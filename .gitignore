@@ -27,10 +27,20 @@ replay_pid*
 target/
 **/target/
 
-# IDE
+# IDE / editors
 .idea/
 *.iml
 .vscode/
+.vs/
+.fleet/
+.zed/
+.cursor/
+.trae/
+.windsurf/
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
 
 # Frontend
 node_modules/
@@ -45,8 +55,28 @@ __MACOSX/
 **/__MACOSX/
 .~*
 ~$*
+*.swp
+*.swo
+*.tmp
+*.temp
 
 # Env files
 .env
 .env.*
 !.env.example
+
+# AI coding tools local state / temporary files
+.codex/
+.codex-cache/
+codex-cache/
+codex-*.log
+.opencode/
+.opencode-cache/
+opencode-cache/
+opencode-*.log
+.claude/
+.claude-cache/
+claude-cache/
+.claude.json
+.claude.local.json
+CLAUDE.local.md

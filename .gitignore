@@ -22,3 +22,31 @@
 # virtual machine crash logs, see http://www.java.com/en/download/help/error_hotspot.xml
 hs_err_pid*
 replay_pid*
+
+# Maven
+target/
+**/target/
+
+# IDE
+.idea/
+*.iml
+.vscode/
+
+# Frontend
+node_modules/
+
+# Local sample data
+datasets/
+
+# OS / editor metadata
+.DS_Store
+**/.DS_Store
+__MACOSX/
+**/__MACOSX/
+.~*
+~$*
+
+# Env files
+.env
+.env.*
+!.env.example

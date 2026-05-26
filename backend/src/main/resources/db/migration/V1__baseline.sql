@@ -1,0 +1,2 @@
+-- Baseline migration placeholder.
+-- Replace with the schema from docs/mysql-schema.sql during implementation.

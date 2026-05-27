@@ -85,6 +85,19 @@ class AuthServiceTest {
     }
 
     @Test
+    void loginRejectsSystemPrincipal() {
+        var user = user(10L, "system_ai_agent", true, false);
+        user.setUserType(UserType.SYSTEM);
+        user.setPasswordHash(null);
+        when(userMapper.selectByUsernameOrEmail("system_ai_agent")).thenReturn(user);
+
+        assertThatThrownBy(() -> authService.login(new LoginRequest("system_ai_agent", "Password123")))
+                .isInstanceOf(BusinessException.class)
+                .extracting("code")
+                .isEqualTo(401001);
+    }
+
+    @Test
     void refreshRejectsStaleTokenVersion() {
         when(jwtTokenService.parseRefreshToken("refresh")).thenReturn(new JwtTokenService.TokenClaims(10L, "labeler", Set.of(), 1, true));
         var user = user(10L, "labeler", true, true);

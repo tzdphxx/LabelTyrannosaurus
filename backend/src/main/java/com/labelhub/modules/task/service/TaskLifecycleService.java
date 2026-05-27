@@ -10,8 +10,10 @@ import com.labelhub.modules.task.dto.TaskLifecycleResponse;
 import com.labelhub.modules.task.dto.UpdateTaskRequest;
 import com.labelhub.modules.task.mapper.TaskMapper;
 import com.labelhub.modules.task.mapper.TaskTagMapper;
+import java.time.LocalDateTime;
 import java.util.LinkedHashSet;
 import java.util.Objects;
+import java.util.Set;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -63,6 +65,50 @@ public class TaskLifecycleService {
         taskTagMapper.delete(new QueryWrapper<TaskTag>().eq("task_id", taskId));
         replaceTags(taskId, request.tags());
         return new TaskLifecycleResponse(task.getId(), task.getStatus());
+    }
+
+    @Transactional
+    public TaskLifecycleResponse publish(Long ownerId, Long taskId) {
+        Task task = loadOwnedTask(ownerId, taskId);
+        requireStatus(task, Set.of(TaskStatus.DRAFT));
+        task.setStatus(TaskStatus.PUBLISHED);
+        task.setPublishedAt(LocalDateTime.now());
+        taskMapper.updateById(task);
+        return new TaskLifecycleResponse(task.getId(), task.getStatus());
+    }
+
+    @Transactional
+    public TaskLifecycleResponse pause(Long ownerId, Long taskId) {
+        Task task = loadOwnedTask(ownerId, taskId);
+        requireStatus(task, Set.of(TaskStatus.PUBLISHED));
+        task.setStatus(TaskStatus.PAUSED);
+        taskMapper.updateById(task);
+        return new TaskLifecycleResponse(task.getId(), task.getStatus());
+    }
+
+    @Transactional
+    public TaskLifecycleResponse resume(Long ownerId, Long taskId) {
+        Task task = loadOwnedTask(ownerId, taskId);
+        requireStatus(task, Set.of(TaskStatus.PAUSED));
+        task.setStatus(TaskStatus.PUBLISHED);
+        taskMapper.updateById(task);
+        return new TaskLifecycleResponse(task.getId(), task.getStatus());
+    }
+
+    @Transactional
+    public TaskLifecycleResponse end(Long ownerId, Long taskId) {
+        Task task = loadOwnedTask(ownerId, taskId);
+        requireStatus(task, Set.of(TaskStatus.PUBLISHED, TaskStatus.PAUSED));
+        task.setStatus(TaskStatus.ENDED);
+        task.setEndedAt(LocalDateTime.now());
+        taskMapper.updateById(task);
+        return new TaskLifecycleResponse(task.getId(), task.getStatus());
+    }
+
+    private void requireStatus(Task task, Set<TaskStatus> allowedStatuses) {
+        if (!allowedStatuses.contains(task.getStatus())) {
+            throw new BusinessException(TASK_STATUS_NOT_ALLOWED, "Task status transition is not allowed");
+        }
     }
 
     private Task loadOwnedTask(Long ownerId, Long taskId) {

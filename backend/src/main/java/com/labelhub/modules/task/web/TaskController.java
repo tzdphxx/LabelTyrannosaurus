@@ -36,4 +36,28 @@ public class TaskController {
                                                           @Valid @RequestBody UpdateTaskRequest request) {
         return ApiResponse.ok(taskLifecycleService.updateDraft(ownerId, taskId, request));
     }
+
+    @PostMapping("/{taskId}/publish")
+    public ApiResponse<TaskLifecycleResponse> publish(@RequestHeader("X-User-Id") Long ownerId,
+                                                      @PathVariable Long taskId) {
+        return ApiResponse.ok(taskLifecycleService.publish(ownerId, taskId));
+    }
+
+    @PostMapping("/{taskId}/pause")
+    public ApiResponse<TaskLifecycleResponse> pause(@RequestHeader("X-User-Id") Long ownerId,
+                                                    @PathVariable Long taskId) {
+        return ApiResponse.ok(taskLifecycleService.pause(ownerId, taskId));
+    }
+
+    @PostMapping("/{taskId}/resume")
+    public ApiResponse<TaskLifecycleResponse> resume(@RequestHeader("X-User-Id") Long ownerId,
+                                                     @PathVariable Long taskId) {
+        return ApiResponse.ok(taskLifecycleService.resume(ownerId, taskId));
+    }
+
+    @PostMapping("/{taskId}/end")
+    public ApiResponse<TaskLifecycleResponse> end(@RequestHeader("X-User-Id") Long ownerId,
+                                                  @PathVariable Long taskId) {
+        return ApiResponse.ok(taskLifecycleService.end(ownerId, taskId));
+    }
 }

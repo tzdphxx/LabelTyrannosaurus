@@ -48,6 +48,10 @@ node_modules/
 # Local sample data
 datasets/
 
+# Local development planning and SQL drafts
+docs/development-plan/
+backend/sql/
+
 # OS / editor metadata
 .DS_Store
 **/.DS_Store

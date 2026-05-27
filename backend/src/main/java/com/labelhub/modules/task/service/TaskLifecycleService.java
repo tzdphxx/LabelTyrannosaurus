@@ -1,6 +1,7 @@
 package com.labelhub.modules.task.service;
 
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
+import com.labelhub.common.audit.AuditAppender;
 import com.labelhub.common.exception.BusinessException;
 import com.labelhub.modules.task.domain.Task;
 import com.labelhub.modules.task.domain.TaskStatus;
@@ -12,6 +13,8 @@ import com.labelhub.modules.task.mapper.TaskMapper;
 import com.labelhub.modules.task.mapper.TaskTagMapper;
 import java.time.LocalDateTime;
 import java.util.LinkedHashSet;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import org.springframework.stereotype.Service;
@@ -23,17 +26,22 @@ public class TaskLifecycleService {
     private static final int TASK_NOT_FOUND = 404001;
     private static final int TASK_STATUS_NOT_ALLOWED = 400101;
     private static final int TASK_PUBLISH_REQUIREMENT_MISSING = 400102;
+    private static final String TASK_BIZ_TYPE = "TASK";
+    private static final String USER_ACTOR_TYPE = "USER";
 
     private final TaskMapper taskMapper;
     private final TaskTagMapper taskTagMapper;
     private final TaskPublishDependencyChecker publishDependencyChecker;
+    private final AuditAppender auditAppender;
 
     public TaskLifecycleService(TaskMapper taskMapper,
                                 TaskTagMapper taskTagMapper,
-                                TaskPublishDependencyChecker publishDependencyChecker) {
+                                TaskPublishDependencyChecker publishDependencyChecker,
+                                AuditAppender auditAppender) {
         this.taskMapper = taskMapper;
         this.taskTagMapper = taskTagMapper;
         this.publishDependencyChecker = publishDependencyChecker;
+        this.auditAppender = auditAppender;
     }
 
     @Transactional
@@ -53,6 +61,7 @@ public class TaskLifecycleService {
         task.setRewardVisible(true);
         taskMapper.insert(task);
         replaceTags(task.getId(), request.tags());
+        appendAudit(task, ownerId, "TASK_CREATED", null, snapshot(task));
         return new TaskLifecycleResponse(task.getId(), task.getStatus());
     }
 
@@ -62,6 +71,7 @@ public class TaskLifecycleService {
         if (task.getStatus() != TaskStatus.DRAFT) {
             throw new BusinessException(TASK_STATUS_NOT_ALLOWED, "Only draft tasks can be edited");
         }
+        Map<String, Object> beforeJson = snapshot(task);
         task.setTitle(request.title());
         task.setDescription(request.description());
         task.setInstructionRichText(request.instructionRichText());
@@ -73,6 +83,7 @@ public class TaskLifecycleService {
         taskMapper.updateById(task);
         taskTagMapper.delete(new QueryWrapper<TaskTag>().eq("task_id", taskId));
         replaceTags(taskId, request.tags());
+        appendAudit(task, ownerId, "TASK_UPDATED", beforeJson, snapshot(task));
         return new TaskLifecycleResponse(task.getId(), task.getStatus());
     }
 
@@ -83,8 +94,7 @@ public class TaskLifecycleService {
         validatePublishRequirements(task);
         task.setStatus(TaskStatus.PUBLISHED);
         task.setPublishedAt(LocalDateTime.now());
-        taskMapper.updateById(task);
-        return new TaskLifecycleResponse(task.getId(), task.getStatus());
+        return updateStatus(task, ownerId, "TASK_PUBLISHED", TaskStatus.DRAFT);
     }
 
     @Transactional
@@ -92,8 +102,7 @@ public class TaskLifecycleService {
         Task task = loadOwnedTask(ownerId, taskId);
         requireStatus(task, Set.of(TaskStatus.PUBLISHED));
         task.setStatus(TaskStatus.PAUSED);
-        taskMapper.updateById(task);
-        return new TaskLifecycleResponse(task.getId(), task.getStatus());
+        return updateStatus(task, ownerId, "TASK_PAUSED", TaskStatus.PUBLISHED);
     }
 
     @Transactional
@@ -101,17 +110,23 @@ public class TaskLifecycleService {
         Task task = loadOwnedTask(ownerId, taskId);
         requireStatus(task, Set.of(TaskStatus.PAUSED));
         task.setStatus(TaskStatus.PUBLISHED);
-        taskMapper.updateById(task);
-        return new TaskLifecycleResponse(task.getId(), task.getStatus());
+        return updateStatus(task, ownerId, "TASK_RESUMED", TaskStatus.PAUSED);
     }
 
     @Transactional
     public TaskLifecycleResponse end(Long ownerId, Long taskId) {
         Task task = loadOwnedTask(ownerId, taskId);
         requireStatus(task, Set.of(TaskStatus.PUBLISHED, TaskStatus.PAUSED));
+        TaskStatus beforeStatus = task.getStatus();
         task.setStatus(TaskStatus.ENDED);
         task.setEndedAt(LocalDateTime.now());
+        return updateStatus(task, ownerId, "TASK_ENDED", beforeStatus);
+    }
+
+    private TaskLifecycleResponse updateStatus(Task task, Long ownerId, String action, TaskStatus beforeStatus) {
+        Map<String, Object> beforeJson = Map.of("status", beforeStatus);
         taskMapper.updateById(task);
+        appendAudit(task, ownerId, action, beforeJson, Map.of("status", task.getStatus()));
         return new TaskLifecycleResponse(task.getId(), task.getStatus());
     }
 
@@ -147,6 +162,28 @@ public class TaskLifecycleService {
 
     private BusinessException missingPublishRequirement(String message) {
         return new BusinessException(TASK_PUBLISH_REQUIREMENT_MISSING, message);
+    }
+
+    private void appendAudit(Task task,
+                             Long actorId,
+                             String action,
+                             Map<String, Object> beforeJson,
+                             Map<String, Object> afterJson) {
+        auditAppender.append(TASK_BIZ_TYPE, task.getId(), USER_ACTOR_TYPE, actorId, action, beforeJson, afterJson, null, null);
+    }
+
+    private Map<String, Object> snapshot(Task task) {
+        Map<String, Object> snapshot = new LinkedHashMap<>();
+        snapshot.put("id", task.getId());
+        snapshot.put("ownerId", task.getOwnerId());
+        snapshot.put("title", task.getTitle());
+        snapshot.put("status", task.getStatus());
+        snapshot.put("quota", task.getQuota());
+        snapshot.put("overlapCount", task.getOverlapCount());
+        snapshot.put("deadlineAt", task.getDeadlineAt());
+        snapshot.put("publishedTemplateVersionId", task.getPublishedTemplateVersionId());
+        snapshot.put("aiReviewConfigId", task.getAiReviewConfigId());
+        return snapshot;
     }
 
     private Task loadOwnedTask(Long ownerId, Long taskId) {

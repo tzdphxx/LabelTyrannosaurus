@@ -3,9 +3,12 @@ package com.labelhub.modules.task.web;
 import com.labelhub.common.api.ApiResponse;
 import com.labelhub.modules.task.dto.CreateTaskRequest;
 import com.labelhub.modules.task.dto.TaskLifecycleResponse;
+import com.labelhub.modules.task.dto.UpdateTaskRequest;
 import com.labelhub.modules.task.service.TaskLifecycleService;
 import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -25,5 +28,12 @@ public class TaskController {
     public ApiResponse<TaskLifecycleResponse> create(@RequestHeader("X-User-Id") Long ownerId,
                                                      @Valid @RequestBody CreateTaskRequest request) {
         return ApiResponse.ok(taskLifecycleService.create(ownerId, request));
+    }
+
+    @PutMapping("/{taskId}")
+    public ApiResponse<TaskLifecycleResponse> updateDraft(@RequestHeader("X-User-Id") Long ownerId,
+                                                          @PathVariable Long taskId,
+                                                          @Valid @RequestBody UpdateTaskRequest request) {
+        return ApiResponse.ok(taskLifecycleService.updateDraft(ownerId, taskId, request));
     }
 }

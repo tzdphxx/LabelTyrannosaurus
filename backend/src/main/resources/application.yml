@@ -31,6 +31,11 @@ server:
   port: 8080
 
 labelhub:
+  security:
+    jwt:
+      secret: ${JWT_SECRET:labelhub-development-secret-key-change-me-please-32-bytes}
+      access-token-ttl-minutes: ${JWT_ACCESS_TOKEN_TTL_MINUTES:120}
+      refresh-token-ttl-days: ${JWT_REFRESH_TOKEN_TTL_DAYS:14}
   ai:
     provider: dashscope
     chat-model: ${AI_DASHSCOPE_CHAT_MODEL:qwen-plus}

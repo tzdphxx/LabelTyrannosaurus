@@ -1,18 +1,17 @@
 package com.labelhub.common.audit;
 
 /**
- * Unified append-only audit writer.
+ * 统一的只追加审计写入接口。
  *
- * <p>The audit table is owned by BE-B. BE-A and BE-B must write audit records
- * through this interface and must not update or delete existing audit rows.</p>
+ * <p>审计表由 BE-B 维护。BE-A 与 BE-B 都必须通过该接口写入审计，禁止更新或删除已有审计行。</p>
  */
 public interface AuditAppender {
 
     /**
-     * Appends a single audit log row and returns its generated id.
+     * 追加一条审计日志并返回生成的主键。
      *
-     * @param command immutable audit append command; traceId is required
-     * @return generated audit log id
+     * @param command 审计追加命令，traceId 必填
+     * @return 生成的审计日志 id
      */
     Long append(AuditCommand command);
 }

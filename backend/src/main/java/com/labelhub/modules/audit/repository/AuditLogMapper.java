@@ -11,10 +11,10 @@ import java.util.List;
 public interface AuditLogMapper extends BaseMapper<AuditLogEntity> {
 
     /**
-     * Queries an audit timeline for one business object.
+     * 查询单个业务对象的审计时间线。
      *
-     * <p>Audit logs are append-only, so timeline order is derived from
-     * {@code created_at} and {@code id}; this mapper never updates audit rows.</p>
+     * <p>审计日志只追加，因此时间线顺序由 {@code created_at} 和 {@code id} 决定；
+     * 该 Mapper 不提供任何更新审计行的能力。</p>
      */
     @Select("""
             select * from audit_logs

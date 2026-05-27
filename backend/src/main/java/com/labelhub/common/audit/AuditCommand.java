@@ -3,10 +3,9 @@ package com.labelhub.common.audit;
 import java.util.Map;
 
 /**
- * Unified audit append command shared by BE-A and BE-B.
+ * BE-A 与 BE-B 共享的统一审计追加命令。
  *
- * <p>Audit records are append-only. Callers provide immutable before/after
- * snapshots for traceability instead of relying on mutable business tables.</p>
+ * <p>审计记录只允许追加。调用方需要传入操作前后快照，避免后续追溯依赖可变业务表。</p>
  */
 public record AuditCommand(String actorType,
                            Long actorId,

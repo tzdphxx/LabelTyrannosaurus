@@ -6,10 +6,9 @@ import org.springframework.boot.ApplicationRunner;
 import org.springframework.stereotype.Component;
 
 /**
- * Boot-time initializer for the BE-B owned system AI principal.
+ * 应用启动时初始化 BE-B 维护的系统 AI 主体。
  *
- * <p>The initializer is idempotent so every application start repairs the
- * principal shape before BE-A can use it for AI audit records.</p>
+ * <p>初始化过程具备幂等性，确保 BE-A 使用该主体写 AI 审计前，用户字段已恢复到固定形态。</p>
  */
 @Component
 public class SystemPrincipalInitializer implements ApplicationRunner {

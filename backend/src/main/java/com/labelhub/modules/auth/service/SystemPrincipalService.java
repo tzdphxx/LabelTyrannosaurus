@@ -12,10 +12,10 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.Set;
 
 /**
- * Maintains the system principal used by AI agent audit records.
+ * 维护 AI Agent 审计使用的系统主体。
  *
- * <p>BE-B owns the {@code system_ai_agent} user. BE-A reads this profile when
- * constructing system actor context, but must not create or mutate the user.</p>
+ * <p>{@code system_ai_agent} 用户由 BE-B 创建和维护。BE-A 构造系统审计主体时只读取该资料，
+ * 不能创建或修改该用户。</p>
  */
 @Service
 public class SystemPrincipalService {
@@ -34,9 +34,9 @@ public class SystemPrincipalService {
     }
 
     /**
-     * Ensures the system AI principal exists and has the fixed non-login shape.
+     * 确保系统 AI 主体存在，并保持固定的不可登录用户形态。
      *
-     * @return profile that BE-A can use as the AI audit actor
+     * @return BE-A 可用于 AI 审计主体的资料
      */
     @Transactional
     public SystemAgentProfile ensureSystemAgent() {
@@ -56,7 +56,7 @@ public class SystemPrincipalService {
     }
 
     /**
-     * Returns the current system agent profile, repairing it first if needed.
+     * 返回当前系统 Agent 资料；如果字段被改动，会先修正为固定形态。
      */
     @Transactional
     public SystemAgentProfile getSystemAgentProfile() {

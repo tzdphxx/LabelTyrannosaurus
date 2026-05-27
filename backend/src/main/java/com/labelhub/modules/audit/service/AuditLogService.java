@@ -17,11 +17,10 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Audit log append and query service owned by BE-B.
+ * BE-B 维护的审计日志追加与查询服务。
  *
- * <p>BE-A may call {@link #append(AuditCommand)} to record AI or review
- * actions, but this service only appends audit rows and does not mutate BE-A
- * business state.</p>
+ * <p>BE-A 可以调用 {@link #append(AuditCommand)} 记录 AI 或审核动作，但本服务只追加审计行，
+ * 不修改 BE-A 负责的业务状态。</p>
  */
 @Service
 public class AuditLogService implements AuditAppender {
@@ -35,8 +34,8 @@ public class AuditLogService implements AuditAppender {
     }
 
     /**
-     * Appends an audit row. The traceId is mandatory for cross-module incident
-     * tracking even though the current baseline schema still allows null.
+     * 追加一条审计记录。虽然当前 baseline 表结构仍允许 traceId 为空，但业务层强制要求携带，
+     * 便于跨模块问题追踪。
      */
     @Override
     @Transactional
@@ -57,7 +56,7 @@ public class AuditLogService implements AuditAppender {
     }
 
     /**
-     * Returns the audit timeline for a business object.
+     * 返回指定业务对象的审计时间线。
      */
     public List<AuditLogResponse> listByBiz(String bizType, Long bizId) {
         if (!StringUtils.hasText(bizType) || bizId == null) {

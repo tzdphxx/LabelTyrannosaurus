@@ -23,6 +23,8 @@ public record CreateTaskRequest(
         LocalDateTime deadlineAt,
         @NotNull
         @Min(1)
-        Integer overlapCount
+        Integer overlapCount,
+        Long publishedTemplateVersionId,
+        Long aiReviewConfigId
 ) {
 }

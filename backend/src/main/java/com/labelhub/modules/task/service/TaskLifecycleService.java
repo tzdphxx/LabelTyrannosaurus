@@ -22,13 +22,18 @@ public class TaskLifecycleService {
 
     private static final int TASK_NOT_FOUND = 404001;
     private static final int TASK_STATUS_NOT_ALLOWED = 400101;
+    private static final int TASK_PUBLISH_REQUIREMENT_MISSING = 400102;
 
     private final TaskMapper taskMapper;
     private final TaskTagMapper taskTagMapper;
+    private final TaskPublishDependencyChecker publishDependencyChecker;
 
-    public TaskLifecycleService(TaskMapper taskMapper, TaskTagMapper taskTagMapper) {
+    public TaskLifecycleService(TaskMapper taskMapper,
+                                TaskTagMapper taskTagMapper,
+                                TaskPublishDependencyChecker publishDependencyChecker) {
         this.taskMapper = taskMapper;
         this.taskTagMapper = taskTagMapper;
+        this.publishDependencyChecker = publishDependencyChecker;
     }
 
     @Transactional
@@ -43,6 +48,8 @@ public class TaskLifecycleService {
         task.setClaimedCount(0);
         task.setOverlapCount(request.overlapCount());
         task.setDeadlineAt(request.deadlineAt());
+        task.setPublishedTemplateVersionId(request.publishedTemplateVersionId());
+        task.setAiReviewConfigId(request.aiReviewConfigId());
         task.setRewardVisible(true);
         taskMapper.insert(task);
         replaceTags(task.getId(), request.tags());
@@ -61,6 +68,8 @@ public class TaskLifecycleService {
         task.setQuota(request.quota());
         task.setOverlapCount(request.overlapCount());
         task.setDeadlineAt(request.deadlineAt());
+        task.setPublishedTemplateVersionId(request.publishedTemplateVersionId());
+        task.setAiReviewConfigId(request.aiReviewConfigId());
         taskMapper.updateById(task);
         taskTagMapper.delete(new QueryWrapper<TaskTag>().eq("task_id", taskId));
         replaceTags(taskId, request.tags());
@@ -71,6 +80,7 @@ public class TaskLifecycleService {
     public TaskLifecycleResponse publish(Long ownerId, Long taskId) {
         Task task = loadOwnedTask(ownerId, taskId);
         requireStatus(task, Set.of(TaskStatus.DRAFT));
+        validatePublishRequirements(task);
         task.setStatus(TaskStatus.PUBLISHED);
         task.setPublishedAt(LocalDateTime.now());
         taskMapper.updateById(task);
@@ -109,6 +119,34 @@ public class TaskLifecycleService {
         if (!allowedStatuses.contains(task.getStatus())) {
             throw new BusinessException(TASK_STATUS_NOT_ALLOWED, "Task status transition is not allowed");
         }
+    }
+
+    private void validatePublishRequirements(Task task) {
+        if (task.getQuota() == null || task.getQuota() <= 0) {
+            throw missingPublishRequirement("Task quota is required");
+        }
+        if (task.getOverlapCount() == null || task.getOverlapCount() < 1) {
+            throw missingPublishRequirement("Task overlap count is required");
+        }
+        if (task.getDeadlineAt() == null || !task.getDeadlineAt().isAfter(LocalDateTime.now())) {
+            throw missingPublishRequirement("Task deadline must be in the future");
+        }
+        if (!publishDependencyChecker.datasetReady(task.getId())) {
+            throw missingPublishRequirement("Task dataset is required");
+        }
+        if (!publishDependencyChecker.templateVersionExists(task.getPublishedTemplateVersionId())) {
+            throw missingPublishRequirement("Task template version is required");
+        }
+        if (task.getAiReviewConfigId() == null) {
+            throw missingPublishRequirement("Task AI review config is required");
+        }
+        if (!publishDependencyChecker.rewardRuleExists(task.getId())) {
+            throw missingPublishRequirement("Task reward rule is required");
+        }
+    }
+
+    private BusinessException missingPublishRequirement(String message) {
+        return new BusinessException(TASK_PUBLISH_REQUIREMENT_MISSING, message);
     }
 
     private Task loadOwnedTask(Long ownerId, Long taskId) {

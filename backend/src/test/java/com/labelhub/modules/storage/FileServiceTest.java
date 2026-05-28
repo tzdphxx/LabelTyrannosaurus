@@ -16,9 +16,12 @@ import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.springframework.mock.web.MockMultipartFile;
 
+import java.io.ByteArrayInputStream;
+import java.io.InputStream;
 import java.net.URL;
 import java.time.Duration;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -26,6 +29,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -77,6 +81,38 @@ class FileServiceTest {
         assertThat(saved.getObjectKey()).endsWith("-dataset.jsonl");
         assertThat(response.fileId()).isEqualTo(99L);
         assertThat(response.downloadUrl()).isEqualTo("https://cos.example.com/download");
+    }
+
+    @Test
+    void uploadClosesInputStreamWhenObjectStorageFails() throws Exception {
+        CurrentUserContext.set(new CurrentUser(10L, "owner", "owner@example.com", Set.of(RoleCode.OWNER), 1));
+        AtomicBoolean closed = new AtomicBoolean(false);
+        byte[] content = "{\"id\":1}\n".getBytes();
+        MockMultipartFile file = new MockMultipartFile(
+                "file",
+                "dataset.jsonl",
+                "application/x-ndjson",
+                content
+        ) {
+            @Override
+            public InputStream getInputStream() {
+                return new ByteArrayInputStream(content) {
+                    @Override
+                    public void close() throws java.io.IOException {
+                        closed.set(true);
+                        super.close();
+                    }
+                };
+            }
+        };
+        doThrow(new IllegalStateException("cos unavailable"))
+                .when(objectStorageService)
+                .upload(eq("labelhub-test"), any(), eq("application/x-ndjson"), any(), eq(file.getSize()));
+
+        assertThatThrownBy(() -> fileService.upload(file, "dataset"))
+                .isInstanceOf(IllegalStateException.class);
+
+        assertThat(closed).isTrue();
     }
 
     @Test

@@ -15,6 +15,7 @@ import org.springframework.util.StringUtils;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
+import java.io.InputStream;
 import java.net.URL;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -48,8 +49,8 @@ public class FileService {
         String originalFilename = StringUtils.cleanPath(file.getOriginalFilename());
         String contentType = StringUtils.hasText(file.getContentType()) ? file.getContentType() : "application/octet-stream";
         String objectKey = buildObjectKey(businessType, originalFilename);
-        try {
-            objectStorageService.upload(properties.bucket(), objectKey, contentType, file.getInputStream(), file.getSize());
+        try (InputStream inputStream = file.getInputStream()) {
+            objectStorageService.upload(properties.bucket(), objectKey, contentType, inputStream, file.getSize());
         } catch (IOException ex) {
             throw new BusinessException(500001, "File upload failed");
         }

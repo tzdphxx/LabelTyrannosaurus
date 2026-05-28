@@ -53,5 +53,8 @@ class ObjectStorageServiceTest {
         assertThat(request.getKey()).isEqualTo("uploads/dataset/file.jsonl");
         assertThat(request.getMethod()).isEqualTo(HttpMethodName.GET);
         assertThat(request.getExpiration().toInstant()).isEqualTo(expiresAt);
+        assertThat(request.getResponseHeaders().getContentDisposition())
+                .contains("attachment")
+                .contains("dataset.jsonl");
     }
 }

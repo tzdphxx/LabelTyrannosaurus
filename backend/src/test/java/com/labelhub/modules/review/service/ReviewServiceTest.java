@@ -3,6 +3,7 @@ package com.labelhub.modules.review.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -48,14 +49,17 @@ class ReviewServiceTest {
     @Mock private SubmissionEventPublisher eventPublisher;
     @Mock private AuditAppender auditAppender;
     @Mock private DatasetClaimService datasetClaimService;
+    @Mock private ReviewLevelEscalationService escalationService;
 
     private ReviewService reviewService;
 
     @BeforeEach
     void setUp() {
+        lenient().when(escalationService.getMaxReviewLevel()).thenReturn(1);
         reviewService = new ReviewService(
                 submissionMapper, assignmentMapper, reviewRecordMapper,
-                reviewSubmissionMapper, eventPublisher, auditAppender, datasetClaimService);
+                reviewSubmissionMapper, eventPublisher, auditAppender, datasetClaimService,
+                escalationService);
     }
 
     // --- approve ---

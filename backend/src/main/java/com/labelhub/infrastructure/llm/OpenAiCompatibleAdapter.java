@@ -42,13 +42,18 @@ public class OpenAiCompatibleAdapter {
     }
 
     public OpenAiCompatibleResponse chat(LlmProviderRuntimeConfig config, List<LlmMessage> messages) {
-        return chat(config, messages, null);
+        return chat(config, messages, null, null);
     }
 
     public OpenAiCompatibleResponse chat(LlmProviderRuntimeConfig config, List<LlmMessage> messages, Integer maxTokens) {
+        return chat(config, messages, maxTokens, null);
+    }
+
+    public OpenAiCompatibleResponse chat(LlmProviderRuntimeConfig config, List<LlmMessage> messages,
+                                         Integer maxTokens, List<ToolDefinition> tools) {
         Instant startedAt = Instant.now();
         try {
-            HttpRequest request = buildRequest(config, messages, maxTokens);
+            HttpRequest request = buildRequest(config, messages, maxTokens, tools);
             HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
             long latencyMs = Duration.between(startedAt, Instant.now()).toMillis();
             if (response.statusCode() >= 200 && response.statusCode() < 300) {
@@ -70,7 +75,8 @@ public class OpenAiCompatibleAdapter {
         }
     }
 
-    private HttpRequest buildRequest(LlmProviderRuntimeConfig config, List<LlmMessage> messages, Integer maxTokens)
+    private HttpRequest buildRequest(LlmProviderRuntimeConfig config, List<LlmMessage> messages,
+                                     Integer maxTokens, List<ToolDefinition> tools)
             throws JsonProcessingException {
         HttpRequest.Builder builder = HttpRequest.newBuilder()
                 .uri(URI.create(config.baseUrl() + CHAT_COMPLETIONS_PATH))
@@ -82,18 +88,53 @@ public class OpenAiCompatibleAdapter {
         if (config.apiKey() != null && !config.apiKey().isBlank()) {
             builder.setHeader("Authorization", "Bearer " + config.apiKey());
         }
-        return builder.POST(HttpRequest.BodyPublishers.ofString(requestBody(config.modelName(), messages, maxTokens))).build();
+        return builder.POST(HttpRequest.BodyPublishers.ofString(requestBody(config.modelName(), messages, maxTokens, tools))).build();
     }
 
-    private String requestBody(String modelName, List<LlmMessage> messages, Integer maxTokens) throws JsonProcessingException {
+    private String requestBody(String modelName, List<LlmMessage> messages, Integer maxTokens,
+                               List<ToolDefinition> tools) throws JsonProcessingException {
         Map<String, Object> payload = new LinkedHashMap<>();
         payload.put("model", modelName);
-        payload.put("messages", messages == null ? List.of() : messages);
+        payload.put("messages", serializeMessages(messages));
         if (maxTokens != null) {
             payload.put("max_tokens", maxTokens);
         }
+        if (tools != null && !tools.isEmpty()) {
+            payload.put("tools", tools);
+        }
         payload.put("temperature", 0);
         return objectMapper.writeValueAsString(payload);
+    }
+
+    private List<Map<String, Object>> serializeMessages(List<LlmMessage> messages) {
+        if (messages == null) {
+            return List.of();
+        }
+        return messages.stream().map(this::serializeMessage).toList();
+    }
+
+    private Map<String, Object> serializeMessage(LlmMessage msg) {
+        Map<String, Object> map = new LinkedHashMap<>();
+        map.put("role", msg.role());
+        if (msg.content() != null) {
+            map.put("content", msg.content());
+        }
+        if (msg.toolCalls() != null && !msg.toolCalls().isEmpty()) {
+            map.put("tool_calls", msg.toolCalls().stream().map(tc -> {
+                Map<String, Object> tcMap = new LinkedHashMap<>();
+                tcMap.put("id", tc.id());
+                tcMap.put("type", tc.type());
+                tcMap.put("function", Map.of("name", tc.function().name(), "arguments", tc.function().arguments()));
+                return tcMap;
+            }).toList());
+        }
+        if (msg.toolCallId() != null) {
+            map.put("tool_call_id", msg.toolCallId());
+        }
+        if (msg.name() != null) {
+            map.put("name", msg.name());
+        }
+        return map;
     }
 
     private OpenAiCompatibleResponse failed(Instant startedAt, String message, String apiKey, boolean timedOut) {

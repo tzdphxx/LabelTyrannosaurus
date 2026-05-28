@@ -35,6 +35,14 @@ public class Submission {
 
     private Boolean isGolden;
 
+    private Integer currentReviewLevel;
+
+    private String reviewFlowStatus;
+
+    private Long assignedReviewerId;
+
+    private Integer reviewVersion;
+
     private LocalDateTime submittedAt;
 
     private LocalDateTime updatedAt;

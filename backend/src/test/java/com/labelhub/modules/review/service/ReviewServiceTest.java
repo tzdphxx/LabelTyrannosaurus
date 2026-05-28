@@ -13,6 +13,7 @@ import com.labelhub.common.exception.BusinessException;
 import com.labelhub.modules.assignment.domain.Assignment;
 import com.labelhub.modules.assignment.domain.AssignmentStatus;
 import com.labelhub.modules.assignment.mapper.AssignmentMapper;
+import com.labelhub.modules.dataset.service.DatasetClaimService;
 import com.labelhub.modules.review.domain.ReviewAction;
 import com.labelhub.modules.review.domain.ReviewRecord;
 import com.labelhub.modules.review.dto.ApproveRequest;
@@ -46,6 +47,7 @@ class ReviewServiceTest {
     @Mock private ReviewSubmissionMapper reviewSubmissionMapper;
     @Mock private SubmissionEventPublisher eventPublisher;
     @Mock private AuditAppender auditAppender;
+    @Mock private DatasetClaimService datasetClaimService;
 
     private ReviewService reviewService;
 
@@ -53,7 +55,7 @@ class ReviewServiceTest {
     void setUp() {
         reviewService = new ReviewService(
                 submissionMapper, assignmentMapper, reviewRecordMapper,
-                reviewSubmissionMapper, eventPublisher, auditAppender);
+                reviewSubmissionMapper, eventPublisher, auditAppender, datasetClaimService);
     }
 
     // --- approve ---

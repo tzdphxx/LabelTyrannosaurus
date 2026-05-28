@@ -17,6 +17,7 @@ import com.labelhub.modules.ai.service.AiReviewDispatcher;
 import com.labelhub.modules.assignment.domain.Assignment;
 import com.labelhub.modules.assignment.domain.AssignmentStatus;
 import com.labelhub.modules.assignment.mapper.AssignmentMapper;
+import com.labelhub.modules.dataset.service.DatasetClaimService;
 import com.labelhub.modules.submission.domain.Submission;
 import com.labelhub.modules.submission.domain.SubmissionStatus;
 import com.labelhub.modules.submission.dto.SubmissionSubmitRequest;
@@ -71,6 +72,9 @@ class SubmissionSubmitServiceTest {
     @Mock
     private AiReviewDispatcher aiReviewDispatcher;
 
+    @Mock
+    private DatasetClaimService datasetClaimService;
+
     private SubmissionSubmitService submissionSubmitService;
 
     @BeforeEach
@@ -82,7 +86,8 @@ class SubmissionSubmitServiceTest {
                 agentRunMapper,
                 answerSchemaValidator,
                 auditAppender,
-                aiReviewDispatcher
+                aiReviewDispatcher,
+                datasetClaimService
         );
     }
 

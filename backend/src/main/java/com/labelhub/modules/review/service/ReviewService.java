@@ -6,6 +6,7 @@ import com.labelhub.common.exception.BusinessException;
 import com.labelhub.modules.assignment.domain.Assignment;
 import com.labelhub.modules.assignment.domain.AssignmentStatus;
 import com.labelhub.modules.assignment.mapper.AssignmentMapper;
+import com.labelhub.modules.dataset.service.DatasetClaimService;
 import com.labelhub.modules.review.domain.ReviewAction;
 import com.labelhub.modules.review.domain.ReviewRecord;
 import com.labelhub.modules.review.dto.ApproveRequest;
@@ -41,19 +42,25 @@ public class ReviewService {
     private final ReviewSubmissionMapper reviewSubmissionMapper;
     private final SubmissionEventPublisher eventPublisher;
     private final AuditAppender auditAppender;
+    private final DatasetClaimService datasetClaimService;
+    private final ReviewLevelEscalationService escalationService;
 
     public ReviewService(SubmissionMapper submissionMapper,
                          AssignmentMapper assignmentMapper,
                          ReviewRecordMapper reviewRecordMapper,
                          ReviewSubmissionMapper reviewSubmissionMapper,
                          SubmissionEventPublisher eventPublisher,
-                         AuditAppender auditAppender) {
+                         AuditAppender auditAppender,
+                         DatasetClaimService datasetClaimService,
+                         ReviewLevelEscalationService escalationService) {
         this.submissionMapper = submissionMapper;
         this.assignmentMapper = assignmentMapper;
         this.reviewRecordMapper = reviewRecordMapper;
         this.reviewSubmissionMapper = reviewSubmissionMapper;
         this.eventPublisher = eventPublisher;
         this.auditAppender = auditAppender;
+        this.datasetClaimService = datasetClaimService;
+        this.escalationService = escalationService;
     }
 
     public List<SubmissionReviewItem> listPendingFinal() {
@@ -63,13 +70,22 @@ public class ReviewService {
     @Transactional
     public ReviewActionResponse approve(Long submissionId, Long reviewerId, ApproveRequest request) {
         Submission submission = requirePendingFinal(submissionId);
+        int currentLevel = request.reviewLevel();
+        int maxLevel = escalationService.getMaxReviewLevel();
 
         ReviewRecord record = createReviewRecord(
                 submissionId, reviewerId, ReviewAction.APPROVE,
-                request.reviewLevel(), null, request.reviewComment());
+                currentLevel, null, request.reviewComment());
+
+        if (currentLevel < maxLevel) {
+            escalationService.escalate(submission, currentLevel, reviewerId);
+            appendAudit(submission, reviewerId, "SUBMISSION_LEVEL_APPROVED", record.getId());
+            return new ReviewActionResponse(submissionId, submission.getStatus(), record.getId());
+        }
 
         submission.setStatus(SubmissionStatus.APPROVED);
         submission.setIsGolden(true);
+        submission.setReviewFlowStatus("FINAL_APPROVED");
         submissionMapper.updateById(submission);
 
         Assignment assignment = assignmentMapper.selectById(submission.getAssignmentId());
@@ -81,6 +97,7 @@ public class ReviewService {
         assignmentMapper.updateById(assignment);
 
         eventPublisher.publishApproved(submissionId, reviewerId);
+        datasetClaimService.increaseApprovedCount(submission.getDatasetItemId());
         appendAudit(submission, reviewerId, "SUBMISSION_APPROVED", record.getId());
 
         return new ReviewActionResponse(submissionId, SubmissionStatus.APPROVED, record.getId());

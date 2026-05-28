@@ -11,6 +11,7 @@ import static org.mockito.Mockito.when;
 
 import com.labelhub.common.audit.AuditAppender;
 import com.labelhub.common.exception.BusinessException;
+import com.labelhub.modules.dataset.service.DatasetClaimService;
 import com.labelhub.modules.review.domain.ConflictGroup;
 import com.labelhub.modules.review.domain.ConflictStatus;
 import com.labelhub.modules.review.domain.ReviewRecord;
@@ -46,6 +47,7 @@ class ConflictResolveServiceTest {
     @Mock private ReviewRecordMapper reviewRecordMapper;
     @Mock private SubmissionEventPublisher eventPublisher;
     @Mock private AuditAppender auditAppender;
+    @Mock private DatasetClaimService datasetClaimService;
 
     private ConflictResolveService service;
 
@@ -53,7 +55,7 @@ class ConflictResolveServiceTest {
     void setUp() {
         service = new ConflictResolveService(
                 conflictGroupMapper, submissionMapper, reviewRecordMapper,
-                eventPublisher, auditAppender);
+                eventPublisher, auditAppender, datasetClaimService);
     }
 
     // --- resolve ---

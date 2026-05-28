@@ -3,6 +3,7 @@ package com.labelhub.modules.review.service;
 import com.labelhub.common.audit.AuditAppender;
 import com.labelhub.common.audit.AuditCommand;
 import com.labelhub.common.exception.BusinessException;
+import com.labelhub.modules.dataset.service.DatasetClaimService;
 import com.labelhub.modules.review.domain.ConflictGroup;
 import com.labelhub.modules.review.domain.ConflictStatus;
 import com.labelhub.modules.review.domain.ReviewAction;
@@ -41,17 +42,20 @@ public class ConflictResolveService {
     private final ReviewRecordMapper reviewRecordMapper;
     private final SubmissionEventPublisher eventPublisher;
     private final AuditAppender auditAppender;
+    private final DatasetClaimService datasetClaimService;
 
     public ConflictResolveService(ConflictGroupMapper conflictGroupMapper,
                                    SubmissionMapper submissionMapper,
                                    ReviewRecordMapper reviewRecordMapper,
                                    SubmissionEventPublisher eventPublisher,
-                                   AuditAppender auditAppender) {
+                                   AuditAppender auditAppender,
+                                   DatasetClaimService datasetClaimService) {
         this.conflictGroupMapper = conflictGroupMapper;
         this.submissionMapper = submissionMapper;
         this.reviewRecordMapper = reviewRecordMapper;
         this.eventPublisher = eventPublisher;
         this.auditAppender = auditAppender;
+        this.datasetClaimService = datasetClaimService;
     }
 
     public List<ConflictGroupResponse> listOpenGroups() {
@@ -121,6 +125,7 @@ public class ConflictResolveService {
         reviewRecordMapper.insert(record);
 
         eventPublisher.publishGoldenSelected(request.goldenSubmissionId(), reviewerId);
+        datasetClaimService.increaseApprovedCount(golden.getDatasetItemId());
         appendAudit(group, golden, reviewerId, record.getId());
 
         return new ConflictResolveResponse(groupId, ConflictStatus.RESOLVED,

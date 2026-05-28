@@ -13,6 +13,7 @@ import com.labelhub.modules.ai.service.AiReviewDispatcher;
 import com.labelhub.modules.assignment.domain.Assignment;
 import com.labelhub.modules.assignment.domain.AssignmentStatus;
 import com.labelhub.modules.assignment.mapper.AssignmentMapper;
+import com.labelhub.modules.dataset.service.DatasetClaimService;
 import com.labelhub.modules.submission.domain.Submission;
 import com.labelhub.modules.submission.domain.SubmissionStatus;
 import com.labelhub.modules.submission.dto.SubmissionSubmitRequest;
@@ -58,6 +59,7 @@ public class SubmissionSubmitService {
     private final AnswerSchemaValidator answerSchemaValidator;
     private final AuditAppender auditAppender;
     private final AiReviewDispatcher aiReviewDispatcher;
+    private final DatasetClaimService datasetClaimService;
     private final ObjectMapper objectMapper;
 
     public SubmissionSubmitService(AssignmentMapper assignmentMapper,
@@ -66,9 +68,10 @@ public class SubmissionSubmitService {
                                    AgentRunMapper agentRunMapper,
                                    AnswerSchemaValidator answerSchemaValidator,
                                    AuditAppender auditAppender,
-                                   AiReviewDispatcher aiReviewDispatcher) {
+                                   AiReviewDispatcher aiReviewDispatcher,
+                                   DatasetClaimService datasetClaimService) {
         this(assignmentMapper, submissionMapper, taskMapper, agentRunMapper, answerSchemaValidator, auditAppender,
-                aiReviewDispatcher, new ObjectMapper());
+                aiReviewDispatcher, datasetClaimService, new ObjectMapper());
     }
 
     SubmissionSubmitService(AssignmentMapper assignmentMapper,
@@ -78,6 +81,7 @@ public class SubmissionSubmitService {
                             AnswerSchemaValidator answerSchemaValidator,
                             AuditAppender auditAppender,
                             AiReviewDispatcher aiReviewDispatcher,
+                            DatasetClaimService datasetClaimService,
                             ObjectMapper objectMapper) {
         this.assignmentMapper = assignmentMapper;
         this.submissionMapper = submissionMapper;
@@ -86,6 +90,7 @@ public class SubmissionSubmitService {
         this.answerSchemaValidator = answerSchemaValidator;
         this.auditAppender = auditAppender;
         this.aiReviewDispatcher = aiReviewDispatcher;
+        this.datasetClaimService = datasetClaimService;
         this.objectMapper = objectMapper;
     }
 
@@ -122,6 +127,7 @@ public class SubmissionSubmitService {
         AgentRun agentRun = createPendingAiReviewRun(submission, task);
         appendSubmitAudit(assignment, submission, agentRun.getId());
         aiReviewDispatcher.enqueue(submission.getId());
+        datasetClaimService.increaseSubmittedCount(submission.getDatasetItemId());
         return toResponse(submission, agentRun.getId());
     }
 

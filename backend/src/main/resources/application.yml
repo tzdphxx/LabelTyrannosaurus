@@ -34,6 +34,10 @@ labelhub:
   ai:
     provider: dashscope
     chat-model: ${AI_DASHSCOPE_CHAT_MODEL:qwen-plus}
+  llm:
+    key-encryption-secret: ${LABELHUB_LLM_KEY_ENCRYPTION_SECRET:}
+    gateway:
+      timeout-ms: ${LABELHUB_LLM_GATEWAY_TIMEOUT_MS:30000}
   cos:
     secret-id: ${COS_SECRET_ID:replace-me}
     secret-key: ${COS_SECRET_KEY:replace-me}

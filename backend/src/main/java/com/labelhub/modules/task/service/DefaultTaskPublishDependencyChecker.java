@@ -7,16 +7,16 @@ public class DefaultTaskPublishDependencyChecker implements TaskPublishDependenc
 
     @Override
     public boolean datasetReady(Long taskId) {
-        return true;
+        return false;
     }
 
     @Override
     public boolean templateVersionExists(Long templateVersionId) {
-        return templateVersionId != null;
+        return false;
     }
 
     @Override
     public boolean rewardRuleExists(Long taskId) {
-        return true;
+        return false;
     }
 }

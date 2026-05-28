@@ -3,10 +3,13 @@ package com.labelhub.modules.task.service;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.labelhub.common.audit.AuditAppender;
 import com.labelhub.common.exception.BusinessException;
+import com.labelhub.common.web.TraceIdProvider;
 import com.labelhub.modules.task.domain.Task;
 import com.labelhub.modules.task.domain.TaskStatus;
 import com.labelhub.modules.task.domain.TaskTag;
 import com.labelhub.modules.task.dto.CreateTaskRequest;
+import com.labelhub.modules.task.dto.OwnerTaskSummaryResponse;
+import com.labelhub.modules.task.dto.TaskDetailResponse;
 import com.labelhub.modules.task.dto.TaskLifecycleResponse;
 import com.labelhub.modules.task.dto.UpdateTaskRequest;
 import com.labelhub.modules.task.mapper.TaskMapper;
@@ -14,6 +17,7 @@ import com.labelhub.modules.task.mapper.TaskTagMapper;
 import java.time.LocalDateTime;
 import java.util.LinkedHashSet;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
@@ -33,15 +37,45 @@ public class TaskLifecycleService {
     private final TaskTagMapper taskTagMapper;
     private final TaskPublishDependencyChecker publishDependencyChecker;
     private final AuditAppender auditAppender;
+    private final TraceIdProvider traceIdProvider;
 
     public TaskLifecycleService(TaskMapper taskMapper,
                                 TaskTagMapper taskTagMapper,
                                 TaskPublishDependencyChecker publishDependencyChecker,
-                                AuditAppender auditAppender) {
+                                AuditAppender auditAppender,
+                                TraceIdProvider traceIdProvider) {
         this.taskMapper = taskMapper;
         this.taskTagMapper = taskTagMapper;
         this.publishDependencyChecker = publishDependencyChecker;
         this.auditAppender = auditAppender;
+        this.traceIdProvider = traceIdProvider;
+    }
+
+    public List<OwnerTaskSummaryResponse> listOwnerTasks(Long ownerId) {
+        return taskMapper.selectList(new QueryWrapper<Task>()
+                        .eq("owner_id", ownerId)
+                        .orderByDesc("updated_at")
+                        .orderByDesc("id"))
+                .stream()
+                .map(task -> new OwnerTaskSummaryResponse(
+                        task.getId(),
+                        task.getTitle(),
+                        task.getStatus(),
+                        listTags(task.getId()),
+                        task.getQuota(),
+                        task.getClaimedCount(),
+                        task.getOverlapCount(),
+                        task.getDeadlineAt(),
+                        task.getPublishedAt(),
+                        task.getEndedAt(),
+                        task.getCreatedAt(),
+                        task.getUpdatedAt()
+                ))
+                .toList();
+    }
+
+    public TaskDetailResponse getOwnedTask(Long ownerId, Long taskId) {
+        return toDetailResponse(loadOwnedTask(ownerId, taskId));
     }
 
     @Transactional
@@ -164,12 +198,45 @@ public class TaskLifecycleService {
         return new BusinessException(TASK_PUBLISH_REQUIREMENT_MISSING, message);
     }
 
+    private TaskDetailResponse toDetailResponse(Task task) {
+        return new TaskDetailResponse(
+                task.getId(),
+                task.getOwnerId(),
+                task.getTitle(),
+                task.getDescription(),
+                task.getInstructionRichText(),
+                task.getStatus(),
+                listTags(task.getId()),
+                task.getQuota(),
+                task.getClaimedCount(),
+                task.getOverlapCount(),
+                task.getDeadlineAt(),
+                task.getPublishedTemplateVersionId(),
+                task.getAiReviewConfigId(),
+                task.getRewardVisible(),
+                task.getPublishedAt(),
+                task.getEndedAt(),
+                task.getCreatedAt(),
+                task.getUpdatedAt()
+        );
+    }
+
+    private List<String> listTags(Long taskId) {
+        return taskTagMapper.selectList(new QueryWrapper<TaskTag>()
+                        .eq("task_id", taskId)
+                        .orderByAsc("id"))
+                .stream()
+                .map(TaskTag::getTagName)
+                .toList();
+    }
+
     private void appendAudit(Task task,
                              Long actorId,
                              String action,
                              Map<String, Object> beforeJson,
                              Map<String, Object> afterJson) {
-        auditAppender.append(TASK_BIZ_TYPE, task.getId(), USER_ACTOR_TYPE, actorId, action, beforeJson, afterJson, null, null);
+        auditAppender.append(TASK_BIZ_TYPE, task.getId(), USER_ACTOR_TYPE, actorId, action, beforeJson, afterJson,
+                traceIdProvider.currentTraceId(), null);
     }
 
     private Map<String, Object> snapshot(Task task) {

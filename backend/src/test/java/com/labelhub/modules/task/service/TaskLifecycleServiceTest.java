@@ -10,10 +10,13 @@ import static org.mockito.Mockito.when;
 import com.baomidou.mybatisplus.core.conditions.Wrapper;
 import com.labelhub.common.audit.AuditAppender;
 import com.labelhub.common.exception.BusinessException;
+import com.labelhub.common.web.TraceIdProvider;
 import com.labelhub.modules.task.domain.Task;
 import com.labelhub.modules.task.domain.TaskStatus;
 import com.labelhub.modules.task.domain.TaskTag;
 import com.labelhub.modules.task.dto.CreateTaskRequest;
+import com.labelhub.modules.task.dto.OwnerTaskSummaryResponse;
+import com.labelhub.modules.task.dto.TaskDetailResponse;
 import com.labelhub.modules.task.dto.TaskLifecycleResponse;
 import com.labelhub.modules.task.dto.UpdateTaskRequest;
 import com.labelhub.modules.task.mapper.TaskMapper;
@@ -45,6 +48,9 @@ class TaskLifecycleServiceTest {
     @Mock
     private AuditAppender auditAppender;
 
+    @Mock
+    private TraceIdProvider traceIdProvider;
+
     private TaskLifecycleService taskLifecycleService;
 
     @BeforeEach
@@ -53,12 +59,14 @@ class TaskLifecycleServiceTest {
                 taskMapper,
                 taskTagMapper,
                 publishDependencyChecker,
-                auditAppender
+                auditAppender,
+                traceIdProvider
         );
     }
 
     @Test
     void createsDraftTaskWithTagsAndAudit() {
+        when(traceIdProvider.currentTraceId()).thenReturn("trace-1");
         when(taskMapper.insert(any(Task.class))).thenAnswer(invocation -> {
             Task task = invocation.getArgument(0);
             task.setId(TASK_ID);
@@ -74,7 +82,36 @@ class TaskLifecycleServiceTest {
         assertThat(taskCaptor.getValue().getStatus()).isEqualTo(TaskStatus.DRAFT);
         verify(taskTagMapper).insert(any(TaskTag.class));
         verify(auditAppender).append(eq("TASK"), eq(TASK_ID), eq("USER"), eq(OWNER_ID), eq("TASK_CREATED"),
-                eq(null), any(), eq(null), eq(null));
+                eq(null), any(), eq("trace-1"), eq(null));
+    }
+
+    @Test
+    void listsOwnerTasksWithTags() {
+        Task task = draftTask();
+        task.setClaimedCount(0);
+        when(taskMapper.selectList(any(Wrapper.class))).thenReturn(List.of(task));
+        when(taskTagMapper.selectList(any(Wrapper.class))).thenReturn(List.of(taskTag("qa")));
+
+        List<OwnerTaskSummaryResponse> responses = taskLifecycleService.listOwnerTasks(OWNER_ID);
+
+        assertThat(responses).hasSize(1);
+        assertThat(responses.get(0).taskId()).isEqualTo(TASK_ID);
+        assertThat(responses.get(0).tags()).containsExactly("qa");
+    }
+
+    @Test
+    void returnsOwnedTaskDetail() {
+        Task task = publishableDraftTask();
+        when(taskMapper.selectById(TASK_ID)).thenReturn(task);
+        when(taskTagMapper.selectList(any(Wrapper.class))).thenReturn(List.of(taskTag("qa")));
+
+        TaskDetailResponse response = taskLifecycleService.getOwnedTask(OWNER_ID, TASK_ID);
+
+        assertThat(response.taskId()).isEqualTo(TASK_ID);
+        assertThat(response.ownerId()).isEqualTo(OWNER_ID);
+        assertThat(response.tags()).containsExactly("qa");
+        assertThat(response.publishedTemplateVersionId()).isEqualTo(100L);
+        assertThat(response.aiReviewConfigId()).isEqualTo(200L);
     }
 
     @Test
@@ -150,6 +187,15 @@ class TaskLifecycleServiceTest {
                         ex -> assertThat(ex.getCode()).isEqualTo(400102));
     }
 
+    @Test
+    void defaultPublishDependencyCheckerDoesNotPassExternalChecks() {
+        DefaultTaskPublishDependencyChecker checker = new DefaultTaskPublishDependencyChecker();
+
+        assertThat(checker.datasetReady(TASK_ID)).isFalse();
+        assertThat(checker.templateVersionExists(100L)).isFalse();
+        assertThat(checker.rewardRuleExists(TASK_ID)).isFalse();
+    }
+
     private CreateTaskRequest createRequest() {
         return new CreateTaskRequest(
                 "New task",
@@ -188,6 +234,13 @@ class TaskLifecycleServiceTest {
         task.setOverlapCount(1);
         task.setDeadlineAt(LocalDateTime.now().plusDays(1));
         return task;
+    }
+
+    private TaskTag taskTag(String tagName) {
+        TaskTag taskTag = new TaskTag();
+        taskTag.setTaskId(TASK_ID);
+        taskTag.setTagName(tagName);
+        return taskTag;
     }
 
     private Task publishableDraftTask() {

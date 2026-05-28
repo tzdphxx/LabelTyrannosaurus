@@ -29,8 +29,13 @@ import com.labelhub.modules.storage.service.FileStorageProperties;
 import com.labelhub.modules.task.domain.TaskEntity;
 import com.labelhub.modules.task.domain.TaskStatus;
 import com.labelhub.modules.task.repository.TaskMapper;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionCallback;
+import org.springframework.transaction.support.TransactionOperations;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.io.ByteArrayInputStream;
 import java.io.InputStream;
@@ -41,8 +46,10 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -67,8 +74,27 @@ public class DatasetImportService {
     private final ObjectStorageService objectStorageService;
     private final FileStorageProperties storageProperties;
     private final AsyncJobService asyncJobService;
+    private final TransactionOperations transactionOperations;
     private final ObjectMapper objectMapper;
     private final Map<DatasetFileFormat, DatasetParser> parsers;
+
+    @Autowired
+    public DatasetImportService(TaskMapper taskMapper,
+                                ObjectFileMapper objectFileMapper,
+                                DatasetFileMapper datasetFileMapper,
+                                DatasetImportJobMapper importJobMapper,
+                                DatasetItemMapper datasetItemMapper,
+                                DatasetItemChangeLogMapper changeLogMapper,
+                                ObjectStorageService objectStorageService,
+                                FileStorageProperties storageProperties,
+                                AsyncJobService asyncJobService,
+                                PlatformTransactionManager transactionManager,
+                                ObjectMapper objectMapper,
+                                List<DatasetParser> parsers) {
+        this(taskMapper, objectFileMapper, datasetFileMapper, importJobMapper, datasetItemMapper, changeLogMapper,
+                objectStorageService, storageProperties, asyncJobService, new TransactionTemplate(transactionManager),
+                objectMapper, parsers);
+    }
 
     public DatasetImportService(TaskMapper taskMapper,
                                 ObjectFileMapper objectFileMapper,
@@ -81,6 +107,23 @@ public class DatasetImportService {
                                 AsyncJobService asyncJobService,
                                 ObjectMapper objectMapper,
                                 List<DatasetParser> parsers) {
+        this(taskMapper, objectFileMapper, datasetFileMapper, importJobMapper, datasetItemMapper, changeLogMapper,
+                objectStorageService, storageProperties, asyncJobService, new ImmediateTransactionOperations(),
+                objectMapper, parsers);
+    }
+
+    private DatasetImportService(TaskMapper taskMapper,
+                                 ObjectFileMapper objectFileMapper,
+                                 DatasetFileMapper datasetFileMapper,
+                                 DatasetImportJobMapper importJobMapper,
+                                 DatasetItemMapper datasetItemMapper,
+                                 DatasetItemChangeLogMapper changeLogMapper,
+                                 ObjectStorageService objectStorageService,
+                                 FileStorageProperties storageProperties,
+                                 AsyncJobService asyncJobService,
+                                 TransactionOperations transactionOperations,
+                                 ObjectMapper objectMapper,
+                                 List<DatasetParser> parsers) {
         this.taskMapper = taskMapper;
         this.objectFileMapper = objectFileMapper;
         this.datasetFileMapper = datasetFileMapper;
@@ -90,6 +133,7 @@ public class DatasetImportService {
         this.objectStorageService = objectStorageService;
         this.storageProperties = storageProperties;
         this.asyncJobService = asyncJobService;
+        this.transactionOperations = transactionOperations;
         this.objectMapper = objectMapper;
         this.parsers = parsers.stream().collect(Collectors.toMap(DatasetParser::format, Function.identity()));
     }
@@ -203,37 +247,72 @@ public class DatasetImportService {
                            Long actorId) {
         try {
             markRunning(job);
-            if (mode == DatasetImportMode.OVERWRITE) {
-                // 覆盖导入采用软删除，保留历史题目和变更审计的可追溯性。
-                datasetItemMapper.softDeleteActiveByTaskId(job.getTaskId());
-            }
             DatasetParseResult result;
             try (InputStream inputStream = objectStorageService.openReadStream(sourceFile.getBucketName(), sourceFile.getObjectKey())) {
                 result = parser.parse(inputStream, request.datasetType());
             }
 
-            List<DatasetImportError> errors = new ArrayList<>(result.errors());
-            int successCount = 0;
-            for (DatasetImportRow row : result.rows()) {
-                // 唯一性由数据库约束兜底，这里先做业务检查以生成可读的行级错误报告。
-                if (datasetItemMapper.countActiveByTaskIdAndExternalId(job.getTaskId(), row.externalId()) > 0) {
-                    errors.add(new DatasetImportError(row.rowNo(), row.externalId(), "DUPLICATE_EXTERNAL_ID",
-                            "externalId already exists in this task", row.rawRow()));
-                    continue;
-                }
-                DatasetItemEntity item = toEntity(job.getTaskId(), request.datasetType().name(), row);
-                datasetItemMapper.insert(item);
-                appendChangeLog(job.getTaskId(), item, actorId);
-                successCount++;
-            }
-            finishJob(job, result.rows().size() + result.errors().size(), successCount, errors, actorId);
+            ImportBatch batch = prepareBatch(job, request, mode, result);
+            transactionOperations.execute(status -> {
+                applyBatch(job, mode, batch, actorId);
+                return null;
+            });
         } catch (Throwable failure) {
             // 文件级或系统级异常标记整个任务失败，便于前端轮询展示失败原因。
+            Throwable effectiveFailure = unwrapImportFailure(failure);
             job.setStatus(DatasetImportStatus.FAILED.name());
-            job.setErrorMessage(failure.getMessage());
+            job.setErrorMessage(effectiveFailure.getMessage());
             job.setFinishedAt(LocalDateTime.now());
             importJobMapper.updateById(job);
         }
+    }
+
+    private ImportBatch prepareBatch(DatasetImportJobEntity job,
+                                     DatasetImportRequest request,
+                                     DatasetImportMode mode,
+                                     DatasetParseResult result) throws JsonProcessingException {
+        List<DatasetImportError> errors = new ArrayList<>(result.errors());
+        List<DatasetItemEntity> items = new ArrayList<>();
+        Set<String> seenExternalIds = new HashSet<>();
+        for (DatasetImportRow row : result.rows()) {
+            if (!seenExternalIds.add(row.externalId())) {
+                errors.add(new DatasetImportError(row.rowNo(), row.externalId(), "DUPLICATE_EXTERNAL_ID",
+                        "externalId duplicated in source file", row.rawRow()));
+                continue;
+            }
+            // 追加导入需要避开现有活跃题目；覆盖导入会先软删除旧活跃题目，允许复用原 externalId。
+            if (mode == DatasetImportMode.APPEND
+                    && datasetItemMapper.countActiveByTaskIdAndExternalId(job.getTaskId(), row.externalId()) > 0) {
+                errors.add(new DatasetImportError(row.rowNo(), row.externalId(), "DUPLICATE_EXTERNAL_ID",
+                        "externalId already exists in this task", row.rawRow()));
+                continue;
+            }
+            items.add(toEntity(job.getTaskId(), request.datasetType().name(), row));
+        }
+        return new ImportBatch(result.rows().size() + result.errors().size(), items, errors);
+    }
+
+    private void applyBatch(DatasetImportJobEntity job, DatasetImportMode mode, ImportBatch batch, Long actorId) {
+        try {
+            if (mode == DatasetImportMode.OVERWRITE) {
+                // 新文件已成功解析并完成行级校验后再覆盖，避免失败任务提前删除旧题目。
+                datasetItemMapper.softDeleteActiveByTaskId(job.getTaskId());
+            }
+            for (DatasetItemEntity item : batch.items()) {
+                datasetItemMapper.insert(item);
+                appendChangeLog(job.getTaskId(), item, actorId, mode);
+            }
+            finishJob(job, batch.totalCount(), batch.items().size(), batch.errors(), actorId);
+        } catch (JsonProcessingException ex) {
+            throw new ImportExecutionException(ex);
+        }
+    }
+
+    private Throwable unwrapImportFailure(Throwable failure) {
+        if (failure instanceof ImportExecutionException && failure.getCause() != null) {
+            return failure.getCause();
+        }
+        return failure;
     }
 
     private void markRunning(DatasetImportJobEntity job) {
@@ -256,11 +335,11 @@ public class DatasetImportService {
         return item;
     }
 
-    private void appendChangeLog(Long taskId, DatasetItemEntity item, Long actorId) {
+    private void appendChangeLog(Long taskId, DatasetItemEntity item, Long actorId, DatasetImportMode mode) {
         DatasetItemChangeLogEntity changeLog = new DatasetItemChangeLogEntity();
         changeLog.setTaskId(taskId);
         changeLog.setItemId(item.getId());
-        changeLog.setChangeType("IMPORT_APPEND");
+        changeLog.setChangeType(mode == DatasetImportMode.OVERWRITE ? "IMPORT_OVERWRITE" : "IMPORT_APPEND");
         changeLog.setAfterJson(item.getItemJson());
         changeLog.setActorId(actorId);
         changeLogMapper.insert(changeLog);
@@ -361,5 +440,21 @@ public class DatasetImportService {
                 job.getFinishedAt(),
                 job.getCreatedAt()
         );
+    }
+
+    private record ImportBatch(int totalCount, List<DatasetItemEntity> items, List<DatasetImportError> errors) {
+    }
+
+    private static class ImportExecutionException extends RuntimeException {
+        private ImportExecutionException(Throwable cause) {
+            super(cause);
+        }
+    }
+
+    private static class ImmediateTransactionOperations implements TransactionOperations {
+        @Override
+        public <T> T execute(TransactionCallback<T> action) {
+            return action.doInTransaction(null);
+        }
     }
 }

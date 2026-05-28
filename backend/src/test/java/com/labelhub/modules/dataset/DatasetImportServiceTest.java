@@ -144,6 +144,50 @@ class DatasetImportServiceTest {
                 .isEqualTo(409301);
     }
 
+    @Test
+    void overwriteImportDoesNotDeleteExistingRowsWhenSourceReadFails() throws Exception {
+        CurrentUserContext.set(new CurrentUser(10L, "owner", "owner@example.com", Set.of(RoleCode.OWNER), 1));
+        stubTask(TaskStatus.DRAFT);
+        stubSourceFile("qa_quality.jsonl");
+        stubIds();
+        when(objectStorageService.openReadStream("labelhub-test", "uploads/dataset/qa_quality.jsonl"))
+                .thenThrow(new IllegalStateException("storage unavailable"));
+
+        service.createOverwriteImport(1L, new DatasetImportRequest(99L, DatasetType.QA_QUALITY));
+
+        verify(datasetItemMapper, never()).softDeleteActiveByTaskId(1L);
+        verify(datasetItemMapper, never()).insert(any(DatasetItemEntity.class));
+        ArgumentCaptor<DatasetImportJobEntity> jobCaptor = ArgumentCaptor.forClass(DatasetImportJobEntity.class);
+        verify(importJobMapper, org.mockito.Mockito.atLeastOnce()).updateById(jobCaptor.capture());
+        DatasetImportJobEntity finalJob = jobCaptor.getAllValues().get(jobCaptor.getAllValues().size() - 1);
+        assertThat(finalJob.getStatus()).isEqualTo("FAILED");
+        assertThat(finalJob.getErrorMessage()).contains("storage unavailable");
+    }
+
+    @Test
+    void overwriteImportSoftDeletesExistingRowsBeforeInsertingReplacementRows() throws Exception {
+        CurrentUserContext.set(new CurrentUser(10L, "owner", "owner@example.com", Set.of(RoleCode.OWNER), 1));
+        stubTask(TaskStatus.DRAFT);
+        stubSourceFile("qa_quality.jsonl");
+        stubIds();
+        when(objectStorageService.openReadStream("labelhub-test", "uploads/dataset/qa_quality.jsonl"))
+                .thenReturn(new ByteArrayInputStream("""
+                        {"externalId":"q1","question":"replacement"}
+                        """.getBytes(StandardCharsets.UTF_8)));
+        when(datasetItemMapper.countActiveByTaskIdAndExternalId(1L, "q1")).thenReturn(1);
+
+        service.createOverwriteImport(1L, new DatasetImportRequest(99L, DatasetType.QA_QUALITY));
+
+        verify(datasetItemMapper).softDeleteActiveByTaskId(1L);
+        ArgumentCaptor<DatasetItemEntity> itemCaptor = ArgumentCaptor.forClass(DatasetItemEntity.class);
+        verify(datasetItemMapper).insert(itemCaptor.capture());
+        assertThat(itemCaptor.getValue().getExternalId()).isEqualTo("q1");
+        ArgumentCaptor<DatasetImportJobEntity> jobCaptor = ArgumentCaptor.forClass(DatasetImportJobEntity.class);
+        verify(importJobMapper, org.mockito.Mockito.atLeastOnce()).updateById(jobCaptor.capture());
+        DatasetImportJobEntity finalJob = jobCaptor.getAllValues().get(jobCaptor.getAllValues().size() - 1);
+        assertThat(finalJob.getStatus()).isEqualTo("SUCCESS");
+    }
+
     private void stubTask(TaskStatus status) {
         TaskEntity task = new TaskEntity();
         task.setId(1L);

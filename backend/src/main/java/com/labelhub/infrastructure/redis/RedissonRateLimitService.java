@@ -19,7 +19,11 @@ public class RedissonRateLimitService implements RateLimitService {
     @Override
     public RateLimitResult tryAcquire(String key, long permits) {
         RRateLimiter rateLimiter = redissonClient.getRateLimiter(key);
-        rateLimiter.trySetRate(RateType.OVERALL, properties.defaultRate(), properties.defaultInterval());
+        rateLimiter.trySetRate(
+                RateType.OVERALL,
+                properties.defaultRate(),
+                properties.defaultInterval(),
+                properties.defaultInterval().multipliedBy(2));
         boolean allowed = rateLimiter.tryAcquire(permits);
         if (allowed) {
             return new RateLimitResult(true, 0L);

@@ -28,7 +28,7 @@ class RateLimitServiceTest {
 
         assertThat(result.allowed()).isTrue();
         assertThat(result.retryAfterMillis()).isZero();
-        verify(rateLimiter).trySetRate(RateType.OVERALL, 5L, Duration.ofSeconds(60));
+        verify(rateLimiter).trySetRate(RateType.OVERALL, 5L, Duration.ofSeconds(60), Duration.ofSeconds(120));
     }
 
     @Test

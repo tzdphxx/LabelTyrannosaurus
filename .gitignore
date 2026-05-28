@@ -50,3 +50,6 @@ __MACOSX/
 .env
 .env.*
 !.env.example
+
+# Local agent memory
+memory.md

@@ -8,9 +8,13 @@ import static org.mockito.Mockito.when;
 import com.labelhub.common.api.ApiResponse;
 import com.labelhub.common.security.CurrentUserContext;
 import com.labelhub.modules.review.dto.ApproveRequest;
+import com.labelhub.modules.review.dto.BatchApproveRequest;
+import com.labelhub.modules.review.dto.BatchReviewResponse;
+import com.labelhub.modules.review.dto.BatchReviewItemResult;
 import com.labelhub.modules.review.dto.RejectRequest;
 import com.labelhub.modules.review.dto.ReviewActionResponse;
 import com.labelhub.modules.review.dto.SubmissionReviewItem;
+import com.labelhub.modules.review.service.BatchReviewService;
 import com.labelhub.modules.review.service.ReviewService;
 import com.labelhub.modules.submission.domain.SubmissionStatus;
 import java.util.List;
@@ -24,13 +28,14 @@ import org.mockito.junit.jupiter.MockitoExtension;
 class ReviewControllerTest {
 
     @Mock private ReviewService reviewService;
+    @Mock private BatchReviewService batchReviewService;
     @Mock private CurrentUserContext currentUserContext;
 
     private ReviewController controller;
 
     @BeforeEach
     void setUp() {
-        controller = new ReviewController(reviewService, currentUserContext);
+        controller = new ReviewController(reviewService, batchReviewService, currentUserContext);
     }
 
     @Test
@@ -72,5 +77,19 @@ class ReviewControllerTest {
 
         assertThat(response.data()).isEqualTo(serviceResponse);
         assertThat(response.data().submissionStatus()).isEqualTo(SubmissionStatus.REJECTED);
+    }
+
+    @Test
+    void batchApproveDelegatesToBatchService() {
+        when(currentUserContext.currentUserId()).thenReturn(1L);
+        BatchReviewResponse serviceResponse = new BatchReviewResponse(
+                1, 1, 0, List.of(BatchReviewItemResult.ok(100L)));
+        when(batchReviewService.batchApprove(eq(1L), any(BatchApproveRequest.class)))
+                .thenReturn(serviceResponse);
+
+        ApiResponse<BatchReviewResponse> response = controller.batchApprove(
+                new BatchApproveRequest(List.of(100L), "ok", 1));
+
+        assertThat(response.data().successCount()).isEqualTo(1);
     }
 }

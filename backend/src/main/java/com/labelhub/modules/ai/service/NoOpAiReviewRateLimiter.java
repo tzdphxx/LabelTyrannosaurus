@@ -1,8 +1,5 @@
 package com.labelhub.modules.ai.service;
 
-import org.springframework.stereotype.Component;
-
-@Component
 public class NoOpAiReviewRateLimiter implements AiReviewRateLimiter {
 
     @Override

@@ -32,6 +32,11 @@ public class CosObjectStorageService implements ObjectStorageService {
     }
 
     @Override
+    public InputStream openReadStream(String bucket, String objectKey) {
+        return cosClient.getObject(bucket, objectKey).getObjectContent();
+    }
+
+    @Override
     public URL generatePresignedDownloadUrl(String bucket, String objectKey, String originalFilename, Instant expiresAt) {
         GeneratePresignedUrlRequest request = new GeneratePresignedUrlRequest(bucket, objectKey, HttpMethodName.GET);
         request.setExpiration(Date.from(expiresAt));

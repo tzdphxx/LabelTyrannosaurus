@@ -45,4 +45,19 @@ public interface AssignmentMapper extends BaseMapper<Assignment> {
                                     @Param("expectedDraftVersion") Integer expectedDraftVersion,
                                     @Param("nextDraftVersion") Integer nextDraftVersion,
                                     @Param("nextStatus") AssignmentStatus nextStatus);
+
+    @Update("""
+            UPDATE assignments
+            SET status = #{nextStatus},
+                submitted_at = CURRENT_TIMESTAMP(3),
+                updated_at = CURRENT_TIMESTAMP(3)
+            WHERE id = #{assignmentId}
+              AND labeler_id = #{labelerId}
+              AND draft_version = #{expectedDraftVersion}
+              AND status IN ('CLAIMED', 'DRAFTING', 'RETURNED')
+            """)
+    int markSubmittedIfCurrent(@Param("assignmentId") Long assignmentId,
+                               @Param("labelerId") Long labelerId,
+                               @Param("expectedDraftVersion") Integer expectedDraftVersion,
+                               @Param("nextStatus") AssignmentStatus nextStatus);
 }

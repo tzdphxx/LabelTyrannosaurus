@@ -4,6 +4,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.labelhub.common.audit.AuditAppender;
+import com.labelhub.common.audit.AuditCommand;
 import com.labelhub.common.exception.BusinessException;
 import com.labelhub.modules.agent.domain.AgentRun;
 import com.labelhub.modules.agent.domain.AgentRunStatus;
@@ -225,8 +226,9 @@ public class SubmissionSubmitService {
         afterJson.put("versionNo", submission.getVersionNo());
         afterJson.put("answerHash", submission.getAnswerHash());
 
-        auditAppender.append(ASSIGNMENT_BIZ_TYPE, assignment.getId(), USER_ACTOR_TYPE, assignment.getLabelerId(),
-                "ASSIGNMENT_SUBMITTED", beforeJson, afterJson, null, agentRunId);
+        auditAppender.append(new AuditCommand(USER_ACTOR_TYPE, assignment.getLabelerId(),
+                ASSIGNMENT_BIZ_TYPE, assignment.getId(),
+                "ASSIGNMENT_SUBMITTED", beforeJson, afterJson, null, agentRunId));
     }
 
     private SubmissionSubmitResponse toResponse(Submission submission, Long agentRunId) {

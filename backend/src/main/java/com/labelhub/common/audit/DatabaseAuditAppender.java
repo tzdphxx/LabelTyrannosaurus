@@ -17,25 +17,17 @@ public class DatabaseAuditAppender implements AuditAppender {
     }
 
     @Override
-    public Long append(String bizType,
-                       Long bizId,
-                       String actorType,
-                       Long actorId,
-                       String action,
-                       Map<String, Object> beforeJson,
-                       Map<String, Object> afterJson,
-                       String traceId,
-                       Long agentRunId) {
+    public Long append(AuditCommand command) {
         AuditLog auditLog = new AuditLog();
-        auditLog.setBizType(bizType);
-        auditLog.setBizId(bizId);
-        auditLog.setActorType(actorType);
-        auditLog.setActorId(actorId);
-        auditLog.setAction(action);
-        auditLog.setBeforeJson(toJson(beforeJson));
-        auditLog.setAfterJson(toJson(afterJson));
-        auditLog.setTraceId(traceId);
-        auditLog.setAgentRunId(agentRunId);
+        auditLog.setBizType(command.bizType());
+        auditLog.setBizId(command.bizId());
+        auditLog.setActorType(command.actorType());
+        auditLog.setActorId(command.actorId());
+        auditLog.setAction(command.action());
+        auditLog.setBeforeJson(toJson(command.beforeJson()));
+        auditLog.setAfterJson(toJson(command.afterJson()));
+        auditLog.setTraceId(command.traceId());
+        auditLog.setAgentRunId(command.agentRunId());
         auditLogMapper.insert(auditLog);
         return auditLog.getId();
     }

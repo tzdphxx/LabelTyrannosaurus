@@ -1,6 +1,7 @@
 package com.labelhub.modules.review.service;
 
 import com.labelhub.common.audit.AuditAppender;
+import com.labelhub.common.audit.AuditCommand;
 import com.labelhub.common.exception.BusinessException;
 import com.labelhub.modules.review.domain.ConflictGroup;
 import com.labelhub.modules.review.domain.ConflictStatus;
@@ -171,9 +172,9 @@ public class ConflictResolveService {
         after.put("goldenSubmissionId", golden.getId());
         after.put("reviewRecordId", reviewRecordId);
 
-        auditAppender.append(SUBMISSION_BIZ_TYPE, golden.getId(),
-                USER_ACTOR_TYPE, reviewerId,
-                "CONFLICT_RESOLVED", before, after, null, null);
+        auditAppender.append(new AuditCommand(USER_ACTOR_TYPE, reviewerId,
+                SUBMISSION_BIZ_TYPE, golden.getId(),
+                "CONFLICT_RESOLVED", before, after, null, null));
     }
 
     private ConflictGroupResponse toResponse(ConflictGroup group) {

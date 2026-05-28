@@ -2,6 +2,7 @@ package com.labelhub.modules.ai.service;
 
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.labelhub.common.audit.AuditAppender;
+import com.labelhub.common.audit.AuditCommand;
 import com.labelhub.common.exception.BusinessException;
 import com.labelhub.modules.ai.domain.LlmProvider;
 import com.labelhub.modules.ai.dto.CreateLlmProviderRequest;
@@ -76,8 +77,8 @@ public class LlmProviderService {
         provider.setEnabled(true);
         provider.setCreatedBy(actorId);
         llmProviderMapper.insert(provider);
-        auditAppender.append(BIZ_TYPE, provider.getId(), USER_ACTOR_TYPE, actorId, "LLM_PROVIDER_CREATED",
-                null, auditSnapshot(provider), null, null);
+        auditAppender.append(new AuditCommand(USER_ACTOR_TYPE, actorId, BIZ_TYPE, provider.getId(), "LLM_PROVIDER_CREATED",
+                null, auditSnapshot(provider), null, null));
         return toResponse(provider);
     }
 
@@ -92,8 +93,8 @@ public class LlmProviderService {
             provider.setEncryptedApiKey(encryptor.encrypt(request.apiKey().trim()));
         }
         llmProviderMapper.updateById(provider);
-        auditAppender.append(BIZ_TYPE, provider.getId(), USER_ACTOR_TYPE, actorId, "LLM_PROVIDER_UPDATED",
-                beforeJson, auditSnapshot(provider), null, null);
+        auditAppender.append(new AuditCommand(USER_ACTOR_TYPE, actorId, BIZ_TYPE, provider.getId(), "LLM_PROVIDER_UPDATED",
+                beforeJson, auditSnapshot(provider), null, null));
         return toResponse(provider);
     }
 
@@ -141,8 +142,8 @@ public class LlmProviderService {
         Map<String, Object> beforeJson = auditSnapshot(provider);
         provider.setEnabled(enabled);
         llmProviderMapper.updateById(provider);
-        auditAppender.append(BIZ_TYPE, provider.getId(), USER_ACTOR_TYPE, actorId, action,
-                beforeJson, auditSnapshot(provider), null, null);
+        auditAppender.append(new AuditCommand(USER_ACTOR_TYPE, actorId, BIZ_TYPE, provider.getId(), action,
+                beforeJson, auditSnapshot(provider), null, null));
         return toResponse(provider);
     }
 

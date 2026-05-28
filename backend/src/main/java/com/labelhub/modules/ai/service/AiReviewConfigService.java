@@ -5,6 +5,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.labelhub.common.audit.AuditAppender;
+import com.labelhub.common.audit.AuditCommand;
 import com.labelhub.common.exception.BusinessException;
 import com.labelhub.common.web.TraceIdProvider;
 import com.labelhub.infrastructure.llm.LlmGateway;
@@ -101,8 +102,8 @@ public class AiReviewConfigService {
         aiReviewConfigMapper.insert(config);
         task.setAiReviewConfigId(config.getId());
         taskMapper.updateById(task);
-        auditAppender.append(BIZ_TYPE, config.getId(), USER_ACTOR_TYPE, ownerId, "AI_REVIEW_CONFIG_CREATED",
-                null, auditSnapshot(config), traceIdProvider.currentTraceId(), null);
+        auditAppender.append(new AuditCommand(USER_ACTOR_TYPE, ownerId, BIZ_TYPE, config.getId(), "AI_REVIEW_CONFIG_CREATED",
+                null, auditSnapshot(config), traceIdProvider.currentTraceId(), null));
         return toResponse(config);
     }
 
@@ -177,8 +178,8 @@ public class AiReviewConfigService {
             task.setAiReviewConfigId(config.getId());
             taskMapper.updateById(task);
         }
-        auditAppender.append(BIZ_TYPE, config.getId(), USER_ACTOR_TYPE, ownerId, action,
-                beforeJson, auditSnapshot(config), traceIdProvider.currentTraceId(), null);
+        auditAppender.append(new AuditCommand(USER_ACTOR_TYPE, ownerId, BIZ_TYPE, config.getId(), action,
+                beforeJson, auditSnapshot(config), traceIdProvider.currentTraceId(), null));
         return toResponse(config);
     }
 

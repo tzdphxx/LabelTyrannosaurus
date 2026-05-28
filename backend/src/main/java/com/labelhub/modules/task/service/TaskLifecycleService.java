@@ -2,6 +2,7 @@ package com.labelhub.modules.task.service;
 
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.labelhub.common.audit.AuditAppender;
+import com.labelhub.common.audit.AuditCommand;
 import com.labelhub.common.exception.BusinessException;
 import com.labelhub.common.web.TraceIdProvider;
 import com.labelhub.modules.task.domain.Task;
@@ -235,8 +236,8 @@ public class TaskLifecycleService {
                              String action,
                              Map<String, Object> beforeJson,
                              Map<String, Object> afterJson) {
-        auditAppender.append(TASK_BIZ_TYPE, task.getId(), USER_ACTOR_TYPE, actorId, action, beforeJson, afterJson,
-                traceIdProvider.currentTraceId(), null);
+        auditAppender.append(new AuditCommand(USER_ACTOR_TYPE, actorId, TASK_BIZ_TYPE, task.getId(), action, beforeJson, afterJson,
+                traceIdProvider.currentTraceId(), null));
     }
 
     private Map<String, Object> snapshot(Task task) {

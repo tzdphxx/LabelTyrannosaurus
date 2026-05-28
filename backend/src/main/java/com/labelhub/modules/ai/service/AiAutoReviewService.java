@@ -4,6 +4,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.labelhub.common.audit.AuditAppender;
+import com.labelhub.common.audit.AuditCommand;
 import com.labelhub.common.exception.BusinessException;
 import com.labelhub.common.web.TraceIdProvider;
 import com.labelhub.infrastructure.llm.LlmGateway;
@@ -246,8 +247,9 @@ public class AiAutoReviewService {
         String action = result.getStatus() == AiReviewStatus.SUCCESS
                 ? "AI_REVIEW_COMPLETED"
                 : "AI_REVIEW_MANUAL_REQUIRED";
-        auditAppender.append(BIZ_TYPE, result.getSubmissionId(), SystemActorContext.ACTOR_TYPE, actor.agentId(),
-                action, null, auditSnapshot(result), traceIdProvider.currentTraceId(), result.getEffectiveRunId());
+        auditAppender.append(new AuditCommand(SystemActorContext.ACTOR_TYPE, actor.agentId(),
+                BIZ_TYPE, result.getSubmissionId(),
+                action, null, auditSnapshot(result), traceIdProvider.currentTraceId(), result.getEffectiveRunId()));
     }
 
     private Map<String, Object> auditSnapshot(AiReviewResult result) {

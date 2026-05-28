@@ -1,6 +1,7 @@
 package com.labelhub.modules.review.service;
 
 import com.labelhub.common.audit.AuditAppender;
+import com.labelhub.common.audit.AuditCommand;
 import com.labelhub.common.exception.BusinessException;
 import com.labelhub.modules.assignment.domain.Assignment;
 import com.labelhub.modules.assignment.domain.AssignmentStatus;
@@ -151,8 +152,8 @@ public class ReviewService {
         after.put("isGolden", submission.getIsGolden());
         after.put("reviewRecordId", reviewRecordId);
 
-        auditAppender.append(SUBMISSION_BIZ_TYPE, submission.getId(),
-                USER_ACTOR_TYPE, reviewerId,
-                action, before, after, null, null);
+        auditAppender.append(new AuditCommand(USER_ACTOR_TYPE, reviewerId,
+                SUBMISSION_BIZ_TYPE, submission.getId(),
+                action, before, after, null, null));
     }
 }

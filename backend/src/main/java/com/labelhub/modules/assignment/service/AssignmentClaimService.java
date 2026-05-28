@@ -1,6 +1,7 @@
 package com.labelhub.modules.assignment.service;
 
 import com.labelhub.common.audit.AuditAppender;
+import com.labelhub.common.audit.AuditCommand;
 import com.labelhub.common.exception.BusinessException;
 import com.labelhub.common.security.CurrentUserContext;
 import com.labelhub.common.security.RoleCode;
@@ -42,7 +43,6 @@ public class AssignmentClaimService {
     private final RedisLockService redisLockService;
     private final AuditAppender auditAppender;
     private final TransactionTemplate transactionTemplate;
-    private final CurrentUserContext currentUserContext;
 
     public AssignmentClaimService(TaskMapper taskMapper,
                                   DatasetClaimService datasetClaimService,
@@ -50,8 +50,7 @@ public class AssignmentClaimService {
                                   AssignmentMapper assignmentMapper,
                                   RedisLockService redisLockService,
                                   AuditAppender auditAppender,
-                                  TransactionTemplate transactionTemplate,
-                                  CurrentUserContext currentUserContext) {
+                                  TransactionTemplate transactionTemplate) {
         this.taskMapper = taskMapper;
         this.datasetClaimService = datasetClaimService;
         this.templateSchemaService = templateSchemaService;
@@ -59,11 +58,10 @@ public class AssignmentClaimService {
         this.redisLockService = redisLockService;
         this.auditAppender = auditAppender;
         this.transactionTemplate = transactionTemplate;
-        this.currentUserContext = currentUserContext;
     }
 
     public AssignmentClaimResponse claim(Long taskId, Long labelerId) {
-        if (!currentUserContext.currentUser().roles().contains(RoleCode.LABELER)) {
+        if (!CurrentUserContext.requireCurrentUser().roles().contains(RoleCode.LABELER)) {
             throw new BusinessException(PERMISSION_DENIED, "Permission denied");
         }
         Task task = loadClaimableTask(taskId);
@@ -138,8 +136,9 @@ public class AssignmentClaimService {
         afterJson.put("datasetItemId", itemSnapshot.datasetItemId());
         afterJson.put("labelerId", assignment.getLabelerId());
         afterJson.put("status", assignment.getStatus());
-        auditAppender.append(ASSIGNMENT_BIZ_TYPE, assignment.getId(), USER_ACTOR_TYPE, assignment.getLabelerId(),
-                "ASSIGNMENT_CLAIMED", null, afterJson, null, null);
+        auditAppender.append(new AuditCommand(USER_ACTOR_TYPE, assignment.getLabelerId(),
+                ASSIGNMENT_BIZ_TYPE, assignment.getId(),
+                "ASSIGNMENT_CLAIMED", null, afterJson, null, null));
     }
 
     private BusinessException claimConflict(String message) {

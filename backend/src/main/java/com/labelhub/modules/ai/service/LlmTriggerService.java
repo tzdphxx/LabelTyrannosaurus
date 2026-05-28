@@ -4,6 +4,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.labelhub.common.audit.AuditAppender;
+import com.labelhub.common.audit.AuditCommand;
 import com.labelhub.common.exception.BusinessException;
 import com.labelhub.common.security.CurrentUser;
 import com.labelhub.common.security.RoleCode;
@@ -116,9 +117,9 @@ public class LlmTriggerService {
             LlmTriggerRunResponse response = new LlmTriggerRunResponse(agentRun.getId(), component.componentId(),
                     Map.of(), null, component.targetFields(), null, LlmGatewayStatus.RATE_LIMITED,
                     null, "RATE_LIMITED", "LLM trigger rate limited");
-            auditAppender.append(BIZ_TYPE, task.getId(), USER_ACTOR_TYPE, currentUser.userId(), "LLM_TRIGGER_RUN",
+            auditAppender.append(new AuditCommand(USER_ACTOR_TYPE, currentUser.userId(), BIZ_TYPE, task.getId(), "LLM_TRIGGER_RUN",
                     null, auditSnapshot(request, component, response), traceIdProvider.currentTraceId(),
-                    agentRun.getId());
+                    agentRun.getId()));
             return response;
         }
 
@@ -137,8 +138,8 @@ public class LlmTriggerService {
         }
 
         LlmTriggerRunResponse response = toResponse(agentRun.getId(), component, gatewayResponse);
-        auditAppender.append(BIZ_TYPE, task.getId(), USER_ACTOR_TYPE, currentUser.userId(), "LLM_TRIGGER_RUN",
-                null, auditSnapshot(request, component, response), traceIdProvider.currentTraceId(), agentRun.getId());
+        auditAppender.append(new AuditCommand(USER_ACTOR_TYPE, currentUser.userId(), BIZ_TYPE, task.getId(), "LLM_TRIGGER_RUN",
+                null, auditSnapshot(request, component, response), traceIdProvider.currentTraceId(), agentRun.getId()));
         return response;
     }
 

@@ -3,6 +3,7 @@ package com.labelhub.modules.assignment.service;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.labelhub.common.audit.AuditAppender;
+import com.labelhub.common.audit.AuditCommand;
 import com.labelhub.common.exception.BusinessException;
 import com.labelhub.modules.assignment.domain.Assignment;
 import com.labelhub.modules.assignment.domain.AssignmentStatus;
@@ -142,8 +143,9 @@ public class AssignmentDraftService {
         afterJson.put("draftVersion", afterEntry.draftVersion());
         afterJson.put("answerLength", afterEntry.draftAnswerJson() == null ? 0 : afterEntry.draftAnswerJson().length());
 
-        auditAppender.append(ASSIGNMENT_BIZ_TYPE, afterEntry.assignmentId(), USER_ACTOR_TYPE, afterEntry.labelerId(),
-                "ASSIGNMENT_DRAFT_SAVED", beforeJson, afterJson, null, null);
+        auditAppender.append(new AuditCommand(USER_ACTOR_TYPE, afterEntry.labelerId(),
+                ASSIGNMENT_BIZ_TYPE, afterEntry.assignmentId(),
+                "ASSIGNMENT_DRAFT_SAVED", beforeJson, afterJson, null, null));
     }
 
     private AssignmentDraftResponse toResponse(AssignmentDraftCacheEntry entry) {

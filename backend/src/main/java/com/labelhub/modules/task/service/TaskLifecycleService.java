@@ -255,7 +255,7 @@ public class TaskLifecycleService {
 
     private Task loadOwnedTask(Long ownerId, Long taskId) {
         Task task = taskMapper.selectById(taskId);
-        if (task == null || !task.getOwnerId().equals(ownerId)) {
+        if (task == null || !ownerId.equals(task.getOwnerId())) {
             throw new BusinessException(TASK_NOT_FOUND, "Task not found");
         }
         return task;

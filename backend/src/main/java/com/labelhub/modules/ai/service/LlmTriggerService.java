@@ -338,7 +338,11 @@ public class LlmTriggerService {
             return number.longValue();
         }
         if (value instanceof String text && !text.isBlank()) {
-            return Long.parseLong(text);
+            try {
+                return Long.parseLong(text);
+            } catch (NumberFormatException ex) {
+                return null;
+            }
         }
         return null;
     }

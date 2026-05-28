@@ -38,4 +38,21 @@ public interface DatasetItemMapper extends BaseMapper<DatasetItem> {
             """)
     int reserveIfAvailable(@Param("datasetItemId") Long datasetItemId,
                            @Param("overlapCount") Integer overlapCount);
+
+    @Select("""
+            SELECT COUNT(1)
+            FROM dataset_items di
+            WHERE di.task_id = #{taskId}
+              AND di.deleted = 0
+              AND di.assigned_count < #{overlapCount}
+              AND NOT EXISTS (
+                SELECT 1
+                FROM assignments a
+                WHERE a.dataset_item_id = di.id
+                  AND a.labeler_id = #{labelerId}
+              )
+            """)
+    Integer countAvailableForLabeler(@Param("taskId") Long taskId,
+                                     @Param("labelerId") Long labelerId,
+                                     @Param("overlapCount") Integer overlapCount);
 }

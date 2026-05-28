@@ -134,6 +134,26 @@ CREATE TABLE assignments (
   CONSTRAINT chk_assignments_draft_version CHECK (draft_version >= 1)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='Claim record and draft state for one labeler on one dataset item.';
 
+CREATE TABLE reward_rules (
+  id BIGINT PRIMARY KEY AUTO_INCREMENT,
+  task_id BIGINT NOT NULL,
+  effective_version INT NOT NULL,
+  reward_mode VARCHAR(32) NOT NULL DEFAULT 'APPROVED_ITEM',
+  unit_reward DECIMAL(12,2) NOT NULL DEFAULT 0,
+  reward_currency VARCHAR(32) NOT NULL DEFAULT 'POINT',
+  reward_visible TINYINT(1) NOT NULL DEFAULT 1,
+  effective_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  created_by BIGINT NOT NULL,
+  created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  UNIQUE KEY uk_reward_rules_task_version (task_id, effective_version),
+  KEY idx_reward_rules_task (task_id),
+  CONSTRAINT fk_reward_rules_task FOREIGN KEY (task_id) REFERENCES tasks(id),
+  CONSTRAINT fk_reward_rules_created_by FOREIGN KEY (created_by) REFERENCES users(id),
+  CONSTRAINT chk_reward_rules_mode CHECK (reward_mode IN ('APPROVED_ITEM')),
+  CONSTRAINT chk_reward_rules_unit_reward CHECK (unit_reward >= 0),
+  CONSTRAINT chk_reward_rules_effective_version CHECK (effective_version >= 1)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='Versioned virtual reward configuration for task market display.';
+
 CREATE TABLE audit_logs (
   id BIGINT PRIMARY KEY AUTO_INCREMENT,
   biz_type VARCHAR(64) NOT NULL,

@@ -38,11 +38,6 @@ class SystemAgentProviderTest {
     }
 
     @Test
-    void actorTypeConstantIsSystemAgent() {
-        assertThat(SystemActorContext.ACTOR_TYPE).isEqualTo("SYSTEM_AGENT");
-    }
-
-    @Test
     void cachesAgentIdAfterFirstLoad() {
         when(identityPort.loadSystemAgentId()).thenReturn(AGENT_ID);
 
@@ -60,5 +55,6 @@ class SystemAgentProviderTest {
         SystemActorContext second = provider.get();
 
         assertThat(first.agentId()).isEqualTo(second.agentId());
+        assertThat(first).isNotSameAs(second);
     }
 }

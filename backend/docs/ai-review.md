@@ -117,16 +117,25 @@ suggestionJson
 displayText
 targetFields
 rawModelSummary
+status
+latencyMs
+errorCode
+errorMessage
 ```
 
 Rules:
 ```Plaintext
-componentId must point to LlmTrigger.
+componentId must point to a template schema component whose type is LlmTrigger.
+Supported component fields: id/componentId, type, providerId, modelName, promptTemplate, targetFields[].
+Designer previewMode=true requires the current user to be the task owner.
+Labeler workbench previewMode=false requires an owned assignmentId matching taskId and templateVersionId.
 Output is only a reference or prefill suggestion.
 Frontend must wait for user confirmation before writing suggestion into answerJson.
 Designer previewMode=true does not create submissions.
 Every call creates an agentRun.
-Calls use RateLimitService.
+Calls pass through the LlmTriggerRateLimiter port; the default adapter is no-op until BE-B RateLimitService is wired.
+Rate limited calls return status=RATE_LIMITED and do not call LlmGateway.
+Successful calls complete the agentRun; failed model calls mark the agentRun FAILED.
 ```
 
 ## GET /api/v1/submissions/{submissionId}/ai-review

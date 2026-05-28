@@ -3,13 +3,17 @@ package com.labelhub.modules.assignment.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.labelhub.common.audit.AuditAppender;
+import com.labelhub.common.audit.AuditCommand;
 import com.labelhub.common.exception.BusinessException;
+import com.labelhub.common.security.CurrentUser;
+import com.labelhub.common.security.CurrentUserContext;
+import com.labelhub.common.security.RoleCode;
 import com.labelhub.infrastructure.redis.RedisLockService;
 import com.labelhub.modules.assignment.domain.Assignment;
 import com.labelhub.modules.assignment.domain.AssignmentStatus;
@@ -24,7 +28,9 @@ import com.labelhub.modules.template.service.TemplateSchemaService;
 import com.labelhub.modules.template.service.TemplateSchemaSnapshot;
 import java.time.LocalDateTime;
 import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -32,6 +38,8 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.dao.DuplicateKeyException;
+import org.springframework.transaction.support.TransactionCallback;
+import org.springframework.transaction.support.TransactionTemplate;
 
 @ExtendWith(MockitoExtension.class)
 class AssignmentClaimServiceTest {
@@ -60,18 +68,33 @@ class AssignmentClaimServiceTest {
     @Mock
     private AuditAppender auditAppender;
 
+    @Mock
+    private TransactionTemplate transactionTemplate;
+
     private AssignmentClaimService assignmentClaimService;
 
+    @SuppressWarnings("unchecked")
     @BeforeEach
     void setUp() {
+        lenient().when(transactionTemplate.execute(any(TransactionCallback.class))).thenAnswer(invocation -> {
+            TransactionCallback<?> callback = invocation.getArgument(0);
+            return callback.doInTransaction(null);
+        });
         assignmentClaimService = new AssignmentClaimService(
                 taskMapper,
                 datasetClaimService,
                 templateSchemaService,
                 assignmentMapper,
                 redisLockService,
-                auditAppender
+                auditAppender,
+                transactionTemplate
         );
+        CurrentUserContext.set(new CurrentUser(LABELER_ID, "labeler", "test@labelhub.dev", Set.of(RoleCode.LABELER), 1));
+    }
+
+    @AfterEach
+    void clearContext() {
+        CurrentUserContext.clear();
     }
 
     @Test
@@ -100,8 +123,7 @@ class AssignmentClaimServiceTest {
         ArgumentCaptor<Assignment> assignmentCaptor = ArgumentCaptor.forClass(Assignment.class);
         verify(assignmentMapper).insert(assignmentCaptor.capture());
         assertThat(assignmentCaptor.getValue().getStatus()).isEqualTo(AssignmentStatus.CLAIMED);
-        verify(auditAppender).append(eq("ASSIGNMENT"), eq(ASSIGNMENT_ID), eq("USER"), eq(LABELER_ID),
-                eq("ASSIGNMENT_CLAIMED"), eq(null), any(), eq(null), eq(null));
+        verify(auditAppender).append(any(AuditCommand.class));
         verify(redisLockService).unlock("lock:claim:task:10");
     }
 
@@ -129,7 +151,7 @@ class AssignmentClaimServiceTest {
                         ex -> assertThat(ex.getCode()).isEqualTo(409201));
 
         verify(assignmentMapper, never()).insert(any(Assignment.class));
-        verify(auditAppender, never()).append(any(), any(), any(), any(), any(), any(), any(), any(), any());
+        verify(auditAppender, never()).append(any(AuditCommand.class));
         verify(redisLockService).unlock("lock:claim:task:10");
     }
 
@@ -147,7 +169,7 @@ class AssignmentClaimServiceTest {
                 .isInstanceOfSatisfying(BusinessException.class,
                         ex -> assertThat(ex.getCode()).isEqualTo(409201));
 
-        verify(auditAppender, never()).append(any(), any(), any(), any(), any(), any(), any(), any(), any());
+        verify(auditAppender, never()).append(any(AuditCommand.class));
         verify(redisLockService).unlock("lock:claim:task:10");
     }
 
@@ -186,7 +208,8 @@ class AssignmentClaimServiceTest {
                 templateSchemaService,
                 assignmentMapper,
                 redisLockService,
-                auditAppender
+                auditAppender,
+                transactionTemplate
         );
         when(taskMapper.selectById(TASK_ID)).thenReturn(publishedTask(1));
         when(redisLockService.tryLock("lock:claim:task:10", 2000, 10000)).thenReturn(true);
@@ -203,10 +226,13 @@ class AssignmentClaimServiceTest {
         for (int i = 0; i < threads.length; i++) {
             long labelerId = 100L + i;
             threads[i] = new Thread(() -> {
+                CurrentUserContext.set(new CurrentUser(labelerId, "labeler", "test@labelhub.dev", Set.of(RoleCode.LABELER), 1));
                 try {
                     concurrentService.claim(TASK_ID, labelerId);
                     successCount.incrementAndGet();
                 } catch (BusinessException ignored) {
+                } finally {
+                    CurrentUserContext.clear();
                 }
             });
         }

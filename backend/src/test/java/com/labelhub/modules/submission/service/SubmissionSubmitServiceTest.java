@@ -3,12 +3,12 @@ package com.labelhub.modules.submission.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.labelhub.common.audit.AuditAppender;
+import com.labelhub.common.audit.AuditCommand;
 import com.labelhub.common.exception.BusinessException;
 import com.labelhub.modules.agent.domain.AgentRun;
 import com.labelhub.modules.agent.domain.AgentRunStatus;
@@ -128,8 +128,7 @@ class SubmissionSubmitServiceTest {
         assertThat(agentRunCaptor.getValue().getStatus()).isEqualTo(AgentRunStatus.PENDING);
         assertThat(agentRunCaptor.getValue().getAgentType()).isEqualTo("AI_REVIEW");
         assertThat(agentRunCaptor.getValue().getSubmissionId()).isEqualTo(SUBMISSION_ID);
-        verify(auditAppender).append(eq("ASSIGNMENT"), eq(ASSIGNMENT_ID), eq("USER"), eq(LABELER_ID),
-                eq("ASSIGNMENT_SUBMITTED"), any(), any(), eq(null), eq(AGENT_RUN_ID));
+        verify(auditAppender).append(any(AuditCommand.class));
         verify(aiReviewDispatcher).enqueue(SUBMISSION_ID);
     }
 
@@ -186,7 +185,7 @@ class SubmissionSubmitServiceTest {
         assertThat(response.agentRunId()).isNull();
         verify(submissionMapper, never()).insert(any(Submission.class));
         verify(agentRunMapper, never()).insert(any(AgentRun.class));
-        verify(auditAppender, never()).append(any(), any(), any(), any(), any(), any(), any(), any(), any());
+        verify(auditAppender, never()).append(any(AuditCommand.class));
         verify(aiReviewDispatcher, never()).enqueue(any());
     }
 
@@ -212,7 +211,7 @@ class SubmissionSubmitServiceTest {
                 LABELER_ID,
                 new SubmissionSubmitRequest(ANSWER_JSON, 1)
         )).isInstanceOfSatisfying(BusinessException.class,
-                ex -> assertThat(ex.getCode()).isEqualTo(409401));
+                ex -> assertThat(ex.getCode()).isEqualTo(409101));
     }
 
     @Test

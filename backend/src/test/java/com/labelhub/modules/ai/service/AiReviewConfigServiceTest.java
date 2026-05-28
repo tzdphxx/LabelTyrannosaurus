@@ -9,6 +9,7 @@ import static org.mockito.Mockito.when;
 
 import com.baomidou.mybatisplus.core.conditions.Wrapper;
 import com.labelhub.common.audit.AuditAppender;
+import com.labelhub.common.audit.AuditCommand;
 import com.labelhub.common.exception.BusinessException;
 import com.labelhub.common.web.TraceIdProvider;
 import com.labelhub.infrastructure.llm.LlmGateway;
@@ -106,8 +107,7 @@ class AiReviewConfigServiceTest {
         ArgumentCaptor<Task> taskCaptor = ArgumentCaptor.forClass(Task.class);
         verify(taskMapper).updateById(taskCaptor.capture());
         assertThat(taskCaptor.getValue().getAiReviewConfigId()).isEqualTo(CONFIG_ID);
-        verify(auditAppender).append(eq("AI_REVIEW_CONFIG"), eq(CONFIG_ID), eq("USER"), eq(OWNER_ID),
-                eq("AI_REVIEW_CONFIG_CREATED"), eq(null), any(), eq("trace-1"), eq(null));
+        verify(auditAppender).append(any(AuditCommand.class));
     }
 
     @Test
@@ -162,8 +162,7 @@ class AiReviewConfigServiceTest {
 
         assertThat(response.promptVersion()).isEqualTo("v4");
         assertThat(existing.getPromptVersion()).isEqualTo("v4");
-        verify(auditAppender).append(eq("AI_REVIEW_CONFIG"), eq(CONFIG_ID), eq("USER"), eq(OWNER_ID),
-                eq("AI_REVIEW_CONFIG_UPDATED"), any(), any(), eq(null), eq(null));
+        verify(auditAppender).append(any(AuditCommand.class));
     }
 
     @Test

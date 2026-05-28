@@ -5,7 +5,9 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.labelhub.common.api.ApiResponse;
+import com.labelhub.common.security.CurrentUser;
 import com.labelhub.common.security.CurrentUserContext;
+import com.labelhub.common.security.RoleCode;
 import com.labelhub.infrastructure.llm.LlmGatewayStatus;
 import com.labelhub.modules.ai.dto.AiReviewConfigRequest;
 import com.labelhub.modules.ai.dto.AiReviewConfigResponse;
@@ -15,6 +17,8 @@ import com.labelhub.modules.ai.service.AiReviewConfigService;
 import java.math.BigDecimal;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
@@ -26,15 +30,17 @@ class AiReviewConfigControllerTest {
     @Mock
     private AiReviewConfigService aiReviewConfigService;
 
-    @Mock
-    private CurrentUserContext currentUserContext;
+    @AfterEach
+    void clearContext() {
+        CurrentUserContext.clear();
+    }
 
     @Test
     void readsCurrentUserWhenSavingConfig() {
-        AiReviewConfigController controller = new AiReviewConfigController(aiReviewConfigService, currentUserContext);
+        CurrentUserContext.set(new CurrentUser(1L, "owner", "test@labelhub.dev", Set.of(RoleCode.OWNER), 1));
+        AiReviewConfigController controller = new AiReviewConfigController(aiReviewConfigService);
         AiReviewConfigRequest request = request();
         AiReviewConfigResponse serviceResponse = response();
-        when(currentUserContext.currentUserId()).thenReturn(1L);
         when(aiReviewConfigService.save(1L, 10L, request)).thenReturn(serviceResponse);
 
         ApiResponse<AiReviewConfigResponse> response = controller.save(10L, request);
@@ -45,7 +51,8 @@ class AiReviewConfigControllerTest {
 
     @Test
     void readsCurrentUserWhenTestingPrompt() {
-        AiReviewConfigController controller = new AiReviewConfigController(aiReviewConfigService, currentUserContext);
+        CurrentUserContext.set(new CurrentUser(1L, "owner", "test@labelhub.dev", Set.of(RoleCode.OWNER), 1));
+        AiReviewConfigController controller = new AiReviewConfigController(aiReviewConfigService);
         AiReviewPromptTestRequest request = new AiReviewPromptTestRequest(Map.of("item", "raw"), Map.of("answer", "ok"));
         AiReviewPromptTestResponse serviceResponse = new AiReviewPromptTestResponse(
                 70L,
@@ -57,7 +64,6 @@ class AiReviewConfigControllerTest {
                 null,
                 null
         );
-        when(currentUserContext.currentUserId()).thenReturn(1L);
         when(aiReviewConfigService.testPrompt(1L, 10L, 20L, request)).thenReturn(serviceResponse);
 
         ApiResponse<AiReviewPromptTestResponse> response = controller.test(10L, 20L, request);

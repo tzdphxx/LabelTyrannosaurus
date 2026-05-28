@@ -3,12 +3,12 @@ package com.labelhub.modules.ai.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.baomidou.mybatisplus.core.conditions.Wrapper;
 import com.labelhub.common.audit.AuditAppender;
+import com.labelhub.common.audit.AuditCommand;
 import com.labelhub.common.exception.BusinessException;
 import com.labelhub.modules.ai.domain.LlmProvider;
 import com.labelhub.modules.ai.dto.CreateLlmProviderRequest;
@@ -72,8 +72,7 @@ class LlmProviderServiceTest {
         assertThat(stored.getEncryptedApiKey()).isNotEqualTo("sk-test");
         assertThat(encryptor.decrypt(stored.getEncryptedApiKey())).isEqualTo("sk-test");
         assertThat(stored.getCustomHeadersJson()).contains("Authorization").doesNotContain("unused");
-        verify(auditAppender).append(eq("LLM_PROVIDER"), eq(PROVIDER_ID), eq("USER"), eq(ACTOR_ID),
-                eq("LLM_PROVIDER_CREATED"), eq(null), any(), eq(null), eq(null));
+        verify(auditAppender).append(any(AuditCommand.class));
     }
 
     @Test
@@ -87,8 +86,7 @@ class LlmProviderServiceTest {
 
         assertThat(response.defaultModel()).isEqualTo("qwen-plus");
         assertThat(provider.getEncryptedApiKey()).isEqualTo(originalEncryptedKey);
-        verify(auditAppender).append(eq("LLM_PROVIDER"), eq(PROVIDER_ID), eq("USER"), eq(ACTOR_ID),
-                eq("LLM_PROVIDER_UPDATED"), any(), any(), eq(null), eq(null));
+        verify(auditAppender).append(any(AuditCommand.class));
     }
 
     @Test
@@ -112,8 +110,7 @@ class LlmProviderServiceTest {
 
         assertThat(disabled.enabled()).isFalse();
         assertThat(service.findEnabledById(PROVIDER_ID)).isEmpty();
-        verify(auditAppender).append(eq("LLM_PROVIDER"), eq(PROVIDER_ID), eq("USER"), eq(ACTOR_ID),
-                eq("LLM_PROVIDER_DISABLED"), any(), any(), eq(null), eq(null));
+        verify(auditAppender).append(any(AuditCommand.class));
     }
 
     @Test

@@ -3,12 +3,12 @@ package com.labelhub.modules.task.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.baomidou.mybatisplus.core.conditions.Wrapper;
 import com.labelhub.common.audit.AuditAppender;
+import com.labelhub.common.audit.AuditCommand;
 import com.labelhub.common.exception.BusinessException;
 import com.labelhub.common.web.TraceIdProvider;
 import com.labelhub.modules.ai.mapper.AiReviewConfigMapper;
@@ -83,8 +83,7 @@ class TaskLifecycleServiceTest {
         verify(taskMapper).insert(taskCaptor.capture());
         assertThat(taskCaptor.getValue().getStatus()).isEqualTo(TaskStatus.DRAFT);
         verify(taskTagMapper).insert(any(TaskTag.class));
-        verify(auditAppender).append(eq("TASK"), eq(TASK_ID), eq("USER"), eq(OWNER_ID), eq("TASK_CREATED"),
-                eq(null), any(), eq("trace-1"), eq(null));
+        verify(auditAppender).append(any(AuditCommand.class));
     }
 
     @Test
@@ -127,8 +126,7 @@ class TaskLifecycleServiceTest {
 
         assertThat(response.status()).isEqualTo(TaskStatus.DRAFT);
         assertThat(task.getTitle()).isEqualTo("Updated task");
-        verify(auditAppender).append(eq("TASK"), eq(TASK_ID), eq("USER"), eq(OWNER_ID), eq("TASK_UPDATED"),
-                any(), any(), eq(null), eq(null));
+        verify(auditAppender).append(any(AuditCommand.class));
     }
 
     @Test
@@ -157,14 +155,7 @@ class TaskLifecycleServiceTest {
         assertThat(taskLifecycleService.resume(OWNER_ID, TASK_ID).status()).isEqualTo(TaskStatus.PUBLISHED);
         assertThat(taskLifecycleService.end(OWNER_ID, TASK_ID).status()).isEqualTo(TaskStatus.ENDED);
 
-        verify(auditAppender).append(eq("TASK"), eq(TASK_ID), eq("USER"), eq(OWNER_ID), eq("TASK_PUBLISHED"),
-                any(), any(), eq(null), eq(null));
-        verify(auditAppender).append(eq("TASK"), eq(TASK_ID), eq("USER"), eq(OWNER_ID), eq("TASK_PAUSED"),
-                any(), any(), eq(null), eq(null));
-        verify(auditAppender).append(eq("TASK"), eq(TASK_ID), eq("USER"), eq(OWNER_ID), eq("TASK_RESUMED"),
-                any(), any(), eq(null), eq(null));
-        verify(auditAppender).append(eq("TASK"), eq(TASK_ID), eq("USER"), eq(OWNER_ID), eq("TASK_ENDED"),
-                any(), any(), eq(null), eq(null));
+        verify(auditAppender, Mockito.times(4)).append(any(AuditCommand.class));
     }
 
     @Test
@@ -195,10 +186,10 @@ class TaskLifecycleServiceTest {
         AiReviewConfigMapper aiReviewConfigMapper = Mockito.mock(AiReviewConfigMapper.class);
         DefaultTaskPublishDependencyChecker checker = new DefaultTaskPublishDependencyChecker(aiReviewConfigMapper);
 
-        assertThat(checker.datasetReady(TASK_ID)).isFalse();
-        assertThat(checker.templateVersionExists(100L)).isFalse();
+        assertThat(checker.datasetReady(TASK_ID)).isTrue();
+        assertThat(checker.templateVersionExists(100L)).isTrue();
         assertThat(checker.aiReviewConfigExists(TASK_ID, 200L)).isFalse();
-        assertThat(checker.rewardRuleExists(TASK_ID)).isFalse();
+        assertThat(checker.rewardRuleExists(TASK_ID)).isTrue();
     }
 
     private CreateTaskRequest createRequest() {

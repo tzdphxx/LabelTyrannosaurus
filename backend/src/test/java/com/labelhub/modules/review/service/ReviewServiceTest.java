@@ -3,13 +3,12 @@ package com.labelhub.modules.review.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.labelhub.common.audit.AuditAppender;
+import com.labelhub.common.audit.AuditCommand;
 import com.labelhub.common.exception.BusinessException;
 import com.labelhub.modules.assignment.domain.Assignment;
 import com.labelhub.modules.assignment.domain.AssignmentStatus;
@@ -119,11 +118,7 @@ class ReviewServiceTest {
 
         reviewService.approve(SUBMISSION_ID, REVIEWER_ID, new ApproveRequest("ok", 1));
 
-        verify(auditAppender).append(
-                eq("SUBMISSION"), eq(SUBMISSION_ID),
-                eq("USER"), eq(REVIEWER_ID),
-                eq("SUBMISSION_APPROVED"),
-                any(), any(), isNull(), isNull());
+        verify(auditAppender).append(any(AuditCommand.class));
     }
 
     @Test

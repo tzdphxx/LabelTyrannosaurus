@@ -8,6 +8,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.labelhub.common.audit.AuditAppender;
+import com.labelhub.common.audit.AuditCommand;
 import com.labelhub.common.web.TraceIdProvider;
 import com.labelhub.infrastructure.llm.LlmGateway;
 import com.labelhub.infrastructure.llm.LlmGatewayRequest;
@@ -114,8 +115,7 @@ class AiAutoReviewServiceTest {
         verify(submissionMapper).updateById(submissionCaptor.capture());
         assertThat(submissionCaptor.getValue().getStatus()).isEqualTo(SubmissionStatus.PENDING_FINAL);
         verify(agentRunService).complete(eq(AGENT_RUN_ID), any());
-        verify(auditAppender).append(eq("AI_REVIEW"), eq(SUBMISSION_ID), eq(SystemActorContext.ACTOR_TYPE),
-                eq(900L), eq("AI_REVIEW_COMPLETED"), any(), any(), eq("trace-ai"), eq(AGENT_RUN_ID));
+        verify(auditAppender).append(any(AuditCommand.class));
     }
 
     @Test

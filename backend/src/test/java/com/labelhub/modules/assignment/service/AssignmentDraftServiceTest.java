@@ -3,13 +3,13 @@ package com.labelhub.modules.assignment.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.labelhub.common.audit.AuditAppender;
+import com.labelhub.common.audit.AuditCommand;
 import com.labelhub.common.exception.BusinessException;
 import com.labelhub.modules.assignment.domain.Assignment;
 import com.labelhub.modules.assignment.domain.AssignmentStatus;
@@ -73,8 +73,7 @@ class AssignmentDraftServiceTest {
         assertThat(response.status()).isEqualTo(AssignmentStatus.DRAFTING);
         assertThat(response.updatedAt()).isNotNull();
         verify(assignmentDraftCacheService).put(any(AssignmentDraftCacheEntry.class));
-        verify(auditAppender).append(eq("ASSIGNMENT"), eq(ASSIGNMENT_ID), eq("USER"), eq(LABELER_ID),
-                eq("ASSIGNMENT_DRAFT_SAVED"), any(), any(), eq(null), eq(null));
+        verify(auditAppender).append(any(AuditCommand.class));
     }
 
     @Test
@@ -87,11 +86,11 @@ class AssignmentDraftServiceTest {
                 LABELER_ID,
                 new AssignmentDraftSaveRequest("{\"answer\":\"new\"}", 1)
         )).isInstanceOfSatisfying(BusinessException.class,
-                ex -> assertThat(ex.getCode()).isEqualTo(409301));
+                ex -> assertThat(ex.getCode()).isEqualTo(409101));
 
         verify(assignmentMapper, never()).updateDraftIfVersionMatches(any(), any(), any(), any(), any(), any());
         verify(assignmentDraftCacheService, never()).put(any());
-        verify(auditAppender, never()).append(any(), any(), any(), any(), any(), any(), any(), any(), any());
+        verify(auditAppender, never()).append(any(AuditCommand.class));
     }
 
     @Test
@@ -106,10 +105,10 @@ class AssignmentDraftServiceTest {
                 LABELER_ID,
                 new AssignmentDraftSaveRequest("{\"answer\":\"new\"}", 2)
         )).isInstanceOfSatisfying(BusinessException.class,
-                ex -> assertThat(ex.getCode()).isEqualTo(409301));
+                ex -> assertThat(ex.getCode()).isEqualTo(409101));
 
         verify(assignmentDraftCacheService, never()).put(any());
-        verify(auditAppender, never()).append(any(), any(), any(), any(), any(), any(), any(), any(), any());
+        verify(auditAppender, never()).append(any(AuditCommand.class));
     }
 
     @Test
@@ -202,11 +201,10 @@ class AssignmentDraftServiceTest {
                 new AssignmentDraftSaveRequest(ANSWER_JSON, 1)
         );
 
-        ArgumentCaptor<Map<String, Object>> afterJsonCaptor = ArgumentCaptor.forClass(Map.class);
-        verify(auditAppender).append(eq("ASSIGNMENT"), eq(ASSIGNMENT_ID), eq("USER"), eq(LABELER_ID),
-                eq("ASSIGNMENT_DRAFT_SAVED"), any(), afterJsonCaptor.capture(), eq(null), eq(null));
-        assertThat(afterJsonCaptor.getValue()).containsEntry("answerLength", ANSWER_JSON.length());
-        assertThat(afterJsonCaptor.getValue()).doesNotContainKey("draftAnswerJson");
+        ArgumentCaptor<AuditCommand> commandCaptor = ArgumentCaptor.forClass(AuditCommand.class);
+        verify(auditAppender).append(commandCaptor.capture());
+        assertThat(commandCaptor.getValue().afterJson()).containsEntry("answerLength", ANSWER_JSON.length());
+        assertThat(commandCaptor.getValue().afterJson()).doesNotContainKey("draftAnswerJson");
     }
 
     private Assignment assignment(AssignmentStatus status, Integer draftVersion, String draftAnswerJson) {

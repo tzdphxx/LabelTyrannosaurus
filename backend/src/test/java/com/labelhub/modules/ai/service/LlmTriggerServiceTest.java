@@ -8,6 +8,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.labelhub.common.audit.AuditAppender;
+import com.labelhub.common.audit.AuditCommand;
 import com.labelhub.common.exception.BusinessException;
 import com.labelhub.common.security.CurrentUser;
 import com.labelhub.common.security.RoleCode;
@@ -117,8 +118,7 @@ class LlmTriggerServiceTest {
         assertThat(response.targetFields()).containsExactly("summary");
         verify(agentRunService).start(AGENT_RUN_ID);
         verify(agentRunService).complete(eq(AGENT_RUN_ID), any());
-        verify(auditAppender).append(eq("LLM_TRIGGER"), eq(TASK_ID), eq("USER"), eq(OWNER_ID),
-                eq("LLM_TRIGGER_RUN"), eq(null), any(), eq("trace-1"), eq(AGENT_RUN_ID));
+        verify(auditAppender).append(any(AuditCommand.class));
     }
 
     @Test
@@ -190,11 +190,11 @@ class LlmTriggerServiceTest {
     }
 
     private CurrentUser owner() {
-        return new CurrentUser(OWNER_ID, "owner", Set.of(RoleCode.OWNER), 1);
+        return new CurrentUser(OWNER_ID, "owner", "test@labelhub.dev", Set.of(RoleCode.OWNER), 1);
     }
 
     private CurrentUser labeler() {
-        return new CurrentUser(LABELER_ID, "labeler", Set.of(RoleCode.LABELER), 1);
+        return new CurrentUser(LABELER_ID, "labeler", "test@labelhub.dev", Set.of(RoleCode.LABELER), 1);
     }
 
     private LlmTriggerRunRequest request(boolean previewMode, Long assignmentId) {

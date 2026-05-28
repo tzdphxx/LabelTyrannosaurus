@@ -6,7 +6,9 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.when;
 
 import com.labelhub.common.api.ApiResponse;
+import com.labelhub.common.security.CurrentUser;
 import com.labelhub.common.security.CurrentUserContext;
+import com.labelhub.common.security.RoleCode;
 import com.labelhub.modules.review.dto.ApproveRequest;
 import com.labelhub.modules.review.dto.BatchApproveRequest;
 import com.labelhub.modules.review.dto.BatchReviewResponse;
@@ -18,6 +20,8 @@ import com.labelhub.modules.review.service.BatchReviewService;
 import com.labelhub.modules.review.service.ReviewService;
 import com.labelhub.modules.submission.domain.SubmissionStatus;
 import java.util.List;
+import java.util.Set;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -29,13 +33,17 @@ class ReviewControllerTest {
 
     @Mock private ReviewService reviewService;
     @Mock private BatchReviewService batchReviewService;
-    @Mock private CurrentUserContext currentUserContext;
 
     private ReviewController controller;
 
     @BeforeEach
     void setUp() {
-        controller = new ReviewController(reviewService, batchReviewService, currentUserContext);
+        controller = new ReviewController(reviewService, batchReviewService);
+    }
+
+    @AfterEach
+    void clearContext() {
+        CurrentUserContext.clear();
     }
 
     @Test
@@ -51,7 +59,7 @@ class ReviewControllerTest {
 
     @Test
     void approvePassesCurrentUserAndReturnsResponse() {
-        when(currentUserContext.currentUserId()).thenReturn(1L);
+        CurrentUserContext.set(new CurrentUser(1L, "reviewer", "test@labelhub.dev", Set.of(RoleCode.REVIEWER), 1));
         ReviewActionResponse serviceResponse = new ReviewActionResponse(
                 100L, SubmissionStatus.APPROVED, 200L);
         when(reviewService.approve(eq(100L), eq(1L), any(ApproveRequest.class)))
@@ -66,7 +74,7 @@ class ReviewControllerTest {
 
     @Test
     void rejectPassesCurrentUserAndReturnsResponse() {
-        when(currentUserContext.currentUserId()).thenReturn(1L);
+        CurrentUserContext.set(new CurrentUser(1L, "reviewer", "test@labelhub.dev", Set.of(RoleCode.REVIEWER), 1));
         ReviewActionResponse serviceResponse = new ReviewActionResponse(
                 100L, SubmissionStatus.REJECTED, 201L);
         when(reviewService.reject(eq(100L), eq(1L), any(RejectRequest.class)))
@@ -81,7 +89,7 @@ class ReviewControllerTest {
 
     @Test
     void batchApproveDelegatesToBatchService() {
-        when(currentUserContext.currentUserId()).thenReturn(1L);
+        CurrentUserContext.set(new CurrentUser(1L, "reviewer", "test@labelhub.dev", Set.of(RoleCode.REVIEWER), 1));
         BatchReviewResponse serviceResponse = new BatchReviewResponse(
                 1, 1, 0, List.of(BatchReviewItemResult.ok(100L)));
         when(batchReviewService.batchApprove(eq(1L), any(BatchApproveRequest.class)))

@@ -42,6 +42,8 @@ public class AiReviewResult {
 
     private Integer retryCount;
 
+    private LocalDateTime nextRetryAt;
+
     private String errorCode;
 
     private String errorMessage;

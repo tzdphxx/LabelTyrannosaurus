@@ -31,6 +31,7 @@ import com.labelhub.modules.submission.mapper.SubmissionMapper;
 import com.labelhub.modules.task.domain.Task;
 import com.labelhub.modules.task.mapper.TaskMapper;
 import java.math.BigDecimal;
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -44,6 +45,7 @@ public class AiAutoReviewService {
     private static final int SUBMISSION_NOT_FOUND = 404701;
     private static final int AI_REVIEW_CONFIG_NOT_FOUND = 404702;
     private static final int AI_REVIEW_INVALID = 400701;
+    private static final int DEFAULT_MAX_RETRY = 3;
     private static final String BIZ_TYPE = "AI_REVIEW";
     private static final String AGENT_TYPE = "AI_REVIEW";
     private static final TypeReference<List<String>> STRING_LIST = new TypeReference<>() {
@@ -63,6 +65,8 @@ public class AiAutoReviewService {
     private final AuditAppender auditAppender;
     private final TraceIdProvider traceIdProvider;
     private final ObjectMapper objectMapper;
+    private final AiReviewRetryStrategy retryStrategy;
+    private final AiReviewRetryScheduler retryScheduler;
 
     public AiAutoReviewService(SubmissionMapper submissionMapper,
                                TaskMapper taskMapper,
@@ -74,9 +78,12 @@ public class AiAutoReviewService {
                                AgentRunService agentRunService,
                                SystemAgentProvider systemAgentProvider,
                                AuditAppender auditAppender,
-                               TraceIdProvider traceIdProvider) {
+                               TraceIdProvider traceIdProvider,
+                               AiReviewRetryStrategy retryStrategy,
+                               AiReviewRetryScheduler retryScheduler) {
         this(submissionMapper, taskMapper, datasetItemMapper, aiReviewConfigMapper, aiReviewResultMapper, rateLimiter,
-                llmGateway, agentRunService, systemAgentProvider, auditAppender, traceIdProvider, new ObjectMapper());
+                llmGateway, agentRunService, systemAgentProvider, auditAppender, traceIdProvider, new ObjectMapper(),
+                retryStrategy, retryScheduler);
     }
 
     AiAutoReviewService(SubmissionMapper submissionMapper,
@@ -90,7 +97,9 @@ public class AiAutoReviewService {
                         SystemAgentProvider systemAgentProvider,
                         AuditAppender auditAppender,
                         TraceIdProvider traceIdProvider,
-                        ObjectMapper objectMapper) {
+                        ObjectMapper objectMapper,
+                        AiReviewRetryStrategy retryStrategy,
+                        AiReviewRetryScheduler retryScheduler) {
         this.submissionMapper = submissionMapper;
         this.taskMapper = taskMapper;
         this.datasetItemMapper = datasetItemMapper;
@@ -103,6 +112,9 @@ public class AiAutoReviewService {
         this.auditAppender = auditAppender;
         this.traceIdProvider = traceIdProvider;
         this.objectMapper = objectMapper;
+        this.retryStrategy = retryStrategy;
+        this.retryScheduler = retryScheduler;
+        this.retryScheduler.setRetryCallback(this::retryReview);
     }
 
     @Transactional
@@ -122,13 +134,14 @@ public class AiAutoReviewService {
                 config.getModelName(), config.getPromptVersion(), promptSnapshot);
         agentRunService.start(agentRun.getId());
 
+        AttemptOutcome outcome = executeAttempt(submission, config, agentRun, promptSnapshot);
+
         AiReviewResult result;
-        if (!rateLimiter.acquire(submission.getTaskId(), config.getProviderId())) {
-            agentRunService.fail(agentRun.getId(), AgentRunStatus.RATE_LIMITED, "AI review rate limited");
-            result = manualRequired(submission, config, agentRun.getId(), promptSnapshot, null,
-                    "RATE_LIMITED", "AI review rate limited");
+        if (outcome.success()) {
+            result = outcome.result();
+            agentRunService.complete(agentRun.getId(), toJson(outcome.responseSnapshot()));
         } else {
-            result = runGateway(submission, config, agentRun, promptSnapshot);
+            result = handleFailure(submission, config, agentRun, promptSnapshot, outcome, 0);
         }
 
         aiReviewResultMapper.insert(result);
@@ -137,8 +150,54 @@ public class AiAutoReviewService {
         return toResponse(result);
     }
 
-    private AiReviewResult runGateway(Submission submission, AiReviewConfig config,
-                                      AgentRun agentRun, String promptSnapshot) {
+    public void retryReview(Long submissionId) {
+        AiReviewResult existing = aiReviewResultMapper.selectBySubmissionId(submissionId);
+        if (existing == null) {
+            return;
+        }
+        AiReviewStatus status = existing.getStatus();
+        if (status != AiReviewStatus.FAILED && status != AiReviewStatus.RATE_LIMITED) {
+            return;
+        }
+
+        Submission submission = loadSubmission(submissionId);
+        Task task = taskMapper.selectById(submission.getTaskId());
+        AiReviewConfig config = loadConfig(task);
+        DatasetItem datasetItem = datasetItemMapper.selectById(submission.getDatasetItemId());
+        String promptSnapshot = buildPromptSnapshot(submission, datasetItem, config);
+
+        AgentRun agentRun = agentRunService.create(AGENT_TYPE, submissionId, config.getProviderId(),
+                config.getModelName(), config.getPromptVersion(), promptSnapshot);
+        agentRunService.start(agentRun.getId());
+
+        AttemptOutcome outcome = executeAttempt(submission, config, agentRun, promptSnapshot);
+        int currentRetryCount = existing.getRetryCount();
+
+        if (outcome.success()) {
+            agentRunService.complete(agentRun.getId(), toJson(outcome.responseSnapshot()));
+            AiReviewResult successResult = outcome.result();
+            aiReviewResultMapper.updateForSuccess(submissionId,
+                    AiReviewStatus.SUCCESS.name(),
+                    agentRun.getId(),
+                    successResult.getDecision(),
+                    successResult.getAverageScore(),
+                    successResult.getDimensionScores(),
+                    successResult.getRiskFlags(),
+                    successResult.getSuggestion(),
+                    successResult.getRawResponse());
+            appendAuditForRetrySuccess(submissionId, agentRun.getId());
+        } else {
+            handleRetryFailure(submissionId, config, agentRun, outcome, currentRetryCount);
+        }
+    }
+
+    private AttemptOutcome executeAttempt(Submission submission, AiReviewConfig config,
+                                          AgentRun agentRun, String promptSnapshot) {
+        if (!rateLimiter.acquire(submission.getTaskId(), config.getProviderId())) {
+            agentRunService.fail(agentRun.getId(), AgentRunStatus.RATE_LIMITED, "AI review rate limited");
+            return AttemptOutcome.failure("RATE_LIMITED", "AI review rate limited", null);
+        }
+
         LlmGatewayResponse response = llmGateway.review(new LlmGatewayRequest(
                 config.getProviderId(),
                 config.getModelName(),
@@ -149,18 +208,69 @@ public class AiAutoReviewService {
         ));
         if (response.status() != LlmGatewayStatus.SUCCESS) {
             agentRunService.fail(agentRun.getId(), AgentRunStatus.FAILED, response.errorMessage());
-            return manualRequired(submission, config, agentRun.getId(), promptSnapshot, response.rawResponse(),
-                    response.errorCode(), response.errorMessage());
+            return AttemptOutcome.failure(response.errorCode(), response.errorMessage(), response.rawResponse());
         }
 
         try {
             AiReviewResult result = successResult(submission, config, agentRun.getId(), promptSnapshot, response);
-            agentRunService.complete(agentRun.getId(), toJson(gatewayResponseSnapshot(response)));
-            return result;
+            return AttemptOutcome.success(result, gatewayResponseSnapshot(response));
         } catch (BusinessException ex) {
             agentRunService.fail(agentRun.getId(), AgentRunStatus.MANUAL_REQUIRED, ex.getMessage());
-            return manualRequired(submission, config, agentRun.getId(), promptSnapshot, response.rawResponse(),
-                    "INVALID_AI_REVIEW_OUTPUT", ex.getMessage());
+            return AttemptOutcome.failure("INVALID_AI_REVIEW_OUTPUT", ex.getMessage(), response.rawResponse());
+        }
+    }
+
+    private AiReviewResult handleFailure(Submission submission, AiReviewConfig config,
+                                         AgentRun agentRun, String promptSnapshot,
+                                         AttemptOutcome outcome, int currentRetryCount) {
+        int maxRetry = config.getMaxRetry() != null ? config.getMaxRetry() : DEFAULT_MAX_RETRY;
+        boolean retryable = retryStrategy.isRetryable(outcome.errorCode());
+        boolean hasRetries = retryStrategy.hasRetriesRemaining(currentRetryCount, maxRetry);
+
+        if (retryable && hasRetries) {
+            boolean rateLimited = "RATE_LIMITED".equals(outcome.errorCode());
+            Duration delay = retryStrategy.computeDelay(currentRetryCount, rateLimited);
+            LocalDateTime nextRetryAt = LocalDateTime.now().plus(delay);
+
+            AiReviewResult result = baseResult(submission, config, agentRun.getId(), promptSnapshot);
+            result.setStatus(rateLimited ? AiReviewStatus.RATE_LIMITED : AiReviewStatus.FAILED);
+            result.setRawResponse(outcome.rawResponse());
+            result.setErrorCode(outcome.errorCode());
+            result.setErrorMessage(outcome.errorMessage());
+            result.setNextRetryAt(nextRetryAt);
+
+            retryScheduler.scheduleRetry(submission.getId(), delay);
+            return result;
+        }
+
+        return manualRequired(submission, config, agentRun.getId(), promptSnapshot,
+                outcome.rawResponse(), outcome.errorCode(), outcome.errorMessage());
+    }
+
+    private void handleRetryFailure(Long submissionId, AiReviewConfig config,
+                                    AgentRun agentRun, AttemptOutcome outcome, int currentRetryCount) {
+        int maxRetry = config.getMaxRetry() != null ? config.getMaxRetry() : DEFAULT_MAX_RETRY;
+        int newRetryCount = currentRetryCount + 1;
+        boolean retryable = retryStrategy.isRetryable(outcome.errorCode());
+        boolean hasRetries = retryStrategy.hasRetriesRemaining(newRetryCount, maxRetry);
+
+        if (retryable && hasRetries) {
+            boolean rateLimited = "RATE_LIMITED".equals(outcome.errorCode());
+            Duration delay = retryStrategy.computeDelay(newRetryCount, rateLimited);
+            LocalDateTime nextRetryAt = LocalDateTime.now().plus(delay);
+            String status = rateLimited ? AiReviewStatus.RATE_LIMITED.name() : AiReviewStatus.FAILED.name();
+
+            int updated = aiReviewResultMapper.updateForRetry(submissionId, currentRetryCount,
+                    status, newRetryCount, nextRetryAt, agentRun.getId(),
+                    outcome.errorCode(), outcome.errorMessage(), outcome.rawResponse());
+            if (updated > 0) {
+                retryScheduler.scheduleRetry(submissionId, delay);
+            }
+        } else {
+            aiReviewResultMapper.updateForRetry(submissionId, currentRetryCount,
+                    AiReviewStatus.MANUAL_REQUIRED.name(), newRetryCount, null, agentRun.getId(),
+                    outcome.errorCode(), outcome.errorMessage(), outcome.rawResponse());
+            appendAuditForManualRequired(submissionId, agentRun.getId());
         }
     }
 
@@ -243,6 +353,9 @@ public class AiAutoReviewService {
     }
 
     private void appendAudit(AiReviewResult result) {
+        if (result.getStatus() == AiReviewStatus.FAILED || result.getStatus() == AiReviewStatus.RATE_LIMITED) {
+            return;
+        }
         SystemActorContext actor = systemAgentProvider.get();
         String action = result.getStatus() == AiReviewStatus.SUCCESS
                 ? "AI_REVIEW_COMPLETED"
@@ -348,5 +461,39 @@ public class AiAutoReviewService {
 
     private String asNullableText(Object value) {
         return value == null ? null : String.valueOf(value);
+    }
+
+    private void appendAuditForRetrySuccess(Long submissionId, Long agentRunId) {
+        SystemActorContext actor = systemAgentProvider.get();
+        Map<String, Object> snapshot = new LinkedHashMap<>();
+        snapshot.put("submissionId", submissionId);
+        snapshot.put("agentRunId", agentRunId);
+        snapshot.put("status", AiReviewStatus.SUCCESS);
+        auditAppender.append(new AuditCommand(SystemActorContext.ACTOR_TYPE, actor.agentId(),
+                BIZ_TYPE, submissionId,
+                "AI_REVIEW_COMPLETED", null, snapshot, traceIdProvider.currentTraceId(), agentRunId));
+    }
+
+    private void appendAuditForManualRequired(Long submissionId, Long agentRunId) {
+        SystemActorContext actor = systemAgentProvider.get();
+        Map<String, Object> snapshot = new LinkedHashMap<>();
+        snapshot.put("submissionId", submissionId);
+        snapshot.put("agentRunId", agentRunId);
+        snapshot.put("status", AiReviewStatus.MANUAL_REQUIRED);
+        auditAppender.append(new AuditCommand(SystemActorContext.ACTOR_TYPE, actor.agentId(),
+                BIZ_TYPE, submissionId,
+                "AI_REVIEW_MANUAL_REQUIRED", null, snapshot, traceIdProvider.currentTraceId(), agentRunId));
+    }
+
+    record AttemptOutcome(boolean success, AiReviewResult result, Map<String, Object> responseSnapshot,
+                          String errorCode, String errorMessage, String rawResponse) {
+
+        static AttemptOutcome success(AiReviewResult result, Map<String, Object> responseSnapshot) {
+            return new AttemptOutcome(true, result, responseSnapshot, null, null, null);
+        }
+
+        static AttemptOutcome failure(String errorCode, String errorMessage, String rawResponse) {
+            return new AttemptOutcome(false, null, null, errorCode, errorMessage, rawResponse);
+        }
     }
 }

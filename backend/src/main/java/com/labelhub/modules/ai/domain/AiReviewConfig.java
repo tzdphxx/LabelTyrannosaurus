@@ -34,6 +34,10 @@ public class AiReviewConfig {
 
     private String promptVersion;
 
+    private Integer maxRetry;
+
+    private String aiRejectAction;
+
     private Long createdBy;
 
     private LocalDateTime createdAt;

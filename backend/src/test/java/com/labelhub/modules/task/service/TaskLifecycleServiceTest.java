@@ -12,6 +12,9 @@ import com.labelhub.common.audit.AuditCommand;
 import com.labelhub.common.exception.BusinessException;
 import com.labelhub.common.web.TraceIdProvider;
 import com.labelhub.modules.ai.mapper.AiReviewConfigMapper;
+import com.labelhub.modules.dataset.mapper.DatasetItemMapper;
+import com.labelhub.modules.reward.mapper.RewardRuleMapper;
+import com.labelhub.modules.template.mapper.TemplateVersionMapper;
 import com.labelhub.modules.task.domain.Task;
 import com.labelhub.modules.task.domain.TaskStatus;
 import com.labelhub.modules.task.domain.TaskTag;
@@ -184,12 +187,16 @@ class TaskLifecycleServiceTest {
     @Test
     void defaultPublishDependencyCheckerDoesNotPassExternalChecks() {
         AiReviewConfigMapper aiReviewConfigMapper = Mockito.mock(AiReviewConfigMapper.class);
-        DefaultTaskPublishDependencyChecker checker = new DefaultTaskPublishDependencyChecker(aiReviewConfigMapper);
+        DatasetItemMapper datasetItemMapper = Mockito.mock(DatasetItemMapper.class);
+        TemplateVersionMapper templateVersionMapper = Mockito.mock(TemplateVersionMapper.class);
+        RewardRuleMapper rewardRuleMapper = Mockito.mock(RewardRuleMapper.class);
+        DefaultTaskPublishDependencyChecker checker = new DefaultTaskPublishDependencyChecker(
+                aiReviewConfigMapper, datasetItemMapper, templateVersionMapper, rewardRuleMapper);
 
-        assertThat(checker.datasetReady(TASK_ID)).isTrue();
-        assertThat(checker.templateVersionExists(100L)).isTrue();
+        assertThat(checker.datasetReady(TASK_ID)).isFalse();
+        assertThat(checker.templateVersionExists(100L)).isFalse();
         assertThat(checker.aiReviewConfigExists(TASK_ID, 200L)).isFalse();
-        assertThat(checker.rewardRuleExists(TASK_ID)).isTrue();
+        assertThat(checker.rewardRuleExists(TASK_ID)).isFalse();
     }
 
     private CreateTaskRequest createRequest() {

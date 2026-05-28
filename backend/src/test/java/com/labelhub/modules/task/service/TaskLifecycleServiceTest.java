@@ -11,6 +11,7 @@ import com.baomidou.mybatisplus.core.conditions.Wrapper;
 import com.labelhub.common.audit.AuditAppender;
 import com.labelhub.common.exception.BusinessException;
 import com.labelhub.common.web.TraceIdProvider;
+import com.labelhub.modules.ai.mapper.AiReviewConfigMapper;
 import com.labelhub.modules.task.domain.Task;
 import com.labelhub.modules.task.domain.TaskStatus;
 import com.labelhub.modules.task.domain.TaskTag;
@@ -28,6 +29,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
+import org.mockito.Mockito;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 @ExtendWith(MockitoExtension.class)
@@ -147,6 +149,7 @@ class TaskLifecycleServiceTest {
         when(taskMapper.updateById(any(Task.class))).thenReturn(1);
         when(publishDependencyChecker.datasetReady(TASK_ID)).thenReturn(true);
         when(publishDependencyChecker.templateVersionExists(100L)).thenReturn(true);
+        when(publishDependencyChecker.aiReviewConfigExists(TASK_ID, 200L)).thenReturn(true);
         when(publishDependencyChecker.rewardRuleExists(TASK_ID)).thenReturn(true);
 
         assertThat(taskLifecycleService.publish(OWNER_ID, TASK_ID).status()).isEqualTo(TaskStatus.PUBLISHED);
@@ -189,10 +192,12 @@ class TaskLifecycleServiceTest {
 
     @Test
     void defaultPublishDependencyCheckerDoesNotPassExternalChecks() {
-        DefaultTaskPublishDependencyChecker checker = new DefaultTaskPublishDependencyChecker();
+        AiReviewConfigMapper aiReviewConfigMapper = Mockito.mock(AiReviewConfigMapper.class);
+        DefaultTaskPublishDependencyChecker checker = new DefaultTaskPublishDependencyChecker(aiReviewConfigMapper);
 
         assertThat(checker.datasetReady(TASK_ID)).isFalse();
         assertThat(checker.templateVersionExists(100L)).isFalse();
+        assertThat(checker.aiReviewConfigExists(TASK_ID, 200L)).isFalse();
         assertThat(checker.rewardRuleExists(TASK_ID)).isFalse();
     }
 

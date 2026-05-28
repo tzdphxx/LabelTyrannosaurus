@@ -186,7 +186,7 @@ public class TaskLifecycleService {
         if (!publishDependencyChecker.templateVersionExists(task.getPublishedTemplateVersionId())) {
             throw missingPublishRequirement("Task template version is required");
         }
-        if (task.getAiReviewConfigId() == null) {
+        if (!publishDependencyChecker.aiReviewConfigExists(task.getId(), task.getAiReviewConfigId())) {
             throw missingPublishRequirement("Task AI review config is required");
         }
         if (!publishDependencyChecker.rewardRuleExists(task.getId())) {

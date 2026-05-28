@@ -1,8 +1,5 @@
 package com.labelhub.modules.ai.service;
 
-import org.springframework.stereotype.Component;
-
-@Component
 public class SyncAiReviewDispatcher implements AiReviewDispatcher {
 
     private final AiAutoReviewService aiAutoReviewService;

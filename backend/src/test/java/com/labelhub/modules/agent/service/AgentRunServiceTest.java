@@ -106,6 +106,8 @@ class AgentRunServiceTest {
         service.fail(1L, AgentRunStatus.RATE_LIMITED, "quota exceeded");
 
         assertThat(run.getStatus()).isEqualTo(AgentRunStatus.RATE_LIMITED);
+        assertThat(run.getFinishedAt()).isNotNull();
+        verify(agentRunMapper).updateById(run);
     }
 
     @Test
@@ -116,6 +118,8 @@ class AgentRunServiceTest {
         service.fail(1L, AgentRunStatus.MANUAL_REQUIRED, "max retries exceeded");
 
         assertThat(run.getStatus()).isEqualTo(AgentRunStatus.MANUAL_REQUIRED);
+        assertThat(run.getFinishedAt()).isNotNull();
+        verify(agentRunMapper).updateById(run);
     }
 
     @Test
@@ -129,6 +133,15 @@ class AgentRunServiceTest {
     void failRejectsSuccessStatus() {
         assertThatThrownBy(() -> service.fail(1L, AgentRunStatus.SUCCESS, "bad"))
                 .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void startThrowsWhenRunNotFound() {
+        when(agentRunMapper.selectById(99L)).thenReturn(null);
+
+        assertThatThrownBy(() -> service.start(99L))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("99");
     }
 
     private AgentRun pendingRun() {

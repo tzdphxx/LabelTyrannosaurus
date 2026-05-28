@@ -66,6 +66,7 @@ class AiAutoReviewServiceTest {
     @Mock private AuditAppender auditAppender;
     @Mock private TraceIdProvider traceIdProvider;
     @Mock private AiReviewRetryScheduler retryScheduler;
+    @Mock private SupervisorAgent supervisorAgent;
 
     private AiReviewRetryStrategy retryStrategy;
     private AiAutoReviewService service;
@@ -75,7 +76,7 @@ class AiAutoReviewServiceTest {
         retryStrategy = new AiReviewRetryStrategy();
         service = new AiAutoReviewService(submissionMapper, taskMapper, datasetItemMapper, aiReviewConfigMapper,
                 aiReviewResultMapper, rateLimiter, llmGateway, agentRunService, systemAgentProvider, auditAppender,
-                traceIdProvider, retryStrategy, retryScheduler);
+                traceIdProvider, retryStrategy, retryScheduler, supervisorAgent);
     }
 
     @Test

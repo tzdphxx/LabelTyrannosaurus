@@ -1,8 +1,5 @@
 package com.labelhub.modules.review.port;
 
-import org.springframework.stereotype.Component;
-
-@Component
 public class NoOpSubmissionEventPublisher implements SubmissionEventPublisher {
 
     @Override

@@ -40,7 +40,7 @@ public class SubmissionSubmitService {
     private static final int ASSIGNMENT_STATUS_NOT_SUBMITTABLE = 400401;
     private static final int INVALID_ANSWER_JSON = 400402;
     private static final int TASK_NOT_SUBMITTABLE = 400403;
-    private static final int DRAFT_VERSION_CONFLICT = 409401;
+    private static final int DRAFT_VERSION_CONFLICT = 409101;
     private static final String ASSIGNMENT_BIZ_TYPE = "ASSIGNMENT";
     private static final String USER_ACTOR_TYPE = "USER";
     private static final String AI_REVIEW_AGENT_TYPE = "AI_REVIEW";
@@ -93,7 +93,7 @@ public class SubmissionSubmitService {
                                            Long labelerId,
                                            SubmissionSubmitRequest request) {
         Assignment assignment = loadOwnedAssignment(assignmentId, labelerId);
-        requireCurrentDraftVersion(assignment, request.clientDraftVersion());
+        requireCurrentDraftVersion(assignment, request.clientVersion());
         String canonicalAnswerJson = canonicalAnswerJson(request.answerJson());
         answerSchemaValidator.validateAnswer(assignment.getTemplateVersionId(), canonicalAnswerJson);
         Task task = loadSubmittableTask(assignment.getTaskId());
@@ -112,7 +112,7 @@ public class SubmissionSubmitService {
         int updated = assignmentMapper.markSubmittedIfCurrent(
                 assignmentId,
                 labelerId,
-                request.clientDraftVersion(),
+                request.clientVersion(),
                 AssignmentStatus.SUBMITTED
         );
         if (updated != 1) {

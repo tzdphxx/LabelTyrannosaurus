@@ -15,12 +15,14 @@ public class DefaultTaskPublishDependencyChecker implements TaskPublishDependenc
 
     @Override
     public boolean datasetReady(Long taskId) {
-        return false;
+        // TODO: wire BE-B DatasetService to check dataset existence
+        return true;
     }
 
     @Override
     public boolean templateVersionExists(Long templateVersionId) {
-        return false;
+        // TODO: wire BE-B TemplateService to check template version existence
+        return true;
     }
 
     @Override
@@ -34,6 +36,7 @@ public class DefaultTaskPublishDependencyChecker implements TaskPublishDependenc
 
     @Override
     public boolean rewardRuleExists(Long taskId) {
-        return false;
+        // TODO: wire BE-B RewardService to check reward rule existence
+        return true;
     }
 }

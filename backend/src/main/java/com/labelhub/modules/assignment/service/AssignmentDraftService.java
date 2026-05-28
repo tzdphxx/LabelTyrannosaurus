@@ -23,7 +23,7 @@ public class AssignmentDraftService {
     private static final int ASSIGNMENT_NOT_FOUND = 404301;
     private static final int ASSIGNMENT_STATUS_NOT_EDITABLE = 400301;
     private static final int INVALID_ANSWER_JSON = 400302;
-    private static final int DRAFT_VERSION_CONFLICT = 409301;
+    private static final int DRAFT_VERSION_CONFLICT = 409101;
     private static final String ASSIGNMENT_BIZ_TYPE = "ASSIGNMENT";
     private static final String USER_ACTOR_TYPE = "USER";
     private static final Set<AssignmentStatus> EDITABLE_STATUSES = Set.of(
@@ -54,13 +54,13 @@ public class AssignmentDraftService {
         Assignment assignment = loadOwnedAssignment(assignmentId, labelerId);
         requireEditable(assignment);
         requireValidJson(request.answerJson());
-        requireCurrentVersion(assignment, request.clientDraftVersion());
+        requireCurrentVersion(assignment, request.clientVersion());
         int nextDraftVersion = assignment.getDraftVersion() + 1;
         int updated = assignmentMapper.updateDraftIfVersionMatches(
                 assignmentId,
                 labelerId,
                 request.answerJson(),
-                request.clientDraftVersion(),
+                request.clientVersion(),
                 nextDraftVersion,
                 AssignmentStatus.DRAFTING
         );

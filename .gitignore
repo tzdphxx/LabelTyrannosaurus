@@ -70,6 +70,7 @@ __MACOSX/
 !.env.example
 
 # AI coding tools local state / temporary files
+.worktrees/
 .codex/
 .codex-cache/
 codex-cache/

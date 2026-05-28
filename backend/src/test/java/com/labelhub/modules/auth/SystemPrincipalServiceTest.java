@@ -60,7 +60,11 @@ class SystemPrincipalServiceTest {
         assertThat(existing.getLoginEnabled()).isFalse();
         assertThat(existing.getEnabled()).isTrue();
         assertThat(existing.getPasswordHash()).isNull();
-        verify(userMapper).updateById(existing);
+        verify(userMapper).repairSystemPrincipal(
+                100L,
+                "system_ai_agent@labelhub.local",
+                "System AI Agent"
+        );
         verify(userRoleMapper).replaceRoles(100L, Set.of(RoleCode.SYSTEM_AGENT));
     }
 

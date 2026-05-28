@@ -49,7 +49,7 @@ public class SystemPrincipalService {
             userMapper.insert(user);
         } else {
             applyFixedFields(user);
-            userMapper.updateById(user);
+            userMapper.repairSystemPrincipal(user.getId(), SYSTEM_AGENT_EMAIL, SYSTEM_AGENT_DISPLAY_NAME);
         }
         userRoleMapper.replaceRoles(user.getId(), SYSTEM_AGENT_ROLES);
         return toProfile(user);

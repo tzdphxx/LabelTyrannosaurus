@@ -36,6 +36,7 @@ import java.time.LocalDateTime;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -471,7 +472,7 @@ public class AiAutoReviewService {
         snapshot.put("status", AiReviewStatus.SUCCESS);
         auditAppender.append(new AuditCommand(SystemActorContext.ACTOR_TYPE, actor.agentId(),
                 BIZ_TYPE, submissionId,
-                "AI_REVIEW_COMPLETED", null, snapshot, traceIdProvider.currentTraceId(), agentRunId));
+                "AI_REVIEW_COMPLETED", null, snapshot, resolveTraceId(), agentRunId));
     }
 
     private void appendAuditForManualRequired(Long submissionId, Long agentRunId) {
@@ -482,7 +483,12 @@ public class AiAutoReviewService {
         snapshot.put("status", AiReviewStatus.MANUAL_REQUIRED);
         auditAppender.append(new AuditCommand(SystemActorContext.ACTOR_TYPE, actor.agentId(),
                 BIZ_TYPE, submissionId,
-                "AI_REVIEW_MANUAL_REQUIRED", null, snapshot, traceIdProvider.currentTraceId(), agentRunId));
+                "AI_REVIEW_MANUAL_REQUIRED", null, snapshot, resolveTraceId(), agentRunId));
+    }
+
+    private String resolveTraceId() {
+        String traceId = traceIdProvider.currentTraceId();
+        return traceId != null ? traceId : "retry-" + UUID.randomUUID();
     }
 
     record AttemptOutcome(boolean success, AiReviewResult result, Map<String, Object> responseSnapshot,

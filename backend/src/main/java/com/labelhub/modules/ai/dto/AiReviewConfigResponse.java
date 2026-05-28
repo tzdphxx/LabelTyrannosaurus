@@ -14,6 +14,7 @@ public record AiReviewConfigResponse(
         BigDecimal passThreshold,
         BigDecimal manualReviewThreshold,
         Map<String, Object> outputSchema,
-        String promptVersion
+        String promptVersion,
+        Integer maxRetry
 ) {
 }

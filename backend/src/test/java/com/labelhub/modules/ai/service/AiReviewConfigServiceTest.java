@@ -129,7 +129,8 @@ class AiReviewConfigServiceTest {
                 List.of("accuracy"),
                 new BigDecimal("60.00"),
                 new BigDecimal("80.00"),
-                Map.of("type", "object")
+                Map.of("type", "object"),
+                3
         );
         when(taskMapper.selectById(TASK_ID)).thenReturn(draftTask());
 
@@ -227,7 +228,8 @@ class AiReviewConfigServiceTest {
                 List.of("accuracy", "safety"),
                 new BigDecimal("85.00"),
                 new BigDecimal("60.00"),
-                Map.of("type", "object", "required", List.of("decision"))
+                Map.of("type", "object", "required", List.of("decision")),
+                3
         );
     }
 

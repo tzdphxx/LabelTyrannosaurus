@@ -192,6 +192,7 @@ public class AiReviewConfigService {
         config.setPassThreshold(request.passThreshold());
         config.setManualReviewThreshold(request.manualReviewThreshold());
         config.setOutputSchemaJson(toJson(request.outputSchema()));
+        config.setMaxRetry(request.maxRetry() != null ? request.maxRetry() : 3);
     }
 
     private void validateRequest(AiReviewConfigRequest request) {
@@ -252,7 +253,8 @@ public class AiReviewConfigService {
                 config.getPassThreshold(),
                 config.getManualReviewThreshold(),
                 parseObjectMap(config.getOutputSchemaJson()),
-                config.getPromptVersion()
+                config.getPromptVersion(),
+                config.getMaxRetry()
         );
     }
 

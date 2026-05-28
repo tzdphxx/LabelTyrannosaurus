@@ -1,44 +1,104 @@
-# ai\-review
-
 # AI Review / LlmTrigger API Contract
 
-Owner：BE\-A
+Owner: BE-A
 
-## POST /api/v1/tasks/\{taskId\}/ai\-review\-configs
+## POST /api/v1/tasks/{taskId}/ai-review-configs
 
-权限：OWNER。
+Permission: OWNER.
 
-请求字段：
-
+Request fields:
 ```Plaintext
 providerId
 modelName
 promptTemplate
-dimensions[]
-decisionPolicy
+scoringDimensions[]
+passThreshold
+manualReviewThreshold
+outputSchema
 ```
 
-响应字段：
-
+Response fields:
 ```Plaintext
-aiReviewConfigId
+id
 taskId
-enabled
+providerId
+modelName
+promptTemplate
+scoringDimensions[]
+passThreshold
+manualReviewThreshold
+outputSchema
+promptVersion
+```
+
+Rules:
+```Plaintext
+Only the task owner can save AI review config.
+Only DRAFT tasks can be configured.
+Provider must exist and be enabled.
+promptTemplate, scoringDimensions, and outputSchema are required.
+Thresholds must be between 0.00 and 100.00.
+manualReviewThreshold must not be greater than passThreshold.
+Saving config backfills tasks.aiReviewConfigId for publish validation.
+```
+
+## PUT /api/v1/tasks/{taskId}/ai-review-configs/{configId}
+
+Permission: OWNER.
+Request and response fields are the same as POST.
+
+Rules:
+```Plaintext
+Only DRAFT tasks can update AI review config.
+configId must belong to taskId.
+Each update increments promptVersion.
+```
+
+## GET /api/v1/tasks/{taskId}/ai-review-configs
+
+Permission: OWNER.
+Response fields are the same as POST.
+
+## POST /api/v1/tasks/{taskId}/ai-review-configs/{configId}/test
+
+Permission: OWNER.
+
+Request fields:
+```Plaintext
+itemSnapshot
+answerJson
+```
+
+Response fields:
+```Plaintext
+agentRunId
+status
+contentText
+structuredJson
+rawResponse
+latencyMs
+errorCode
+errorMessage
+```
+
+Rules:
+```Plaintext
+Prompt test calls LlmGateway with the selected provider and model.
+Prompt test creates an AI_REVIEW_CONFIG_TEST agentRun.
+Model call failure is returned with errorCode and errorMessage.
+Prompt test does not create submission or ai_review_result records.
 ```
 
 ## POST /api/v1/llm/triggers/run
 
-权限：OWNER / LABELER。
-
-使用场景：
-
+Permission: OWNER / LABELER.
+Use cases:
 ```Plaintext
-Designer 预览 LlmTrigger。
-Labeler 工作台字段级模型辅助。
+Designer preview LlmTrigger.
+Labeler workbench field-level model assistance.
 ```
 
-请求字段：
-
+Request fields:
 ```Plaintext
 taskId
 templateVersionId
@@ -49,8 +109,7 @@ currentAnswerJson
 previewMode
 ```
 
-响应字段：
-
+Response fields:
 ```Plaintext
 agentRunId
 componentId
@@ -60,23 +119,21 @@ targetFields
 rawModelSummary
 ```
 
-规则：
-
+Rules:
 ```Plaintext
-componentId 必须指向 LlmTrigger。
-输出只作为参考或预填建议。
-前端必须用户确认后才写入 answerJson。
-Designer previewMode=true 时不产生 submission。
-每次调用产生 agentRun。
-调用走 RateLimitService。
+componentId must point to LlmTrigger.
+Output is only a reference or prefill suggestion.
+Frontend must wait for user confirmation before writing suggestion into answerJson.
+Designer previewMode=true does not create submissions.
+Every call creates an agentRun.
+Calls use RateLimitService.
 ```
 
-## GET /api/v1/submissions/\{submissionId\}/ai\-review
+## GET /api/v1/submissions/{submissionId}/ai-review
 
-权限：REVIEWER / OWNER。
+Permission: REVIEWER / OWNER.
 
-响应字段：
-
+Response fields:
 ```Plaintext
 aiReviewStatus
 decision
@@ -89,11 +146,9 @@ promptSnapshot
 rawResponse
 ```
 
-状态规则：
-
+Status rules:
 ```Plaintext
-AI 失败兜底时 aiReview.status=MANUAL_REQUIRED。
-submission.status 仍为 PENDING_FINAL。
-AI 不直接设置 APPROVED。
+When AI fails with fallback, aiReview.status=MANUAL_REQUIRED.
+submission.status remains PENDING_FINAL.
+AI never sets submission status to APPROVED.
 ```
-

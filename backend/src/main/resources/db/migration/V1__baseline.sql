@@ -56,6 +56,84 @@ CREATE TABLE task_tags (
   CONSTRAINT fk_task_tags_task FOREIGN KEY (task_id) REFERENCES tasks(id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
+CREATE TABLE dataset_items (
+  id BIGINT PRIMARY KEY AUTO_INCREMENT,
+  task_id BIGINT NOT NULL,
+  external_id VARCHAR(128) NOT NULL,
+  dataset_type VARCHAR(40) NOT NULL,
+  item_json JSON NOT NULL COMMENT 'Normalized dataset payload used by labeler claim.',
+  metadata_json JSON NULL,
+  assigned_count INT NOT NULL DEFAULT 0,
+  submitted_count INT NOT NULL DEFAULT 0,
+  approved_count INT NOT NULL DEFAULT 0,
+  deleted TINYINT(1) NOT NULL DEFAULT 0,
+  created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  updated_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+  UNIQUE KEY uk_dataset_items_task_external (task_id, external_id),
+  KEY idx_dataset_items_claim (task_id, deleted, assigned_count),
+  KEY idx_dataset_items_type (task_id, dataset_type),
+  CONSTRAINT fk_dataset_items_task FOREIGN KEY (task_id) REFERENCES tasks(id),
+  CONSTRAINT chk_dataset_items_type CHECK (dataset_type IN ('QA_QUALITY', 'PREFERENCE_COMPARE')),
+  CONSTRAINT chk_dataset_items_assigned_count CHECK (assigned_count >= 0)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='Dataset items available for labeler claim and review.';
+
+CREATE TABLE templates (
+  id BIGINT PRIMARY KEY AUTO_INCREMENT,
+  task_id BIGINT NOT NULL,
+  name VARCHAR(200) NOT NULL,
+  current_version_no INT NOT NULL DEFAULT 0,
+  created_by BIGINT NOT NULL,
+  created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  updated_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+  KEY idx_templates_task (task_id),
+  CONSTRAINT fk_templates_task FOREIGN KEY (task_id) REFERENCES tasks(id),
+  CONSTRAINT fk_templates_created_by FOREIGN KEY (created_by) REFERENCES users(id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+CREATE TABLE template_versions (
+  id BIGINT PRIMARY KEY AUTO_INCREMENT,
+  template_id BIGINT NOT NULL,
+  task_id BIGINT NOT NULL,
+  version_no INT NOT NULL,
+  schema_json JSON NOT NULL COMMENT 'Frozen renderer schema used by labeler rendering and backend validation.',
+  published_snapshot TINYINT(1) NOT NULL DEFAULT 0,
+  change_note VARCHAR(500) NULL,
+  created_by BIGINT NOT NULL,
+  created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  UNIQUE KEY uk_template_versions_template_version (template_id, version_no),
+  KEY idx_template_versions_task (task_id),
+  CONSTRAINT fk_template_versions_template FOREIGN KEY (template_id) REFERENCES templates(id),
+  CONSTRAINT fk_template_versions_task FOREIGN KEY (task_id) REFERENCES tasks(id),
+  CONSTRAINT fk_template_versions_created_by FOREIGN KEY (created_by) REFERENCES users(id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='Immutable template schema versions used by owner preview and labeler rendering.';
+
+CREATE TABLE assignments (
+  id BIGINT PRIMARY KEY AUTO_INCREMENT,
+  task_id BIGINT NOT NULL,
+  dataset_item_id BIGINT NOT NULL,
+  labeler_id BIGINT NOT NULL,
+  template_version_id BIGINT NOT NULL,
+  status VARCHAR(20) NOT NULL DEFAULT 'CLAIMED',
+  draft_answer_json JSON NULL COMMENT 'Latest server-side draft answer; Redis may cache the same draft for faster autosave.',
+  draft_version INT NOT NULL DEFAULT 1,
+  claimed_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  submitted_at DATETIME(3) NULL,
+  returned_at DATETIME(3) NULL,
+  ai_returned_at DATETIME(3) NULL,
+  approved_at DATETIME(3) NULL,
+  cancelled_at DATETIME(3) NULL,
+  updated_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+  UNIQUE KEY uk_assignments_item_labeler (dataset_item_id, labeler_id),
+  KEY idx_assignments_labeler_status (labeler_id, status),
+  KEY idx_assignments_task_status (task_id, status),
+  CONSTRAINT fk_assignments_task FOREIGN KEY (task_id) REFERENCES tasks(id),
+  CONSTRAINT fk_assignments_item FOREIGN KEY (dataset_item_id) REFERENCES dataset_items(id),
+  CONSTRAINT fk_assignments_labeler FOREIGN KEY (labeler_id) REFERENCES users(id),
+  CONSTRAINT fk_assignments_template_version FOREIGN KEY (template_version_id) REFERENCES template_versions(id),
+  CONSTRAINT chk_assignments_status CHECK (status IN ('CLAIMED', 'DRAFTING', 'SUBMITTED', 'AI_RETURNED', 'RETURNED', 'APPROVED', 'CANCELLED')),
+  CONSTRAINT chk_assignments_draft_version CHECK (draft_version >= 1)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='Claim record and draft state for one labeler on one dataset item.';
+
 CREATE TABLE audit_logs (
   id BIGINT PRIMARY KEY AUTO_INCREMENT,
   biz_type VARCHAR(64) NOT NULL,

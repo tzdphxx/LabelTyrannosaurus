@@ -157,10 +157,14 @@ public class DatasetItemService {
         }
         try {
             String beforeJson = entity.getItemJson();
-            entity.setItemJson(writeJson(request.itemJson()));
-            entity.setMetadataJson(writeJson(request.metadataJson()));
-            datasetItemMapper.updateById(entity);
-            appendChangeLog(task.getId(), entity.getId(), "BATCH_UPDATE", beforeJson, entity.getItemJson(), actorId);
+            String itemJson = writeJson(request.itemJson());
+            String metadataJson = writeJson(request.metadataJson());
+            int updated = datasetItemMapper.updateEditableJsonById(entity.getId(), task.getId(), itemJson, metadataJson);
+            if (updated == 0) {
+                return BatchItemResult.failure(entity.getId(), entity.getExternalId(), 400101,
+                        "Claimed or submitted item cannot be changed");
+            }
+            appendChangeLog(task.getId(), entity.getId(), "BATCH_UPDATE", beforeJson, itemJson, actorId);
             return BatchItemResult.success(entity.getId(), entity.getExternalId());
         } catch (RuntimeException ex) {
             return BatchItemResult.failure(entity.getId(), entity.getExternalId(), 500001, ex.getMessage());
@@ -173,7 +177,11 @@ public class DatasetItemService {
         if (validation != null) {
             return validation;
         }
-        datasetItemMapper.softDeleteById(entity.getId());
+        int deleted = datasetItemMapper.softDeleteById(entity.getId());
+        if (deleted == 0) {
+            return BatchItemResult.failure(entity.getId(), entity.getExternalId(), 400101,
+                    "Claimed or submitted item cannot be changed");
+        }
         appendChangeLog(task.getId(), entity.getId(), "BATCH_DELETE", entity.getItemJson(), null, actorId);
         return BatchItemResult.success(entity.getId(), entity.getExternalId());
     }

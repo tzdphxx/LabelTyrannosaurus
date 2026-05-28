@@ -83,6 +83,21 @@ public interface DatasetItemMapper extends BaseMapper<DatasetItemEntity> {
     DatasetItemEntity selectActiveByTaskIdAndExternalId(@Param("taskId") Long taskId,
                                                         @Param("externalId") String externalId);
 
+    @Update("""
+            update dataset_items
+            set item_json = #{itemJson},
+                metadata_json = #{metadataJson}
+            where id = #{itemId}
+              and task_id = #{taskId}
+              and deleted = 0
+              and assigned_count = 0
+              and submitted_count = 0
+            """)
+    int updateEditableJsonById(@Param("itemId") Long itemId,
+                               @Param("taskId") Long taskId,
+                               @Param("itemJson") String itemJson,
+                               @Param("metadataJson") String metadataJson);
+
     /**
      * 覆盖导入前软删除任务下现有题目，保留历史记录用于审计和回溯。
      */
@@ -102,6 +117,8 @@ public interface DatasetItemMapper extends BaseMapper<DatasetItemEntity> {
             set deleted = 1
             where id = #{itemId}
               and deleted = 0
+              and assigned_count = 0
+              and submitted_count = 0
             """)
     int softDeleteById(@Param("itemId") Long itemId);
 

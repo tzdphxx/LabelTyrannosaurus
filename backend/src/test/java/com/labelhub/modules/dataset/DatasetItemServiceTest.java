@@ -112,6 +112,7 @@ class DatasetItemServiceTest {
         stubTask(10L, TaskStatus.DRAFT, 2);
         when(datasetItemMapper.selectById(100L)).thenReturn(item(100L, "q1", 1, 0, false));
         when(datasetItemMapper.selectById(101L)).thenReturn(item(101L, "q2", 0, 0, false));
+        when(datasetItemMapper.updateEditableJsonById(any(), any(), any(), any())).thenReturn(1);
 
         var results = itemService.batchUpdate(1L, new BatchUpdateItemsRequest(List.of(
                 new DatasetItemUpdateRequest(100L, Map.of("question", "blocked"), Map.of()),
@@ -120,8 +121,24 @@ class DatasetItemServiceTest {
 
         assertThat(results).extracting("success").containsExactly(false, true);
         assertThat(results.get(0).errorCode()).isEqualTo(400101);
-        verify(datasetItemMapper).updateById(any(DatasetItemEntity.class));
+        verify(datasetItemMapper).updateEditableJsonById(101L, 1L, "{\"question\":\"updated\"}", "{\"source\":\"manual\"}");
         verify(changeLogMapper).insert(any(DatasetItemChangeLogEntity.class));
+    }
+
+    @Test
+    void batchUpdateReturnsFailureWhenEditableItemIsClaimedBeforeAtomicUpdate() {
+        CurrentUserContext.set(new CurrentUser(10L, "owner", "owner@example.com", Set.of(RoleCode.OWNER), 1));
+        stubTask(10L, TaskStatus.DRAFT, 2);
+        when(datasetItemMapper.selectById(101L)).thenReturn(item(101L, "q2", 0, 0, false));
+        when(datasetItemMapper.updateEditableJsonById(any(), any(), any(), any())).thenReturn(0);
+
+        var results = itemService.batchUpdate(1L, new BatchUpdateItemsRequest(List.of(
+                new DatasetItemUpdateRequest(101L, Map.of("question", "updated"), Map.of("source", "manual"))
+        )));
+
+        assertThat(results).extracting("success").containsExactly(false);
+        assertThat(results.get(0).errorCode()).isEqualTo(400101);
+        verify(changeLogMapper, never()).insert(any(DatasetItemChangeLogEntity.class));
     }
 
     @Test
@@ -130,6 +147,7 @@ class DatasetItemServiceTest {
         stubTask(10L, TaskStatus.DRAFT, 2);
         when(datasetItemMapper.selectById(100L)).thenReturn(item(100L, "q1", 0, 1, false));
         when(datasetItemMapper.selectById(101L)).thenReturn(item(101L, "q2", 0, 0, false));
+        when(datasetItemMapper.softDeleteById(101L)).thenReturn(1);
 
         var results = itemService.batchDelete(1L, new BatchDeleteItemsRequest(List.of(100L, 101L)));
 
@@ -137,6 +155,20 @@ class DatasetItemServiceTest {
         assertThat(results.get(0).errorCode()).isEqualTo(400101);
         verify(datasetItemMapper).softDeleteById(101L);
         verify(changeLogMapper).insert(any(DatasetItemChangeLogEntity.class));
+    }
+
+    @Test
+    void batchDeleteReturnsFailureWhenEditableItemIsClaimedBeforeSoftDelete() {
+        CurrentUserContext.set(new CurrentUser(10L, "owner", "owner@example.com", Set.of(RoleCode.OWNER), 1));
+        stubTask(10L, TaskStatus.DRAFT, 2);
+        when(datasetItemMapper.selectById(101L)).thenReturn(item(101L, "q2", 0, 0, false));
+        when(datasetItemMapper.softDeleteById(101L)).thenReturn(0);
+
+        var results = itemService.batchDelete(1L, new BatchDeleteItemsRequest(List.of(101L)));
+
+        assertThat(results).extracting("success").containsExactly(false);
+        assertThat(results.get(0).errorCode()).isEqualTo(400101);
+        verify(changeLogMapper, never()).insert(any(DatasetItemChangeLogEntity.class));
     }
 
     @Test

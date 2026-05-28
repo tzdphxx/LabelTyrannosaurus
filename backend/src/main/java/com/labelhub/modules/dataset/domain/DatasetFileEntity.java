@@ -6,6 +6,11 @@ import com.baomidou.mybatisplus.annotation.TableName;
 
 import java.time.LocalDateTime;
 
+/**
+ * 数据集源文件记录。
+ *
+ * <p>用于关联任务、对象存储文件和解析格式；真实文件内容只存放在对象存储中。</p>
+ */
 @TableName("dataset_files")
 public class DatasetFileEntity {
 

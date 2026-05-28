@@ -11,6 +11,11 @@ import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.List;
 
+/**
+ * JSON 数组数据集解析器。
+ *
+ * <p>源文件必须是对象数组；数组元素逐条转换为统一导入行，元素级异常会进入错误报告。</p>
+ */
 @Component
 public class JsonDatasetParser extends AbstractDatasetParser {
 

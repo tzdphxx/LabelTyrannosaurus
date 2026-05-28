@@ -6,6 +6,11 @@ import com.baomidou.mybatisplus.annotation.TableName;
 
 import java.time.LocalDateTime;
 
+/**
+ * 数据集题目变更日志。
+ *
+ * <p>导入、覆盖、批量编辑等动作通过该表保留题目内容变化的可追溯记录。</p>
+ */
 @TableName("dataset_item_change_logs")
 public class DatasetItemChangeLogEntity {
 

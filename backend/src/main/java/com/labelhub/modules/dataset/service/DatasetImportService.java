@@ -47,6 +47,14 @@ import java.util.UUID;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
+/**
+ * 数据集导入应用服务。
+ *
+ * <p>本服务负责把已上传到对象存储的源文件解析为标准题目数据，并维护
+ * {@code dataset_files}、{@code dataset_import_jobs}、{@code dataset_items}
+ * 和错误报告文件之间的一致关系。导入过程允许单行失败，失败明细会汇总为
+ * JSONL 错误报告，避免一条脏数据阻断整批导入。</p>
+ */
 @Service
 public class DatasetImportService {
 
@@ -86,16 +94,29 @@ public class DatasetImportService {
         this.parsers = parsers.stream().collect(Collectors.toMap(DatasetParser::format, Function.identity()));
     }
 
+    /**
+     * 创建追加导入任务。
+     *
+     * <p>追加导入只新增不存在的 {@code externalId}，重复题目会作为行级失败记录。</p>
+     */
     @Transactional
     public DatasetImportJobResponse createAppendImport(Long taskId, DatasetImportRequest request) {
         return createImport(taskId, request, DatasetImportMode.APPEND);
     }
 
+    /**
+     * 创建覆盖导入任务。
+     *
+     * <p>覆盖导入会软删除当前任务下已有题目，只允许在 DRAFT 状态下执行。</p>
+     */
     @Transactional
     public DatasetImportJobResponse createOverwriteImport(Long taskId, DatasetImportRequest request) {
         return createImport(taskId, request, DatasetImportMode.OVERWRITE);
     }
 
+    /**
+     * 查询导入任务详情，并在存在错误报告时补充签名下载地址。
+     */
     public DatasetImportJobResponse getImportJob(Long taskId, Long jobId) {
         TaskEntity task = requireWritableTask(taskId);
         DatasetImportJobEntity job = importJobMapper.selectByTaskAndJob(task.getId(), jobId);
@@ -118,6 +139,7 @@ public class DatasetImportService {
         }
 
         CurrentUser currentUser = CurrentUserContext.requireCurrentUser();
+        // 源文件和导入任务先落库，后台任务执行失败时仍可查询到失败状态。
         DatasetFileEntity datasetFile = new DatasetFileEntity();
         datasetFile.setTaskId(task.getId());
         datasetFile.setFileId(sourceFile.getId());
@@ -182,6 +204,7 @@ public class DatasetImportService {
         try {
             markRunning(job);
             if (mode == DatasetImportMode.OVERWRITE) {
+                // 覆盖导入采用软删除，保留历史题目和变更审计的可追溯性。
                 datasetItemMapper.softDeleteActiveByTaskId(job.getTaskId());
             }
             DatasetParseResult result;
@@ -192,6 +215,7 @@ public class DatasetImportService {
             List<DatasetImportError> errors = new ArrayList<>(result.errors());
             int successCount = 0;
             for (DatasetImportRow row : result.rows()) {
+                // 唯一性由数据库约束兜底，这里先做业务检查以生成可读的行级错误报告。
                 if (datasetItemMapper.countActiveByTaskIdAndExternalId(job.getTaskId(), row.externalId()) > 0) {
                     errors.add(new DatasetImportError(row.rowNo(), row.externalId(), "DUPLICATE_EXTERNAL_ID",
                             "externalId already exists in this task", row.rawRow()));
@@ -204,6 +228,7 @@ public class DatasetImportService {
             }
             finishJob(job, result.rows().size() + result.errors().size(), successCount, errors, actorId);
         } catch (Throwable failure) {
+            // 文件级或系统级异常标记整个任务失败，便于前端轮询展示失败原因。
             job.setStatus(DatasetImportStatus.FAILED.name());
             job.setErrorMessage(failure.getMessage());
             job.setFinishedAt(LocalDateTime.now());
@@ -248,6 +273,7 @@ public class DatasetImportService {
                            Long actorId) throws JsonProcessingException {
         int failedCount = errors.size();
         if (!errors.isEmpty()) {
+            // 只要存在行级失败就生成报告，成功行仍然正常入库。
             ObjectFileEntity errorFile = uploadErrorReport(job.getId(), errors, actorId);
             job.setErrorReportFileId(errorFile.getId());
         }
@@ -273,6 +299,7 @@ public class DatasetImportService {
         String originalFilename = "dataset-import-%d-errors.jsonl".formatted(jobId);
         StringBuilder content = new StringBuilder();
         for (DatasetImportError error : errors) {
+            // 错误报告使用 JSONL，便于大文件逐行下载、预览和后续离线分析。
             content.append(objectMapper.writeValueAsString(Map.of(
                     "rowNo", error.rowNo(),
                     "externalId", error.externalId() == null ? "" : error.externalId(),

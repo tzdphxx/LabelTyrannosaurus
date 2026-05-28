@@ -6,6 +6,11 @@ import com.baomidou.mybatisplus.annotation.TableName;
 
 import java.time.LocalDateTime;
 
+/**
+ * 任务基础实体。
+ *
+ * <p>当前用于 BE-B 数据集导入校验任务归属和任务状态；任务主生命周期仍由 BE-A 模块维护。</p>
+ */
 @TableName("tasks")
 public class TaskEntity {
 

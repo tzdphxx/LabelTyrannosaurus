@@ -14,6 +14,12 @@ import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.List;
 
+/**
+ * Excel 数据集解析器。
+ *
+ * <p>第一行作为字段名表头；普通列进入 {@code itemJson}，
+ * 以 {@code metadata.} 开头的列进入 {@code metadataJson}。</p>
+ */
 @Component
 public class ExcelDatasetParser extends AbstractDatasetParser {
 

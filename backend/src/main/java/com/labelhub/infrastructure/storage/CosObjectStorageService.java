@@ -33,6 +33,7 @@ public class CosObjectStorageService implements ObjectStorageService {
 
     @Override
     public InputStream openReadStream(String bucket, String objectKey) {
+        // COSObjectInputStream 绑定底层 HTTP 连接，调用方必须在解析完成后关闭。
         return cosClient.getObject(bucket, objectKey).getObjectContent();
     }
 

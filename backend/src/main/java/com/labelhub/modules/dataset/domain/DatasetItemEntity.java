@@ -6,6 +6,12 @@ import com.baomidou.mybatisplus.annotation.TableName;
 
 import java.time.LocalDateTime;
 
+/**
+ * 数据集题目实体。
+ *
+ * <p>{@code externalId} 是同一任务内的业务唯一键；题目主体存储在 {@code itemJson}，
+ * 计数类字段由领取、提交和审核流程通过明确入口递增。</p>
+ */
 @TableName("dataset_items")
 public class DatasetItemEntity {
 

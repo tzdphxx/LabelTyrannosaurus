@@ -14,6 +14,12 @@ import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 
+/**
+ * JSONL 数据集解析器。
+ *
+ * <p>每一行独立解析，单行 JSON 非法或缺少 {@code externalId} 时只记录该行错误，
+ * 不影响其他行继续导入。</p>
+ */
 @Component
 public class JsonlDatasetParser extends AbstractDatasetParser {
 

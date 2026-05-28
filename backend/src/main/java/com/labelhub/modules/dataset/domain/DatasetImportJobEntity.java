@@ -6,6 +6,11 @@ import com.baomidou.mybatisplus.annotation.TableName;
 
 import java.time.LocalDateTime;
 
+/**
+ * 数据集导入任务记录。
+ *
+ * <p>导入任务用于前端轮询进度，并在失败或部分成功时保存错误信息和错误报告文件引用。</p>
+ */
 @TableName("dataset_import_jobs")
 public class DatasetImportJobEntity {
 

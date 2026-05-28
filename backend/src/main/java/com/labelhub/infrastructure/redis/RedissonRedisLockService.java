@@ -1,9 +1,12 @@
 package com.labelhub.infrastructure.redis;
 
-import java.util.concurrent.TimeUnit;
+import com.labelhub.common.exception.BusinessException;
 import org.redisson.api.RLock;
 import org.redisson.api.RedissonClient;
 import org.springframework.stereotype.Service;
+
+import java.util.concurrent.TimeUnit;
+import java.util.function.Supplier;
 
 @Service
 public class RedissonRedisLockService implements RedisLockService {
@@ -30,5 +33,25 @@ public class RedissonRedisLockService implements RedisLockService {
         if (lock.isHeldByCurrentThread()) {
             lock.unlock();
         }
+    }
+
+    @Override
+    public <T> T withLock(String key, long waitMillis, long leaseMillis, Supplier<T> action) {
+        if (!tryLock(key, waitMillis, leaseMillis)) {
+            throw new BusinessException(409101, "Redis lock acquire timeout");
+        }
+        try {
+            return action.get();
+        } finally {
+            unlock(key);
+        }
+    }
+
+    @Override
+    public void withLock(String key, long waitMillis, long leaseMillis, Runnable action) {
+        withLock(key, waitMillis, leaseMillis, () -> {
+            action.run();
+            return null;
+        });
     }
 }

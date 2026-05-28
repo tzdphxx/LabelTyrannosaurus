@@ -1,88 +1,43 @@
-# auth
+# Auth API Contract
 
-# Auth / Admin User API Contract
+Owner: BE-B
 
-Owner：BE\-B
+## Register
 
-## POST /api/v1/auth/register
+- URL: `POST /api/v1/auth/register`
+- Roles: public
+- Request: `username`, `email`, `password`
+- Response: `accessToken`, `refreshToken`, `tokenVersion`
+- Effects: creates `users` row with `userType=USER`, `enabled=true`, `loginEnabled=true`, BCrypt `passwordHash`, `tokenVersion=1`; creates default `LABELER` role.
+- Errors: `400102` duplicate username/email or invalid parameters.
+- Frontend: register page.
 
-权限：公开。
+## Login
 
-请求字段：
+- URL: `POST /api/v1/auth/login`
+- Roles: public
+- Request: `account`, `password`
+- Response: `accessToken`, `refreshToken`, `tokenVersion`
+- Effects: validates `enabled=true`, `loginEnabled=true`, password hash, and `userType=USER`; updates `lastLoginAt`.
+- Errors: `401001` invalid credential, disabled user, login-disabled user, or system user.
+- Frontend: login page.
 
-```Plaintext
-username
-email
-password
-```
+## Refresh
 
-响应字段：
+- URL: `POST /api/v1/auth/refresh`
+- Roles: public with valid refresh token
+- Request: `refreshToken`
+- Response: `accessToken`, `refreshToken`, `tokenVersion`
+- Effects: validates refresh token and current `users.tokenVersion`.
+- Errors: `401001` invalid token, expired token, stale `tokenVersion`, disabled user.
+- Frontend: API client token refresh.
 
-```Plaintext
-userId
-username
-roles = [LABELER]
-accessToken
-refreshToken
-```
+## Current User
 
-错误码：
-
-```Plaintext
-400102 参数非法
-409101 username/email 已存在
-```
-
-## POST /api/v1/auth/login
-
-权限：公开。
-
-请求字段：
-
-```Plaintext
-account
-password
-```
-
-响应字段：
-
-```Plaintext
-userId
-username
-roles
-accessToken
-refreshToken
-```
-
-## GET /api/v1/users/me
-
-权限：登录用户。
-
-响应字段：
-
-```Plaintext
-userId
-username
-email
-roles
-tokenVersion
-```
-
-## PUT /api/v1/admin/users/\{userId\}/roles
-
-权限：ADMIN。
-
-请求字段：
-
-```Plaintext
-roles
-```
-
-状态影响：
-
-```Plaintext
-更新 user_roles。
-递增 users.tokenVersion。
-旧 token 失效。
-```
-
+- URL: `GET /api/v1/users/me`
+- Roles: authenticated user
+- Request: none
+- Response: `userId`, `username`, `email`, `roles`
+- Effects: none.
+- Errors: `401001` unauthenticated or stale token.
+- Frontend: auth state restore, permission menu.

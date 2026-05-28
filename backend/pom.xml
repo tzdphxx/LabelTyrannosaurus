@@ -20,6 +20,7 @@
         <redisson.version>3.52.0</redisson.version>
         <tencent.cos.version>5.6.269</tencent.cos.version>
         <jjwt.version>0.12.6</jjwt.version>
+        <flyway.version>10.22.0</flyway.version>
     </properties>
 
     <dependencyManagement>
@@ -99,6 +100,12 @@
         <dependency>
             <groupId>org.flywaydb</groupId>
             <artifactId>flyway-core</artifactId>
+            <version>${flyway.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.flywaydb</groupId>
+            <artifactId>flyway-mysql</artifactId>
+            <version>${flyway.version}</version>
         </dependency>
         <dependency>
             <groupId>com.mysql</groupId>

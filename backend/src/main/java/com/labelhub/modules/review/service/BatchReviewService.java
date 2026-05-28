@@ -15,6 +15,7 @@ import com.labelhub.modules.review.mapper.ReviewRecordMapper;
 import com.labelhub.modules.submission.domain.Submission;
 import com.labelhub.modules.submission.domain.SubmissionStatus;
 import com.labelhub.modules.submission.mapper.SubmissionMapper;
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
@@ -85,6 +86,10 @@ public class BatchReviewService {
                 return BatchReviewItemResult.fail(submissionId,
                         "Conflict submissions cannot be batch approved");
             }
+            if (isMarkedManualRequired(submissionId)) {
+                return BatchReviewItemResult.fail(submissionId,
+                        "Submission is marked for manual review");
+            }
             reviewService.approve(submissionId, reviewerId,
                     new ApproveRequest(request.reviewComment(), request.reviewLevel()));
             return BatchReviewItemResult.ok(submissionId);
@@ -96,6 +101,10 @@ public class BatchReviewService {
     private BatchReviewItemResult trySingleReject(Long submissionId, Long reviewerId,
                                                    BatchRejectRequest request) {
         try {
+            if (isMarkedManualRequired(submissionId)) {
+                return BatchReviewItemResult.fail(submissionId,
+                        "Submission is marked for manual review");
+            }
             reviewService.reject(submissionId, reviewerId,
                     new RejectRequest(request.reason(), request.reviewLevel()));
             return BatchReviewItemResult.ok(submissionId);
@@ -153,6 +162,13 @@ public class BatchReviewService {
     private boolean isConflict(Submission submission) {
         return submissionMapper.countPendingFinalByTaskAndItem(
                 submission.getTaskId(), submission.getDatasetItemId()) > 1;
+    }
+
+    private boolean isMarkedManualRequired(Long submissionId) {
+        LambdaQueryWrapper<ReviewRecord> query = new LambdaQueryWrapper<ReviewRecord>()
+                .eq(ReviewRecord::getSubmissionId, submissionId)
+                .eq(ReviewRecord::getAction, ReviewAction.MARK_MANUAL_REQUIRED);
+        return reviewRecordMapper.selectCount(query) > 0;
     }
 
     private BatchReviewResponse buildResponse(List<BatchReviewItemResult> results) {

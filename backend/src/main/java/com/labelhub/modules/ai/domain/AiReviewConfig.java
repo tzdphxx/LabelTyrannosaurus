@@ -38,6 +38,12 @@ public class AiReviewConfig {
 
     private String aiRejectAction;
 
+    private String agentMode;
+
+    private String enabledToolsJson;
+
+    private Integer maxIterations;
+
     private Long createdBy;
 
     private LocalDateTime createdAt;

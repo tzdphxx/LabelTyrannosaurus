@@ -68,6 +68,7 @@ public class AiAutoReviewService {
     private final ObjectMapper objectMapper;
     private final AiReviewRetryStrategy retryStrategy;
     private final AiReviewRetryScheduler retryScheduler;
+    private final SupervisorAgent supervisorAgent;
 
     public AiAutoReviewService(SubmissionMapper submissionMapper,
                                TaskMapper taskMapper,
@@ -81,10 +82,11 @@ public class AiAutoReviewService {
                                AuditAppender auditAppender,
                                TraceIdProvider traceIdProvider,
                                AiReviewRetryStrategy retryStrategy,
-                               AiReviewRetryScheduler retryScheduler) {
+                               AiReviewRetryScheduler retryScheduler,
+                               SupervisorAgent supervisorAgent) {
         this(submissionMapper, taskMapper, datasetItemMapper, aiReviewConfigMapper, aiReviewResultMapper, rateLimiter,
                 llmGateway, agentRunService, systemAgentProvider, auditAppender, traceIdProvider, new ObjectMapper(),
-                retryStrategy, retryScheduler);
+                retryStrategy, retryScheduler, supervisorAgent);
     }
 
     AiAutoReviewService(SubmissionMapper submissionMapper,
@@ -100,7 +102,8 @@ public class AiAutoReviewService {
                         TraceIdProvider traceIdProvider,
                         ObjectMapper objectMapper,
                         AiReviewRetryStrategy retryStrategy,
-                        AiReviewRetryScheduler retryScheduler) {
+                        AiReviewRetryScheduler retryScheduler,
+                        SupervisorAgent supervisorAgent) {
         this.submissionMapper = submissionMapper;
         this.taskMapper = taskMapper;
         this.datasetItemMapper = datasetItemMapper;
@@ -115,6 +118,7 @@ public class AiAutoReviewService {
         this.objectMapper = objectMapper;
         this.retryStrategy = retryStrategy;
         this.retryScheduler = retryScheduler;
+        this.supervisorAgent = supervisorAgent;
         this.retryScheduler.setRetryCallback(this::retryReview);
     }
 
@@ -194,6 +198,14 @@ public class AiAutoReviewService {
 
     private AttemptOutcome executeAttempt(Submission submission, AiReviewConfig config,
                                           AgentRun agentRun, String promptSnapshot) {
+        if ("SUPERVISOR".equals(config.getAgentMode())) {
+            return executeSupervisor(submission, config, agentRun, promptSnapshot);
+        }
+        return executeDirect(submission, config, agentRun, promptSnapshot);
+    }
+
+    private AttemptOutcome executeDirect(Submission submission, AiReviewConfig config,
+                                         AgentRun agentRun, String promptSnapshot) {
         if (!rateLimiter.acquire(submission.getTaskId(), config.getProviderId())) {
             agentRunService.fail(agentRun.getId(), AgentRunStatus.RATE_LIMITED, "AI review rate limited");
             return AttemptOutcome.failure("RATE_LIMITED", "AI review rate limited", null);
@@ -218,6 +230,76 @@ public class AiAutoReviewService {
         } catch (BusinessException ex) {
             agentRunService.fail(agentRun.getId(), AgentRunStatus.MANUAL_REQUIRED, ex.getMessage());
             return AttemptOutcome.failure("INVALID_AI_REVIEW_OUTPUT", ex.getMessage(), response.rawResponse());
+        }
+    }
+
+    private AttemptOutcome executeSupervisor(Submission submission, AiReviewConfig config,
+                                             AgentRun agentRun, String promptSnapshot) {
+        if (!rateLimiter.acquire(submission.getTaskId(), config.getProviderId())) {
+            agentRunService.fail(agentRun.getId(), AgentRunStatus.RATE_LIMITED, "AI review rate limited");
+            return AttemptOutcome.failure("RATE_LIMITED", "AI review rate limited", null);
+        }
+
+        List<String> enabledTools = parseEnabledTools(config.getEnabledToolsJson());
+        int maxIterations = config.getMaxIterations() != null ? config.getMaxIterations() : 10;
+        DatasetItem datasetItem = datasetItemMapper.selectById(submission.getDatasetItemId());
+
+        SupervisorRequest request = new SupervisorRequest(
+                submission.getId(),
+                submission.getTaskId(),
+                buildSupervisorSystemPrompt(config),
+                promptSnapshot,
+                supervisorAgent.getToolRegistry().getToolDefinitions(enabledTools),
+                new com.labelhub.modules.ai.tool.ToolContext(
+                        submission.getId(), submission.getTaskId(), submission.getDatasetItemId(),
+                        submission.getLabelerId(), submission.getAnswerJson(),
+                        datasetItem != null ? datasetItem.getItemJson() : null),
+                maxIterations,
+                config.getProviderId(),
+                config.getModelName()
+        );
+
+        SupervisorResult supervisorResult = supervisorAgent.execute(request);
+
+        if (supervisorResult.success()) {
+            AiReviewResult result = baseResult(submission, config, agentRun.getId(), promptSnapshot);
+            result.setStatus(AiReviewStatus.SUCCESS);
+            result.setDecision(supervisorResult.decision());
+            result.setAverageScore(supervisorResult.averageScore());
+            result.setDimensionScores(toJson(supervisorResult.dimensionScores() != null ? supervisorResult.dimensionScores() : Map.of()));
+            result.setRiskFlags(toJson(supervisorResult.riskFlags() != null ? supervisorResult.riskFlags() : List.of()));
+            result.setSuggestion(supervisorResult.suggestion());
+            result.setRawResponse(supervisorResult.rawConversation());
+            Map<String, Object> snapshot = new LinkedHashMap<>();
+            snapshot.put("mode", "SUPERVISOR");
+            snapshot.put("result", supervisorResult);
+            return AttemptOutcome.success(result, snapshot);
+        } else {
+            agentRunService.fail(agentRun.getId(), AgentRunStatus.FAILED, supervisorResult.errorMessage());
+            return AttemptOutcome.failure(supervisorResult.errorCode(), supervisorResult.errorMessage(),
+                    supervisorResult.rawConversation());
+        }
+    }
+
+    private String buildSupervisorSystemPrompt(AiReviewConfig config) {
+        return "You are LabelHub AI Reviewer (Supervisor mode). "
+                + "You have access to tools to help you review the submission. "
+                + "Use the tools to gather information, then make a final decision. "
+                + "When you have enough information, respond with a JSON object containing: "
+                + "decision (PASS/FAIL/UNCERTAIN), averageScore, dimensionScores, riskFlags, suggestion. "
+                + "Scoring dimensions: " + config.getScoringDimensionsJson() + ". "
+                + "Pass threshold: " + config.getPassThreshold() + ". "
+                + "Manual review threshold: " + config.getManualReviewThreshold() + ".";
+    }
+
+    private List<String> parseEnabledTools(String json) {
+        if (json == null || json.isBlank()) {
+            return null;
+        }
+        try {
+            return objectMapper.readValue(json, STRING_LIST);
+        } catch (Exception e) {
+            return null;
         }
     }
 

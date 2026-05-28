@@ -57,4 +57,16 @@ public interface SubmissionMapper extends BaseMapper<Submission> {
             """)
     java.util.List<Submission> selectPendingFinalByTaskAndItem(@Param("taskId") Long taskId,
                                                                @Param("datasetItemId") Long datasetItemId);
+
+    @Select("""
+            SELECT *
+            FROM submissions
+            WHERE labeler_id = #{labelerId}
+              AND task_id = #{taskId}
+            ORDER BY created_at DESC
+            LIMIT #{limit}
+            """)
+    java.util.List<Submission> selectRecentByLabeler(@Param("labelerId") Long labelerId,
+                                                     @Param("taskId") Long taskId,
+                                                     @Param("limit") int limit);
 }

@@ -31,6 +31,7 @@ public class ConflictResolveService {
     private static final int GROUP_NOT_FOUND = 404701;
     private static final int GROUP_ALREADY_RESOLVED = 400701;
     private static final int SUBMISSION_NOT_IN_GROUP = 400702;
+    private static final int SUBMISSION_NOT_REVIEWABLE = 400703;
     private static final String SUBMISSION_BIZ_TYPE = "SUBMISSION";
     private static final String USER_ACTOR_TYPE = "USER";
 
@@ -83,10 +84,24 @@ public class ConflictResolveService {
             throw new BusinessException(SUBMISSION_NOT_IN_GROUP,
                     "Submission does not belong to this conflict group");
         }
+        if (golden.getStatus() != SubmissionStatus.PENDING_FINAL) {
+            throw new BusinessException(SUBMISSION_NOT_REVIEWABLE,
+                    "Submission is not in reviewable status");
+        }
 
         golden.setIsGolden(true);
         golden.setStatus(SubmissionStatus.APPROVED);
         submissionMapper.updateById(golden);
+
+        List<Submission> siblings = submissionMapper.selectPendingFinalByTaskAndItem(
+                group.getTaskId(), group.getDatasetItemId());
+        for (Submission s : siblings) {
+            if (!s.getId().equals(golden.getId())) {
+                s.setStatus(SubmissionStatus.REJECTED);
+                s.setIsGolden(false);
+                submissionMapper.updateById(s);
+            }
+        }
 
         group.setStatus(ConflictStatus.RESOLVED);
         group.setGoldenSubmissionId(request.goldenSubmissionId());

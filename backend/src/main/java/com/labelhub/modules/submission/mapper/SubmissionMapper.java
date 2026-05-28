@@ -47,4 +47,14 @@ public interface SubmissionMapper extends BaseMapper<Submission> {
             """)
     int countPendingFinalByTaskAndItem(@Param("taskId") Long taskId,
                                        @Param("datasetItemId") Long datasetItemId);
+
+    @Select("""
+            SELECT *
+            FROM submissions
+            WHERE task_id = #{taskId}
+              AND dataset_item_id = #{datasetItemId}
+              AND status = 'PENDING_FINAL'
+            """)
+    java.util.List<Submission> selectPendingFinalByTaskAndItem(@Param("taskId") Long taskId,
+                                                               @Param("datasetItemId") Long datasetItemId);
 }

@@ -7,6 +7,9 @@ public class NoOpSubmissionEventPublisher implements SubmissionEventPublisher {
 
     @Override
     public void publishApproved(Long submissionId, Long reviewerId) {
-        // BE-B 接入后替换为真实实现
+    }
+
+    @Override
+    public void publishGoldenSelected(Long submissionId, Long reviewerId) {
     }
 }

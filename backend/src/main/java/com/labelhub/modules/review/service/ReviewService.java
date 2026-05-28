@@ -30,6 +30,7 @@ public class ReviewService {
     private static final int SUBMISSION_NOT_FOUND = 404601;
     private static final int SUBMISSION_STATUS_NOT_REVIEWABLE = 400601;
     private static final int REJECT_REASON_REQUIRED = 400602;
+    private static final int ASSIGNMENT_NOT_FOUND = 404602;
     private static final String SUBMISSION_BIZ_TYPE = "SUBMISSION";
     private static final String USER_ACTOR_TYPE = "USER";
 
@@ -71,6 +72,9 @@ public class ReviewService {
         submissionMapper.updateById(submission);
 
         Assignment assignment = assignmentMapper.selectById(submission.getAssignmentId());
+        if (assignment == null) {
+            throw new BusinessException(ASSIGNMENT_NOT_FOUND, "Associated assignment not found");
+        }
         assignment.setStatus(AssignmentStatus.APPROVED);
         assignment.setApprovedAt(LocalDateTime.now());
         assignmentMapper.updateById(assignment);
@@ -96,6 +100,9 @@ public class ReviewService {
         submissionMapper.updateById(submission);
 
         Assignment assignment = assignmentMapper.selectById(submission.getAssignmentId());
+        if (assignment == null) {
+            throw new BusinessException(ASSIGNMENT_NOT_FOUND, "Associated assignment not found");
+        }
         assignment.setStatus(AssignmentStatus.RETURNED);
         assignment.setReturnedAt(LocalDateTime.now());
         assignmentMapper.updateById(assignment);

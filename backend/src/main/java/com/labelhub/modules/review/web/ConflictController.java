@@ -20,12 +20,9 @@ import org.springframework.web.bind.annotation.RestController;
 public class ConflictController {
 
     private final ConflictResolveService conflictResolveService;
-    private final CurrentUserContext currentUserContext;
 
-    public ConflictController(ConflictResolveService conflictResolveService,
-                              CurrentUserContext currentUserContext) {
+    public ConflictController(ConflictResolveService conflictResolveService) {
         this.conflictResolveService = conflictResolveService;
-        this.currentUserContext = currentUserContext;
     }
 
     @GetMapping
@@ -42,6 +39,6 @@ public class ConflictController {
     public ApiResponse<ConflictResolveResponse> resolve(@PathVariable Long groupId,
                                                          @Valid @RequestBody ConflictResolveRequest request) {
         return ApiResponse.ok(conflictResolveService.resolve(
-                groupId, currentUserContext.currentUserId(), request));
+                groupId, CurrentUserContext.getUserId(), request));
     }
 }

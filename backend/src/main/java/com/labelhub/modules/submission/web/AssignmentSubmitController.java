@@ -17,12 +17,9 @@ import org.springframework.web.bind.annotation.RestController;
 public class AssignmentSubmitController {
 
     private final SubmissionSubmitService submissionSubmitService;
-    private final CurrentUserContext currentUserContext;
 
-    public AssignmentSubmitController(SubmissionSubmitService submissionSubmitService,
-                                      CurrentUserContext currentUserContext) {
+    public AssignmentSubmitController(SubmissionSubmitService submissionSubmitService) {
         this.submissionSubmitService = submissionSubmitService;
-        this.currentUserContext = currentUserContext;
     }
 
     @PostMapping
@@ -30,7 +27,7 @@ public class AssignmentSubmitController {
                                                         @Valid @RequestBody SubmissionSubmitRequest request) {
         return ApiResponse.ok(submissionSubmitService.submit(
                 assignmentId,
-                currentUserContext.currentUserId(),
+                CurrentUserContext.getUserId(),
                 request
         ));
     }

@@ -28,14 +28,11 @@ public class ReviewController {
 
     private final ReviewService reviewService;
     private final BatchReviewService batchReviewService;
-    private final CurrentUserContext currentUserContext;
 
     public ReviewController(ReviewService reviewService,
-                            BatchReviewService batchReviewService,
-                            CurrentUserContext currentUserContext) {
+                            BatchReviewService batchReviewService) {
         this.reviewService = reviewService;
         this.batchReviewService = batchReviewService;
-        this.currentUserContext = currentUserContext;
     }
 
     @GetMapping
@@ -47,37 +44,37 @@ public class ReviewController {
     public ApiResponse<ReviewActionResponse> approve(@PathVariable Long submissionId,
                                                       @Valid @RequestBody ApproveRequest request) {
         return ApiResponse.ok(reviewService.approve(
-                submissionId, currentUserContext.currentUserId(), request));
+                submissionId, CurrentUserContext.getUserId(), request));
     }
 
     @PostMapping("/{submissionId}/reject")
     public ApiResponse<ReviewActionResponse> reject(@PathVariable Long submissionId,
                                                      @Valid @RequestBody RejectRequest request) {
         return ApiResponse.ok(reviewService.reject(
-                submissionId, currentUserContext.currentUserId(), request));
+                submissionId, CurrentUserContext.getUserId(), request));
     }
 
     @PostMapping("/batch/approve")
     public ApiResponse<BatchReviewResponse> batchApprove(@Valid @RequestBody BatchApproveRequest request) {
         return ApiResponse.ok(batchReviewService.batchApprove(
-                currentUserContext.currentUserId(), request));
+                CurrentUserContext.getUserId(), request));
     }
 
     @PostMapping("/batch/reject")
     public ApiResponse<BatchReviewResponse> batchReject(@Valid @RequestBody BatchRejectRequest request) {
         return ApiResponse.ok(batchReviewService.batchReject(
-                currentUserContext.currentUserId(), request));
+                CurrentUserContext.getUserId(), request));
     }
 
     @PostMapping("/batch/mark-manual")
     public ApiResponse<BatchReviewResponse> batchMarkManual(@Valid @RequestBody BatchMarkManualRequest request) {
         return ApiResponse.ok(batchReviewService.batchMarkManual(
-                currentUserContext.currentUserId(), request));
+                CurrentUserContext.getUserId(), request));
     }
 
     @PostMapping("/batch/assign")
     public ApiResponse<BatchReviewResponse> batchAssign(@Valid @RequestBody BatchAssignRequest request) {
         return ApiResponse.ok(batchReviewService.batchAssign(
-                currentUserContext.currentUserId(), request));
+                CurrentUserContext.getUserId(), request));
     }
 }

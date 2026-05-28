@@ -14,16 +14,13 @@ import org.springframework.web.bind.annotation.RestController;
 public class AiReviewResultController {
 
     private final AiReviewResultQueryService queryService;
-    private final CurrentUserContext currentUserContext;
 
-    public AiReviewResultController(AiReviewResultQueryService queryService,
-                                    CurrentUserContext currentUserContext) {
+    public AiReviewResultController(AiReviewResultQueryService queryService) {
         this.queryService = queryService;
-        this.currentUserContext = currentUserContext;
     }
 
     @GetMapping
     public ApiResponse<AiReviewResultResponse> get(@PathVariable Long submissionId) {
-        return ApiResponse.ok(queryService.getForSubmission(currentUserContext.currentUser(), submissionId));
+        return ApiResponse.ok(queryService.getForSubmission(CurrentUserContext.requireCurrentUser(), submissionId));
     }
 }

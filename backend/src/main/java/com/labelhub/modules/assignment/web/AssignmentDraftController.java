@@ -18,12 +18,9 @@ import org.springframework.web.bind.annotation.RestController;
 public class AssignmentDraftController {
 
     private final AssignmentDraftService assignmentDraftService;
-    private final CurrentUserContext currentUserContext;
 
-    public AssignmentDraftController(AssignmentDraftService assignmentDraftService,
-                                     CurrentUserContext currentUserContext) {
+    public AssignmentDraftController(AssignmentDraftService assignmentDraftService) {
         this.assignmentDraftService = assignmentDraftService;
-        this.currentUserContext = currentUserContext;
     }
 
     @PutMapping
@@ -31,7 +28,7 @@ public class AssignmentDraftController {
                                                           @Valid @RequestBody AssignmentDraftSaveRequest request) {
         return ApiResponse.ok(assignmentDraftService.saveDraft(
                 assignmentId,
-                currentUserContext.currentUserId(),
+                CurrentUserContext.getUserId(),
                 request
         ));
     }
@@ -40,7 +37,7 @@ public class AssignmentDraftController {
     public ApiResponse<AssignmentDraftResponse> getDraft(@PathVariable Long assignmentId) {
         return ApiResponse.ok(assignmentDraftService.getDraft(
                 assignmentId,
-                currentUserContext.currentUserId()
+                CurrentUserContext.getUserId()
         ));
     }
 }

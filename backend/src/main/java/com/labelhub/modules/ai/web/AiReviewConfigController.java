@@ -21,38 +21,35 @@ import org.springframework.web.bind.annotation.RestController;
 public class AiReviewConfigController {
 
     private final AiReviewConfigService aiReviewConfigService;
-    private final CurrentUserContext currentUserContext;
 
-    public AiReviewConfigController(AiReviewConfigService aiReviewConfigService,
-                                    CurrentUserContext currentUserContext) {
+    public AiReviewConfigController(AiReviewConfigService aiReviewConfigService) {
         this.aiReviewConfigService = aiReviewConfigService;
-        this.currentUserContext = currentUserContext;
     }
 
     @PostMapping
     public ApiResponse<AiReviewConfigResponse> save(@PathVariable Long taskId,
                                                     @Valid @RequestBody AiReviewConfigRequest request) {
-        return ApiResponse.ok(aiReviewConfigService.save(currentUserContext.currentUserId(), taskId, request));
+        return ApiResponse.ok(aiReviewConfigService.save(CurrentUserContext.getUserId(), taskId, request));
     }
 
     @PutMapping("/{configId}")
     public ApiResponse<AiReviewConfigResponse> update(@PathVariable Long taskId,
                                                       @PathVariable Long configId,
                                                       @Valid @RequestBody AiReviewConfigRequest request) {
-        return ApiResponse.ok(aiReviewConfigService.update(currentUserContext.currentUserId(), taskId, configId,
+        return ApiResponse.ok(aiReviewConfigService.update(CurrentUserContext.getUserId(), taskId, configId,
                 request));
     }
 
     @GetMapping
     public ApiResponse<AiReviewConfigResponse> get(@PathVariable Long taskId) {
-        return ApiResponse.ok(aiReviewConfigService.get(currentUserContext.currentUserId(), taskId));
+        return ApiResponse.ok(aiReviewConfigService.get(CurrentUserContext.getUserId(), taskId));
     }
 
     @PostMapping("/{configId}/test")
     public ApiResponse<AiReviewPromptTestResponse> test(@PathVariable Long taskId,
                                                         @PathVariable Long configId,
                                                         @Valid @RequestBody AiReviewPromptTestRequest request) {
-        return ApiResponse.ok(aiReviewConfigService.testPrompt(currentUserContext.currentUserId(), taskId, configId,
+        return ApiResponse.ok(aiReviewConfigService.testPrompt(CurrentUserContext.getUserId(), taskId, configId,
                 request));
     }
 }

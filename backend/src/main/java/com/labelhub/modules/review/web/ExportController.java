@@ -15,12 +15,9 @@ import org.springframework.web.bind.annotation.RestController;
 public class ExportController {
 
     private final ExportSnapshotService exportSnapshotService;
-    private final CurrentUserContext currentUserContext;
 
-    public ExportController(ExportSnapshotService exportSnapshotService,
-                            CurrentUserContext currentUserContext) {
+    public ExportController(ExportSnapshotService exportSnapshotService) {
         this.exportSnapshotService = exportSnapshotService;
-        this.currentUserContext = currentUserContext;
     }
 
     @GetMapping("/golden-submissions")
@@ -29,7 +26,7 @@ public class ExportController {
             @RequestParam(required = false) Long lastId,
             @RequestParam(defaultValue = "50") int limit) {
         return ApiResponse.ok(exportSnapshotService.queryExportableGoldenSubmissions(
-                currentUserContext.currentUserId(),
+                CurrentUserContext.getUserId(),
                 new ExportPageRequest(taskId, lastId, limit)));
     }
 }

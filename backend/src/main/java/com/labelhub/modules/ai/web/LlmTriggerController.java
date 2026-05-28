@@ -16,15 +16,13 @@ import org.springframework.web.bind.annotation.RestController;
 public class LlmTriggerController {
 
     private final LlmTriggerService llmTriggerService;
-    private final CurrentUserContext currentUserContext;
 
-    public LlmTriggerController(LlmTriggerService llmTriggerService, CurrentUserContext currentUserContext) {
+    public LlmTriggerController(LlmTriggerService llmTriggerService) {
         this.llmTriggerService = llmTriggerService;
-        this.currentUserContext = currentUserContext;
     }
 
     @PostMapping("/run")
     public ApiResponse<LlmTriggerRunResponse> run(@Valid @RequestBody LlmTriggerRunRequest request) {
-        return ApiResponse.ok(llmTriggerService.run(currentUserContext.currentUser(), request));
+        return ApiResponse.ok(llmTriggerService.run(CurrentUserContext.requireCurrentUser(), request));
     }
 }

@@ -21,7 +21,7 @@ public class MockCurrentUserProvider implements CurrentUserProvider {
     @Override
     public CurrentUser currentUser() {
         Long userId = resolveUserId();
-        return new CurrentUser(userId, "mock-owner-" + userId, Set.of(RoleCode.OWNER), 1);
+        return new CurrentUser(userId, "mock-owner-" + userId, "mock@labelhub.dev", Set.of(RoleCode.OWNER), 1);
     }
 
     private Long resolveUserId() {

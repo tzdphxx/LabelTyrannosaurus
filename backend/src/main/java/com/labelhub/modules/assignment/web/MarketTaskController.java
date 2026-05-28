@@ -17,11 +17,9 @@ import org.springframework.web.bind.annotation.RestController;
 public class MarketTaskController {
 
     private final TaskMarketService taskMarketService;
-    private final CurrentUserContext currentUserContext;
 
-    public MarketTaskController(TaskMarketService taskMarketService, CurrentUserContext currentUserContext) {
+    public MarketTaskController(TaskMarketService taskMarketService) {
         this.taskMarketService = taskMarketService;
-        this.currentUserContext = currentUserContext;
     }
 
     @GetMapping
@@ -29,7 +27,7 @@ public class MarketTaskController {
                                                                  @RequestParam(required = false) String tag,
                                                                  @RequestParam(required = false) TaskStatus status) {
         return ApiResponse.ok(taskMarketService.listMarketTasks(
-                currentUserContext.currentUserId(),
+                CurrentUserContext.getUserId(),
                 new MarketTaskQueryRequest(keyword, tag, status)
         ));
     }

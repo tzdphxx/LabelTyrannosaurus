@@ -29,4 +29,14 @@ public class DefaultDatasetClaimService implements DatasetClaimService {
         }
         return Optional.of(new DatasetItemSnapshot(datasetItem.getId(), datasetItem.getItemJson()));
     }
+
+    @Override
+    public void increaseSubmittedCount(Long itemId) {
+        datasetItemMapper.increaseSubmittedCount(itemId);
+    }
+
+    @Override
+    public void increaseApprovedCount(Long itemId) {
+        datasetItemMapper.increaseApprovedCount(itemId);
+    }
 }

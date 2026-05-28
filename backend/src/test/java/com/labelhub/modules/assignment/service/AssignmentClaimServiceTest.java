@@ -277,5 +277,13 @@ class AssignmentClaimServiceTest {
         int assignedCount() {
             return assignedCount.get();
         }
+
+        @Override
+        public void increaseSubmittedCount(Long itemId) {
+        }
+
+        @Override
+        public void increaseApprovedCount(Long itemId) {
+        }
     }
 }

@@ -55,4 +55,28 @@ public interface DatasetItemMapper extends BaseMapper<DatasetItem> {
     Integer countAvailableForLabeler(@Param("taskId") Long taskId,
                                      @Param("labelerId") Long labelerId,
                                      @Param("overlapCount") Integer overlapCount);
+
+    @Update("""
+            UPDATE dataset_items
+            SET submitted_count = submitted_count + 1
+            WHERE id = #{datasetItemId}
+              AND deleted = 0
+            """)
+    int increaseSubmittedCount(@Param("datasetItemId") Long datasetItemId);
+
+    @Update("""
+            UPDATE dataset_items
+            SET approved_count = approved_count + 1
+            WHERE id = #{datasetItemId}
+              AND deleted = 0
+            """)
+    int increaseApprovedCount(@Param("datasetItemId") Long datasetItemId);
+
+    @Select("""
+            SELECT COUNT(1)
+            FROM dataset_items
+            WHERE task_id = #{taskId}
+              AND deleted = 0
+            """)
+    int countByTaskId(@Param("taskId") Long taskId);
 }

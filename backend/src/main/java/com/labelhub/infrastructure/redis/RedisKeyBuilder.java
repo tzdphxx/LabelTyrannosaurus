@@ -24,4 +24,8 @@ public final class RedisKeyBuilder {
     public static String rewardRule(Long taskId) {
         return "lock:reward-rule:task:%d".formatted(taskId);
     }
+
+    public static String aiReviewStream(Long taskId) {
+        return "ai:review:stream:task:%d".formatted(taskId);
+    }
 }

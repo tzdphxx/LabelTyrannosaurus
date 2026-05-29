@@ -32,6 +32,23 @@ public final class CurrentUserContext {
         return requireCurrentUser().roles();
     }
 
+    public static CurrentUser requireRole(RoleCode role) {
+        CurrentUser currentUser = requireCurrentUser();
+        if (!currentUser.roles().contains(role)) {
+            throw new BusinessException(403001, "Forbidden");
+        }
+        return currentUser;
+    }
+
+    public static CurrentUser requireAnyRole(Set<RoleCode> roles) {
+        CurrentUser currentUser = requireCurrentUser();
+        boolean matched = currentUser.roles().stream().anyMatch(roles::contains);
+        if (!matched) {
+            throw new BusinessException(403001, "Forbidden");
+        }
+        return currentUser;
+    }
+
     public static Integer getTokenVersion() {
         return requireCurrentUser().tokenVersion();
     }

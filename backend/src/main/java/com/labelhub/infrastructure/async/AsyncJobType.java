@@ -2,5 +2,6 @@ package com.labelhub.infrastructure.async;
 
 public enum AsyncJobType {
     DATASET_IMPORT,
-    EXPORT
+    EXPORT,
+    AI_REVIEW
 }

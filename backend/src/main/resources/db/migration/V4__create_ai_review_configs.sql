@@ -1,0 +1,23 @@
+CREATE TABLE ai_review_configs (
+  id BIGINT PRIMARY KEY AUTO_INCREMENT,
+  task_id BIGINT NOT NULL,
+  provider_id BIGINT NOT NULL,
+  model_name VARCHAR(128) NOT NULL,
+  prompt_template MEDIUMTEXT NOT NULL,
+  scoring_dimensions_json JSON NOT NULL,
+  pass_threshold DECIMAL(5,2) NOT NULL,
+  manual_review_threshold DECIMAL(5,2) NOT NULL,
+  output_schema_json JSON NOT NULL,
+  prompt_version VARCHAR(32) NOT NULL DEFAULT 'v1',
+  created_by BIGINT NOT NULL,
+  created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  updated_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+  UNIQUE KEY uk_ai_review_configs_task (task_id),
+  KEY idx_ai_review_configs_provider (provider_id),
+  CONSTRAINT fk_ai_review_configs_task FOREIGN KEY (task_id) REFERENCES tasks(id),
+  CONSTRAINT fk_ai_review_configs_provider FOREIGN KEY (provider_id) REFERENCES llm_providers(id),
+  CONSTRAINT fk_ai_review_configs_created_by FOREIGN KEY (created_by) REFERENCES users(id),
+  CONSTRAINT chk_ai_review_configs_pass_threshold CHECK (pass_threshold >= 0 AND pass_threshold <= 100),
+  CONSTRAINT chk_ai_review_configs_manual_threshold CHECK (manual_review_threshold >= 0 AND manual_review_threshold <= 100),
+  CONSTRAINT chk_ai_review_configs_threshold_order CHECK (manual_review_threshold <= pass_threshold)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='Task-level AI review prompt and scoring configuration.';

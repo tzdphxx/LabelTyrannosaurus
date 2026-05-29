@@ -1,11 +1,13 @@
 package com.labelhub.modules.review.web;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.when;
 
 import com.labelhub.common.api.ApiResponse;
+import com.labelhub.common.exception.BusinessException;
 import com.labelhub.common.security.CurrentUser;
 import com.labelhub.common.security.CurrentUserContext;
 import com.labelhub.common.security.RoleCode;
@@ -48,6 +50,7 @@ class ReviewControllerTest {
 
     @Test
     void listPendingFinalDelegatesToService() {
+        CurrentUserContext.set(new CurrentUser(1L, "reviewer", "test@labelhub.dev", Set.of(RoleCode.REVIEWER), 1));
         SubmissionReviewItem item = new SubmissionReviewItem(
                 100L, 1L, 1L, 1L, SubmissionStatus.PENDING_FINAL, null, null, 1);
         when(reviewService.listPendingFinal()).thenReturn(List.of(item));
@@ -99,5 +102,32 @@ class ReviewControllerTest {
                 new BatchApproveRequest(List.of(100L), "ok", 1));
 
         assertThat(response.data().successCount()).isEqualTo(1);
+    }
+
+    @Test
+    void labelerCannotListPendingFinal() {
+        CurrentUserContext.set(new CurrentUser(2L, "labeler", "test@labelhub.dev", Set.of(RoleCode.LABELER), 1));
+
+        assertThatThrownBy(() -> controller.listPendingFinal())
+                .isInstanceOfSatisfying(BusinessException.class,
+                        ex -> assertThat(ex.getCode()).isEqualTo(403001));
+    }
+
+    @Test
+    void labelerCannotApproveSubmission() {
+        CurrentUserContext.set(new CurrentUser(2L, "labeler", "test@labelhub.dev", Set.of(RoleCode.LABELER), 1));
+
+        assertThatThrownBy(() -> controller.approve(100L, new ApproveRequest("ok", 1)))
+                .isInstanceOfSatisfying(BusinessException.class,
+                        ex -> assertThat(ex.getCode()).isEqualTo(403001));
+    }
+
+    @Test
+    void labelerCannotBatchApprove() {
+        CurrentUserContext.set(new CurrentUser(2L, "labeler", "test@labelhub.dev", Set.of(RoleCode.LABELER), 1));
+
+        assertThatThrownBy(() -> controller.batchApprove(new BatchApproveRequest(List.of(100L), "ok", 1)))
+                .isInstanceOfSatisfying(BusinessException.class,
+                        ex -> assertThat(ex.getCode()).isEqualTo(403001));
     }
 }

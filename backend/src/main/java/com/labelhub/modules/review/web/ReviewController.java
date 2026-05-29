@@ -2,6 +2,7 @@ package com.labelhub.modules.review.web;
 
 import com.labelhub.common.api.ApiResponse;
 import com.labelhub.common.security.CurrentUserContext;
+import com.labelhub.common.security.RoleCode;
 import com.labelhub.modules.review.dto.ApproveRequest;
 import com.labelhub.modules.review.dto.BatchApproveRequest;
 import com.labelhub.modules.review.dto.BatchAssignRequest;
@@ -37,12 +38,14 @@ public class ReviewController {
 
     @GetMapping
     public ApiResponse<List<SubmissionReviewItem>> listPendingFinal() {
+        CurrentUserContext.requireRole(RoleCode.REVIEWER);
         return ApiResponse.ok(reviewService.listPendingFinal());
     }
 
     @PostMapping("/{submissionId}/approve")
     public ApiResponse<ReviewActionResponse> approve(@PathVariable Long submissionId,
                                                       @Valid @RequestBody ApproveRequest request) {
+        CurrentUserContext.requireRole(RoleCode.REVIEWER);
         return ApiResponse.ok(reviewService.approve(
                 submissionId, CurrentUserContext.getUserId(), request));
     }
@@ -50,30 +53,35 @@ public class ReviewController {
     @PostMapping("/{submissionId}/reject")
     public ApiResponse<ReviewActionResponse> reject(@PathVariable Long submissionId,
                                                      @Valid @RequestBody RejectRequest request) {
+        CurrentUserContext.requireRole(RoleCode.REVIEWER);
         return ApiResponse.ok(reviewService.reject(
                 submissionId, CurrentUserContext.getUserId(), request));
     }
 
     @PostMapping("/batch/approve")
     public ApiResponse<BatchReviewResponse> batchApprove(@Valid @RequestBody BatchApproveRequest request) {
+        CurrentUserContext.requireRole(RoleCode.REVIEWER);
         return ApiResponse.ok(batchReviewService.batchApprove(
                 CurrentUserContext.getUserId(), request));
     }
 
     @PostMapping("/batch/reject")
     public ApiResponse<BatchReviewResponse> batchReject(@Valid @RequestBody BatchRejectRequest request) {
+        CurrentUserContext.requireRole(RoleCode.REVIEWER);
         return ApiResponse.ok(batchReviewService.batchReject(
                 CurrentUserContext.getUserId(), request));
     }
 
     @PostMapping("/batch/mark-manual")
     public ApiResponse<BatchReviewResponse> batchMarkManual(@Valid @RequestBody BatchMarkManualRequest request) {
+        CurrentUserContext.requireRole(RoleCode.REVIEWER);
         return ApiResponse.ok(batchReviewService.batchMarkManual(
                 CurrentUserContext.getUserId(), request));
     }
 
     @PostMapping("/batch/assign")
     public ApiResponse<BatchReviewResponse> batchAssign(@Valid @RequestBody BatchAssignRequest request) {
+        CurrentUserContext.requireRole(RoleCode.REVIEWER);
         return ApiResponse.ok(batchReviewService.batchAssign(
                 CurrentUserContext.getUserId(), request));
     }

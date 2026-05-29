@@ -2,6 +2,7 @@ package com.labelhub.modules.review.web;
 
 import com.labelhub.common.api.ApiResponse;
 import com.labelhub.common.security.CurrentUserContext;
+import com.labelhub.common.security.RoleCode;
 import com.labelhub.modules.review.dto.ConflictGroupResponse;
 import com.labelhub.modules.review.dto.ConflictResolveRequest;
 import com.labelhub.modules.review.dto.ConflictResolveResponse;
@@ -27,17 +28,20 @@ public class ConflictController {
 
     @GetMapping
     public ApiResponse<List<ConflictGroupResponse>> listOpenGroups() {
+        CurrentUserContext.requireRole(RoleCode.REVIEWER);
         return ApiResponse.ok(conflictResolveService.listOpenGroups());
     }
 
     @GetMapping("/{groupId}")
     public ApiResponse<ConflictGroupResponse> getGroup(@PathVariable Long groupId) {
+        CurrentUserContext.requireRole(RoleCode.REVIEWER);
         return ApiResponse.ok(conflictResolveService.getGroup(groupId));
     }
 
     @PostMapping("/{groupId}/resolve")
     public ApiResponse<ConflictResolveResponse> resolve(@PathVariable Long groupId,
                                                          @Valid @RequestBody ConflictResolveRequest request) {
+        CurrentUserContext.requireRole(RoleCode.REVIEWER);
         return ApiResponse.ok(conflictResolveService.resolve(
                 groupId, CurrentUserContext.getUserId(), request));
     }

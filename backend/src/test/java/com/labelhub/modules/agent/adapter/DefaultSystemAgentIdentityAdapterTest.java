@@ -5,8 +5,8 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
 
+import com.labelhub.common.user.SystemUserMapper;
 import com.labelhub.common.user.User;
-import com.labelhub.common.user.UserMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -17,7 +17,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 class DefaultSystemAgentIdentityAdapterTest {
 
     @Mock
-    private UserMapper userMapper;
+    private SystemUserMapper userMapper;
 
     private DefaultSystemAgentIdentityAdapter adapter;
 

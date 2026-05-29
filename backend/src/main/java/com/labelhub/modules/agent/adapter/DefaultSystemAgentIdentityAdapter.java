@@ -1,17 +1,17 @@
 package com.labelhub.modules.agent.adapter;
 
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
+import com.labelhub.common.user.SystemUserMapper;
 import com.labelhub.common.user.User;
-import com.labelhub.common.user.UserMapper;
 import com.labelhub.modules.agent.port.SystemAgentIdentityPort;
 import org.springframework.stereotype.Component;
 
 @Component
 class DefaultSystemAgentIdentityAdapter implements SystemAgentIdentityPort {
 
-    private final UserMapper userMapper;
+    private final SystemUserMapper userMapper;
 
-    DefaultSystemAgentIdentityAdapter(UserMapper userMapper) {
+    DefaultSystemAgentIdentityAdapter(SystemUserMapper userMapper) {
         this.userMapper = userMapper;
     }
 

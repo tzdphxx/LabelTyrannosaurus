@@ -48,6 +48,16 @@ public interface RewardLedgerMapper extends BaseMapper<RewardLedgerEntity> {
     RewardLedgerEntity selectLatestPositiveBySubmissionId(@Param("submissionId") Long submissionId);
 
     @Select("""
+            select * from reward_ledger
+            where direction = 'DEBIT'
+              and reward_type = 'REWARD_REVERSED'
+              and submission_id = #{submissionId}
+            order by id desc
+            limit 1
+            """)
+    RewardLedgerEntity selectLatestReversedBySubmissionId(@Param("submissionId") Long submissionId);
+
+    @Select("""
             select id as ledgerId,
                    task_id as taskId,
                    submission_id as submissionId,

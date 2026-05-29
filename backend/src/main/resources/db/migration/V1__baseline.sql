@@ -832,7 +832,7 @@ create table reward_ledger
     constraint fk_reward_ledger_task
         foreign key (task_id) references tasks (id),
     constraint chk_reward_ledger_amount
-        check (`amount` > 0),
+        check (`amount` >= 0),
     constraint chk_reward_ledger_direction
         check (`direction` in (_utf8mb4\'CREDIT\',_utf8mb4\'DEBIT\')),
 	constraint chk_reward_ledger_type

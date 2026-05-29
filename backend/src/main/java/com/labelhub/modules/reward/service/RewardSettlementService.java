@@ -103,6 +103,9 @@ public class RewardSettlementService {
         if (positive == null) {
             throw new BusinessException(400102, "Positive reward not found");
         }
+        if (alreadyReversed(event.submissionId())) {
+            return;
+        }
         RewardLedgerEntity debit = new RewardLedgerEntity();
         debit.setTaskId(positive.getTaskId());
         debit.setLabelerId(positive.getLabelerId());
@@ -126,7 +129,7 @@ public class RewardSettlementService {
     }
 
     private boolean insertCreditAndStats(RewardLedgerEntity ledger, Long datasetItemId, LocalDate statDate) {
-        if (ledger.getAmount().compareTo(BigDecimal.ZERO) <= 0) {
+        if (ledger.getAmount().compareTo(BigDecimal.ZERO) < 0) {
             return false;
         }
         // 最终幂等依赖 reward_ledger.source_event_id、positive_submission_id、positive_assignment_id 唯一约束。
@@ -139,6 +142,10 @@ public class RewardSettlementService {
                 ledger.getAmount(), statDate);
         datasetSnapshotService.increaseApprovedCount(datasetItemId);
         return true;
+    }
+
+    private boolean alreadyReversed(Long submissionId) {
+        return rewardLedgerMapper.selectLatestReversedBySubmissionId(submissionId) != null;
     }
 
     private boolean alreadyConsumed(String eventId) {

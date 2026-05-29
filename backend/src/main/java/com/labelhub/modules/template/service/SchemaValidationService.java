@@ -52,7 +52,7 @@ public class SchemaValidationService implements TemplateSchemaValidator {
      * 校验指定模板版本下的答案字段，返回所有可定位的错误。
      */
     public List<SchemaValidationError> validateAnswer(Long schemaVersionId, Map<String, Object> answerJson) {
-        JsonNode schema = templateVersionService.getTemplateSchema(schemaVersionId).schemaJson();
+        JsonNode schema = templateVersionService.getVersion(schemaVersionId).schemaJson();
         SchemaRules rules = parseSchema(schema);
         if (!rules.errors().isEmpty()) {
             SchemaValidationError first = rules.errors().get(0);
@@ -159,7 +159,7 @@ public class SchemaValidationService implements TemplateSchemaValidator {
 
         String field = textValue(component.get("field"));
         boolean showItem = "ShowItem".equals(type);
-        if (!showItem && !StringUtils.hasText(field)) {
+        if (!showItem && !StringUtils.hasText(field) && !hasNestedComponents(component)) {
             errors.add(SchemaValidationError.of(componentPath + "/field", "component field is required"));
         }
         if (StringUtils.hasText(field)) {
@@ -173,6 +173,10 @@ public class SchemaValidationService implements TemplateSchemaValidator {
 
         validateNestedComponents(component, componentPath, "children", fieldPaths, answerRules, showItemFields, errors);
         validateNestedComponents(component, componentPath, "components", fieldPaths, answerRules, showItemFields, errors);
+    }
+
+    private boolean hasNestedComponents(JsonNode component) {
+        return component.has("children") || component.has("components");
     }
 
     private void detectDuplicateField(String field,

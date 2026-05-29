@@ -10,7 +10,7 @@ spring:
         options:
           model: ${AI_DASHSCOPE_CHAT_MODEL:qwen-plus}
   datasource:
-    url: jdbc:mysql://${DB_HOST:127.0.0.1}:${DB_PORT:3306}/${DB_NAME:labelhub}?useSSL=false&serverTimezone=Asia/Shanghai&characterEncoding=utf8
+    url: jdbc:mysql://${DB_HOST:127.0.0.1}:${DB_PORT:3306}/${DB_NAME:labelhub}?useSSL=false&serverTimezone=Asia/Shanghai&characterEncoding=utf8&allowPublicKeyRetrieval=true
     username: ${DB_USERNAME:labelhub}
     password: ${DB_PASSWORD:labelhub}
     driver-class-name: com.mysql.cj.jdbc.Driver
@@ -23,6 +23,7 @@ spring:
     enabled: true
     locations: classpath:db/migration
     baseline-on-migrate: true
+    validate-on-migrate: false
   servlet:
     multipart:
       max-file-size: 200MB

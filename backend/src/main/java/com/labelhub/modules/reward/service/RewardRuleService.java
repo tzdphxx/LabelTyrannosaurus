@@ -4,16 +4,21 @@ import com.labelhub.common.exception.BusinessException;
 import com.labelhub.common.security.CurrentUser;
 import com.labelhub.common.security.CurrentUserContext;
 import com.labelhub.common.security.RoleCode;
+import com.labelhub.infrastructure.redis.RedisKeyBuilder;
+import com.labelhub.infrastructure.redis.RedisLockService;
 import com.labelhub.modules.reward.domain.RewardRuleEntity;
 import com.labelhub.modules.reward.dto.RewardRuleRequest;
 import com.labelhub.modules.reward.dto.RewardRuleResponse;
 import com.labelhub.modules.reward.repository.RewardRuleMapper;
 import com.labelhub.modules.task.domain.TaskEntity;
 import com.labelhub.modules.task.repository.TaskMapper;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
+import java.util.function.Supplier;
 
 /**
  * 奖励规则应用服务。BE-B 只按任务追加规则版本，不回写 BE-A 的任务发布状态。
@@ -22,13 +27,24 @@ import java.math.BigDecimal;
 public class RewardRuleService {
 
     public static final String APPROVED_ITEM_MODE = "APPROVED_ITEM";
+    private static final long RULE_LOCK_WAIT_MILLIS = 1000L;
+    private static final long RULE_LOCK_LEASE_MILLIS = 5000L;
 
     private final TaskMapper taskMapper;
     private final RewardRuleMapper rewardRuleMapper;
+    private final RedisLockService redisLockService;
 
     public RewardRuleService(TaskMapper taskMapper, RewardRuleMapper rewardRuleMapper) {
+        this(taskMapper, rewardRuleMapper, new NoopRedisLockService());
+    }
+
+    @Autowired
+    public RewardRuleService(TaskMapper taskMapper,
+                             RewardRuleMapper rewardRuleMapper,
+                             RedisLockService redisLockService) {
         this.taskMapper = taskMapper;
         this.rewardRuleMapper = rewardRuleMapper;
+        this.redisLockService = redisLockService;
     }
 
     /**
@@ -39,7 +55,17 @@ public class RewardRuleService {
         TaskEntity task = requireOwnedTask(taskId);
         validateRule(request);
         CurrentUser actor = CurrentUserContext.requireCurrentUser();
+        return redisLockService.withLock(
+                RedisKeyBuilder.rewardRule(task.getId()),
+                RULE_LOCK_WAIT_MILLIS,
+                RULE_LOCK_LEASE_MILLIS,
+                () -> saveRuleLocked(task, request, actor)
+        );
+    }
+
+    private RewardRuleResponse saveRuleLocked(TaskEntity task, RewardRuleRequest request, CurrentUser actor) {
         int nextVersion = rewardRuleMapper.selectMaxVersionByTaskId(task.getId()) + 1;
+        LocalDateTime now = LocalDateTime.now();
 
         RewardRuleEntity entity = new RewardRuleEntity();
         entity.setTaskId(task.getId());
@@ -48,7 +74,9 @@ public class RewardRuleService {
         entity.setUnitReward(request.unitReward());
         entity.setRewardCurrency(defaultString(request.rewardCurrency(), "POINT"));
         entity.setRewardVisible(request.rewardVisible() == null || request.rewardVisible());
+        entity.setEffectiveAt(now);
         entity.setCreatedBy(actor.userId());
+        entity.setCreatedAt(now);
         rewardRuleMapper.insert(entity);
         return toResponse(entity);
     }
@@ -104,5 +132,27 @@ public class RewardRuleService {
 
     private String defaultString(String value, String defaultValue) {
         return value == null || value.isBlank() ? defaultValue : value;
+    }
+
+    private static final class NoopRedisLockService implements RedisLockService {
+
+        @Override
+        public boolean tryLock(String key, long waitMillis, long leaseMillis) {
+            return true;
+        }
+
+        @Override
+        public void unlock(String key) {
+        }
+
+        @Override
+        public <T> T withLock(String key, long waitMillis, long leaseMillis, Supplier<T> action) {
+            return action.get();
+        }
+
+        @Override
+        public void withLock(String key, long waitMillis, long leaseMillis, Runnable action) {
+            action.run();
+        }
     }
 }

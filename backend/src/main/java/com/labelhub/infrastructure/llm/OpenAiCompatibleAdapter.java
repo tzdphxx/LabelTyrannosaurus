@@ -15,6 +15,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeoutException;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
@@ -28,6 +29,7 @@ public class OpenAiCompatibleAdapter {
     private final HttpClient httpClient;
     private final Duration timeout;
 
+    @Autowired
     public OpenAiCompatibleAdapter(ObjectMapper objectMapper,
                                    @Value("${labelhub.llm.gateway.timeout-ms:30000}") long timeoutMs) {
         this(objectMapper, Duration.ofMillis(timeoutMs));

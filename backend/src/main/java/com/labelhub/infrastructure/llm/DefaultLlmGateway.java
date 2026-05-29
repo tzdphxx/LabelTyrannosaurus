@@ -8,6 +8,7 @@ import com.labelhub.modules.ai.service.LlmProviderRuntimeConfig;
 import com.labelhub.modules.ai.service.LlmProviderService;
 import java.util.Map;
 import java.util.Optional;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 @Component
@@ -24,6 +25,7 @@ public class DefaultLlmGateway implements LlmGateway {
     private final OpenAiCompatibleAdapter adapter;
     private final ObjectMapper objectMapper;
 
+    @Autowired
     public DefaultLlmGateway(LlmProviderService llmProviderService,
                              OpenAiCompatibleAdapter adapter,
                              ObjectMapper objectMapper) {

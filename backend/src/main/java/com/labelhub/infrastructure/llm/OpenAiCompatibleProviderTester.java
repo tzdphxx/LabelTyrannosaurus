@@ -6,6 +6,7 @@ import com.labelhub.modules.ai.service.LlmProviderRuntimeConfig;
 import com.labelhub.modules.ai.service.LlmProviderTester;
 import java.time.Duration;
 import java.util.List;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 @Component
@@ -15,6 +16,7 @@ public class OpenAiCompatibleProviderTester implements LlmProviderTester {
 
     private final OpenAiCompatibleAdapter adapter;
 
+    @Autowired
     public OpenAiCompatibleProviderTester(OpenAiCompatibleAdapter adapter) {
         this.adapter = adapter;
     }

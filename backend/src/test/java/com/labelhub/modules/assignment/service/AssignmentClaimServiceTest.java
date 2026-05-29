@@ -200,6 +200,18 @@ class AssignmentClaimServiceTest {
     }
 
     @Test
+    void rejectsWhenCurrentUserIsNotLabeler() {
+        CurrentUserContext.set(new CurrentUser(LABELER_ID, "reviewer", "test@labelhub.dev", Set.of(RoleCode.REVIEWER), 1));
+
+        assertThatThrownBy(() -> assignmentClaimService.claim(TASK_ID, LABELER_ID))
+                .isInstanceOfSatisfying(BusinessException.class,
+                        ex -> assertThat(ex.getCode()).isEqualTo(403001));
+
+        verify(taskMapper, never()).selectById(any());
+        verify(redisLockService, never()).tryLock(any(), any(Long.class), any(Long.class));
+    }
+
+    @Test
     void concurrentClaimsDoNotOverAssignWhenOnlyOneReservationCanWin() throws InterruptedException {
         InMemoryDatasetClaimService inMemoryDatasetClaimService = new InMemoryDatasetClaimService();
         AssignmentClaimService concurrentService = new AssignmentClaimService(

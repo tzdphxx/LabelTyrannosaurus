@@ -48,6 +48,10 @@ class ExportSnapshotServiceTest {
                 OWNER_ID, new ExportPageRequest(TASK_ID, null, 50));
 
         assertThat(response.items()).hasSize(2);
+        assertThat(response.items().get(0).taskId()).isEqualTo(TASK_ID);
+        assertThat(response.items().get(0).itemJsonRef()).isEqualTo("{\"text\":\"item\"}");
+        assertThat(response.items().get(0).reviewSummary()).isEqualTo("final ok");
+        assertThat(response.items().get(0).auditRef()).isEqualTo(50L);
         assertThat(response.nextCursor()).isEqualTo(101L);
         assertThat(response.hasMore()).isFalse();
     }
@@ -128,6 +132,7 @@ class ExportSnapshotServiceTest {
     }
 
     private ExportGoldenItem goldenItem(Long id) {
-        return new ExportGoldenItem(id, 1L, 1L, 1, "{}", AiDecision.PASS, "ok", 50L);
+        return new ExportGoldenItem(id, TASK_ID, 1L, "{\"text\":\"item\"}", 1L, 1, "{}",
+                AiDecision.PASS, "ok", "final ok", 50L);
     }
 }

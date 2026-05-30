@@ -6,10 +6,10 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.labelhub.common.exception.BusinessException;
 import com.labelhub.modules.dataset.domain.DatasetItemEntity;
 import com.labelhub.modules.dataset.dto.DatasetItemSnapshot;
-import com.labelhub.modules.dataset.repository.DatasetItemMapper;
+import com.labelhub.modules.dataset.repository.DatasetItemRepositoryMapper;
 import com.labelhub.modules.task.domain.TaskEntity;
 import com.labelhub.modules.task.domain.TaskStatus;
-import com.labelhub.modules.task.repository.TaskMapper;
+import com.labelhub.modules.task.repository.TaskRepositoryMapper;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -24,12 +24,12 @@ public class DatasetSnapshotService {
 
     private static final int MAX_RESERVE_RETRY = 5;
 
-    private final TaskMapper taskMapper;
-    private final DatasetItemMapper datasetItemMapper;
+    private final TaskRepositoryMapper taskMapper;
+    private final DatasetItemRepositoryMapper datasetItemMapper;
     private final ObjectMapper objectMapper;
 
-    public DatasetSnapshotService(TaskMapper taskMapper,
-                                  DatasetItemMapper datasetItemMapper,
+    public DatasetSnapshotService(TaskRepositoryMapper taskMapper,
+                                  DatasetItemRepositoryMapper datasetItemMapper,
                                   ObjectMapper objectMapper) {
         this.taskMapper = taskMapper;
         this.datasetItemMapper = datasetItemMapper;

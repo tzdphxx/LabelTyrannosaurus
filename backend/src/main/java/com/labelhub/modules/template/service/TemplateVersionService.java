@@ -8,12 +8,12 @@ import com.labelhub.common.security.CurrentUser;
 import com.labelhub.common.security.CurrentUserContext;
 import com.labelhub.common.security.RoleCode;
 import com.labelhub.modules.task.domain.TaskEntity;
-import com.labelhub.modules.task.repository.TaskMapper;
+import com.labelhub.modules.task.repository.TaskRepositoryMapper;
 import com.labelhub.modules.template.domain.TemplateVersionEntity;
 import com.labelhub.modules.template.dto.TemplateSchemaResponse;
 import com.labelhub.modules.template.dto.TemplateVersionResponse;
 import com.labelhub.modules.template.repository.TemplateMapper;
-import com.labelhub.modules.template.repository.TemplateVersionMapper;
+import com.labelhub.modules.template.repository.TemplateVersionRepositoryMapper;
 import org.springframework.stereotype.Service;
 
 /**
@@ -25,14 +25,14 @@ import org.springframework.stereotype.Service;
 @Service
 public class TemplateVersionService {
 
-    private final TaskMapper taskMapper;
+    private final TaskRepositoryMapper taskMapper;
     private final TemplateMapper templateMapper;
-    private final TemplateVersionMapper templateVersionMapper;
+    private final TemplateVersionRepositoryMapper templateVersionMapper;
     private final ObjectMapper objectMapper;
 
-    public TemplateVersionService(TaskMapper taskMapper,
+    public TemplateVersionService(TaskRepositoryMapper taskMapper,
                                   TemplateMapper templateMapper,
-                                  TemplateVersionMapper templateVersionMapper,
+                                  TemplateVersionRepositoryMapper templateVersionMapper,
                                   ObjectMapper objectMapper) {
         this.taskMapper = taskMapper;
         this.templateMapper = templateMapper;

@@ -22,13 +22,13 @@ import com.labelhub.modules.dataset.dto.DatasetImportRequest;
 import com.labelhub.modules.dataset.repository.DatasetFileMapper;
 import com.labelhub.modules.dataset.repository.DatasetImportJobMapper;
 import com.labelhub.modules.dataset.repository.DatasetItemChangeLogMapper;
-import com.labelhub.modules.dataset.repository.DatasetItemMapper;
+import com.labelhub.modules.dataset.repository.DatasetItemRepositoryMapper;
 import com.labelhub.modules.storage.domain.ObjectFileEntity;
 import com.labelhub.modules.storage.repository.ObjectFileMapper;
 import com.labelhub.modules.storage.service.FileStorageProperties;
 import com.labelhub.modules.task.domain.TaskEntity;
 import com.labelhub.modules.task.domain.TaskStatus;
-import com.labelhub.modules.task.repository.TaskMapper;
+import com.labelhub.modules.task.repository.TaskRepositoryMapper;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -65,11 +65,11 @@ import java.util.stream.Collectors;
 @Service
 public class DatasetImportService {
 
-    private final TaskMapper taskMapper;
+    private final TaskRepositoryMapper taskMapper;
     private final ObjectFileMapper objectFileMapper;
     private final DatasetFileMapper datasetFileMapper;
     private final DatasetImportJobMapper importJobMapper;
-    private final DatasetItemMapper datasetItemMapper;
+    private final DatasetItemRepositoryMapper datasetItemMapper;
     private final DatasetItemChangeLogMapper changeLogMapper;
     private final ObjectStorageService objectStorageService;
     private final FileStorageProperties storageProperties;
@@ -79,11 +79,11 @@ public class DatasetImportService {
     private final Map<DatasetFileFormat, DatasetParser> parsers;
 
     @Autowired
-    public DatasetImportService(TaskMapper taskMapper,
+    public DatasetImportService(TaskRepositoryMapper taskMapper,
                                 ObjectFileMapper objectFileMapper,
                                 DatasetFileMapper datasetFileMapper,
                                 DatasetImportJobMapper importJobMapper,
-                                DatasetItemMapper datasetItemMapper,
+                                DatasetItemRepositoryMapper datasetItemMapper,
                                 DatasetItemChangeLogMapper changeLogMapper,
                                 ObjectStorageService objectStorageService,
                                 FileStorageProperties storageProperties,
@@ -96,11 +96,11 @@ public class DatasetImportService {
                 objectMapper, parsers);
     }
 
-    public DatasetImportService(TaskMapper taskMapper,
+    public DatasetImportService(TaskRepositoryMapper taskMapper,
                                 ObjectFileMapper objectFileMapper,
                                 DatasetFileMapper datasetFileMapper,
                                 DatasetImportJobMapper importJobMapper,
-                                DatasetItemMapper datasetItemMapper,
+                                DatasetItemRepositoryMapper datasetItemMapper,
                                 DatasetItemChangeLogMapper changeLogMapper,
                                 ObjectStorageService objectStorageService,
                                 FileStorageProperties storageProperties,
@@ -112,11 +112,11 @@ public class DatasetImportService {
                 objectMapper, parsers);
     }
 
-    private DatasetImportService(TaskMapper taskMapper,
+    private DatasetImportService(TaskRepositoryMapper taskMapper,
                                  ObjectFileMapper objectFileMapper,
                                  DatasetFileMapper datasetFileMapper,
                                  DatasetImportJobMapper importJobMapper,
-                                 DatasetItemMapper datasetItemMapper,
+                                 DatasetItemRepositoryMapper datasetItemMapper,
                                  DatasetItemChangeLogMapper changeLogMapper,
                                  ObjectStorageService objectStorageService,
                                  FileStorageProperties storageProperties,

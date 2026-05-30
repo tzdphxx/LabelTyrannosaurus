@@ -15,12 +15,12 @@ import com.labelhub.modules.dataset.dto.DatasetItemAppendRequest;
 import com.labelhub.modules.dataset.dto.DatasetItemQuery;
 import com.labelhub.modules.dataset.dto.DatasetItemUpdateRequest;
 import com.labelhub.modules.dataset.repository.DatasetItemChangeLogMapper;
-import com.labelhub.modules.dataset.repository.DatasetItemMapper;
+import com.labelhub.modules.dataset.repository.DatasetItemRepositoryMapper;
 import com.labelhub.modules.dataset.service.DatasetItemService;
 import com.labelhub.modules.dataset.service.DatasetSnapshotService;
 import com.labelhub.modules.task.domain.TaskEntity;
 import com.labelhub.modules.task.domain.TaskStatus;
-import com.labelhub.modules.task.repository.TaskMapper;
+import com.labelhub.modules.task.repository.TaskRepositoryMapper;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -39,8 +39,8 @@ import static org.mockito.Mockito.when;
 
 class DatasetItemServiceTest {
 
-    private final TaskMapper taskMapper = mock(TaskMapper.class);
-    private final DatasetItemMapper datasetItemMapper = mock(DatasetItemMapper.class);
+    private final TaskRepositoryMapper taskMapper = mock(TaskRepositoryMapper.class);
+    private final DatasetItemRepositoryMapper datasetItemMapper = mock(DatasetItemRepositoryMapper.class);
     private final DatasetItemChangeLogMapper changeLogMapper = mock(DatasetItemChangeLogMapper.class);
     private final ObjectMapper objectMapper = new ObjectMapper();
     private final DatasetItemService itemService = new DatasetItemService(

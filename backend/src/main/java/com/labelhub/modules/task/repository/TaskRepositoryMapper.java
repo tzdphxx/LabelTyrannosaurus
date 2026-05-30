@@ -10,5 +10,5 @@ import org.apache.ibatis.annotations.Mapper;
  * <p>BE-B 在 Task5 中仅读取任务归属和状态，不推进任务状态机。</p>
  */
 @Mapper
-public interface TaskMapper extends BaseMapper<TaskEntity> {
+public interface TaskRepositoryMapper extends BaseMapper<TaskEntity> {
 }

@@ -12,7 +12,7 @@ import com.labelhub.modules.reward.dto.RewardReversedEvent;
 import com.labelhub.modules.reward.dto.SubmissionApprovedEvent;
 import com.labelhub.modules.reward.repository.ContributionStatsMapper;
 import com.labelhub.modules.reward.repository.RewardLedgerMapper;
-import com.labelhub.modules.reward.repository.RewardRuleMapper;
+import com.labelhub.modules.reward.repository.RewardRuleRepositoryMapper;
 import com.labelhub.modules.reward.repository.SubmissionSnapshot;
 import com.labelhub.modules.reward.repository.SubmissionSnapshotMapper;
 import org.springframework.dao.DuplicateKeyException;
@@ -33,14 +33,14 @@ public class RewardSettlementService {
     private static final String TYPE_GOLDEN_SELECTED = "GOLDEN_SELECTED";
     private static final String TYPE_REWARD_REVERSED = "REWARD_REVERSED";
 
-    private final RewardRuleMapper rewardRuleMapper;
+    private final RewardRuleRepositoryMapper rewardRuleMapper;
     private final RewardLedgerMapper rewardLedgerMapper;
     private final ContributionStatsMapper contributionStatsMapper;
     private final SubmissionSnapshotMapper submissionSnapshotMapper;
     private final DatasetSnapshotService datasetSnapshotService;
     private final AuditAppender auditAppender;
 
-    public RewardSettlementService(RewardRuleMapper rewardRuleMapper,
+    public RewardSettlementService(RewardRuleRepositoryMapper rewardRuleMapper,
                                    RewardLedgerMapper rewardLedgerMapper,
                                    ContributionStatsMapper contributionStatsMapper,
                                    SubmissionSnapshotMapper submissionSnapshotMapper,

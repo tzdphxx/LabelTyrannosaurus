@@ -7,11 +7,11 @@ import com.labelhub.common.security.CurrentUserContext;
 import com.labelhub.common.security.RoleCode;
 import com.labelhub.modules.task.domain.TaskEntity;
 import com.labelhub.modules.task.domain.TaskStatus;
-import com.labelhub.modules.task.repository.TaskMapper;
+import com.labelhub.modules.task.repository.TaskRepositoryMapper;
 import com.labelhub.modules.template.domain.TemplateVersionEntity;
 import com.labelhub.modules.template.dto.SchemaValidationError;
 import com.labelhub.modules.template.repository.TemplateMapper;
-import com.labelhub.modules.template.repository.TemplateVersionMapper;
+import com.labelhub.modules.template.repository.TemplateVersionRepositoryMapper;
 import com.labelhub.modules.template.service.SchemaValidationService;
 import com.labelhub.modules.template.service.TemplateVersionService;
 import org.junit.jupiter.api.AfterEach;
@@ -29,9 +29,9 @@ import static org.mockito.Mockito.when;
 
 class SchemaValidationServiceTest {
 
-    private final TaskMapper taskMapper = mock(TaskMapper.class);
+    private final TaskRepositoryMapper taskMapper = mock(TaskRepositoryMapper.class);
     private final TemplateMapper templateMapper = mock(TemplateMapper.class);
-    private final TemplateVersionMapper templateVersionMapper = mock(TemplateVersionMapper.class);
+    private final TemplateVersionRepositoryMapper templateVersionMapper = mock(TemplateVersionRepositoryMapper.class);
     private final ObjectMapper objectMapper = new ObjectMapper();
     private final TemplateVersionService templateVersionService = new TemplateVersionService(
             taskMapper,

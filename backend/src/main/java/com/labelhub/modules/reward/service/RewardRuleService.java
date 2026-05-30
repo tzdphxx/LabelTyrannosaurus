@@ -9,9 +9,9 @@ import com.labelhub.infrastructure.redis.RedisLockService;
 import com.labelhub.modules.reward.domain.RewardRuleEntity;
 import com.labelhub.modules.reward.dto.RewardRuleRequest;
 import com.labelhub.modules.reward.dto.RewardRuleResponse;
-import com.labelhub.modules.reward.repository.RewardRuleMapper;
+import com.labelhub.modules.reward.repository.RewardRuleRepositoryMapper;
 import com.labelhub.modules.task.domain.TaskEntity;
-import com.labelhub.modules.task.repository.TaskMapper;
+import com.labelhub.modules.task.repository.TaskRepositoryMapper;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -30,17 +30,17 @@ public class RewardRuleService {
     private static final long RULE_LOCK_WAIT_MILLIS = 1000L;
     private static final long RULE_LOCK_LEASE_MILLIS = 5000L;
 
-    private final TaskMapper taskMapper;
-    private final RewardRuleMapper rewardRuleMapper;
+    private final TaskRepositoryMapper taskMapper;
+    private final RewardRuleRepositoryMapper rewardRuleMapper;
     private final RedisLockService redisLockService;
 
-    public RewardRuleService(TaskMapper taskMapper, RewardRuleMapper rewardRuleMapper) {
+    public RewardRuleService(TaskRepositoryMapper taskMapper, RewardRuleRepositoryMapper rewardRuleMapper) {
         this(taskMapper, rewardRuleMapper, new NoopRedisLockService());
     }
 
     @Autowired
-    public RewardRuleService(TaskMapper taskMapper,
-                             RewardRuleMapper rewardRuleMapper,
+    public RewardRuleService(TaskRepositoryMapper taskMapper,
+                             RewardRuleRepositoryMapper rewardRuleMapper,
                              RedisLockService redisLockService) {
         this.taskMapper = taskMapper;
         this.rewardRuleMapper = rewardRuleMapper;

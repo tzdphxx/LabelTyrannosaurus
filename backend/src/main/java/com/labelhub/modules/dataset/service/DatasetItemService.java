@@ -19,9 +19,9 @@ import com.labelhub.modules.dataset.dto.DatasetItemQuery;
 import com.labelhub.modules.dataset.dto.DatasetItemResponse;
 import com.labelhub.modules.dataset.dto.DatasetItemUpdateRequest;
 import com.labelhub.modules.dataset.repository.DatasetItemChangeLogMapper;
-import com.labelhub.modules.dataset.repository.DatasetItemMapper;
+import com.labelhub.modules.dataset.repository.DatasetItemRepositoryMapper;
 import com.labelhub.modules.task.domain.TaskEntity;
-import com.labelhub.modules.task.repository.TaskMapper;
+import com.labelhub.modules.task.repository.TaskRepositoryMapper;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -40,13 +40,13 @@ import java.util.Set;
 @Service
 public class DatasetItemService {
 
-    private final TaskMapper taskMapper;
-    private final DatasetItemMapper datasetItemMapper;
+    private final TaskRepositoryMapper taskMapper;
+    private final DatasetItemRepositoryMapper datasetItemMapper;
     private final DatasetItemChangeLogMapper changeLogMapper;
     private final ObjectMapper objectMapper;
 
-    public DatasetItemService(TaskMapper taskMapper,
-                              DatasetItemMapper datasetItemMapper,
+    public DatasetItemService(TaskRepositoryMapper taskMapper,
+                              DatasetItemRepositoryMapper datasetItemMapper,
                               DatasetItemChangeLogMapper changeLogMapper,
                               ObjectMapper objectMapper) {
         this.taskMapper = taskMapper;

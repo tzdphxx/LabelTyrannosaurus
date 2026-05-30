@@ -8,10 +8,10 @@ import com.labelhub.infrastructure.redis.RedisLockService;
 import com.labelhub.modules.reward.domain.RewardRuleEntity;
 import com.labelhub.modules.reward.dto.RewardRuleRequest;
 import com.labelhub.modules.reward.dto.RewardRuleResponse;
-import com.labelhub.modules.reward.repository.RewardRuleMapper;
+import com.labelhub.modules.reward.repository.RewardRuleRepositoryMapper;
 import com.labelhub.modules.reward.service.RewardRuleService;
 import com.labelhub.modules.task.domain.TaskEntity;
-import com.labelhub.modules.task.repository.TaskMapper;
+import com.labelhub.modules.task.repository.TaskRepositoryMapper;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -31,8 +31,8 @@ import static org.mockito.Mockito.when;
 
 class RewardRuleServiceTest {
 
-    private final TaskMapper taskMapper = mock(TaskMapper.class);
-    private final RewardRuleMapper rewardRuleMapper = mock(RewardRuleMapper.class);
+    private final TaskRepositoryMapper taskMapper = mock(TaskRepositoryMapper.class);
+    private final RewardRuleRepositoryMapper rewardRuleMapper = mock(RewardRuleRepositoryMapper.class);
     private final CapturingRedisLockService redisLockService = new CapturingRedisLockService();
     private final RewardRuleService rewardRuleService = newService(taskMapper, rewardRuleMapper, redisLockService);
 
@@ -106,8 +106,8 @@ class RewardRuleServiceTest {
         when(taskMapper.selectById(1L)).thenReturn(task);
     }
 
-    private static RewardRuleService newService(TaskMapper taskMapper,
-                                                RewardRuleMapper rewardRuleMapper,
+    private static RewardRuleService newService(TaskRepositoryMapper taskMapper,
+                                                RewardRuleRepositoryMapper rewardRuleMapper,
                                                 RedisLockService redisLockService) {
         for (Constructor<?> constructor : RewardRuleService.class.getConstructors()) {
             Class<?>[] parameterTypes = constructor.getParameterTypes();

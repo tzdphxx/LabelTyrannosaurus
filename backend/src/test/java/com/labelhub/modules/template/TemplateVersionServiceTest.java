@@ -7,13 +7,13 @@ import com.labelhub.common.security.CurrentUserContext;
 import com.labelhub.common.security.RoleCode;
 import com.labelhub.modules.task.domain.TaskEntity;
 import com.labelhub.modules.task.domain.TaskStatus;
-import com.labelhub.modules.task.repository.TaskMapper;
+import com.labelhub.modules.task.repository.TaskRepositoryMapper;
 import com.labelhub.modules.template.domain.TemplateEntity;
 import com.labelhub.modules.template.domain.TemplateVersionEntity;
 import com.labelhub.modules.template.dto.CreateTemplateRequest;
 import com.labelhub.modules.template.dto.ForkTemplateRequest;
 import com.labelhub.modules.template.repository.TemplateMapper;
-import com.labelhub.modules.template.repository.TemplateVersionMapper;
+import com.labelhub.modules.template.repository.TemplateVersionRepositoryMapper;
 import com.labelhub.modules.template.service.TemplateSchemaValidator;
 import com.labelhub.modules.template.service.TemplateService;
 import com.labelhub.modules.template.service.TemplateVersionService;
@@ -36,9 +36,9 @@ import static org.mockito.Mockito.when;
 
 class TemplateVersionServiceTest {
 
-    private final TaskMapper taskMapper = mock(TaskMapper.class);
+    private final TaskRepositoryMapper taskMapper = mock(TaskRepositoryMapper.class);
     private final TemplateMapper templateMapper = mock(TemplateMapper.class);
-    private final TemplateVersionMapper templateVersionMapper = mock(TemplateVersionMapper.class);
+    private final TemplateVersionRepositoryMapper templateVersionMapper = mock(TemplateVersionRepositoryMapper.class);
     private final TemplateSchemaValidator schemaValidator = mock(TemplateSchemaValidator.class);
     private final ObjectMapper objectMapper = new ObjectMapper();
     private final TemplateVersionService versionService = new TemplateVersionService(

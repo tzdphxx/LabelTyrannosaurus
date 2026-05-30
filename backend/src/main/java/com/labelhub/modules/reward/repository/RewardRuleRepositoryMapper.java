@@ -10,7 +10,7 @@ import org.apache.ibatis.annotations.Select;
  * 奖励规则 Mapper。规则按任务递增版本保存，历史版本不覆盖。
  */
 @Mapper
-public interface RewardRuleMapper extends BaseMapper<RewardRuleEntity> {
+public interface RewardRuleRepositoryMapper extends BaseMapper<RewardRuleEntity> {
 
     /**
      * 查询任务当前最大规则版本，用于创建下一版本。

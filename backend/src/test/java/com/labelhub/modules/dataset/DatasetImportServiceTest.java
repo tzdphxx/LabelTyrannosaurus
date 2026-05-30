@@ -16,7 +16,7 @@ import com.labelhub.modules.dataset.dto.DatasetImportRequest;
 import com.labelhub.modules.dataset.repository.DatasetFileMapper;
 import com.labelhub.modules.dataset.repository.DatasetImportJobMapper;
 import com.labelhub.modules.dataset.repository.DatasetItemChangeLogMapper;
-import com.labelhub.modules.dataset.repository.DatasetItemMapper;
+import com.labelhub.modules.dataset.repository.DatasetItemRepositoryMapper;
 import com.labelhub.modules.dataset.service.DatasetImportService;
 import com.labelhub.modules.dataset.service.ExcelDatasetParser;
 import com.labelhub.modules.dataset.service.JsonDatasetParser;
@@ -26,7 +26,7 @@ import com.labelhub.modules.storage.repository.ObjectFileMapper;
 import com.labelhub.modules.storage.service.FileStorageProperties;
 import com.labelhub.modules.task.domain.TaskEntity;
 import com.labelhub.modules.task.domain.TaskStatus;
-import com.labelhub.modules.task.repository.TaskMapper;
+import com.labelhub.modules.task.repository.TaskRepositoryMapper;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -51,11 +51,11 @@ import static org.mockito.Mockito.when;
 
 class DatasetImportServiceTest {
 
-    private final TaskMapper taskMapper = mock(TaskMapper.class);
+    private final TaskRepositoryMapper taskMapper = mock(TaskRepositoryMapper.class);
     private final ObjectFileMapper objectFileMapper = mock(ObjectFileMapper.class);
     private final DatasetFileMapper datasetFileMapper = mock(DatasetFileMapper.class);
     private final DatasetImportJobMapper importJobMapper = mock(DatasetImportJobMapper.class);
-    private final DatasetItemMapper datasetItemMapper = mock(DatasetItemMapper.class);
+    private final DatasetItemRepositoryMapper datasetItemMapper = mock(DatasetItemRepositoryMapper.class);
     private final DatasetItemChangeLogMapper changeLogMapper = mock(DatasetItemChangeLogMapper.class);
     private final ObjectStorageService objectStorageService = mock(ObjectStorageService.class);
     private final ObjectMapper objectMapper = new ObjectMapper();

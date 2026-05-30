@@ -13,7 +13,7 @@ import java.util.List;
  * 数据集题目表 Mapper。
  */
 @Mapper
-public interface DatasetItemMapper extends BaseMapper<DatasetItemEntity> {
+public interface DatasetItemRepositoryMapper extends BaseMapper<DatasetItemEntity> {
 
     /**
      * 查询同一任务下未删除题目的 externalId 是否已存在。

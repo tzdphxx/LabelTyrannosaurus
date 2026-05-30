@@ -28,7 +28,7 @@ import com.labelhub.modules.submission.dto.ExportableSubmissionSnapshot;
 import com.labelhub.modules.submission.service.SubmissionExportQueryService;
 import com.labelhub.modules.task.domain.TaskEntity;
 import com.labelhub.modules.task.domain.TaskStatus;
-import com.labelhub.modules.task.repository.TaskMapper;
+import com.labelhub.modules.task.repository.TaskRepositoryMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -58,7 +58,7 @@ public class ExportJobService {
     private static final Logger log = LoggerFactory.getLogger(ExportJobService.class);
     private static final int DEFAULT_PAGE_SIZE = 500;
 
-    private final TaskMapper taskMapper;
+    private final TaskRepositoryMapper taskMapper;
     private final ExportJobMapper exportJobMapper;
     private final ObjectFileMapper objectFileMapper;
     private final ObjectStorageService objectStorageService;
@@ -69,7 +69,7 @@ public class ExportJobService {
     private final ObjectMapper objectMapper;
     private final Map<String, ExportFileWriter> writerMap;
 
-    public ExportJobService(TaskMapper taskMapper,
+    public ExportJobService(TaskRepositoryMapper taskMapper,
                             ExportJobMapper exportJobMapper,
                             ObjectFileMapper objectFileMapper,
                             ObjectStorageService objectStorageService,

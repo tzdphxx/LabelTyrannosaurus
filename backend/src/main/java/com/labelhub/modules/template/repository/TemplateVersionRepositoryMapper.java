@@ -10,7 +10,7 @@ import org.apache.ibatis.annotations.Select;
  * 模板版本表 Mapper。
  */
 @Mapper
-public interface TemplateVersionMapper extends BaseMapper<TemplateVersionEntity> {
+public interface TemplateVersionRepositoryMapper extends BaseMapper<TemplateVersionEntity> {
 
     /**
      * 查询模板的指定版本。

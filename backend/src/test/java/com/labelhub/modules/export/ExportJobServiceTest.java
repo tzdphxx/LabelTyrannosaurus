@@ -24,7 +24,7 @@ import com.labelhub.modules.submission.dto.ExportableSubmissionSnapshot;
 import com.labelhub.modules.submission.service.SubmissionExportQueryService;
 import com.labelhub.modules.task.domain.TaskEntity;
 import com.labelhub.modules.task.domain.TaskStatus;
-import com.labelhub.modules.task.repository.TaskMapper;
+import com.labelhub.modules.task.repository.TaskRepositoryMapper;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -50,7 +50,7 @@ import static org.mockito.Mockito.when;
 
 class ExportJobServiceTest {
 
-    private final TaskMapper taskMapper = mock(TaskMapper.class);
+    private final TaskRepositoryMapper taskMapper = mock(TaskRepositoryMapper.class);
     private final ExportJobMapper exportJobMapper = mock(ExportJobMapper.class);
     private final ObjectFileMapper objectFileMapper = mock(ObjectFileMapper.class);
     private final ObjectStorageService objectStorageService = mock(ObjectStorageService.class);

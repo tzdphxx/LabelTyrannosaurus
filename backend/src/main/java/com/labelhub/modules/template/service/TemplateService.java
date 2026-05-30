@@ -7,7 +7,7 @@ import com.labelhub.common.security.CurrentUser;
 import com.labelhub.common.security.CurrentUserContext;
 import com.labelhub.common.security.RoleCode;
 import com.labelhub.modules.task.domain.TaskEntity;
-import com.labelhub.modules.task.repository.TaskMapper;
+import com.labelhub.modules.task.repository.TaskRepositoryMapper;
 import com.labelhub.modules.template.domain.TemplateEntity;
 import com.labelhub.modules.template.domain.TemplateVersionEntity;
 import com.labelhub.modules.template.dto.CreateTemplateRequest;
@@ -15,7 +15,7 @@ import com.labelhub.modules.template.dto.ForkTemplateRequest;
 import com.labelhub.modules.template.dto.TemplateResponse;
 import com.labelhub.modules.template.dto.TemplateVersionResponse;
 import com.labelhub.modules.template.repository.TemplateMapper;
-import com.labelhub.modules.template.repository.TemplateVersionMapper;
+import com.labelhub.modules.template.repository.TemplateVersionRepositoryMapper;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -31,16 +31,16 @@ import java.util.Map;
 @Service
 public class TemplateService {
 
-    private final TaskMapper taskMapper;
+    private final TaskRepositoryMapper taskMapper;
     private final TemplateMapper templateMapper;
-    private final TemplateVersionMapper templateVersionMapper;
+    private final TemplateVersionRepositoryMapper templateVersionMapper;
     private final TemplateSchemaValidator schemaValidator;
     private final TemplateVersionService templateVersionService;
     private final ObjectMapper objectMapper;
 
-    public TemplateService(TaskMapper taskMapper,
+    public TemplateService(TaskRepositoryMapper taskMapper,
                            TemplateMapper templateMapper,
-                           TemplateVersionMapper templateVersionMapper,
+                           TemplateVersionRepositoryMapper templateVersionMapper,
                            TemplateSchemaValidator schemaValidator,
                            TemplateVersionService templateVersionService,
                            ObjectMapper objectMapper) {

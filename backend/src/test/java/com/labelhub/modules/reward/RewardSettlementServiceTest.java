@@ -10,7 +10,7 @@ import com.labelhub.modules.reward.dto.RewardReversedEvent;
 import com.labelhub.modules.reward.dto.SubmissionApprovedEvent;
 import com.labelhub.modules.reward.repository.ContributionStatsMapper;
 import com.labelhub.modules.reward.repository.RewardLedgerMapper;
-import com.labelhub.modules.reward.repository.RewardRuleMapper;
+import com.labelhub.modules.reward.repository.RewardRuleRepositoryMapper;
 import com.labelhub.modules.reward.repository.SubmissionSnapshot;
 import com.labelhub.modules.reward.repository.SubmissionSnapshotMapper;
 import com.labelhub.modules.reward.service.RewardSettlementService;
@@ -30,7 +30,7 @@ import static org.mockito.Mockito.when;
 
 class RewardSettlementServiceTest {
 
-    private final RewardRuleMapper rewardRuleMapper = mock(RewardRuleMapper.class);
+    private final RewardRuleRepositoryMapper rewardRuleMapper = mock(RewardRuleRepositoryMapper.class);
     private final RewardLedgerMapper rewardLedgerMapper = mock(RewardLedgerMapper.class);
     private final ContributionStatsMapper contributionStatsMapper = mock(ContributionStatsMapper.class);
     private final SubmissionSnapshotMapper submissionSnapshotMapper = mock(SubmissionSnapshotMapper.class);

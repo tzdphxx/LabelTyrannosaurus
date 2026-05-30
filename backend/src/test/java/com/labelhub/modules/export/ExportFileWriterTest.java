@@ -57,6 +57,22 @@ class ExportFileWriterTest {
         assertThat(content).contains("200,\"A, \"\"quoted\"\"\"");
     }
 
+    @Test
+    void csvWriterNeutralizesFormulaLeadingValues() throws Exception {
+        CsvExportFileWriter writer = new CsvExportFileWriter(objectMapper);
+        ByteArrayOutputStream output = new ByteArrayOutputStream();
+
+        try (var session = writer.open(output, List.of(
+                new ExportFieldMapping("$.answerJson.answer", "answer", null, true)
+        ))) {
+            session.writeRow(formulaSnapshot());
+        }
+
+        String content = output.toString(StandardCharsets.UTF_8);
+        assertThat(content).startsWith("answer");
+        assertThat(content).contains("'=2+3");
+    }
+
     private ExportableSubmissionSnapshot snapshot() {
         return new ExportableSubmissionSnapshot(
                 200L,
@@ -68,6 +84,20 @@ class ExportFileWriterTest {
                 null,
                 null,
                 LocalDateTime.parse("2026-05-01T10:00:00")
+        );
+    }
+
+    private ExportableSubmissionSnapshot formulaSnapshot() {
+        return new ExportableSubmissionSnapshot(
+                201L,
+                12L,
+                objectMapper.valueToTree(Map.of("question", "What is B?")),
+                objectMapper.valueToTree(Map.of("answer", "=2+3")),
+                objectMapper.valueToTree(Map.of("decision", "PASS")),
+                List.of(),
+                null,
+                null,
+                LocalDateTime.parse("2026-05-02T10:00:00")
         );
     }
 }

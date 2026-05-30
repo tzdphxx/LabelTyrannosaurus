@@ -60,8 +60,20 @@ public class CsvExportFileWriter implements ExportFileWriter {
         if (value == null) {
             return "";
         }
+        value = neutralizeSpreadsheetFormula(value);
         boolean needQuote = value.contains(",") || value.contains("\"") || value.contains("\n") || value.contains("\r");
         String escaped = value.replace("\"", "\"\"");
         return needQuote ? "\"" + escaped + "\"" : escaped;
+    }
+
+    private String neutralizeSpreadsheetFormula(String value) {
+        if (value.isEmpty()) {
+            return value;
+        }
+        char first = value.charAt(0);
+        if (first == '=' || first == '+' || first == '-' || first == '@') {
+            return "'" + value;
+        }
+        return value;
     }
 }

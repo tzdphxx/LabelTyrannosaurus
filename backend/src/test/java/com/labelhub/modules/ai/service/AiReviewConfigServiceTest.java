@@ -138,6 +138,7 @@ class AiReviewConfigServiceTest {
                 null, null, null, null, null, null
         );
         when(taskMapper.selectById(TASK_ID)).thenReturn(draftTask());
+        when(llmProviderService.findEnabledById(PROVIDER_ID)).thenReturn(Optional.of(provider()));
 
         assertThatThrownBy(() -> service.save(OWNER_ID, TASK_ID, invalid))
                 .isInstanceOfSatisfying(BusinessException.class,

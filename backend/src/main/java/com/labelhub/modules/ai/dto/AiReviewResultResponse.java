@@ -1,6 +1,7 @@
 package com.labelhub.modules.ai.dto;
 
 import com.labelhub.modules.ai.domain.AiReviewStatus;
+import java.time.LocalDateTime;
 import java.util.Map;
 
 public record AiReviewResultResponse(Long id,
@@ -14,6 +15,10 @@ public record AiReviewResultResponse(Long id,
                                      Map<String, Object> dimensionScores,
                                      String riskFlags,
                                      String suggestion,
+                                     String confidence,
+                                     String flowAction,
                                      String errorCode,
-                                     String errorMessage) {
+                                     String errorMessage,
+                                     LocalDateTime createdAt,
+                                     LocalDateTime updatedAt) {
 }

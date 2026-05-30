@@ -15,6 +15,12 @@ public record AiReviewConfigResponse(
         BigDecimal manualReviewThreshold,
         Map<String, Object> outputSchema,
         String promptVersion,
-        Integer maxRetry
+        Integer maxRetry,
+        String aiFlowPolicy,
+        Boolean allowAiDirectApprove,
+        Boolean allowAiDirectReject,
+        BigDecimal rejectThreshold,
+        BigDecimal confidenceThreshold,
+        List<String> riskFlagsForceManual
 ) {
 }

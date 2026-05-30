@@ -20,6 +20,12 @@ public record AiReviewConfigRequest(
         @NotNull @DecimalMin("0.00") @DecimalMax("100.00") BigDecimal passThreshold,
         @NotNull @DecimalMin("0.00") @DecimalMax("100.00") BigDecimal manualReviewThreshold,
         @NotEmpty Map<String, Object> outputSchema,
-        @Min(0) @Max(10) Integer maxRetry
+        @Min(0) @Max(10) Integer maxRetry,
+        String aiFlowPolicy,
+        Boolean allowAiDirectApprove,
+        Boolean allowAiDirectReject,
+        @DecimalMin("0.00") @DecimalMax("100.00") BigDecimal rejectThreshold,
+        @DecimalMin("0.00") @DecimalMax("1.00") BigDecimal confidenceThreshold,
+        List<String> riskFlagsForceManual
 ) {
 }

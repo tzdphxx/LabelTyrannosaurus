@@ -20,9 +20,11 @@ import com.labelhub.modules.agent.service.SystemAgentProvider;
 import com.labelhub.modules.ai.domain.AiReviewConfig;
 import com.labelhub.modules.ai.domain.AiReviewResult;
 import com.labelhub.modules.ai.domain.AiReviewStatus;
+import com.labelhub.modules.ai.domain.AiFlowAction;
 import com.labelhub.modules.ai.dto.AiReviewResultResponse;
 import com.labelhub.modules.ai.mapper.AiReviewConfigMapper;
 import com.labelhub.modules.ai.mapper.AiReviewResultMapper;
+import com.labelhub.modules.assignment.domain.Assignment;
 import com.labelhub.modules.dataset.domain.DatasetItem;
 import com.labelhub.modules.dataset.mapper.DatasetItemMapper;
 import com.labelhub.modules.submission.domain.Submission;
@@ -70,6 +72,15 @@ public class AiAutoReviewService {
     private final AiReviewRetryStrategy retryStrategy;
     private final AiReviewRetryScheduler retryScheduler;
     private final SupervisorAgent supervisorAgent;
+
+    @Autowired
+    private AiFlowDecisionService flowDecisionService;
+    @Autowired
+    private com.labelhub.modules.review.port.SubmissionEventPublisher eventPublisher;
+    @Autowired
+    private com.labelhub.modules.assignment.mapper.AssignmentMapper assignmentMapper;
+    @Autowired
+    private com.labelhub.modules.review.mapper.ReviewRecordMapper reviewRecordMapper;
 
     @Autowired
     public AiAutoReviewService(SubmissionMapper submissionMapper,
@@ -151,8 +162,13 @@ public class AiAutoReviewService {
             result = handleFailure(submission, config, agentRun, promptSnapshot, outcome, 0);
         }
 
+        if (result.getStatus() == AiReviewStatus.SUCCESS && flowDecisionService != null) {
+            AiFlowAction flowAction = flowDecisionService.decide(result, config);
+            result.setFlowAction(flowAction.name());
+        }
+
         aiReviewResultMapper.insert(result);
-        moveSubmissionToPendingFinal(submission);
+        applyFlowAction(submission, result, config);
         appendAudit(result);
         return toResponse(result);
     }
@@ -369,6 +385,7 @@ public class AiAutoReviewService {
         result.setStatus(AiReviewStatus.SUCCESS);
         result.setDecision(String.valueOf(structuredJson.get("decision")));
         result.setAverageScore(asBigDecimal(structuredJson.get("averageScore")));
+        result.setConfidence(asBigDecimal(structuredJson.get("confidence")));
         result.setDimensionScores(toJson(structuredJson.getOrDefault("dimensionScores", Map.of())));
         result.setRiskFlags(toJson(structuredJson.getOrDefault("riskFlags", List.of())));
         result.setSuggestion(asNullableText(structuredJson.get("suggestion")));
@@ -437,6 +454,49 @@ public class AiAutoReviewService {
         submissionMapper.updateById(submission);
     }
 
+    private void applyFlowAction(Submission submission, AiReviewResult result, AiReviewConfig config) {
+        if (result.getFlowAction() == null || result.getStatus() != AiReviewStatus.SUCCESS) {
+            moveSubmissionToPendingFinal(submission);
+            return;
+        }
+        AiFlowAction action = AiFlowAction.valueOf(result.getFlowAction());
+        switch (action) {
+            case AI_DIRECT_APPROVE -> directApprove(submission);
+            case AI_DIRECT_REJECT -> directReject(submission, result);
+            default -> moveSubmissionToPendingFinal(submission);
+        }
+    }
+
+    private void directApprove(Submission submission) {
+        submission.setStatus(SubmissionStatus.APPROVED);
+        submissionMapper.updateById(submission);
+        Assignment assignment = assignmentMapper.selectById(submission.getAssignmentId());
+        if (assignment != null) {
+            assignment.setStatus(com.labelhub.modules.assignment.domain.AssignmentStatus.APPROVED);
+            assignmentMapper.updateById(assignment);
+        }
+        eventPublisher.publishApproved(submission.getId(), null);
+    }
+
+    private void directReject(Submission submission, AiReviewResult result) {
+        submission.setStatus(SubmissionStatus.REJECTED);
+        submissionMapper.updateById(submission);
+        Assignment assignment = assignmentMapper.selectById(submission.getAssignmentId());
+        if (assignment != null) {
+            assignment.setStatus(com.labelhub.modules.assignment.domain.AssignmentStatus.RETURNED);
+            assignmentMapper.updateById(assignment);
+        }
+        if (reviewRecordMapper != null) {
+            com.labelhub.modules.review.domain.ReviewRecord record = new com.labelhub.modules.review.domain.ReviewRecord();
+            record.setSubmissionId(submission.getId());
+            record.setReviewerId(null);
+            record.setAction(com.labelhub.modules.review.domain.ReviewAction.AI_REJECT);
+            record.setReviewLevel(0);
+            record.setReason(result.getSuggestion());
+            reviewRecordMapper.insert(record);
+        }
+    }
+
     private void appendAudit(AiReviewResult result) {
         if (result.getStatus() == AiReviewStatus.FAILED || result.getStatus() == AiReviewStatus.RATE_LIMITED) {
             return;
@@ -456,7 +516,9 @@ public class AiAutoReviewService {
         snapshot.put("agentRunId", result.getEffectiveRunId());
         snapshot.put("status", result.getStatus());
         snapshot.put("decision", result.getDecision());
+        snapshot.put("flowAction", result.getFlowAction());
         snapshot.put("averageScore", result.getAverageScore());
+        snapshot.put("confidence", result.getConfidence());
         snapshot.put("errorCode", result.getErrorCode());
         snapshot.put("errorMessage", result.getErrorMessage());
         return snapshot;
@@ -487,8 +549,12 @@ public class AiAutoReviewService {
                 parseObjectMapOrEmpty(result.getDimensionScores()),
                 result.getRiskFlags(),
                 result.getSuggestion(),
+                result.getConfidence() == null ? null : result.getConfidence().toPlainString(),
+                result.getFlowAction(),
                 result.getErrorCode(),
-                result.getErrorMessage()
+                result.getErrorMessage(),
+                result.getCreatedAt(),
+                result.getUpdatedAt()
         );
     }
 

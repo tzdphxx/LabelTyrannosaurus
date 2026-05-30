@@ -195,6 +195,13 @@ public class AiReviewConfigService {
         config.setManualReviewThreshold(request.manualReviewThreshold());
         config.setOutputSchemaJson(toJson(request.outputSchema()));
         config.setMaxRetry(request.maxRetry() != null ? request.maxRetry() : 3);
+        config.setAiFlowPolicy(request.aiFlowPolicy() != null ? request.aiFlowPolicy() : "MANUAL_FIRST");
+        config.setAllowAiDirectApprove(Boolean.TRUE.equals(request.allowAiDirectApprove()));
+        config.setAllowAiDirectReject(Boolean.TRUE.equals(request.allowAiDirectReject()));
+        config.setRejectThreshold(request.rejectThreshold());
+        config.setConfidenceThreshold(request.confidenceThreshold());
+        config.setRiskFlagsForceManual(request.riskFlagsForceManual() != null
+                ? toJson(request.riskFlagsForceManual()) : null);
     }
 
     private void validateRequest(AiReviewConfigRequest request) {
@@ -256,7 +263,13 @@ public class AiReviewConfigService {
                 config.getManualReviewThreshold(),
                 parseObjectMap(config.getOutputSchemaJson()),
                 config.getPromptVersion(),
-                config.getMaxRetry()
+                config.getMaxRetry(),
+                config.getAiFlowPolicy(),
+                config.getAllowAiDirectApprove(),
+                config.getAllowAiDirectReject(),
+                config.getRejectThreshold(),
+                config.getConfidenceThreshold(),
+                parseStringListOrNull(config.getRiskFlagsForceManual())
         );
     }
 
@@ -334,6 +347,17 @@ public class AiReviewConfigService {
             return objectMapper.readValue(json, STRING_LIST);
         } catch (JsonProcessingException ex) {
             throw new BusinessException(AI_REVIEW_CONFIG_INVALID, "AI review scoring dimensions are invalid");
+        }
+    }
+
+    private List<String> parseStringListOrNull(String json) {
+        if (json == null || json.isBlank()) {
+            return null;
+        }
+        try {
+            return objectMapper.readValue(json, STRING_LIST);
+        } catch (JsonProcessingException ex) {
+            return null;
         }
     }
 

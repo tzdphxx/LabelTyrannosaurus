@@ -38,7 +38,13 @@ public class AiReviewResult {
 
     private String flowAction;
 
-    private java.math.BigDecimal confidence;
+    private BigDecimal confidence;
+
+    private String promptMode;
+
+    private Boolean degraded;
+
+    private String limitations;
 
     private String promptSnapshot;
 

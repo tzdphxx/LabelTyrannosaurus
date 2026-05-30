@@ -56,6 +56,16 @@ public class AiReviewConfig {
 
     private String riskFlagsForceManual;
 
+    private Boolean multimodalEnabled;
+
+    private BigDecimal degradationPenalty;
+
+    private String visionDetail;
+
+    private Integer maxImagesPerRequest;
+
+    private Boolean allowAiDirectApproveWhenDegraded;
+
     private Long createdBy;
 
     private LocalDateTime createdAt;

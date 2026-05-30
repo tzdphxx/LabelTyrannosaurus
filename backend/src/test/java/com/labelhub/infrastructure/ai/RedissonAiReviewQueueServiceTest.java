@@ -178,6 +178,20 @@ class RedissonAiReviewQueueServiceTest {
         verify(stream).remove(messageId);
     }
 
+    @Test
+    void ackRemovesMessageWhenAlreadyAcknowledgedOnRetry() {
+        when(redissonClient.<String, String>getStream(eq("ai:review:stream:task:7"), eq(StringCodec.INSTANCE)))
+                .thenReturn(stream);
+        StreamMessageId messageId = new StreamMessageId(1710000000000L, 0L);
+        when(stream.ack("ai-review-workers", messageId)).thenReturn(0L);
+
+        boolean acked = queueService.ack(7L, "1710000000000-0");
+
+        assertThat(acked).isFalse();
+        verify(stream).ack("ai-review-workers", messageId);
+        verify(stream).remove(messageId);
+    }
+
     private static Map<String, String> payload() {
         return Map.of(
                 "taskId", "7",

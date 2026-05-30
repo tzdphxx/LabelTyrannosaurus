@@ -83,9 +83,7 @@ public class RedissonAiReviewQueueService implements AiReviewQueueService {
         RStream<String, String> stream = stream(taskId);
         StreamMessageId streamMessageId = parseMessageId(messageId);
         long acked = stream.ack(properties.consumerGroup(), streamMessageId);
-        if (acked > 0) {
-            stream.remove(streamMessageId);
-        }
+        stream.remove(streamMessageId);
         return acked > 0;
     }
 

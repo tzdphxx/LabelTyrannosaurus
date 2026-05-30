@@ -1,3 +1,5 @@
+SET FOREIGN_KEY_CHECKS = 0;
+
 CREATE TABLE `agent_runs` (
   `id` bigint NOT NULL AUTO_INCREMENT,
   `agent_type` varchar(32) NOT NULL,
@@ -35,6 +37,9 @@ CREATE TABLE `ai_review_configs` (
   `manual_threshold` decimal(5,2) DEFAULT NULL,
   `ai_reject_action` varchar(24) NOT NULL DEFAULT 'SUGGEST_ONLY' COMMENT 'Whether AI reject only suggests, returns to labeler, or requires manual review.',
   `max_retry` int NOT NULL DEFAULT '3',
+  `agent_mode` varchar(24) NOT NULL DEFAULT 'DIRECT' COMMENT 'DIRECT | SUPERVISOR',
+  `enabled_tools` json DEFAULT NULL COMMENT 'Enabled tool names list, null means all enabled',
+  `max_iterations` int NOT NULL DEFAULT '10',
   `created_by` bigint NOT NULL,
   `created_at` datetime(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
   `updated_at` datetime(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
@@ -45,6 +50,7 @@ CREATE TABLE `ai_review_configs` (
   CONSTRAINT `fk_ai_review_configs_created_by` FOREIGN KEY (`created_by`) REFERENCES `users` (`id`),
   CONSTRAINT `fk_ai_review_configs_provider` FOREIGN KEY (`provider_id`) REFERENCES `llm_providers` (`id`),
   CONSTRAINT `fk_ai_review_configs_task` FOREIGN KEY (`task_id`) REFERENCES `tasks` (`id`),
+  CONSTRAINT `chk_agent_mode` CHECK ((`agent_mode` in (_utf8mb4'DIRECT',_utf8mb4'SUPERVISOR'))),
   CONSTRAINT `chk_ai_review_configs_reject_action` CHECK ((`ai_reject_action` in (_utf8mb4'SUGGEST_ONLY',_utf8mb4'RETURN_TO_LABELER',_utf8mb4'MANUAL_REVIEW')))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='Per-task AI review prompt, thresholds, provider, and reject routing policy.';
 CREATE TABLE `ai_review_results` (
@@ -62,6 +68,7 @@ CREATE TABLE `ai_review_results` (
   `prompt_snapshot` mediumtext COMMENT 'Final prompt sent to the provider for audit display.',
   `raw_response` mediumtext COMMENT 'Original provider response retained for troubleshooting and review transparency.',
   `retry_count` int NOT NULL DEFAULT '0',
+  `next_retry_at` datetime(3) DEFAULT NULL,
   `created_at` datetime(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
   `updated_at` datetime(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
   PRIMARY KEY (`id`),
@@ -70,10 +77,11 @@ CREATE TABLE `ai_review_results` (
   KEY `idx_ai_review_results_status` (`status`),
   KEY `fk_ai_review_results_provider` (`provider_id`),
   KEY `idx_ai_review_results_decision_status` (`decision`,`status`),
+  KEY `idx_ai_review_results_retry` (`status`,`next_retry_at`),
   CONSTRAINT `fk_ai_review_results_effective_run` FOREIGN KEY (`effective_run_id`) REFERENCES `agent_runs` (`id`),
   CONSTRAINT `fk_ai_review_results_provider` FOREIGN KEY (`provider_id`) REFERENCES `llm_providers` (`id`),
   CONSTRAINT `fk_ai_review_results_submission` FOREIGN KEY (`submission_id`) REFERENCES `submissions` (`id`),
-  CONSTRAINT `chk_ai_review_results_decision` CHECK (((`decision` is null) or (`decision` in (_utf8mb4'PASS',_utf8mb4'REJECT',_utf8mb4'MANUAL_REVIEW')))),
+  CONSTRAINT `chk_ai_review_results_decision` CHECK (((`decision` is null) or (`decision` in (_utf8mb4'PASS',_utf8mb4'RETURN',_utf8mb4'MANUAL_REVIEW')))),
   CONSTRAINT `chk_ai_review_results_status` CHECK ((`status` in (_utf8mb4'PENDING',_utf8mb4'RUNNING',_utf8mb4'SUCCESS',_utf8mb4'FAILED',_utf8mb4'RATE_LIMITED',_utf8mb4'MANUAL_REQUIRED')))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='Business-level AI review conclusion for a submission; agent_runs stores execution details.';
 CREATE TABLE `assignments` (
@@ -420,7 +428,7 @@ CREATE TABLE `reward_ledger` (
   CONSTRAINT `fk_reward_ledger_labeler` FOREIGN KEY (`labeler_id`) REFERENCES `users` (`id`),
   CONSTRAINT `fk_reward_ledger_submission` FOREIGN KEY (`submission_id`) REFERENCES `submissions` (`id`),
   CONSTRAINT `fk_reward_ledger_task` FOREIGN KEY (`task_id`) REFERENCES `tasks` (`id`),
-  CONSTRAINT `chk_reward_ledger_amount` CHECK ((`amount` > 0)),
+  CONSTRAINT `chk_reward_ledger_amount` CHECK ((`amount` >= 0)),
   CONSTRAINT `chk_reward_ledger_direction` CHECK ((`direction` in (_utf8mb4'CREDIT',_utf8mb4'DEBIT'))),
   CONSTRAINT `chk_reward_ledger_type` CHECK ((`reward_type` in (_utf8mb4'SUBMISSION_APPROVED',_utf8mb4'GOLDEN_SELECTED',_utf8mb4'REWARD_REVERSED')))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='Append-only virtual reward ledger; reversals are negative rows, not updates.';
@@ -606,3 +614,5 @@ CREATE TABLE `users` (
   KEY `idx_users_enabled` (`enabled`),
   CONSTRAINT `chk_users_user_type` CHECK ((`user_type` in (_utf8mb4'USER',_utf8mb4'SYSTEM')))
 ) ENGINE=InnoDB AUTO_INCREMENT=900107 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+SET FOREIGN_KEY_CHECKS = 1;

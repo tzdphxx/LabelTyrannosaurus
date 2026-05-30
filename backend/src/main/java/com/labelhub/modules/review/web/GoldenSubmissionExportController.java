@@ -12,11 +12,11 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/api/v1/owner/export")
-public class ExportController {
+public class GoldenSubmissionExportController {
 
     private final ExportSnapshotService exportSnapshotService;
 
-    public ExportController(ExportSnapshotService exportSnapshotService) {
+    public GoldenSubmissionExportController(ExportSnapshotService exportSnapshotService) {
         this.exportSnapshotService = exportSnapshotService;
     }
 

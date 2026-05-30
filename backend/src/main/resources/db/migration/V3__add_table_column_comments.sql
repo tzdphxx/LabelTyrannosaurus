@@ -68,6 +68,9 @@ alter table ai_review_configs modify column reject_threshold decimal(5, 2) null 
 alter table ai_review_configs modify column manual_threshold decimal(5, 2) null comment '人工阈值';
 alter table ai_review_configs modify column ai_reject_action varchar(24) default 'SUGGEST_ONLY' not null comment 'AI拒绝动作';
 alter table ai_review_configs modify column max_retry int default 3 not null comment '最大重试';
+alter table ai_review_configs modify column agent_mode varchar(24) default 'DIRECT' not null comment '智能体模式';
+alter table ai_review_configs modify column enabled_tools json null comment '启用工具列表';
+alter table ai_review_configs modify column max_iterations int default 10 not null comment '最大迭代次数';
 alter table ai_review_configs modify column created_by bigint not null comment '创建人';
 alter table ai_review_configs modify column created_at datetime(3) default CURRENT_TIMESTAMP(3) not null comment '创建时间';
 alter table ai_review_configs modify column updated_at datetime(3) default CURRENT_TIMESTAMP(3) not null on update CURRENT_TIMESTAMP(3) comment '更新时间';
@@ -301,6 +304,7 @@ alter table ai_review_results modify column suggestion text null comment '建议
 alter table ai_review_results modify column prompt_snapshot mediumtext null comment '提示词快照';
 alter table ai_review_results modify column raw_response mediumtext null comment '原始响应';
 alter table ai_review_results modify column retry_count int default 0 not null comment '重试数量';
+alter table ai_review_results modify column next_retry_at datetime(3) null comment '下次重试时间';
 alter table ai_review_results modify column created_at datetime(3) default CURRENT_TIMESTAMP(3) not null comment '创建时间';
 alter table ai_review_results modify column updated_at datetime(3) default CURRENT_TIMESTAMP(3) not null on update CURRENT_TIMESTAMP(3) comment '更新时间';
 

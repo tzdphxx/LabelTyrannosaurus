@@ -17,7 +17,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 class DatabaseCommentMigrationTest {
 
     private static final Path MIGRATION_DIR = Path.of("src/main/resources/db/migration");
-    private static final Path COMMENT_MIGRATION = MIGRATION_DIR.resolve("V5__add_table_column_comments.sql");
+    private static final Path COMMENT_MIGRATION = MIGRATION_DIR.resolve("V3__add_table_column_comments.sql");
 
     @Test
     void commentMigrationCoversEveryBusinessTableAndColumnWithChineseComments() throws IOException {
@@ -27,7 +27,7 @@ class DatabaseCommentMigrationTest {
         String migration = Files.readString(COMMENT_MIGRATION);
 
         assertThat(schema).hasSize(28);
-        assertThat(schema.values().stream().mapToInt(List::size).sum()).isEqualTo(325);
+        assertThat(schema.values().stream().mapToInt(List::size).sum()).isEqualTo(329);
 
         schema.forEach((tableName, columns) -> {
             assertThat(findTableComment(migration, tableName))

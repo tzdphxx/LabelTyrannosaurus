@@ -69,4 +69,12 @@ public interface SubmissionMapper extends BaseMapper<Submission> {
     java.util.List<Submission> selectRecentByLabeler(@Param("labelerId") Long labelerId,
                                                      @Param("taskId") Long taskId,
                                                      @Param("limit") int limit);
+
+    @Select("""
+            SELECT *
+            FROM submissions
+            WHERE assignment_id = #{assignmentId}
+            ORDER BY version_no ASC
+            """)
+    java.util.List<Submission> selectByAssignmentId(@Param("assignmentId") Long assignmentId);
 }

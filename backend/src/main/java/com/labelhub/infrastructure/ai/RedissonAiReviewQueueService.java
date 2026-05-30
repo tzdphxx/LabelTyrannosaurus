@@ -26,6 +26,7 @@ public class RedissonAiReviewQueueService implements AiReviewQueueService {
 
     private static final String BUSY_GROUP_ERROR = "BUSYGROUP";
     private static final String DEFAULT_START_MESSAGE_ID = "0-0";
+    private static final StreamMessageId GROUP_START_MESSAGE_ID = new StreamMessageId(0L, 0L);
 
     private final RedissonClient redissonClient;
     private final AiReviewQueueProperties properties;
@@ -114,7 +115,7 @@ public class RedissonAiReviewQueueService implements AiReviewQueueService {
     private void ensureConsumerGroup(RStream<String, String> stream) {
         try {
             stream.createGroup(StreamCreateGroupArgs.name(properties.consumerGroup())
-                    .id(StreamMessageId.MIN)
+                    .id(GROUP_START_MESSAGE_ID)
                     .makeStream());
         } catch (RedisException ex) {
             if (ex.getMessage() == null || !ex.getMessage().contains(BUSY_GROUP_ERROR)) {

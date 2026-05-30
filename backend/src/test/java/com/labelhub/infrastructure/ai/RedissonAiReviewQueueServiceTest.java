@@ -1,12 +1,14 @@
 package com.labelhub.infrastructure.ai;
 
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.redisson.api.AutoClaimResult;
 import org.redisson.api.RStream;
 import org.redisson.api.RedissonClient;
 import org.redisson.api.StreamMessageId;
 import org.redisson.api.stream.StreamAddArgs;
 import org.redisson.api.stream.StreamCreateGroupArgs;
+import org.redisson.api.stream.StreamCreateGroupParams;
 import org.redisson.api.stream.StreamReadGroupArgs;
 import org.redisson.client.RedisException;
 import org.redisson.client.codec.StringCodec;
@@ -74,6 +76,22 @@ class RedissonAiReviewQueueServiceTest {
                 "retryCount", "0",
                 "createdAt", "2026-05-30T01:00:00Z"
         ));
+    }
+
+    @Test
+    void readCreatesGroupFromBeginningWithValidStreamId() {
+        when(redissonClient.<String, String>getStream(eq("ai:review:stream:task:7"), eq(StringCodec.INSTANCE)))
+                .thenReturn(stream);
+        when(stream.readGroup(eq("ai-review-workers"), eq("worker-1"), any(StreamReadGroupArgs.class)))
+                .thenReturn(Map.of());
+
+        queueService.read(7L, "worker-1", 5, Duration.ofSeconds(1));
+
+        ArgumentCaptor<StreamCreateGroupArgs> argsCaptor = ArgumentCaptor.forClass(StreamCreateGroupArgs.class);
+        verify(stream).createGroup(argsCaptor.capture());
+        StreamCreateGroupParams args = (StreamCreateGroupParams) argsCaptor.getValue();
+        assertThat(args.getId()).isEqualTo(new StreamMessageId(0L, 0L));
+        assertThat(args.isMakeStream()).isTrue();
     }
 
     @Test

@@ -30,6 +30,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -67,8 +68,8 @@ public class ConflictResolveService {
         this.datasetClaimService = datasetClaimService;
     }
 
-    public List<ConflictGroupResponse> listOpenGroups() {
-        return conflictGroupMapper.selectOpenGroups().stream()
+    public List<ConflictGroupResponse> listOpenGroups(int limit) {
+        return conflictGroupMapper.selectOpenGroups(limit).stream()
                 .map(this::toResponse)
                 .toList();
     }
@@ -173,7 +174,15 @@ public class ConflictResolveService {
         group.setStatus(ConflictStatus.OPEN);
         group.setConsensusScore(score);
         group.setCreatedAt(LocalDateTime.now());
-        conflictGroupMapper.insert(group);
+        try {
+            conflictGroupMapper.insert(group);
+        } catch (DuplicateKeyException e) {
+            ConflictGroup concurrent = conflictGroupMapper.selectByTaskAndItem(taskId, datasetItemId);
+            if (concurrent != null) {
+                concurrent.setConsensusScore(score);
+                conflictGroupMapper.updateById(concurrent);
+            }
+        }
     }
 
     private void appendAudit(ConflictGroup group, Submission golden,

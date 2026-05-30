@@ -271,9 +271,9 @@ class ConflictResolveServiceTest {
     @Test
     void listOpenGroupsDelegates() {
         ConflictGroup group = openGroup();
-        when(conflictGroupMapper.selectOpenGroups()).thenReturn(List.of(group));
+        when(conflictGroupMapper.selectOpenGroups(100)).thenReturn(List.of(group));
 
-        List<ConflictGroupResponse> result = service.listOpenGroups();
+        List<ConflictGroupResponse> result = service.listOpenGroups(100);
 
         assertThat(result).hasSize(1);
         assertThat(result.get(0).groupId()).isEqualTo(GROUP_ID);

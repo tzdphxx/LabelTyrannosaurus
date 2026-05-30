@@ -38,7 +38,13 @@ public interface ExportSubmissionMapper {
                    al.id             AS audit_ref
             FROM submissions s
             JOIN dataset_items di ON di.id = s.dataset_item_id
-            LEFT JOIN ai_review_results arr ON arr.submission_id = s.id
+            LEFT JOIN ai_review_results arr ON arr.id = (
+                SELECT arr2.id
+                FROM ai_review_results arr2
+                WHERE arr2.submission_id = s.id
+                ORDER BY arr2.created_at DESC, arr2.id DESC
+                LIMIT 1
+            )
             LEFT JOIN review_records rr ON rr.id = (
                 SELECT rr2.id
                 FROM review_records rr2

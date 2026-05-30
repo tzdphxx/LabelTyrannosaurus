@@ -40,7 +40,7 @@ class ConflictControllerTest {
         CurrentUserContext.set(labeler());
         ConflictController controller = new ConflictController(conflictResolveService);
 
-        assertThatThrownBy(controller::listOpenGroups)
+        assertThatThrownBy(() -> controller.listOpenGroups(100))
                 .isInstanceOfSatisfying(BusinessException.class,
                         ex -> assertThat(ex.getCode()).isEqualTo(403001));
     }
@@ -72,9 +72,9 @@ class ConflictControllerTest {
         ConflictGroupResponse serviceResponse = new ConflictGroupResponse(
                 10L, 20L, 30L, ConflictStatus.OPEN, BigDecimal.ONE, null,
                 List.of(), null, null);
-        when(conflictResolveService.listOpenGroups()).thenReturn(List.of(serviceResponse));
+        when(conflictResolveService.listOpenGroups(100)).thenReturn(List.of(serviceResponse));
 
-        ApiResponse<List<ConflictGroupResponse>> response = controller.listOpenGroups();
+        ApiResponse<List<ConflictGroupResponse>> response = controller.listOpenGroups(100);
 
         assertThat(response.data()).containsExactly(serviceResponse);
     }

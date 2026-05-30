@@ -25,6 +25,7 @@ public interface ConflictGroupMapper extends BaseMapper<ConflictGroup> {
             FROM conflict_groups
             WHERE status = 'OPEN'
             ORDER BY created_at ASC
+            LIMIT #{limit}
             """)
-    List<ConflictGroup> selectOpenGroups();
+    List<ConflictGroup> selectOpenGroups(@Param("limit") int limit);
 }

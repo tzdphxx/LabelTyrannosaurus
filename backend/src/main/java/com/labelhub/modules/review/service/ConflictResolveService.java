@@ -3,12 +3,17 @@ package com.labelhub.modules.review.service;
 import com.labelhub.common.audit.AuditAppender;
 import com.labelhub.common.audit.AuditCommand;
 import com.labelhub.common.exception.BusinessException;
+import com.labelhub.modules.ai.domain.AiReviewResult;
+import com.labelhub.modules.ai.mapper.AiReviewResultMapper;
 import com.labelhub.modules.dataset.service.DatasetClaimService;
 import com.labelhub.modules.review.domain.ConflictGroup;
 import com.labelhub.modules.review.domain.ConflictStatus;
 import com.labelhub.modules.review.domain.ReviewAction;
 import com.labelhub.modules.review.domain.ReviewRecord;
 import com.labelhub.modules.review.dto.ConflictGroupResponse;
+import com.labelhub.modules.review.dto.ConflictGroupResponse.AiReviewSummary;
+import com.labelhub.modules.review.dto.ConflictGroupResponse.CandidateSubmissionItem;
+import com.labelhub.modules.review.dto.ConflictGroupResponse.ReviewRecordItem;
 import com.labelhub.modules.review.dto.ConflictResolveRequest;
 import com.labelhub.modules.review.dto.ConflictResolveResponse;
 import com.labelhub.modules.review.mapper.ConflictGroupMapper;
@@ -21,6 +26,7 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDateTime;
 import java.util.LinkedHashMap;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -40,6 +46,7 @@ public class ConflictResolveService {
     private final ConflictGroupMapper conflictGroupMapper;
     private final SubmissionMapper submissionMapper;
     private final ReviewRecordMapper reviewRecordMapper;
+    private final AiReviewResultMapper aiReviewResultMapper;
     private final SubmissionEventPublisher eventPublisher;
     private final AuditAppender auditAppender;
     private final DatasetClaimService datasetClaimService;
@@ -47,12 +54,14 @@ public class ConflictResolveService {
     public ConflictResolveService(ConflictGroupMapper conflictGroupMapper,
                                    SubmissionMapper submissionMapper,
                                    ReviewRecordMapper reviewRecordMapper,
+                                   AiReviewResultMapper aiReviewResultMapper,
                                    SubmissionEventPublisher eventPublisher,
                                    AuditAppender auditAppender,
                                    DatasetClaimService datasetClaimService) {
         this.conflictGroupMapper = conflictGroupMapper;
         this.submissionMapper = submissionMapper;
         this.reviewRecordMapper = reviewRecordMapper;
+        this.aiReviewResultMapper = aiReviewResultMapper;
         this.eventPublisher = eventPublisher;
         this.auditAppender = auditAppender;
         this.datasetClaimService = datasetClaimService;
@@ -69,7 +78,7 @@ public class ConflictResolveService {
         if (group == null) {
             throw new BusinessException(GROUP_NOT_FOUND, "Conflict group not found");
         }
-        return toResponse(group);
+        return toDetailResponse(group);
     }
 
     @Transactional
@@ -93,6 +102,8 @@ public class ConflictResolveService {
             throw new BusinessException(SUBMISSION_NOT_REVIEWABLE,
                     "Submission is not in reviewable status");
         }
+
+        submissionMapper.clearGoldenByDatasetItem(group.getDatasetItemId());
 
         golden.setIsGolden(true);
         golden.setStatus(SubmissionStatus.APPROVED);
@@ -124,7 +135,7 @@ public class ConflictResolveService {
         record.setCreatedAt(LocalDateTime.now());
         reviewRecordMapper.insert(record);
 
-        eventPublisher.publishGoldenSelected(request.goldenSubmissionId(), reviewerId);
+        eventPublisher.publishGoldenSelected(groupId, request.goldenSubmissionId(), reviewerId);
         datasetClaimService.increaseApprovedCount(golden.getDatasetItemId());
         appendAudit(group, golden, reviewerId, record.getId());
 
@@ -186,6 +197,62 @@ public class ConflictResolveService {
         return new ConflictGroupResponse(
                 group.getId(), group.getTaskId(), group.getDatasetItemId(),
                 group.getStatus(), group.getConsensusScore(),
-                group.getGoldenSubmissionId(), group.getCreatedAt(), group.getResolvedAt());
+                group.getGoldenSubmissionId(), List.of(), group.getCreatedAt(), group.getResolvedAt());
+    }
+
+    private ConflictGroupResponse toDetailResponse(ConflictGroup group) {
+        List<Submission> candidates = submissionMapper.selectConflictCandidates(
+                group.getTaskId(), group.getDatasetItemId());
+        List<Long> submissionIds = candidates.stream().map(Submission::getId).toList();
+        Map<Long, AiReviewResult> aiResults = submissionIds.isEmpty()
+                ? Collections.emptyMap()
+                : aiReviewResultMapper.selectBySubmissionIds(submissionIds).stream()
+                .collect(Collectors.toMap(AiReviewResult::getSubmissionId, r -> r, (a, b) -> a));
+        Map<Long, List<ReviewRecord>> records = submissionIds.isEmpty()
+                ? Collections.emptyMap()
+                : reviewRecordMapper.selectBySubmissionIds(submissionIds).stream()
+                .collect(Collectors.groupingBy(ReviewRecord::getSubmissionId));
+
+        List<CandidateSubmissionItem> items = candidates.stream()
+                .map(s -> new CandidateSubmissionItem(
+                        s.getId(),
+                        s.getLabelerId(),
+                        s.getAnswerJson(),
+                        toAiSummary(aiResults.get(s.getId())),
+                        toReviewItems(records.getOrDefault(s.getId(), List.of())),
+                        s.getVersionNo()))
+                .toList();
+
+        return new ConflictGroupResponse(
+                group.getId(), group.getTaskId(), group.getDatasetItemId(),
+                group.getStatus(), group.getConsensusScore(),
+                group.getGoldenSubmissionId(), items, group.getCreatedAt(), group.getResolvedAt());
+    }
+
+    private AiReviewSummary toAiSummary(AiReviewResult result) {
+        if (result == null) {
+            return null;
+        }
+        return new AiReviewSummary(
+                result.getId(),
+                result.getEffectiveRunId(),
+                result.getStatus() != null ? result.getStatus().name() : null,
+                result.getDecision(),
+                result.getAverageScore() != null ? result.getAverageScore().toPlainString() : null,
+                result.getRiskFlags(),
+                result.getSuggestion());
+    }
+
+    private List<ReviewRecordItem> toReviewItems(List<ReviewRecord> records) {
+        return records.stream()
+                .map(r -> new ReviewRecordItem(
+                        r.getId(),
+                        r.getReviewerId(),
+                        r.getAction() != null ? r.getAction().name() : null,
+                        r.getReviewLevel(),
+                        r.getReason(),
+                        r.getReviewComment(),
+                        r.getCreatedAt()))
+                .toList();
     }
 }

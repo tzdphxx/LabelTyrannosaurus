@@ -56,16 +56,41 @@ class ConflictControllerTest {
     }
 
     @Test
+    void labelerCannotGetConflictGroup() {
+        CurrentUserContext.set(labeler());
+        ConflictController controller = new ConflictController(conflictResolveService);
+
+        assertThatThrownBy(() -> controller.getGroup(10L))
+                .isInstanceOfSatisfying(BusinessException.class,
+                        ex -> assertThat(ex.getCode()).isEqualTo(403001));
+    }
+
+    @Test
     void reviewerCanListConflictGroups() {
         CurrentUserContext.set(reviewer());
         ConflictController controller = new ConflictController(conflictResolveService);
         ConflictGroupResponse serviceResponse = new ConflictGroupResponse(
-                10L, 20L, 30L, ConflictStatus.OPEN, BigDecimal.ONE, null, null, null);
+                10L, 20L, 30L, ConflictStatus.OPEN, BigDecimal.ONE, null,
+                List.of(), null, null);
         when(conflictResolveService.listOpenGroups()).thenReturn(List.of(serviceResponse));
 
         ApiResponse<List<ConflictGroupResponse>> response = controller.listOpenGroups();
 
         assertThat(response.data()).containsExactly(serviceResponse);
+    }
+
+    @Test
+    void reviewerCanGetConflictGroup() {
+        CurrentUserContext.set(reviewer());
+        ConflictController controller = new ConflictController(conflictResolveService);
+        ConflictGroupResponse serviceResponse = new ConflictGroupResponse(
+                10L, 20L, 30L, ConflictStatus.OPEN, BigDecimal.ONE, null,
+                List.of(), null, null);
+        when(conflictResolveService.getGroup(10L)).thenReturn(serviceResponse);
+
+        ApiResponse<ConflictGroupResponse> response = controller.getGroup(10L);
+
+        assertThat(response.data()).isEqualTo(serviceResponse);
     }
 
     @Test

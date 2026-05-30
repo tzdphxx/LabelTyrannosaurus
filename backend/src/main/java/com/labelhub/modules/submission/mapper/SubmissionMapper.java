@@ -2,6 +2,7 @@ package com.labelhub.modules.submission.mapper;
 
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import com.labelhub.modules.submission.domain.Submission;
+import java.util.List;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 import org.apache.ibatis.annotations.Select;
@@ -55,8 +56,31 @@ public interface SubmissionMapper extends BaseMapper<Submission> {
               AND dataset_item_id = #{datasetItemId}
               AND status = 'PENDING_FINAL'
             """)
-    java.util.List<Submission> selectPendingFinalByTaskAndItem(@Param("taskId") Long taskId,
-                                                               @Param("datasetItemId") Long datasetItemId);
+    List<Submission> selectPendingFinalByTaskAndItem(@Param("taskId") Long taskId,
+                                                     @Param("datasetItemId") Long datasetItemId);
+
+    @Select("""
+            SELECT *
+            FROM submissions
+            WHERE task_id = #{taskId}
+              AND dataset_item_id = #{datasetItemId}
+              AND status <> 'SUPERSEDED'
+            ORDER BY FIELD(status, 'PENDING_FINAL', 'APPROVED', 'REJECTED',
+                           'AI_REVIEWING', 'SUBMITTED', 'AI_REJECTED'),
+                     version_no DESC,
+                     id ASC
+            """)
+    List<Submission> selectConflictCandidates(@Param("taskId") Long taskId,
+                                              @Param("datasetItemId") Long datasetItemId);
+
+    @Update("""
+            UPDATE submissions
+            SET is_golden = 0,
+                updated_at = CURRENT_TIMESTAMP(3)
+            WHERE dataset_item_id = #{datasetItemId}
+              AND is_golden = 1
+            """)
+    int clearGoldenByDatasetItem(@Param("datasetItemId") Long datasetItemId);
 
     @Select("""
             SELECT *
@@ -66,9 +90,9 @@ public interface SubmissionMapper extends BaseMapper<Submission> {
             ORDER BY created_at DESC
             LIMIT #{limit}
             """)
-    java.util.List<Submission> selectRecentByLabeler(@Param("labelerId") Long labelerId,
-                                                     @Param("taskId") Long taskId,
-                                                     @Param("limit") int limit);
+    List<Submission> selectRecentByLabeler(@Param("labelerId") Long labelerId,
+                                           @Param("taskId") Long taskId,
+                                           @Param("limit") int limit);
 
     @Select("""
             SELECT *
@@ -76,5 +100,5 @@ public interface SubmissionMapper extends BaseMapper<Submission> {
             WHERE assignment_id = #{assignmentId}
             ORDER BY version_no ASC
             """)
-    java.util.List<Submission> selectByAssignmentId(@Param("assignmentId") Long assignmentId);
+    List<Submission> selectByAssignmentId(@Param("assignmentId") Long assignmentId);
 }

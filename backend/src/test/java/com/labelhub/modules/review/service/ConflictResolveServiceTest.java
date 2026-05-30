@@ -11,6 +11,9 @@ import static org.mockito.Mockito.when;
 
 import com.labelhub.common.audit.AuditAppender;
 import com.labelhub.common.exception.BusinessException;
+import com.labelhub.modules.ai.domain.AiReviewResult;
+import com.labelhub.modules.ai.domain.AiReviewStatus;
+import com.labelhub.modules.ai.mapper.AiReviewResultMapper;
 import com.labelhub.modules.dataset.service.DatasetClaimService;
 import com.labelhub.modules.review.domain.ConflictGroup;
 import com.labelhub.modules.review.domain.ConflictStatus;
@@ -45,6 +48,7 @@ class ConflictResolveServiceTest {
     @Mock private ConflictGroupMapper conflictGroupMapper;
     @Mock private SubmissionMapper submissionMapper;
     @Mock private ReviewRecordMapper reviewRecordMapper;
+    @Mock private AiReviewResultMapper aiReviewResultMapper;
     @Mock private SubmissionEventPublisher eventPublisher;
     @Mock private AuditAppender auditAppender;
     @Mock private DatasetClaimService datasetClaimService;
@@ -55,7 +59,7 @@ class ConflictResolveServiceTest {
     void setUp() {
         service = new ConflictResolveService(
                 conflictGroupMapper, submissionMapper, reviewRecordMapper,
-                eventPublisher, auditAppender, datasetClaimService);
+                aiReviewResultMapper, eventPublisher, auditAppender, datasetClaimService);
     }
 
     // --- resolve ---
@@ -75,7 +79,54 @@ class ConflictResolveServiceTest {
         assertThat(golden.getIsGolden()).isTrue();
         assertThat(golden.getStatus()).isEqualTo(SubmissionStatus.APPROVED);
         assertThat(group.getStatus()).isEqualTo(ConflictStatus.RESOLVED);
-        verify(eventPublisher).publishGoldenSelected(50L, REVIEWER_ID);
+        verify(eventPublisher).publishGoldenSelected(GROUP_ID, 50L, REVIEWER_ID);
+    }
+
+    @Test
+    void getGroupReturnsCandidateSubmissionDetails() {
+        ConflictGroup group = openGroup();
+        Submission candidate = submissionInGroup(50L);
+        candidate.setLabelerId(7L);
+        candidate.setAnswerJson("{\"label\":\"yes\"}");
+        candidate.setVersionNo(2);
+        AiReviewResult aiResult = new AiReviewResult();
+        aiResult.setId(70L);
+        aiResult.setSubmissionId(50L);
+        aiResult.setEffectiveRunId(80L);
+        aiResult.setStatus(AiReviewStatus.SUCCESS);
+        aiResult.setDecision("PASS");
+        aiResult.setAverageScore(new BigDecimal("4.500"));
+        aiResult.setRiskFlags("[]");
+        aiResult.setSuggestion("good");
+        ReviewRecord record = new ReviewRecord();
+        record.setId(90L);
+        record.setSubmissionId(50L);
+        record.setReviewerId(REVIEWER_ID);
+        record.setAction(com.labelhub.modules.review.domain.ReviewAction.APPROVE);
+        record.setReviewLevel(1);
+        record.setReason("ok");
+        record.setReviewComment("looks good");
+        record.setCreatedAt(LocalDateTime.now());
+        when(conflictGroupMapper.selectById(GROUP_ID)).thenReturn(group);
+        when(submissionMapper.selectConflictCandidates(TASK_ID, ITEM_ID))
+                .thenReturn(List.of(candidate));
+        when(aiReviewResultMapper.selectBySubmissionIds(List.of(50L)))
+                .thenReturn(List.of(aiResult));
+        when(reviewRecordMapper.selectBySubmissionIds(List.of(50L)))
+                .thenReturn(List.of(record));
+
+        ConflictGroupResponse response = service.getGroup(GROUP_ID);
+
+        assertThat(response.candidateSubmissions()).hasSize(1);
+        ConflictGroupResponse.CandidateSubmissionItem item =
+                response.candidateSubmissions().get(0);
+        assertThat(item.submissionId()).isEqualTo(50L);
+        assertThat(item.labelerId()).isEqualTo(7L);
+        assertThat(item.answerJson()).isEqualTo("{\"label\":\"yes\"}");
+        assertThat(item.versionNo()).isEqualTo(2);
+        assertThat(item.aiReviewSummary().aiReviewResultId()).isEqualTo(70L);
+        assertThat(item.reviewRecords()).hasSize(1);
+        assertThat(item.reviewRecords().get(0).reviewRecordId()).isEqualTo(90L);
     }
 
     @Test
@@ -111,7 +162,7 @@ class ConflictResolveServiceTest {
                 GROUP_ID, REVIEWER_ID, new ConflictResolveRequest(50L, "reason")))
                 .isInstanceOfSatisfying(BusinessException.class,
                         ex -> assertThat(ex.getCode()).isEqualTo(400701));
-        verify(eventPublisher, never()).publishGoldenSelected(any(), any());
+        verify(eventPublisher, never()).publishGoldenSelected(any(), any(), any());
     }
 
     @Test
@@ -128,6 +179,32 @@ class ConflictResolveServiceTest {
                 GROUP_ID, REVIEWER_ID, new ConflictResolveRequest(99L, "reason")))
                 .isInstanceOfSatisfying(BusinessException.class,
                         ex -> assertThat(ex.getCode()).isEqualTo(400702));
+    }
+
+    @Test
+    void resolveSubmissionNotReviewableThrows() {
+        ConflictGroup group = openGroup();
+        Submission approved = submissionInGroup(50L);
+        approved.setStatus(SubmissionStatus.APPROVED);
+        when(conflictGroupMapper.selectById(GROUP_ID)).thenReturn(group);
+        when(submissionMapper.selectById(50L)).thenReturn(approved);
+
+        assertThatThrownBy(() -> service.resolve(
+                GROUP_ID, REVIEWER_ID, new ConflictResolveRequest(50L, "reason")))
+                .isInstanceOfSatisfying(BusinessException.class,
+                        ex -> assertThat(ex.getCode()).isEqualTo(400703));
+    }
+
+    @Test
+    void resolveClearsExistingGoldenForSameItem() {
+        ConflictGroup group = openGroup();
+        Submission golden = submissionInGroup(50L);
+        when(conflictGroupMapper.selectById(GROUP_ID)).thenReturn(group);
+        when(submissionMapper.selectById(50L)).thenReturn(golden);
+
+        service.resolve(GROUP_ID, REVIEWER_ID, new ConflictResolveRequest(50L, "Best"));
+
+        verify(submissionMapper).clearGoldenByDatasetItem(ITEM_ID);
     }
 
     // --- detectAndCreateConflict ---

@@ -17,9 +17,12 @@ import com.labelhub.modules.review.dto.BatchReviewResponse;
 import com.labelhub.modules.review.dto.BatchReviewItemResult;
 import com.labelhub.modules.review.dto.RejectRequest;
 import com.labelhub.modules.review.dto.ReviewActionResponse;
+import com.labelhub.modules.review.dto.ReviewerSubmissionListItem;
 import com.labelhub.modules.review.dto.SubmissionReviewItem;
+import com.labelhub.modules.review.mapper.ReviewerSubmissionListMapper;
 import com.labelhub.modules.review.service.BatchReviewService;
 import com.labelhub.modules.review.service.ReviewService;
+import com.labelhub.modules.review.service.ReviewerSubmissionQueryService;
 import com.labelhub.modules.submission.domain.SubmissionStatus;
 import java.util.List;
 import java.util.Set;
@@ -35,12 +38,15 @@ class ReviewControllerTest {
 
     @Mock private ReviewService reviewService;
     @Mock private BatchReviewService batchReviewService;
+    @Mock private ReviewerSubmissionQueryService reviewerQueryService;
+    @Mock private ReviewerSubmissionListMapper reviewerListMapper;
 
     private ReviewController controller;
 
     @BeforeEach
     void setUp() {
-        controller = new ReviewController(reviewService, batchReviewService);
+        controller = new ReviewController(reviewService, batchReviewService,
+                reviewerQueryService, reviewerListMapper);
     }
 
     @AfterEach
@@ -49,13 +55,15 @@ class ReviewControllerTest {
     }
 
     @Test
-    void listPendingFinalDelegatesToService() {
+    void listDelegatesToMapper() {
         CurrentUserContext.set(new CurrentUser(1L, "reviewer", "test@labelhub.dev", Set.of(RoleCode.REVIEWER), 1));
-        SubmissionReviewItem item = new SubmissionReviewItem(
-                100L, 1L, 1L, 1L, SubmissionStatus.PENDING_FINAL, null, null, 1);
-        when(reviewService.listPendingFinal()).thenReturn(List.of(item));
+        ReviewerSubmissionListItem item = new ReviewerSubmissionListItem(
+                100L, 1L, 1L, 1L, SubmissionStatus.PENDING_FINAL, null, null, null, 1, null, null, null);
+        when(reviewerListMapper.selectWithFilters(null, null, null, null, null, null, null, 0, 20))
+                .thenReturn(List.of(item));
 
-        ApiResponse<List<SubmissionReviewItem>> response = controller.listPendingFinal();
+        ApiResponse<List<ReviewerSubmissionListItem>> response = controller.list(
+                null, null, null, null, null, null, null, 1, 20);
 
         assertThat(response.data()).containsExactly(item);
     }
@@ -105,10 +113,10 @@ class ReviewControllerTest {
     }
 
     @Test
-    void labelerCannotListPendingFinal() {
+    void labelerCannotList() {
         CurrentUserContext.set(new CurrentUser(2L, "labeler", "test@labelhub.dev", Set.of(RoleCode.LABELER), 1));
 
-        assertThatThrownBy(() -> controller.listPendingFinal())
+        assertThatThrownBy(() -> controller.list(null, null, null, null, null, null, null, 1, 20))
                 .isInstanceOfSatisfying(BusinessException.class,
                         ex -> assertThat(ex.getCode()).isEqualTo(403001));
     }

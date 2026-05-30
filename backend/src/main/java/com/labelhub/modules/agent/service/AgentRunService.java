@@ -23,9 +23,17 @@ public class AgentRunService {
     @Transactional
     public AgentRun create(String agentType, Long submissionId, Long providerId,
                            String modelName, String promptVersion, String inputSnapshot) {
+        return create(agentType, submissionId, providerId, modelName, promptVersion, inputSnapshot, null);
+    }
+
+    @Transactional
+    public AgentRun create(String agentType, Long submissionId, Long providerId,
+                           String modelName, String promptVersion, String inputSnapshot,
+                           Long assignmentId) {
         AgentRun run = new AgentRun();
         run.setAgentType(agentType);
         run.setSubmissionId(submissionId);
+        run.setAssignmentId(assignmentId);
         run.setProviderId(providerId);
         run.setModelName(modelName);
         run.setPromptVersion(promptVersion);

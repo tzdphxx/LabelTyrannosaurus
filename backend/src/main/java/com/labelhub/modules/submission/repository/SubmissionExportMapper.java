@@ -20,7 +20,20 @@ public interface SubmissionExportMapper {
                    s.dataset_item_id as datasetItemId,
                    di.item_json as itemJson,
                    s.answer_json as answerJson,
-                   case when #{includeAiReview} then ar.raw_response else null end as aiReviewJson,
+                   case when #{includeAiReview} and ar.id is not null then cast(json_object(
+                       'status', ar.status,
+                       'decision', ar.decision,
+                       'averageScore', ar.average_score,
+                       'dimensionScores', ar.dimension_scores,
+                       'riskFlags', ar.risk_flags,
+                       'suggestion', ar.suggestion,
+                       'promptSnapshot', ar.prompt_snapshot,
+                       'providerId', ar.provider_id,
+                       'modelName', ar.model_name,
+                       'retryCount', ar.retry_count,
+                       'createdAt', ar.created_at,
+                       'updatedAt', ar.updated_at
+                   ) as char) else null end as aiReviewJson,
                    case when #{includeReviewComment} then (
                        select rr.comment
                        from review_records rr

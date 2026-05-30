@@ -43,6 +43,8 @@ class SubmissionExportQueryServiceTest {
         assertThat(snapshots.get(0).itemSnapshot().get("question").asText()).isEqualTo("Q200");
         assertThat(snapshots.get(0).answerJson().get("answer").asText()).isEqualTo("A200");
         assertThat(snapshots.get(0).aiReviewSnapshot().get("decision").asText()).isEqualTo("PASS");
+        assertThat(snapshots.get(0).aiReviewSnapshot().get("averageScore").asDouble()).isEqualTo(98.5);
+        assertThat(snapshots.get(0).aiReviewSnapshot().get("riskFlags").get(0).asText()).isEqualTo("low_confidence");
         assertThat(snapshots.get(0).auditRefs()).extracting("action").containsExactly("APPROVE");
         assertThat(snapshots.get(0).labelerInfo().username()).isEqualTo("labeler");
     }
@@ -67,7 +69,7 @@ class SubmissionExportQueryServiceTest {
                 11L,
                 "{\"question\":\"Q" + submissionId + "\"}",
                 "{\"answer\":\"A" + submissionId + "\"}",
-                "{\"decision\":\"PASS\"}",
+                "{\"status\":\"SUCCESS\",\"decision\":\"PASS\",\"averageScore\":98.5,\"dimensionScores\":{\"accuracy\":99.0},\"riskFlags\":[\"low_confidence\"],\"suggestion\":\"Keep up the good work\",\"promptSnapshot\":\"prompt text\",\"providerId\":7,\"modelName\":\"qwen-plus\",\"retryCount\":1,\"createdAt\":\"2026-05-01T09:59:00\",\"updatedAt\":\"2026-05-01T10:00:00\"}",
                 "通过",
                 20L,
                 "labeler",

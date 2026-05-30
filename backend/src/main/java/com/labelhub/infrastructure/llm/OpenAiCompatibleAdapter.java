@@ -28,18 +28,25 @@ public class OpenAiCompatibleAdapter {
     private final ObjectMapper objectMapper;
     private final HttpClient httpClient;
     private final Duration timeout;
+    private final Duration visionTimeout;
 
     @Autowired
     public OpenAiCompatibleAdapter(ObjectMapper objectMapper,
-                                   @Value("${labelhub.llm.gateway.timeout-ms:30000}") long timeoutMs) {
-        this(objectMapper, Duration.ofMillis(timeoutMs));
+                                   @Value("${labelhub.llm.gateway.timeout-ms:30000}") long timeoutMs,
+                                   @Value("${labelhub.llm.gateway.vision-timeout-ms:60000}") long visionTimeoutMs) {
+        this(objectMapper, Duration.ofMillis(timeoutMs), Duration.ofMillis(visionTimeoutMs));
     }
 
     OpenAiCompatibleAdapter(ObjectMapper objectMapper, Duration timeout) {
+        this(objectMapper, timeout, timeout);
+    }
+
+    OpenAiCompatibleAdapter(ObjectMapper objectMapper, Duration timeout, Duration visionTimeout) {
         this.objectMapper = objectMapper;
         this.timeout = timeout;
+        this.visionTimeout = visionTimeout;
         this.httpClient = HttpClient.newBuilder()
-                .connectTimeout(timeout)
+                .connectTimeout(timeout.compareTo(visionTimeout) >= 0 ? timeout : visionTimeout)
                 .build();
     }
 
@@ -82,7 +89,7 @@ public class OpenAiCompatibleAdapter {
             throws JsonProcessingException {
         HttpRequest.Builder builder = HttpRequest.newBuilder()
                 .uri(URI.create(config.baseUrl() + CHAT_COMPLETIONS_PATH))
-                .timeout(timeout)
+                .timeout(containsImagePart(messages) ? visionTimeout : timeout)
                 .header("Content-Type", "application/json");
         if (config.customHeaders() != null) {
             config.customHeaders().forEach(builder::header);
@@ -159,6 +166,16 @@ public class OpenAiCompatibleAdapter {
             return map;
         }
         throw new IllegalArgumentException("Unsupported content part: " + part);
+    }
+
+    private boolean containsImagePart(List<LlmMessage> messages) {
+        if (messages == null) {
+            return false;
+        }
+        return messages.stream()
+                .filter(message -> message.contentParts() != null)
+                .flatMap(message -> message.contentParts().stream())
+                .anyMatch(LlmMessage.ImageUrlPart.class::isInstance);
     }
 
     private OpenAiCompatibleResponse failed(Instant startedAt, String message, String apiKey, boolean timedOut) {

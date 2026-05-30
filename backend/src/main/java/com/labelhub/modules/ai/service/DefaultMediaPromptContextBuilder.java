@@ -3,7 +3,12 @@ package com.labelhub.modules.ai.service;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.labelhub.infrastructure.llm.LlmMessage;
+import java.net.URI;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
+import java.util.HexFormat;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
@@ -17,6 +22,7 @@ public class DefaultMediaPromptContextBuilder implements MediaPromptContextBuild
 
     private static final Pattern MD_IMAGE = Pattern.compile("!\\[.*?]\\((https?://[^)]+)\\)");
     private static final Pattern HTML_IMAGE = Pattern.compile("<img[^>]+src=[\"'](https?://[^\"']+)[\"']", Pattern.CASE_INSENSITIVE);
+    private static final Pattern HTTP_URL = Pattern.compile("https?://[^\\s\"'<>),}]+");
 
     private final ObjectMapper objectMapper = new ObjectMapper();
 
@@ -43,6 +49,9 @@ public class DefaultMediaPromptContextBuilder implements MediaPromptContextBuild
                 if (url.isBlank()) {
                     limitations.add("MEDIA_URL_MISSING");
                     degraded = true;
+                } else if (!isHttpUrl(url)) {
+                    limitations.add("MEDIA_URL_INVALID");
+                    degraded = true;
                 } else if (visionAvailable(input, capability, limitations)) {
                     imageUrls.add(url);
                     mode = PromptMode.IMAGE_SINGLE;
@@ -52,9 +61,12 @@ public class DefaultMediaPromptContextBuilder implements MediaPromptContextBuild
                 }
             }
             case "video" -> {
-                text.append("videoTranscript: ").append(text(item.get("video_transcript"))).append("\n");
+                String transcript = text(item.get("video_transcript"));
+                if (!transcript.isBlank()) {
+                    text.append("videoTranscript: ").append(transcript).append("\n");
+                }
                 text.append("ownerMediaDescription: ").append(text(item.get("owner_media_description"))).append("\n");
-                imageUrls.addAll(stringList(item.get("key_frame_urls")));
+                imageUrls.addAll(validHttpUrls(stringList(item.get("key_frame_urls")), limitations));
                 if (imageUrls.isEmpty()) {
                     limitations.add("KEY_FRAME_MISSING");
                     degraded = true;
@@ -64,14 +76,14 @@ public class DefaultMediaPromptContextBuilder implements MediaPromptContextBuild
                     degraded = true;
                     imageUrls.clear();
                 }
-                if (text(item.get("video_transcript")).isBlank()) {
+                if (transcript.isBlank()) {
                     limitations.add("TRANSCRIPT_MISSING");
                 }
             }
             case "markdown" -> {
                 String markdown = text(item.get("content_markdown"));
                 text.append("contentMarkdown: ").append(markdown).append("\n");
-                imageUrls.addAll(extractMarkdownImages(markdown));
+                imageUrls.addAll(validHttpUrls(extractMarkdownImages(markdown), limitations));
                 if (!imageUrls.isEmpty() && visionAvailable(input, capability, limitations)) {
                     mode = PromptMode.MARKDOWN_WITH_IMAGES;
                 } else if (!imageUrls.isEmpty()) {
@@ -95,7 +107,8 @@ public class DefaultMediaPromptContextBuilder implements MediaPromptContextBuild
         List<LlmMessage> messages = imageUrls.isEmpty()
                 ? List.of(new LlmMessage("user", text.toString()))
                 : List.of(LlmMessage.userParts(contentParts(text.toString(), imageUrls, input.visionDetail())));
-        return new MediaPromptResult(messages, mode, degraded, List.copyOf(limitations), promptSnapshot);
+        return new MediaPromptResult(messages, mode, degraded, List.copyOf(limitations), promptSnapshot,
+                mediaUnderstanding(mediaType, mode, degraded, limitations, imageUrls, item));
     }
 
     private boolean visionAvailable(MediaPromptInput input, ProviderCapability capability, List<String> limitations) {
@@ -109,7 +122,11 @@ public class DefaultMediaPromptContextBuilder implements MediaPromptContextBuild
     private int imageLimit(MediaPromptInput input, ProviderCapability capability) {
         int configured = input.maxImagesPerRequest() > 0 ? input.maxImagesPerRequest() : 5;
         int provider = capability.maxImageCount() > 0 ? capability.maxImageCount() : configured;
-        return Math.max(0, Math.min(configured, provider));
+        int limit = Math.max(0, Math.min(configured, provider));
+        if (!capability.supportMultiImage()) {
+            limit = Math.min(limit, 1);
+        }
+        return limit;
     }
 
     private List<LlmMessage.ContentPart> contentParts(String prompt, List<String> imageUrls, String detail) {
@@ -137,13 +154,90 @@ public class DefaultMediaPromptContextBuilder implements MediaPromptContextBuild
     private String snapshot(String prompt, String mediaType, PromptMode promptMode, boolean degraded,
                             List<String> limitations, List<String> imageUrls) {
         Map<String, Object> snapshot = new LinkedHashMap<>();
-        snapshot.put("prompt", prompt);
+        snapshot.put("promptTemplate", safePrompt(prompt));
         snapshot.put("mediaType", mediaType);
         snapshot.put("promptMode", promptMode.name());
         snapshot.put("degraded", degraded);
         snapshot.put("limitations", limitations);
         snapshot.put("imageCount", imageUrls.size());
+        snapshot.put("images", imageUrls.stream().map(this::safeUrlSummary).toList());
         return toJson(snapshot);
+    }
+
+    private Map<String, Object> mediaUnderstanding(String mediaType, PromptMode promptMode, boolean degraded,
+                                                   List<String> limitations, List<String> imageUrls,
+                                                   Map<String, Object> item) {
+        Map<String, Object> summary = new LinkedHashMap<>();
+        summary.put("mode", promptMode.name());
+        summary.put("mediaType", mediaType);
+        summary.put("usedMedia", !imageUrls.isEmpty());
+        summary.put("usedKeyFrames", promptMode == PromptMode.VIDEO_KEYFRAMES && !imageUrls.isEmpty());
+        summary.put("usedTranscript", !text(item.get("video_transcript")).isBlank());
+        summary.put("degraded", degraded);
+        summary.put("limitations", List.copyOf(limitations));
+        summary.put("imageCount", imageUrls.size());
+        return summary;
+    }
+
+    private List<String> validHttpUrls(List<String> urls, List<String> limitations) {
+        List<String> valid = new ArrayList<>();
+        for (String url : urls) {
+            if (isHttpUrl(url)) {
+                valid.add(url);
+            } else if (url != null && !url.isBlank()) {
+                limitations.add("MEDIA_URL_INVALID");
+            }
+        }
+        return valid;
+    }
+
+    private boolean isHttpUrl(String url) {
+        if (url == null || url.isBlank()) {
+            return false;
+        }
+        try {
+            URI uri = URI.create(url);
+            String scheme = uri.getScheme();
+            return ("http".equalsIgnoreCase(scheme) || "https".equalsIgnoreCase(scheme))
+                    && uri.getHost() != null;
+        } catch (IllegalArgumentException ex) {
+            return false;
+        }
+    }
+
+    private Map<String, Object> safeUrlSummary(String url) {
+        Map<String, Object> summary = new LinkedHashMap<>();
+        try {
+            URI uri = URI.create(url);
+            summary.put("scheme", uri.getScheme());
+            summary.put("host", uri.getHost());
+            summary.put("pathHash", sha256(uri.getPath() == null ? "" : uri.getPath()));
+            return summary;
+        } catch (IllegalArgumentException ex) {
+            summary.put("invalid", true);
+            return summary;
+        }
+    }
+
+    private String safePrompt(String prompt) {
+        String preview = prompt.length() > 1200 ? prompt.substring(0, 1200) : prompt;
+        Matcher matcher = HTTP_URL.matcher(preview);
+        StringBuffer sanitized = new StringBuffer();
+        while (matcher.find()) {
+            matcher.appendReplacement(sanitized, Matcher.quoteReplacement(toJson(safeUrlSummary(matcher.group()))));
+        }
+        matcher.appendTail(sanitized);
+        return sanitized.toString();
+    }
+
+    private String sha256(String value) {
+        try {
+            byte[] digest = MessageDigest.getInstance("SHA-256")
+                    .digest(value.getBytes(StandardCharsets.UTF_8));
+            return HexFormat.of().formatHex(digest).substring(0, 16);
+        } catch (NoSuchAlgorithmException ex) {
+            throw new IllegalStateException(ex);
+        }
     }
 
     @SuppressWarnings("unchecked")

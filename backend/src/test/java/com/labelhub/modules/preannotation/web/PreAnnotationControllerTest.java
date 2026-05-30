@@ -38,12 +38,12 @@ class PreAnnotationControllerTest {
         CurrentUserContext.set(new CurrentUser(20L, "labeler", "l@test.dev", Set.of(RoleCode.LABELER), 1));
         PreAnnotationController controller = new PreAnnotationController(preAnnotationService);
         PreAnnotationResponse serviceResponse = response();
-        when(preAnnotationService.run(10L, 20L)).thenReturn(serviceResponse);
+        when(preAnnotationService.run(10L, 20L, null)).thenReturn(serviceResponse);
 
-        ApiResponse<PreAnnotationResponse> response = controller.run(10L);
+        ApiResponse<PreAnnotationResponse> response = controller.run(10L, null);
 
         assertThat(response.data()).isEqualTo(serviceResponse);
-        verify(preAnnotationService).run(10L, 20L);
+        verify(preAnnotationService).run(10L, 20L, null);
     }
 
     @Test

@@ -118,7 +118,9 @@ public class OpenAiCompatibleAdapter {
     private Map<String, Object> serializeMessage(LlmMessage msg) {
         Map<String, Object> map = new LinkedHashMap<>();
         map.put("role", msg.role());
-        if (msg.content() != null) {
+        if (msg.contentParts() != null && !msg.contentParts().isEmpty()) {
+            map.put("content", msg.contentParts().stream().map(this::serializeContentPart).toList());
+        } else if (msg.content() != null) {
             map.put("content", msg.content());
         }
         if (msg.toolCalls() != null && !msg.toolCalls().isEmpty()) {
@@ -137,6 +139,26 @@ public class OpenAiCompatibleAdapter {
             map.put("name", msg.name());
         }
         return map;
+    }
+
+    private Map<String, Object> serializeContentPart(LlmMessage.ContentPart part) {
+        Map<String, Object> map = new LinkedHashMap<>();
+        if (part instanceof LlmMessage.TextPart textPart) {
+            map.put("type", "text");
+            map.put("text", textPart.text());
+            return map;
+        }
+        if (part instanceof LlmMessage.ImageUrlPart imageUrlPart) {
+            map.put("type", "image_url");
+            Map<String, Object> imageUrl = new LinkedHashMap<>();
+            imageUrl.put("url", imageUrlPart.url());
+            if (imageUrlPart.detail() != null && !imageUrlPart.detail().isBlank()) {
+                imageUrl.put("detail", imageUrlPart.detail());
+            }
+            map.put("image_url", imageUrl);
+            return map;
+        }
+        throw new IllegalArgumentException("Unsupported content part: " + part);
     }
 
     private OpenAiCompatibleResponse failed(Instant startedAt, String message, String apiKey, boolean timedOut) {

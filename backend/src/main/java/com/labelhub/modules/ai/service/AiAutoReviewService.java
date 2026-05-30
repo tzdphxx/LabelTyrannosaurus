@@ -81,6 +81,10 @@ public class AiAutoReviewService {
     private com.labelhub.modules.assignment.mapper.AssignmentMapper assignmentMapper;
     @Autowired
     private com.labelhub.modules.review.mapper.ReviewRecordMapper reviewRecordMapper;
+    @Autowired(required = false)
+    private MediaPromptContextBuilder mediaPromptContextBuilder;
+    @Autowired(required = false)
+    private LlmProviderService llmProviderService;
 
     @Autowired
     public AiAutoReviewService(SubmissionMapper submissionMapper,
@@ -146,13 +150,14 @@ public class AiAutoReviewService {
         Task task = taskMapper.selectById(submission.getTaskId());
         AiReviewConfig config = loadConfig(task);
         DatasetItem datasetItem = datasetItemMapper.selectById(submission.getDatasetItemId());
-        String promptSnapshot = buildPromptSnapshot(submission, datasetItem, config);
+        MediaPromptResult prompt = buildPrompt(submission, datasetItem, config);
+        String promptSnapshot = prompt.promptSnapshot();
 
         AgentRun agentRun = agentRunService.create(AGENT_TYPE, submissionId, config.getProviderId(),
                 config.getModelName(), config.getPromptVersion(), promptSnapshot);
         agentRunService.start(agentRun.getId());
 
-        AttemptOutcome outcome = executeAttempt(submission, config, agentRun, promptSnapshot);
+        AttemptOutcome outcome = executeAttempt(submission, config, agentRun, prompt);
 
         AiReviewResult result;
         if (outcome.success()) {
@@ -187,13 +192,14 @@ public class AiAutoReviewService {
         Task task = taskMapper.selectById(submission.getTaskId());
         AiReviewConfig config = loadConfig(task);
         DatasetItem datasetItem = datasetItemMapper.selectById(submission.getDatasetItemId());
-        String promptSnapshot = buildPromptSnapshot(submission, datasetItem, config);
+        MediaPromptResult prompt = buildPrompt(submission, datasetItem, config);
+        String promptSnapshot = prompt.promptSnapshot();
 
         AgentRun agentRun = agentRunService.create(AGENT_TYPE, submissionId, config.getProviderId(),
                 config.getModelName(), config.getPromptVersion(), promptSnapshot);
         agentRunService.start(agentRun.getId());
 
-        AttemptOutcome outcome = executeAttempt(submission, config, agentRun, promptSnapshot);
+        AttemptOutcome outcome = executeAttempt(submission, config, agentRun, prompt);
         int currentRetryCount = existing.getRetryCount();
 
         if (outcome.success()) {
@@ -215,15 +221,15 @@ public class AiAutoReviewService {
     }
 
     private AttemptOutcome executeAttempt(Submission submission, AiReviewConfig config,
-                                          AgentRun agentRun, String promptSnapshot) {
+                                          AgentRun agentRun, MediaPromptResult prompt) {
         if ("SUPERVISOR".equals(config.getAgentMode())) {
-            return executeSupervisor(submission, config, agentRun, promptSnapshot);
+            return executeSupervisor(submission, config, agentRun, prompt.promptSnapshot());
         }
-        return executeDirect(submission, config, agentRun, promptSnapshot);
+        return executeDirect(submission, config, agentRun, prompt);
     }
 
     private AttemptOutcome executeDirect(Submission submission, AiReviewConfig config,
-                                         AgentRun agentRun, String promptSnapshot) {
+                                         AgentRun agentRun, MediaPromptResult prompt) {
         if (!rateLimiter.acquire(submission.getTaskId(), config.getProviderId())) {
             agentRunService.fail(agentRun.getId(), AgentRunStatus.RATE_LIMITED, "AI review rate limited");
             return AttemptOutcome.failure("RATE_LIMITED", "AI review rate limited", null);
@@ -232,10 +238,9 @@ public class AiAutoReviewService {
         LlmGatewayResponse response = llmGateway.review(new LlmGatewayRequest(
                 config.getProviderId(),
                 config.getModelName(),
-                List.of(
-                        new LlmMessage("system", "You are LabelHub AI reviewer. Return valid JSON only."),
-                        new LlmMessage("user", promptSnapshot)
-                )
+                java.util.stream.Stream.concat(
+                        java.util.stream.Stream.of(new LlmMessage("system", "You are LabelHub AI reviewer. Return valid JSON only.")),
+                        prompt.messages().stream()).toList()
         ));
         if (response.status() != LlmGatewayStatus.SUCCESS) {
             agentRunService.fail(agentRun.getId(), AgentRunStatus.FAILED, response.errorMessage());
@@ -243,7 +248,7 @@ public class AiAutoReviewService {
         }
 
         try {
-            AiReviewResult result = successResult(submission, config, agentRun.getId(), promptSnapshot, response);
+            AiReviewResult result = successResult(submission, config, agentRun.getId(), prompt, response);
             return AttemptOutcome.success(result, gatewayResponseSnapshot(response));
         } catch (BusinessException ex) {
             agentRunService.fail(agentRun.getId(), AgentRunStatus.MANUAL_REQUIRED, ex.getMessage());
@@ -376,19 +381,28 @@ public class AiAutoReviewService {
     }
 
     private AiReviewResult successResult(Submission submission, AiReviewConfig config, Long agentRunId,
-                                         String promptSnapshot, LlmGatewayResponse response) {
+                                         MediaPromptResult prompt, LlmGatewayResponse response) {
         Map<String, Object> structuredJson = response.structuredJson();
         if (structuredJson == null || !structuredJson.containsKey("decision")) {
             throw new BusinessException(AI_REVIEW_INVALID, "AI review decision is required");
         }
-        AiReviewResult result = baseResult(submission, config, agentRunId, promptSnapshot);
+        AiReviewResult result = baseResult(submission, config, agentRunId, prompt.promptSnapshot());
         result.setStatus(AiReviewStatus.SUCCESS);
         result.setDecision(String.valueOf(structuredJson.get("decision")));
         result.setAverageScore(asBigDecimal(structuredJson.get("averageScore")));
-        result.setConfidence(asBigDecimal(structuredJson.get("confidence")));
+        BigDecimal confidence = asBigDecimal(structuredJson.get("confidence"));
+        if (prompt.degraded() && confidence != null) {
+            BigDecimal penalty = config.getDegradationPenalty() != null
+                    ? config.getDegradationPenalty() : new BigDecimal("0.20");
+            confidence = confidence.subtract(penalty).max(BigDecimal.ZERO);
+        }
+        result.setConfidence(confidence);
         result.setDimensionScores(toJson(structuredJson.getOrDefault("dimensionScores", Map.of())));
         result.setRiskFlags(toJson(structuredJson.getOrDefault("riskFlags", List.of())));
         result.setSuggestion(asNullableText(structuredJson.get("suggestion")));
+        result.setPromptMode(prompt.promptMode().name());
+        result.setDegraded(prompt.degraded());
+        result.setLimitations(toJson(mergeLimitations(prompt.limitations(), structuredJson.get("limitations"))));
         result.setRawResponse(response.rawResponse());
         return result;
     }
@@ -416,6 +430,18 @@ public class AiAutoReviewService {
         result.setCreatedAt(LocalDateTime.now());
         result.setUpdatedAt(LocalDateTime.now());
         return result;
+    }
+
+    private List<String> mergeLimitations(List<String> promptLimitations, Object responseLimitations) {
+        java.util.LinkedHashSet<String> values = new java.util.LinkedHashSet<>(promptLimitations);
+        if (responseLimitations instanceof Iterable<?> iterable) {
+            for (Object item : iterable) {
+                if (item != null && !String.valueOf(item).isBlank()) {
+                    values.add(String.valueOf(item));
+                }
+            }
+        }
+        return List.copyOf(values);
     }
 
     private Submission loadSubmission(Long submissionId) {
@@ -447,6 +473,26 @@ public class AiAutoReviewService {
         prompt.put("itemSnapshot", datasetItem == null ? Map.of() : parseJsonValue(datasetItem.getItemJson()));
         prompt.put("answerJson", parseJsonValue(submission.getAnswerJson()));
         return toJson(prompt);
+    }
+
+    private MediaPromptResult buildPrompt(Submission submission, DatasetItem datasetItem, AiReviewConfig config) {
+        ProviderCapability capability = ProviderCapability.textOnly();
+        if (llmProviderService != null) {
+            capability = llmProviderService.findEnabledById(config.getProviderId())
+                    .map(llmProviderService::capability)
+                    .orElse(ProviderCapability.textOnly());
+        }
+        MediaPromptContextBuilder builder = mediaPromptContextBuilder != null
+                ? mediaPromptContextBuilder : new DefaultMediaPromptContextBuilder();
+        return builder.build(new MediaPromptInput(
+                datasetItem == null ? null : datasetItem.getItemJson(),
+                submission.getAnswerJson(),
+                buildPromptSnapshot(submission, datasetItem, config),
+                capability,
+                config.getMultimodalEnabled() == null || Boolean.TRUE.equals(config.getMultimodalEnabled()),
+                config.getVisionDetail() != null ? config.getVisionDetail() : "auto",
+                config.getMaxImagesPerRequest() != null ? config.getMaxImagesPerRequest() : 5
+        ));
     }
 
     private void moveSubmissionToPendingFinal(Submission submission) {
@@ -551,6 +597,9 @@ public class AiAutoReviewService {
                 result.getSuggestion(),
                 result.getConfidence() == null ? null : result.getConfidence().toPlainString(),
                 result.getFlowAction(),
+                result.getPromptMode(),
+                result.getDegraded(),
+                result.getLimitations(),
                 result.getErrorCode(),
                 result.getErrorMessage(),
                 result.getCreatedAt(),

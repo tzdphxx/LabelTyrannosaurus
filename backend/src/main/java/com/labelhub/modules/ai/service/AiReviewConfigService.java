@@ -202,6 +202,13 @@ public class AiReviewConfigService {
         config.setConfidenceThreshold(request.confidenceThreshold());
         config.setRiskFlagsForceManual(request.riskFlagsForceManual() != null
                 ? toJson(request.riskFlagsForceManual()) : null);
+        config.setMultimodalEnabled(request.multimodalEnabled() == null || Boolean.TRUE.equals(request.multimodalEnabled()));
+        config.setDegradationPenalty(request.degradationPenalty() != null
+                ? request.degradationPenalty() : new BigDecimal("0.20"));
+        config.setVisionDetail(request.visionDetail() != null && !request.visionDetail().isBlank()
+                ? request.visionDetail().trim() : "auto");
+        config.setMaxImagesPerRequest(request.maxImagesPerRequest() != null ? request.maxImagesPerRequest() : 5);
+        config.setAllowAiDirectApproveWhenDegraded(Boolean.TRUE.equals(request.allowAiDirectApproveWhenDegraded()));
     }
 
     private void validateRequest(AiReviewConfigRequest request) {
@@ -269,7 +276,12 @@ public class AiReviewConfigService {
                 config.getAllowAiDirectReject(),
                 config.getRejectThreshold(),
                 config.getConfidenceThreshold(),
-                parseStringListOrNull(config.getRiskFlagsForceManual())
+                parseStringListOrNull(config.getRiskFlagsForceManual()),
+                config.getMultimodalEnabled() == null || Boolean.TRUE.equals(config.getMultimodalEnabled()),
+                config.getDegradationPenalty() != null ? config.getDegradationPenalty() : new BigDecimal("0.20"),
+                config.getVisionDetail() != null ? config.getVisionDetail() : "auto",
+                config.getMaxImagesPerRequest() != null ? config.getMaxImagesPerRequest() : 5,
+                Boolean.TRUE.equals(config.getAllowAiDirectApproveWhenDegraded())
         );
     }
 
@@ -285,6 +297,10 @@ public class AiReviewConfigService {
         snapshot.put("manualReviewThreshold", config.getManualReviewThreshold());
         snapshot.put("outputSchema", parseObjectMap(config.getOutputSchemaJson()));
         snapshot.put("promptVersion", config.getPromptVersion());
+        snapshot.put("multimodalEnabled", config.getMultimodalEnabled());
+        snapshot.put("degradationPenalty", config.getDegradationPenalty());
+        snapshot.put("visionDetail", config.getVisionDetail());
+        snapshot.put("maxImagesPerRequest", config.getMaxImagesPerRequest());
         return snapshot;
     }
 

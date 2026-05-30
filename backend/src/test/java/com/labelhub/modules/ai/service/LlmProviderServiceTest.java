@@ -66,11 +66,16 @@ class LlmProviderServiceTest {
         assertThat(response.apiKeyConfigured()).isTrue();
         assertThat(response.customHeaders()).containsEntry("Authorization", "******");
         assertThat(response.customHeaders()).containsEntry("X-Trace-Source", "labelhub");
+        assertThat(response.supportVision()).isTrue();
+        assertThat(response.maxImageCount()).isEqualTo(8);
         ArgumentCaptor<LlmProvider> providerCaptor = ArgumentCaptor.forClass(LlmProvider.class);
         verify(llmProviderMapper).insert(providerCaptor.capture());
         LlmProvider stored = providerCaptor.getValue();
         assertThat(stored.getEncryptedApiKey()).isNotEqualTo("sk-test");
         assertThat(encryptor.decrypt(stored.getEncryptedApiKey())).isEqualTo("sk-test");
+        assertThat(stored.getSupportVision()).isTrue();
+        assertThat(stored.getSupportMultiImage()).isTrue();
+        assertThat(stored.getVisionModel()).isEqualTo("qwen-vl-plus");
         assertThat(stored.getCustomHeadersJson()).contains("Authorization").doesNotContain("unused");
         verify(auditAppender).append(any(AuditCommand.class));
     }
@@ -162,7 +167,11 @@ class LlmProviderServiceTest {
                 Map.of("Authorization", "Bearer custom", "X-Trace-Source", "labelhub", "unused", " "),
                 60,
                 30,
-                10
+                10,
+                true,
+                true,
+                8,
+                "qwen-vl-plus"
         );
     }
 

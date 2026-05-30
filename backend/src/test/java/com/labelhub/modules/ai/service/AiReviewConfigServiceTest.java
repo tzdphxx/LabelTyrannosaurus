@@ -104,6 +104,10 @@ class AiReviewConfigServiceTest {
         assertThat(response.taskId()).isEqualTo(TASK_ID);
         assertThat(response.promptVersion()).isEqualTo("v1");
         assertThat(response.scoringDimensions()).containsExactly("accuracy", "safety");
+        assertThat(response.multimodalEnabled()).isTrue();
+        assertThat(response.degradationPenalty()).isEqualByComparingTo("0.20");
+        assertThat(response.visionDetail()).isEqualTo("auto");
+        assertThat(response.maxImagesPerRequest()).isEqualTo(5);
         ArgumentCaptor<Task> taskCaptor = ArgumentCaptor.forClass(Task.class);
         verify(taskMapper).updateById(taskCaptor.capture());
         assertThat(taskCaptor.getValue().getAiReviewConfigId()).isEqualTo(CONFIG_ID);

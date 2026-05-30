@@ -116,6 +116,8 @@ class AiAutoReviewServiceTest {
         verify(aiReviewResultMapper).insert(resultCaptor.capture());
         assertThat(resultCaptor.getValue().getStatus()).isEqualTo(AiReviewStatus.SUCCESS);
         assertThat(resultCaptor.getValue().getPromptSnapshot()).contains("Review answer strictly");
+        assertThat(resultCaptor.getValue().getPromptMode()).isEqualTo("TEXT_ONLY");
+        assertThat(resultCaptor.getValue().getDegraded()).isFalse();
         assertThat(resultCaptor.getValue().getRawResponse()).isEqualTo("{\"decision\":\"PASS\"}");
         ArgumentCaptor<Submission> submissionCaptor = ArgumentCaptor.forClass(Submission.class);
         verify(submissionMapper).updateById(submissionCaptor.capture());

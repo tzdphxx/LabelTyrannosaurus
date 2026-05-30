@@ -28,6 +28,11 @@ public class AiFlowDecisionService {
             return AiFlowAction.AI_ASSIGN_MANUAL_REVIEW;
         }
 
+        if (Boolean.TRUE.equals(result.getDegraded())
+                && !Boolean.TRUE.equals(config.getAllowAiDirectApproveWhenDegraded())) {
+            return AiFlowAction.AI_ASSIGN_MANUAL_REVIEW;
+        }
+
         String decision = result.getDecision();
         if (decision == null) {
             return AiFlowAction.AI_ASSIGN_MANUAL_REVIEW;

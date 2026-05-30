@@ -176,4 +176,3 @@ class RewardSettlementServiceTest {
         when(rewardRuleMapper.selectLatestByTaskId(1L)).thenReturn(rule);
     }
 }
-

@@ -53,7 +53,7 @@ class DatabaseCommentMigrationTest {
 
     private static Map<String, List<String>> parseCreateTableColumns(String sql) {
         Map<String, List<String>> schema = new LinkedHashMap<>();
-        Pattern createTablePattern = Pattern.compile("create\\s+table\\s+(\\w+)\\s*\\(", Pattern.CASE_INSENSITIVE);
+        Pattern createTablePattern = Pattern.compile("create\\s+table\\s+`?(\\w+)`?\\s*\\(", Pattern.CASE_INSENSITIVE);
         Matcher matcher = createTablePattern.matcher(sql);
         while (matcher.find()) {
             String tableName = matcher.group(1);
@@ -122,6 +122,8 @@ class DatabaseCommentMigrationTest {
                 || lowerCase.startsWith("constraint")
                 || lowerCase.startsWith("foreign key")
                 || lowerCase.startsWith("unique")
+                || lowerCase.startsWith("key ")
+                || lowerCase.startsWith("fulltext key")
                 || lowerCase.startsWith("check ")) {
             return null;
         }
@@ -130,6 +132,12 @@ class DatabaseCommentMigrationTest {
 
     private static void addColumn(Map<String, List<String>> schema, String tableName, String columnName) {
         List<String> columns = schema.get(tableName);
+        if (columns == null) {
+            throw new IllegalArgumentException("Unknown table in baseline schema: " + tableName);
+        }
+        if (columns.contains(columnName)) {
+            return;
+        }
         int insertAfter = columns.indexOf("deleted");
         if ("trace_id".equals(columnName)) {
             insertAfter = columns.indexOf("error_message");

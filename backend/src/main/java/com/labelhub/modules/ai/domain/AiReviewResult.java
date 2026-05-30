@@ -36,6 +36,10 @@ public class AiReviewResult {
 
     private String suggestion;
 
+    private String flowAction;
+
+    private java.math.BigDecimal confidence;
+
     private String promptSnapshot;
 
     private String rawResponse;

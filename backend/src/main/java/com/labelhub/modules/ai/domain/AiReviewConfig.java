@@ -44,6 +44,18 @@ public class AiReviewConfig {
 
     private Integer maxIterations;
 
+    private String aiFlowPolicy;
+
+    private Boolean allowAiDirectApprove;
+
+    private Boolean allowAiDirectReject;
+
+    private BigDecimal rejectThreshold;
+
+    private BigDecimal confidenceThreshold;
+
+    private String riskFlagsForceManual;
+
     private Long createdBy;
 
     private LocalDateTime createdAt;

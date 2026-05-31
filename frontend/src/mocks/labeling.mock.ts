@@ -179,6 +179,8 @@ export const mockLabelingSubmissions: LabelingSubmission[] = [
     reviewedAt: '2026-05-31 10:12',
     rejectReason: '部分不合格样本缺少原因说明。',
     reviewComment: '请补充具体不一致点，例如图片主体、标题规格或描述承诺。',
+    reviewSource: 'manual',
+    reviewStatus: 'manual_rejected',
     answers: [
       {
         templateId: productTemplate.id,
@@ -198,6 +200,10 @@ export const mockLabelingSubmissions: LabelingSubmission[] = [
     userId: 'user-labeler',
     status: 'submitted',
     submittedAt: '2026-05-30 20:06',
+    reviewStatus: 'manual_pending',
+    aiDecision: 'manual_review',
+    aiReviewSummary: '用户情绪和风险标签存在不确定性，需要人工复核。',
+    reviewComment: '高风险会话标签存在歧义。',
     answers: [
       {
         templateId: supportTemplate.id,

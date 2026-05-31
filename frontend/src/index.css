@@ -513,6 +513,48 @@ select {
   line-height: 1.6;
 }
 
+.reviewer-page {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.reviewer-table-card.ant-card,
+.reviewer-detail-grid .ant-card {
+  border: 1px solid #d9e1e8;
+  border-radius: 8px;
+  box-shadow: 0 12px 30px rgba(20, 34, 48, 0.04);
+}
+
+.reviewer-detail-grid {
+  display: grid;
+  grid-template-columns: minmax(360px, 0.9fr) minmax(460px, 1.1fr);
+  gap: 16px;
+  align-items: start;
+}
+
+.reviewer-detail-grid .ant-card:last-child {
+  grid-column: 1 / -1;
+}
+
+.reviewer-answer-list {
+  margin-top: 16px;
+}
+
+.reviewer-answer-list,
+.reviewer-action-panel {
+  width: 100%;
+}
+
+.reviewer-readonly-form {
+  margin-top: 16px;
+}
+
+.reviewer-next-button.ant-btn {
+  margin-top: 12px;
+  padding-left: 0;
+}
+
 .designer-shell {
   display: grid;
   grid-template-columns: 280px minmax(420px, 1fr) minmax(340px, 420px);
@@ -772,6 +814,10 @@ select {
   }
 
   .labeler-workbench {
+    grid-template-columns: 1fr;
+  }
+
+  .reviewer-detail-grid {
     grid-template-columns: 1fr;
   }
 

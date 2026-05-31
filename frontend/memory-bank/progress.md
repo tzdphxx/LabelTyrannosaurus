@@ -286,3 +286,92 @@
 
 - 按用户要求，本阶段未运行 `npm run build`。
 - 按用户要求，本阶段未运行 `npm run lint`。
+
+## 2026-05-31 - 计划五：AI 前置审核与人工复核闭环 P0-P7
+
+### 已实现
+
+- 重写并细化 `implementation-plans/05-review-workflow.md`，将计划五调整为 AI 前置审核流程：
+  - 标注员提交后先进入 AI 审核。
+  - AI 结果分为通过、人工复核、打回。
+  - 只有 AI 判定为人工复核的提交进入审核员队列。
+- 新增 Review 领域类型：
+  - `AiReviewDecision`
+  - `AiReviewStatus`
+  - `ManualReviewStatus`
+  - `SubmissionReviewStatus`
+  - `AiReviewResult`
+  - `ManualReviewRecord`
+  - `ReviewQueueItem`
+  - `ReviewDetail`
+  - `ReviewAuditEvent`
+  - `BatchManualReviewResult`
+- 新增 Review Mock 数据：
+  - AI 通过提交。
+  - AI 打回提交。
+  - AI 人工复核提交。
+  - AI 异常降级人工复核提交。
+  - 人工复核历史。
+  - 审计时间线。
+- 新增 Review 服务层与 store：
+  - 查询人工复核队列。
+  - 查询审核详情。
+  - 查询审核历史。
+  - 模拟 AI 审核分流。
+  - 提交单条人工复核动作。
+  - 提交批量人工复核动作。
+  - 同步人工审核结果回标注员侧状态。
+- 扩展 Labeler 提交流程：
+  - `submitAnswers` 和 `submitTaskDrafts` 提交后调用 AI 审核分流。
+  - AI 通过直接更新为已通过。
+  - AI 打回直接更新为待修改。
+  - AI 人工复核保持待人工复核状态，并进入审核员队列。
+- 拆分冗长的 `labelingService.ts`：
+  - 新增 `labelingServiceHelpers.ts` 承载 clone、草稿持久化、提交校验和 AI 结果映射。
+  - `labelingService.ts` 降为服务编排层，保留外部 API 不变。
+- 接入 Reviewer 路由：
+  - `/app/reviewer/queue`
+  - `/app/reviewer/tasks/:reviewId`
+  - `/app/reviewer/history`
+- 实现人工复核队列页面：
+  - 只展示 AI 人工复核项。
+  - 支持关键词、风险等级、人工状态筛选。
+  - 支持待复核项选择。
+  - 支持批量人工通过。
+  - 支持批量人工打回，打回必须填写统一原因。
+  - 支持分页。
+- 实现人工复核详情页：
+  - 展示 AI 审核结果、风险等级、命中原因和异常降级原因。
+  - 展示提交快照、原始数据和 schema 版本。
+  - 使用 `DynamicFormRenderer` 的 `readOnly` 模式渲染提交答案。
+  - 支持人工通过、人工打回、修订建议。
+  - 人工打回和修订建议必须填写原因或建议。
+  - 操作前二次确认。
+  - 操作后写入人工审核记录和审计时间线。
+  - 人工完成后提供下一条待复核入口。
+- 实现审核历史页面：
+  - 只读查看 AI 通过、AI 打回、AI 转人工和人工完成记录。
+  - 支持关键词和 AI 结论筛选。
+  - 支持进入详情回看。
+- 扩展标注员“我的数据”页面：
+  - 展示 AI 审核结果。
+  - 展示审核来源，区分 AI 审核和人工审核。
+  - 人工打回结果可回流为待修改状态。
+- 补充 Reviewer 页面样式，覆盖队列、详情、只读表单、操作区和历史页。
+
+### 当前约束
+
+- 计划五仍使用前端 Mock 服务层，不接真实后端。
+- AI 审核只通过 Mock 规则模拟，不调用真实模型。
+- AI 异常当前按 Mock 兜底进入人工复核。
+- 人工审核结果同步到标注员侧依赖前端内存回调，刷新页面后仍回到初始 Mock 数据。
+- 批量人工复核当前使用统一原因，不支持逐条填写不同原因。
+- 审核历史、审计时间线和提交快照都来自前端 Mock，不具备真实持久化能力。
+
+### 未验证
+
+- 本阶段未运行 `npm run build`。
+- 本阶段未运行 `npm run lint`。
+- 此前执行 `nvm list` 时当前 shell 找不到 `nvm`。
+- 此前尝试 `npm run build` 时被用户中断，后续按用户意图未继续执行 npm 命令。
+- 已执行 `git diff --check -- .\src`，未发现空白错误，仅有 Git 行尾转换提示。

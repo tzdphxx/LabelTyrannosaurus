@@ -37,13 +37,13 @@ const roleHomeContent: Record<
   },
   reviewer: {
     headline: '审核员工作台',
-    summary: '后续承载待审队列、审核详情、AI 预审结果回看和审核历史。',
+    summary: '后续承载 AI 人工复核队列、审核详情、AI 审核结果回看和审核历史。',
     metrics: [
-      { label: '审核队列', value: '预留' },
-      { label: '审核详情', value: '预留' },
+      { label: '人工复核队列', value: 'P0' },
+      { label: 'AI 审核结果', value: 'P0' },
       { label: '审核历史', value: '预留' },
     ],
-    nextSteps: ['待审队列入口', '审核操作入口', '审核记录入口'],
+    nextSteps: ['人工复核队列入口', 'AI 审核结果入口', '人工审核记录入口'],
   },
 }
 

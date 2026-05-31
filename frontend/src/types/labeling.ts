@@ -1,4 +1,5 @@
 import type { DynamicFormSchema, DynamicFormSubmitResult } from './dynamicForm'
+import type { AiReviewDecision, SubmissionReviewStatus } from './review'
 
 export type LabelerTaskStatus =
   | 'available'
@@ -28,6 +29,10 @@ export interface LabelerTaskSummary {
   submittedAt?: string
   reviewedAt?: string
   rejectReason?: string
+  reviewSource?: 'ai' | 'manual'
+  reviewStatus?: SubmissionReviewStatus
+  aiDecision?: AiReviewDecision
+  aiReviewSummary?: string
 }
 
 export interface LabelerTaskListQuery {
@@ -66,6 +71,10 @@ export interface LabelingSubmission {
   reviewedAt?: string
   rejectReason?: string
   reviewComment?: string
+  reviewSource?: 'ai' | 'manual'
+  reviewStatus?: SubmissionReviewStatus
+  aiDecision?: AiReviewDecision
+  aiReviewSummary?: string
   answers: DynamicFormSubmitResult[]
 }
 

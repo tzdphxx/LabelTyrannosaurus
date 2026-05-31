@@ -8,7 +8,7 @@ import { useLabelingStore } from '../../stores/labelingStore'
 import type { LabelingSubmission } from '../../types/labeling'
 
 const statusLabels: Record<LabelingSubmission['status'], string> = {
-  submitted: '已提交',
+  submitted: '待人工复核',
   approved: '已通过',
   rejected: '待修改',
 }
@@ -21,10 +21,32 @@ const statusColors: Record<LabelingSubmission['status'], string> = {
 
 const statusOptions = [
   { label: '全部状态', value: 'all' },
-  { label: '已提交', value: 'submitted' },
+  { label: '待人工复核', value: 'submitted' },
   { label: '已通过', value: 'approved' },
   { label: '待修改', value: 'rejected' },
 ]
+
+const aiDecisionLabels: Record<NonNullable<LabelingSubmission['aiDecision']>, string> = {
+  pass: 'AI 通过',
+  manual_review: 'AI 转人工',
+  reject: 'AI 打回',
+}
+
+const aiDecisionColors: Record<NonNullable<LabelingSubmission['aiDecision']>, string> = {
+  pass: 'success',
+  manual_review: 'processing',
+  reject: 'error',
+}
+
+const reviewSourceLabels: Record<NonNullable<LabelingSubmission['reviewSource']>, string> = {
+  ai: 'AI 审核',
+  manual: '人工审核',
+}
+
+const reviewSourceColors: Record<NonNullable<LabelingSubmission['reviewSource']>, string> = {
+  ai: 'blue',
+  manual: 'purple',
+}
 
 export function LabelerSubmissionsPage() {
   const navigate = useNavigate()
@@ -49,7 +71,8 @@ export function LabelerSubmissionsPage() {
         normalizedKeyword.length === 0 ||
         submission.taskTitle.toLowerCase().includes(normalizedKeyword) ||
         submission.rejectReason?.toLowerCase().includes(normalizedKeyword) ||
-        submission.reviewComment?.toLowerCase().includes(normalizedKeyword)
+        submission.reviewComment?.toLowerCase().includes(normalizedKeyword) ||
+        submission.aiReviewSummary?.toLowerCase().includes(normalizedKeyword)
 
       return matchesStatus && matchesKeyword
     })
@@ -109,6 +132,7 @@ export function LabelerSubmissionsPage() {
                 <Space direction="vertical" size={4}>
                   <Typography.Text strong>{submission.taskTitle}</Typography.Text>
                   <Typography.Text type="secondary">提交时间：{submission.submittedAt}</Typography.Text>
+                  {submission.aiReviewSummary ? <Typography.Text type="secondary">{submission.aiReviewSummary}</Typography.Text> : null}
                   {submission.rejectReason ? <Typography.Text type="danger">{submission.rejectReason}</Typography.Text> : null}
                 </Space>
               ),
@@ -118,6 +142,20 @@ export function LabelerSubmissionsPage() {
               dataIndex: 'status',
               width: 110,
               render: (value: LabelingSubmission['status']) => <Tag color={statusColors[value]}>{statusLabels[value]}</Tag>,
+            },
+            {
+              title: 'AI 结果',
+              dataIndex: 'aiDecision',
+              width: 120,
+              render: (value?: LabelingSubmission['aiDecision']) =>
+                value ? <Tag color={aiDecisionColors[value]}>{aiDecisionLabels[value]}</Tag> : '-',
+            },
+            {
+              title: '审核来源',
+              dataIndex: 'reviewSource',
+              width: 150,
+              render: (value?: LabelingSubmission['reviewSource']) =>
+                value ? <Tag color={reviewSourceColors[value]}>{reviewSourceLabels[value]}</Tag> : '-',
             },
             {
               title: '审核时间',
@@ -164,6 +202,12 @@ export function LabelerSubmissionsPage() {
         <Space direction="vertical" size={12}>
           <Typography.Text>提交时间：{previewSubmission?.submittedAt}</Typography.Text>
           <Typography.Text>审核结果：{previewSubmission ? statusLabels[previewSubmission.status] : '-'}</Typography.Text>
+          {previewSubmission?.aiDecision ? (
+            <Typography.Text>AI 结果：{aiDecisionLabels[previewSubmission.aiDecision]}</Typography.Text>
+          ) : null}
+          {previewSubmission?.reviewSource ? (
+            <Typography.Text>审核来源：{reviewSourceLabels[previewSubmission.reviewSource]}</Typography.Text>
+          ) : null}
           {previewSubmission?.reviewComment ? <Typography.Paragraph>{previewSubmission.reviewComment}</Typography.Paragraph> : null}
           <pre className="labeler-history-card__content">{JSON.stringify(previewSubmission?.answers ?? [], null, 2)}</pre>
         </Space>

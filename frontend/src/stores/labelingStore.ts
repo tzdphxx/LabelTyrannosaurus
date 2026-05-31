@@ -212,9 +212,15 @@ export const useLabelingStore = create<LabelingStore>((set, get) => ({
           result.submission && state.currentTask
             ? {
                 ...state.currentTask,
-                status: 'submitted',
+                status: result.submission.status,
                 completedQuestions: state.currentTask.totalQuestions,
                 submittedAt: result.submission.submittedAt,
+                reviewedAt: result.submission.reviewedAt,
+                rejectReason: result.submission.rejectReason,
+                reviewSource: result.submission.reviewSource,
+                reviewStatus: result.submission.reviewStatus,
+                aiDecision: result.submission.aiDecision,
+                aiReviewSummary: result.submission.aiReviewSummary,
               }
             : state.currentTask,
       }))

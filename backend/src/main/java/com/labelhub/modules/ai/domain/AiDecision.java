@@ -2,6 +2,6 @@ package com.labelhub.modules.ai.domain;
 
 public enum AiDecision {
     PASS,
-    REJECT,
+    RETURN,
     MANUAL_REVIEW
 }

@@ -10,7 +10,7 @@ spring:
         options:
           model: ${AI_DASHSCOPE_CHAT_MODEL:qwen-plus}
   datasource:
-    url: jdbc:mysql://${DB_HOST:127.0.0.1}:${DB_PORT:3306}/${DB_NAME:labelhub}?useSSL=false&serverTimezone=Asia/Shanghai&characterEncoding=utf8
+    url: jdbc:mysql://${DB_HOST:127.0.0.1}:${DB_PORT:3306}/${DB_NAME:labelhub}?useSSL=false&serverTimezone=Asia/Shanghai&characterEncoding=utf8&allowPublicKeyRetrieval=true
     username: ${DB_USERNAME:labelhub}
     password: ${DB_PASSWORD:labelhub}
     driver-class-name: com.mysql.cj.jdbc.Driver
@@ -22,6 +22,8 @@ spring:
   flyway:
     enabled: true
     locations: classpath:db/migration
+    baseline-on-migrate: true
+    validate-on-migrate: false
   servlet:
     multipart:
       max-file-size: 200MB
@@ -31,15 +33,32 @@ server:
   port: 8080
 
 labelhub:
+  security:
+    jwt:
+      secret: ${JWT_SECRET:labelhub-development-secret-key-change-me-please-32-bytes}
+      access-token-ttl-minutes: ${JWT_ACCESS_TOKEN_TTL_MINUTES:120}
+      refresh-token-ttl-days: ${JWT_REFRESH_TOKEN_TTL_DAYS:14}
   ai:
     provider: dashscope
     chat-model: ${AI_DASHSCOPE_CHAT_MODEL:qwen-plus}
+  llm:
+    key-encryption-secret: ${LABELHUB_LLM_KEY_ENCRYPTION_SECRET:}
+    gateway:
+      timeout-ms: ${LABELHUB_LLM_GATEWAY_TIMEOUT_MS:30000}
   cos:
     secret-id: ${COS_SECRET_ID:replace-me}
     secret-key: ${COS_SECRET_KEY:replace-me}
     region: ${COS_REGION:ap-guangzhou}
     bucket: ${COS_BUCKET:labelhub-0000000000}
     endpoint: ${COS_ENDPOINT:}
+  storage:
+    bucket: ${COS_BUCKET:labelhub-0000000000}
+    max-file-size-bytes: ${STORAGE_MAX_FILE_SIZE_BYTES:209715200}
+    signed-url-ttl: ${STORAGE_SIGNED_URL_TTL:10m}
+  redis:
+    rate-limit:
+      default-rate: ${REDIS_RATE_LIMIT_DEFAULT_RATE:60}
+      default-interval: ${REDIS_RATE_LIMIT_DEFAULT_INTERVAL:60s}
 
 mybatis-plus:
   configuration:

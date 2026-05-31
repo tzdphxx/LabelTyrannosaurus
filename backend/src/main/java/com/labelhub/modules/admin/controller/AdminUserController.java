@@ -5,6 +5,8 @@ import com.labelhub.modules.admin.dto.AdminUserResponse;
 import com.labelhub.modules.admin.dto.CreateReviewerRequest;
 import com.labelhub.modules.admin.dto.UpdateUserRolesRequest;
 import com.labelhub.modules.admin.service.AdminUserService;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -27,6 +29,7 @@ import java.util.List;
 @RestController
 @RequestMapping("/api/v1/admin/users")
 @PreAuthorize("hasRole('ADMIN')")
+@Tag(name = "用户管理", description = "管理员用户列表、角色调整和账号启停")
 public class AdminUserController {
 
     private final AdminUserService adminUserService;
@@ -45,6 +48,7 @@ public class AdminUserController {
      * @return 用户基础信息和角色集合
      */
     @GetMapping
+    @Operation(summary = "用户列表", description = "查询后台用户列表，默认排除系统用户。")
     public ApiResponse<List<AdminUserResponse>> listUsers(@RequestParam(defaultValue = "false") boolean includeSystem) {
         return ApiResponse.ok(adminUserService.listUsers(includeSystem));
     }
@@ -60,8 +64,9 @@ public class AdminUserController {
      * @return 空响应体
      */
     @PutMapping("/{userId}/roles")
-    public ApiResponse<Void> changeRoles(@PathVariable Long userId, @Valid @RequestBody UpdateUserRolesRequest request) {
-        adminUserService.changeRoles(userId, request.roles());
+    @Operation(summary = "修改用户角色", description = "替换用户的单个角色，并递增 tokenVersion 使旧令牌失效。")
+    public ApiResponse<Void> changeRole(@PathVariable Long userId, @Valid @RequestBody UpdateUserRolesRequest request) {
+        adminUserService.changeRole(userId, request.role());
         return ApiResponse.ok(null);
     }
 
@@ -74,6 +79,7 @@ public class AdminUserController {
      * @return 空响应体
      */
     @PostMapping("/{userId}/enable")
+    @Operation(summary = "启用用户", description = "启用账号并递增 tokenVersion。")
     public ApiResponse<Void> enableUser(@PathVariable Long userId) {
         adminUserService.enableUser(userId);
         return ApiResponse.ok(null);
@@ -88,6 +94,7 @@ public class AdminUserController {
      * @return 空响应体
      */
     @PostMapping("/{userId}/disable")
+    @Operation(summary = "禁用用户", description = "禁用账号并递增 tokenVersion，使已有令牌失效。")
     public ApiResponse<Void> disableUser(@PathVariable Long userId) {
         adminUserService.disableUser(userId);
         return ApiResponse.ok(null);

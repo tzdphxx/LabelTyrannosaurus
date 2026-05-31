@@ -3,12 +3,17 @@ package com.labelhub.infrastructure.storage;
 import com.qcloud.cos.COSClient;
 import com.qcloud.cos.http.HttpMethodName;
 import com.qcloud.cos.model.GeneratePresignedUrlRequest;
+import com.qcloud.cos.model.COSObject;
+import com.qcloud.cos.model.COSObjectInputStream;
 import com.qcloud.cos.model.ObjectMetadata;
+import org.apache.http.client.methods.HttpRequestBase;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 
 import java.io.ByteArrayInputStream;
+import java.io.InputStream;
 import java.net.URL;
+import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -56,5 +61,22 @@ class ObjectStorageServiceTest {
         assertThat(request.getResponseHeaders().getContentDisposition())
                 .contains("attachment")
                 .contains("dataset.jsonl");
+    }
+
+    @Test
+    void openReadStreamReturnsCosObjectContent() throws Exception {
+        COSObject cosObject = new COSObject();
+        cosObject.setObjectContent(new COSObjectInputStream(
+                new ByteArrayInputStream("{\"externalId\":\"q1\"}".getBytes(StandardCharsets.UTF_8)),
+                mock(HttpRequestBase.class)
+        ));
+        when(cosClient.getObject("bucket-1", "uploads/dataset/file.jsonl")).thenReturn(cosObject);
+
+        try (InputStream inputStream = objectStorageService.openReadStream("bucket-1", "uploads/dataset/file.jsonl")) {
+            assertThat(new String(inputStream.readAllBytes(), StandardCharsets.UTF_8))
+                    .isEqualTo("{\"externalId\":\"q1\"}");
+        }
+
+        verify(cosClient).getObject("bucket-1", "uploads/dataset/file.jsonl");
     }
 }

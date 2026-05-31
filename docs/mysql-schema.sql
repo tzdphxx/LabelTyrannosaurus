@@ -63,6 +63,7 @@ CREATE TABLE user_roles (
   user_id BIGINT NOT NULL,
   role_code VARCHAR(32) NOT NULL,
   created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  UNIQUE KEY uk_user_roles_user (user_id),
   UNIQUE KEY uk_user_roles_user_role (user_id, role_code),
   KEY idx_user_roles_role (role_code),
   CONSTRAINT fk_user_roles_user FOREIGN KEY (user_id) REFERENCES users(id),

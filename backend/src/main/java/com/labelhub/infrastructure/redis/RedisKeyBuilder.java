@@ -20,4 +20,12 @@ public final class RedisKeyBuilder {
     public static String eventDedup(String eventType, Object eventId) {
         return "event:dedup:%s:%s".formatted(eventType, eventId);
     }
+
+    public static String rewardRule(Long taskId) {
+        return "lock:reward-rule:task:%d".formatted(taskId);
+    }
+
+    public static String aiReviewStream(Long taskId) {
+        return "ai:review:stream:task:%d".formatted(taskId);
+    }
 }

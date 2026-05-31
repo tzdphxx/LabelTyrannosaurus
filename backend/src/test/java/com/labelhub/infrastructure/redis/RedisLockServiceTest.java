@@ -30,6 +30,8 @@ class RedisLockServiceTest {
                 .isEqualTo("llm:rate:task:13");
         assertThat(RedisKeyBuilder.eventDedup("SubmissionApproved", "evt-15"))
                 .isEqualTo("event:dedup:SubmissionApproved:evt-15");
+        assertThat(RedisKeyBuilder.rewardRule(17L))
+                .isEqualTo("lock:reward-rule:task:17");
     }
 
     @Test

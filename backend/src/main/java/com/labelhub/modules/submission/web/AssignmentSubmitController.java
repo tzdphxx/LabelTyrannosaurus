@@ -5,6 +5,8 @@ import com.labelhub.common.security.CurrentUserContext;
 import com.labelhub.modules.submission.dto.SubmissionSubmitRequest;
 import com.labelhub.modules.submission.dto.SubmissionSubmitResponse;
 import com.labelhub.modules.submission.service.SubmissionSubmitService;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -14,6 +16,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/api/v1/assignments/{assignmentId}/submit")
+@Tag(name = "提交", description = "标注答案提交")
 public class AssignmentSubmitController {
 
     private final SubmissionSubmitService submissionSubmitService;
@@ -23,6 +26,7 @@ public class AssignmentSubmitController {
     }
 
     @PostMapping
+    @Operation(summary = "提交标注答案", description = "提交当前 assignment 的最终答案。")
     public ApiResponse<SubmissionSubmitResponse> submit(@PathVariable Long assignmentId,
                                                         @Valid @RequestBody SubmissionSubmitRequest request) {
         return ApiResponse.ok(submissionSubmitService.submit(

@@ -5,6 +5,8 @@ import com.labelhub.modules.export.dto.CreateExportRequest;
 import com.labelhub.modules.export.dto.ExportJobPageResponse;
 import com.labelhub.modules.export.dto.ExportJobResponse;
 import com.labelhub.modules.export.service.ExportJobService;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -24,6 +26,7 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/api/v1/tasks/{taskId}/exports")
 @PreAuthorize("hasAnyRole('ADMIN','OWNER')")
+@Tag(name = "导出", description = "任务数据导出任务")
 public class ExportController {
 
     private final ExportJobService exportJobService;
@@ -36,6 +39,7 @@ public class ExportController {
      * 创建导出任务。
      */
     @PostMapping
+    @Operation(summary = "创建导出任务", description = "按任务创建异步导出任务。")
     public ApiResponse<ExportJobResponse> create(@PathVariable Long taskId,
                                                  @Valid @RequestBody CreateExportRequest request,
                                                  HttpServletRequest httpServletRequest) {
@@ -46,6 +50,7 @@ public class ExportController {
      * 查询导出历史。
      */
     @GetMapping
+    @Operation(summary = "导出任务列表", description = "分页查询任务导出历史。")
     public ApiResponse<ExportJobPageResponse> list(@PathVariable Long taskId,
                                                    @RequestParam(required = false) Integer page,
                                                    @RequestParam(required = false) Integer pageSize) {
@@ -56,6 +61,7 @@ public class ExportController {
      * 查询导出任务详情。
      */
     @GetMapping("/{exportJobId}")
+    @Operation(summary = "导出任务详情", description = "查询导出任务状态和下载信息。")
     public ApiResponse<ExportJobResponse> detail(@PathVariable Long taskId, @PathVariable Long exportJobId) {
         return ApiResponse.ok(exportJobService.getExportJob(taskId, exportJobId));
     }

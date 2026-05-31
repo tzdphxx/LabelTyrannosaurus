@@ -7,6 +7,8 @@ import com.labelhub.modules.review.dto.ConflictGroupResponse;
 import com.labelhub.modules.review.dto.ConflictResolveRequest;
 import com.labelhub.modules.review.dto.ConflictResolveResponse;
 import com.labelhub.modules.review.service.ConflictResolveService;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import java.util.List;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -18,6 +20,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/api/v1/reviewer/conflict-groups")
+@Tag(name = "审核", description = "冲突组查询和仲裁")
 public class ConflictController {
 
     private final ConflictResolveService conflictResolveService;
@@ -27,18 +30,21 @@ public class ConflictController {
     }
 
     @GetMapping
+    @Operation(summary = "冲突组列表", description = "查询待解决冲突组。")
     public ApiResponse<List<ConflictGroupResponse>> listOpenGroups() {
         CurrentUserContext.requireRole(RoleCode.REVIEWER);
         return ApiResponse.ok(conflictResolveService.listOpenGroups());
     }
 
     @GetMapping("/{groupId}")
+    @Operation(summary = "冲突组详情", description = "查询冲突组详情。")
     public ApiResponse<ConflictGroupResponse> getGroup(@PathVariable Long groupId) {
         CurrentUserContext.requireRole(RoleCode.REVIEWER);
         return ApiResponse.ok(conflictResolveService.getGroup(groupId));
     }
 
     @PostMapping("/{groupId}/resolve")
+    @Operation(summary = "解决冲突组", description = "选择最终提交并完成冲突仲裁。")
     public ApiResponse<ConflictResolveResponse> resolve(@PathVariable Long groupId,
                                                          @Valid @RequestBody ConflictResolveRequest request) {
         CurrentUserContext.requireRole(RoleCode.REVIEWER);

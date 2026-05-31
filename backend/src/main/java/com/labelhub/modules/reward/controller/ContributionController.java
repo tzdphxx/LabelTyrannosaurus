@@ -6,6 +6,8 @@ import com.labelhub.modules.reward.dto.DailyContributionPoint;
 import com.labelhub.modules.reward.dto.RewardLedgerResponse;
 import com.labelhub.modules.reward.dto.TaskContributionResponse;
 import com.labelhub.modules.reward.service.ContributionStatsService;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -20,6 +22,7 @@ import java.util.List;
 @RestController
 @RequestMapping("/api/v1/labeler")
 @PreAuthorize("hasAnyRole('LABELER','ADMIN')")
+@Tag(name = "奖励", description = "标注员贡献统计和奖励流水")
 public class ContributionController {
 
     private final ContributionStatsService contributionStatsService;
@@ -32,6 +35,7 @@ public class ContributionController {
      * 查询当前标注员贡献总览，待审核提交不进入通过率分母。
      */
     @GetMapping("/contribution/overview")
+    @Operation(summary = "贡献概览", description = "查询当前标注员贡献总览。")
     public ApiResponse<ContributionOverviewResponse> overview() {
         return ApiResponse.ok(contributionStatsService.getOverview());
     }
@@ -40,6 +44,7 @@ public class ContributionController {
      * 查询近 N 日贡献趋势；缺失日期由服务层补零。
      */
     @GetMapping("/contribution/trend")
+    @Operation(summary = "贡献趋势", description = "查询最近 N 天贡献趋势。")
     public ApiResponse<List<DailyContributionPoint>> trend(@RequestParam(required = false) Integer days) {
         return ApiResponse.ok(contributionStatsService.getTrend(days));
     }
@@ -48,6 +53,7 @@ public class ContributionController {
      * 查询当前标注员按任务聚合的贡献统计。
      */
     @GetMapping("/contribution/tasks")
+    @Operation(summary = "任务贡献统计", description = "按任务聚合查询当前标注员贡献。")
     public ApiResponse<List<TaskContributionResponse>> tasks(@RequestParam(required = false) Integer limit,
                                                              @RequestParam(required = false) Integer offset) {
         return ApiResponse.ok(contributionStatsService.getTasks(limit, offset));
@@ -57,6 +63,7 @@ public class ContributionController {
      * 查询当前标注员奖励流水，包含正向奖励和冲正记录。
      */
     @GetMapping("/rewards/ledger")
+    @Operation(summary = "奖励流水", description = "查询当前标注员奖励和冲正流水。")
     public ApiResponse<List<RewardLedgerResponse>> ledger(@RequestParam(required = false) Integer limit,
                                                           @RequestParam(required = false) Integer offset) {
         return ApiResponse.ok(contributionStatsService.getLedger(limit, offset));

@@ -4,6 +4,8 @@ import com.labelhub.common.api.ApiResponse;
 import com.labelhub.modules.template.dto.SchemaValidationError;
 import com.labelhub.modules.template.dto.ValidateAnswerRequest;
 import com.labelhub.modules.template.service.SchemaValidationService;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -21,6 +23,7 @@ import java.util.List;
 @RestController
 @RequestMapping("/api/v1/schema")
 @PreAuthorize("hasAnyRole('ADMIN','OWNER')")
+@Tag(name = "模板", description = "Schema 和答案预校验")
 public class SchemaValidationController {
 
     private final SchemaValidationService schemaValidationService;
@@ -33,6 +36,7 @@ public class SchemaValidationController {
      * 按指定模板版本校验答案 JSON。
      */
     @PostMapping("/validate-answer")
+    @Operation(summary = "校验答案 JSON", description = "按模板版本 Schema 校验答案 JSON，不修改业务数据。")
     public ApiResponse<List<SchemaValidationError>> validateAnswer(
             @Valid @RequestBody ValidateAnswerRequest request) {
         return ApiResponse.ok(schemaValidationService.validateAnswer(

@@ -7,6 +7,7 @@ import com.labelhub.modules.auth.domain.UserEntity;
 import com.labelhub.modules.auth.repository.UserMapper;
 import com.labelhub.modules.auth.repository.UserRoleMapper;
 import org.junit.jupiter.api.Test;
+import org.springframework.security.crypto.password.PasswordEncoder;
 
 import java.util.Set;
 
@@ -19,7 +20,8 @@ class AdminUserServiceTest {
 
     private final UserMapper userMapper = mock(UserMapper.class);
     private final UserRoleMapper userRoleMapper = mock(UserRoleMapper.class);
-    private final AdminUserService adminUserService = new AdminUserService(userMapper, userRoleMapper);
+    private final PasswordEncoder passwordEncoder = mock(PasswordEncoder.class);
+    private final AdminUserService adminUserService = new AdminUserService(userMapper, userRoleMapper, passwordEncoder);
 
     @Test
     void changeRolesIncrementsTokenVersion() {

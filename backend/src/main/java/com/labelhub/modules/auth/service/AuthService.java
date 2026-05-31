@@ -29,7 +29,7 @@ import java.util.Set;
 @Service
 public class AuthService {
 
-    private static final Set<RoleCode> DEFAULT_REGISTER_ROLES = Set.of(RoleCode.LABELER);
+    private static final Set<String> ALLOWED_REGISTER_ROLES = Set.of("OWNER", "LABELER");
 
     private final UserMapper userMapper;
     private final UserRoleMapper userRoleMapper;
@@ -54,9 +54,13 @@ public class AuthService {
      */
     @Transactional
     public TokenResponse register(RegisterRequest request) {
+        if (!ALLOWED_REGISTER_ROLES.contains(request.role().toUpperCase())) {
+            throw new BusinessException(400101, "Role must be OWNER or LABELER");
+        }
         if (userMapper.selectByUsername(request.username()) != null || userMapper.selectByEmail(request.email()) != null) {
             throw new BusinessException(400102, "Username or email already exists");
         }
+        RoleCode selectedRole = RoleCode.valueOf(request.role().toUpperCase());
         UserEntity user = new UserEntity();
         user.setUsername(request.username());
         user.setEmail(request.email());
@@ -66,8 +70,8 @@ public class AuthService {
         user.setLoginEnabled(true);
         user.setTokenVersion(1);
         userMapper.insert(user);
-        userRoleMapper.insert(new UserRoleEntity(user.getId(), RoleCode.LABELER));
-        return issueTokens(user, DEFAULT_REGISTER_ROLES);
+        userRoleMapper.insert(new UserRoleEntity(user.getId(), selectedRole));
+        return issueTokens(user, Set.of(selectedRole));
     }
 
     /**

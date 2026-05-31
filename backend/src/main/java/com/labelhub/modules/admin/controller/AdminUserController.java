@@ -2,6 +2,7 @@ package com.labelhub.modules.admin.controller;
 
 import com.labelhub.common.api.ApiResponse;
 import com.labelhub.modules.admin.dto.AdminUserResponse;
+import com.labelhub.modules.admin.dto.CreateReviewerRequest;
 import com.labelhub.modules.admin.dto.UpdateUserRolesRequest;
 import com.labelhub.modules.admin.service.AdminUserService;
 import jakarta.validation.Valid;
@@ -90,5 +91,10 @@ public class AdminUserController {
     public ApiResponse<Void> disableUser(@PathVariable Long userId) {
         adminUserService.disableUser(userId);
         return ApiResponse.ok(null);
+    }
+
+    @PostMapping("/reviewers")
+    public ApiResponse<AdminUserResponse> createReviewer(@Valid @RequestBody CreateReviewerRequest request) {
+        return ApiResponse.ok(adminUserService.createReviewer(request));
     }
 }

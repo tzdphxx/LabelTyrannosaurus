@@ -45,7 +45,7 @@ class AuthServiceTest {
         when(jwtTokenService.createAccessToken(10L, "labeler", Set.of(RoleCode.LABELER), 1)).thenReturn("access");
         when(jwtTokenService.createRefreshToken(10L, "labeler", 1)).thenReturn("refresh");
 
-        var response = authService.register(new RegisterRequest("labeler", "labeler@example.com", "Password123"));
+        var response = authService.register(new RegisterRequest("labeler", "labeler@example.com", "Password123", "LABELER"));
 
         assertThat(response.accessToken()).isEqualTo("access");
         verify(userMapper).insert(any(UserEntity.class));
@@ -56,7 +56,7 @@ class AuthServiceTest {
     void registerRejectsDuplicateUsername() {
         when(userMapper.selectByUsername("labeler")).thenReturn(new UserEntity());
 
-        assertThatThrownBy(() -> authService.register(new RegisterRequest("labeler", "new@example.com", "Password123")))
+        assertThatThrownBy(() -> authService.register(new RegisterRequest("labeler", "new@example.com", "Password123", "LABELER")))
                 .isInstanceOf(BusinessException.class)
                 .extracting("code")
                 .isEqualTo(400102);

@@ -20,7 +20,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
-@RequestMapping("/api/v1/admin/llm-providers")
+@RequestMapping("/api/v1/llm-providers")
 public class LlmProviderController {
 
     private final LlmProviderService llmProviderService;
@@ -31,39 +31,39 @@ public class LlmProviderController {
 
     @GetMapping
     public ApiResponse<List<LlmProviderResponse>> list() {
-        CurrentUserContext.requireRole(RoleCode.ADMIN);
-        return ApiResponse.ok(llmProviderService.list());
+        Long ownerId = CurrentUserContext.requireRole(RoleCode.OWNER).userId();
+        return ApiResponse.ok(llmProviderService.list(ownerId));
     }
 
     @PostMapping
     public ApiResponse<LlmProviderResponse> create(@Valid @RequestBody CreateLlmProviderRequest request) {
-        Long actorId = CurrentUserContext.requireRole(RoleCode.ADMIN).userId();
+        Long actorId = CurrentUserContext.requireRole(RoleCode.OWNER).userId();
         return ApiResponse.ok(llmProviderService.create(actorId, request));
     }
 
     @PutMapping("/{providerId}")
     public ApiResponse<LlmProviderResponse> update(@PathVariable Long providerId,
                                                    @Valid @RequestBody UpdateLlmProviderRequest request) {
-        Long actorId = CurrentUserContext.requireRole(RoleCode.ADMIN).userId();
+        Long actorId = CurrentUserContext.requireRole(RoleCode.OWNER).userId();
         return ApiResponse.ok(llmProviderService.update(actorId, providerId, request));
     }
 
     @PostMapping("/{providerId}/enable")
     public ApiResponse<LlmProviderResponse> enable(@PathVariable Long providerId) {
-        Long actorId = CurrentUserContext.requireRole(RoleCode.ADMIN).userId();
+        Long actorId = CurrentUserContext.requireRole(RoleCode.OWNER).userId();
         return ApiResponse.ok(llmProviderService.enable(actorId, providerId));
     }
 
     @PostMapping("/{providerId}/disable")
     public ApiResponse<LlmProviderResponse> disable(@PathVariable Long providerId) {
-        Long actorId = CurrentUserContext.requireRole(RoleCode.ADMIN).userId();
+        Long actorId = CurrentUserContext.requireRole(RoleCode.OWNER).userId();
         return ApiResponse.ok(llmProviderService.disable(actorId, providerId));
     }
 
     @PostMapping("/{providerId}/test")
     public ApiResponse<LlmProviderTestResponse> test(@PathVariable Long providerId,
                                                      @Valid @RequestBody TestLlmProviderRequest request) {
-        CurrentUserContext.requireRole(RoleCode.ADMIN);
-        return ApiResponse.ok(llmProviderService.test(providerId, request));
+        Long ownerId = CurrentUserContext.requireRole(RoleCode.OWNER).userId();
+        return ApiResponse.ok(llmProviderService.test(ownerId, providerId, request));
     }
 }

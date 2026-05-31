@@ -123,7 +123,7 @@ class LlmProviderServiceTest {
         LlmProvider provider = persistedProvider();
         when(llmProviderMapper.selectList(any(Wrapper.class))).thenReturn(List.of(provider));
 
-        List<LlmProviderResponse> providers = service.list();
+        List<LlmProviderResponse> providers = service.list(ACTOR_ID);
 
         assertThat(providers).hasSize(1);
         assertThat(providers.get(0).apiKeyConfigured()).isTrue();
@@ -137,7 +137,7 @@ class LlmProviderServiceTest {
         when(llmProviderTester.test(any(LlmProviderRuntimeConfig.class)))
                 .thenReturn(new LlmProviderTestResponse(true, 12L, "OK"));
 
-        LlmProviderTestResponse response = service.test(PROVIDER_ID,
+        LlmProviderTestResponse response = service.test(ACTOR_ID, PROVIDER_ID,
                 new TestLlmProviderRequest(null, "qwen-max", Map.of("X-Test", "yes")));
 
         assertThat(response.success()).isTrue();
@@ -202,6 +202,7 @@ class LlmProviderServiceTest {
         provider.setPlatformRateLimitPerMinute(60);
         provider.setTaskRateLimitPerMinute(30);
         provider.setUserRateLimitPerMinute(10);
+        provider.setOwnerId(ACTOR_ID);
         provider.setCreatedBy(ACTOR_ID);
         return provider;
     }

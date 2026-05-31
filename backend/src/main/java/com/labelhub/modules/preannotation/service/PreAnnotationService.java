@@ -15,6 +15,7 @@ import com.labelhub.infrastructure.llm.LlmGatewayRequest;
 import com.labelhub.infrastructure.llm.LlmGatewayResponse;
 import com.labelhub.infrastructure.llm.LlmGatewayStatus;
 import com.labelhub.infrastructure.llm.LlmMessage;
+import com.labelhub.infrastructure.redis.RedisLockService;
 import com.labelhub.modules.agent.domain.AgentRun;
 import com.labelhub.modules.agent.domain.AgentRunStatus;
 import com.labelhub.modules.agent.service.AgentRunService;
@@ -79,6 +80,7 @@ public class PreAnnotationService {
     private final AuditAppender auditAppender;
     private final TraceIdProvider traceIdProvider;
     private final MediaPromptContextBuilder mediaPromptContextBuilder;
+    private final RedisLockService redisLockService;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     public PreAnnotationService(AssignmentMapper assignmentMapper,
@@ -93,7 +95,8 @@ public class PreAnnotationService {
                                 SubmissionMapper submissionMapper,
                                 AuditAppender auditAppender,
                                 TraceIdProvider traceIdProvider,
-                                MediaPromptContextBuilder mediaPromptContextBuilder) {
+                                MediaPromptContextBuilder mediaPromptContextBuilder,
+                                RedisLockService redisLockService) {
         this.assignmentMapper = assignmentMapper;
         this.taskMapper = taskMapper;
         this.datasetItemMapper = datasetItemMapper;
@@ -107,6 +110,7 @@ public class PreAnnotationService {
         this.auditAppender = auditAppender;
         this.traceIdProvider = traceIdProvider;
         this.mediaPromptContextBuilder = mediaPromptContextBuilder;
+        this.redisLockService = redisLockService;
     }
 
     public PreAnnotationResponse run(Long assignmentId, Long labelerId) {
@@ -120,11 +124,18 @@ public class PreAnnotationService {
         }
         validateRequest(assignment, request);
 
-        PreAnnotation running = preAnnotationMapper.selectRunningByAssignmentId(assignmentId);
-        if (running != null) {
-            return toResponse(running, false);
-        }
+        String lockKey = "lock:preannotation:" + assignmentId;
+        return redisLockService.withLock(lockKey, 2000L, 120000L, () -> {
+            PreAnnotation running = preAnnotationMapper.selectRunningByAssignmentId(assignmentId);
+            if (running != null) {
+                return toResponse(running, false);
+            }
+            return doRun(assignment, request);
+        });
+    }
 
+    private PreAnnotationResponse doRun(Assignment assignment, PreAnnotationRunRequest request) {
+        Long labelerId = assignment.getLabelerId();
         Task task = taskMapper.selectById(assignment.getTaskId());
         AiReviewConfig config = loadConfig(task);
         Long datasetItemId = request != null && request.datasetItemId() != null

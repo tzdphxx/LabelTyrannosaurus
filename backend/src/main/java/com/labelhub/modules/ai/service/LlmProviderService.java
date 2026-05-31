@@ -62,8 +62,10 @@ public class LlmProviderService {
         this.objectMapper = objectMapper;
     }
 
-    public List<LlmProviderResponse> list() {
-        return llmProviderMapper.selectList(new QueryWrapper<LlmProvider>().orderByDesc("updated_at"))
+    public List<LlmProviderResponse> list(Long ownerId) {
+        return llmProviderMapper.selectList(new QueryWrapper<LlmProvider>()
+                        .eq("owner_id", ownerId)
+                        .orderByDesc("updated_at"))
                 .stream()
                 .map(this::toResponse)
                 .toList();
@@ -78,6 +80,7 @@ public class LlmProviderService {
                 request.supportVision(), request.supportMultiImage(), request.maxImageCount(), request.visionModel());
         provider.setEncryptedApiKey(encryptor.encrypt(request.apiKey()));
         provider.setEnabled(true);
+        provider.setOwnerId(actorId);
         provider.setCreatedBy(actorId);
         llmProviderMapper.insert(provider);
         auditAppender.append(new AuditCommand(USER_ACTOR_TYPE, actorId, BIZ_TYPE, provider.getId(), "LLM_PROVIDER_CREATED",
@@ -87,7 +90,7 @@ public class LlmProviderService {
 
     @Transactional
     public LlmProviderResponse update(Long actorId, Long providerId, UpdateLlmProviderRequest request) {
-        LlmProvider provider = loadProvider(providerId);
+        LlmProvider provider = loadOwnedProvider(actorId, providerId);
         Map<String, Object> beforeJson = auditSnapshot(provider);
         applyProviderFields(provider, request.providerCode(), request.providerName(), request.baseUrl(),
                 request.defaultModel(), request.customHeaders(), request.platformRateLimitPerMinute(),
@@ -131,8 +134,8 @@ public class LlmProviderService {
                 ));
     }
 
-    public LlmProviderTestResponse test(Long providerId, TestLlmProviderRequest request) {
-        LlmProvider provider = loadProvider(providerId);
+    public LlmProviderTestResponse test(Long ownerId, Long providerId, TestLlmProviderRequest request) {
+        LlmProvider provider = loadOwnedProvider(ownerId, providerId);
         Map<String, String> headers = parseHeaders(provider.getCustomHeadersJson());
         headers.putAll(normalizeHeaders(request.customHeaders()));
         String apiKey = hasText(request.apiKey())
@@ -143,7 +146,7 @@ public class LlmProviderService {
     }
 
     private LlmProviderResponse setEnabled(Long actorId, Long providerId, boolean enabled, String action) {
-        LlmProvider provider = loadProvider(providerId);
+        LlmProvider provider = loadOwnedProvider(actorId, providerId);
         Map<String, Object> beforeJson = auditSnapshot(provider);
         provider.setEnabled(enabled);
         llmProviderMapper.updateById(provider);
@@ -187,6 +190,14 @@ public class LlmProviderService {
         return provider;
     }
 
+    private LlmProvider loadOwnedProvider(Long ownerId, Long providerId) {
+        LlmProvider provider = loadProvider(providerId);
+        if (!ownerId.equals(provider.getOwnerId())) {
+            throw new BusinessException(PROVIDER_NOT_FOUND, "LLM provider not found");
+        }
+        return provider;
+    }
+
     private LlmProviderResponse toResponse(LlmProvider provider) {
         return new LlmProviderResponse(
                 provider.getId(),
@@ -204,6 +215,7 @@ public class LlmProviderService {
                 provider.getMaxImageCount() != null ? provider.getMaxImageCount() : 10,
                 provider.getVisionModel(),
                 hasText(provider.getEncryptedApiKey()),
+                provider.getOwnerId(),
                 provider.getCreatedBy(),
                 provider.getCreatedAt(),
                 provider.getUpdatedAt()

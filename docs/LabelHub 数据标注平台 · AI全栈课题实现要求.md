@@ -44,17 +44,16 @@
 
 > 以下截图为帮助理解课题要求绘制的 UI 示意图，**非真实产品截图**，仅用于明确每个环节的核心交互、关键字段与状态流转。开发时请以本文档第四章的功能需求为准。
 
-![Image](https://internal-api-drive-stream.larkoffice.com/space/api/box/stream/download/authcode/?code=MjMxNzhjNzkzNDJkMWMwMjAwODFjZTg4NmY1ZDAxNTRfZmIxZTVhNTIyY2QxNzBkNTVkOGZiMDllNjNkYTk0YmVfSUQ6NzY0MTkyMzkxOTM0NzI4OTI4NV8xNzgwMDcwNTI2OjE3ODAxNTY5MjZfVjM)
+![任务发布|对应4.1任务管理:任务状态机(草稿/发布中/已暂停/已结束)、分发策略、配额与截止时间、发布前抽屉。](./LabelHub%20%E6%95%B0%E6%8D%AE%E6%A0%87%E6%B3%A8%E5%B9%B3%E5%8F%B0%20%C2%B7%20AI%E5%85%A8%E6%A0%88%E8%AF%BE%E9%A2%98%E5%AE%9E%E7%8E%B0%E8%A6%81%E6%B1%82.assets/image-20260531232015984.png)
 
-![Image](https://internal-api-drive-stream.larkoffice.com/space/api/box/stream/download/authcode/?code=NjRjYjFiOTA5ZWEwZWE3Zjk1NWQ5NGNjYzBhZGU2NTJfZGQ0Njg3ZmExMTdhOWE5ZDg2YzBkMTNhMDI4OWQ0M2RfSUQ6NzY0MTkyMzkxODA2NDAyODYwM18xNzgwMDcwNTI2OjE3ODAxNTY5MjZfVjM)
+![模板配置|对应4.2标注页面动态搭建:左侧物料中间画布(含LLM触发组件/展示项ShowItem)右侧属性/校验/联
+动配置。](./LabelHub%20%E6%95%B0%E6%8D%AE%E6%A0%87%E6%B3%A8%E5%B9%B3%E5%8F%B0%20%C2%B7%20AI%E5%85%A8%E6%A0%88%E8%AF%BE%E9%A2%98%E5%AE%9E%E7%8E%B0%E8%A6%81%E6%B1%82.assets/image-20260531232111385.png)
 
-![Image](https://internal-api-drive-stream.larkoffice.com/space/api/box/stream/download/authcode/?code=ZTQzMjRkMjY1ZjU3OTY0ZTM3MTJkMTNiNzhkYzg3NGJfNGNlY2UzOGMyNDU4NDY1NjdjYjdlYTllYjU0YTJlMWNfSUQ6NzY0MTkyMzkxODMyNDAyNjMyOV8xNzgwMDcwNTI2OjE3ODAxNTY5MjZfVjM)
+![标注台|对应4.3标注员工作台:题目导航/草稿自动保存/打回提示/题目级LLM辅助调用/提交校验。](./LabelHub%20%E6%95%B0%E6%8D%AE%E6%A0%87%E6%B3%A8%E5%B9%B3%E5%8F%B0%20%C2%B7%20AI%E5%85%A8%E6%A0%88%E8%AF%BE%E9%A2%98%E5%AE%9E%E7%8E%B0%E8%A6%81%E6%B1%82.assets/image-20260531232138577.png)
 
-![Image](https://internal-api-drive-stream.larkoffice.com/space/api/box/stream/download/authcode/?code=Y2RkMWI5NzQyNTQ4OGU1MjkzNGY2ZDMxYWU0ZjVkNWZfMDhkMTg5ODNiZjc4Y2ViNmVjYWUxN2E1ZDNjYmNkMWFfSUQ6NzY0MTkyMzkxODIzMTc1MTg3NF8xNzgwMDcwNTI2OjE3ODAxNTY5MjZfVjM)
+![机审(AI自动预审)|对应4.4 AI Agent:异步队列、维度评分(function_calling结构化输出)、Prompt模板、失败重试与人工兜底。](./LabelHub%20%E6%95%B0%E6%8D%AE%E6%A0%87%E6%B3%A8%E5%B9%B3%E5%8F%B0%20%C2%B7%20AI%E5%85%A8%E6%A0%88%E8%AF%BE%E9%A2%98%E5%AE%9E%E7%8E%B0%E8%A6%81%E6%B1%82.assets/image-20260531232214734.png)
 
-![Image](https://internal-api-drive-stream.larkoffice.com/space/api/box/stream/download/authcode/?code=ZTZiNGQwZDA2YTYyMWUyNWIzMGZiMDNlOWNkYjU3MGVfYWZmMzRiNDE5MzRhMGVjMzBlZmIyNTMwY2ZhNThhOTJfSUQ6NzY0MTkyMzkxNzgxNjY5NTc4MF8xNzgwMDcwNTI2OjE3ODAxNTY5MjZfVjM)
-
-
+![验收(人工审核流转)|对应4.5多角色审核流转:复审/终审视图、第1/2轮dif、AI评语、批量操作、完整审计时间线。](./LabelHub%20%E6%95%B0%E6%8D%AE%E6%A0%87%E6%B3%A8%E5%B9%B3%E5%8F%B0%20%C2%B7%20AI%E5%85%A8%E6%A0%88%E8%AF%BE%E9%A2%98%E5%AE%9E%E7%8E%B0%E8%A6%81%E6%B1%82.assets/image-20260531232246784.png)
 
 ---
 
@@ -278,11 +277,10 @@
 3. **演示视频**（5–10 分钟，覆盖三大角色完整链路）
 
 4. **相关文档**（架构图、关键技术点、Demo 截图）
-
     1. **AI Coding 过程记录（开发思路、过程文件）**
-
+    
     2. **基础技术文档**
-
+    
 5. **可访问的演示环境****说明文档**（任意云平台部署）
 
 6. **API 文档**（Postman Collection / API 文档（飞书文档、markdown文件等形式都可以） 任选）

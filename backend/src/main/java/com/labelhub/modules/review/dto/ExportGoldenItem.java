@@ -4,12 +4,15 @@ import com.labelhub.modules.ai.domain.AiDecision;
 
 public record ExportGoldenItem(
         Long submissionId,
+        Long taskId,
         Long datasetItemId,
+        String itemJsonRef,
         Long labelerId,
         Integer versionNo,
         String answerJson,
         AiDecision aiDecision,
         String aiSummary,
-        Long auditLogId
+        String reviewSummary,
+        Long auditRef
 ) {
 }

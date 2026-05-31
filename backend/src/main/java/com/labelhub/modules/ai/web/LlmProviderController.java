@@ -22,8 +22,8 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
-@RequestMapping("/api/v1/admin/llm-providers")
-@Tag(name = "大模型配置", description = "管理员维护大模型供应商")
+@RequestMapping("/api/v1/llm-providers")
+@Tag(name = "大模型配置", description = "OWNER 维护大模型供应商")
 public class LlmProviderController {
 
     private final LlmProviderService llmProviderService;
@@ -35,14 +35,14 @@ public class LlmProviderController {
     @GetMapping
     @Operation(summary = "供应商列表", description = "查询大模型供应商配置列表。")
     public ApiResponse<List<LlmProviderResponse>> list() {
-        CurrentUserContext.requireRole(RoleCode.ADMIN);
-        return ApiResponse.ok(llmProviderService.list());
+        Long ownerId = CurrentUserContext.requireRole(RoleCode.OWNER).userId();
+        return ApiResponse.ok(llmProviderService.list(ownerId));
     }
 
     @PostMapping
     @Operation(summary = "创建供应商", description = "创建大模型供应商配置。")
     public ApiResponse<LlmProviderResponse> create(@Valid @RequestBody CreateLlmProviderRequest request) {
-        Long actorId = CurrentUserContext.requireRole(RoleCode.ADMIN).userId();
+        Long actorId = CurrentUserContext.requireRole(RoleCode.OWNER).userId();
         return ApiResponse.ok(llmProviderService.create(actorId, request));
     }
 
@@ -50,21 +50,21 @@ public class LlmProviderController {
     @Operation(summary = "更新供应商", description = "更新大模型供应商配置。")
     public ApiResponse<LlmProviderResponse> update(@PathVariable Long providerId,
                                                    @Valid @RequestBody UpdateLlmProviderRequest request) {
-        Long actorId = CurrentUserContext.requireRole(RoleCode.ADMIN).userId();
+        Long actorId = CurrentUserContext.requireRole(RoleCode.OWNER).userId();
         return ApiResponse.ok(llmProviderService.update(actorId, providerId, request));
     }
 
     @PostMapping("/{providerId}/enable")
     @Operation(summary = "启用供应商", description = "启用大模型供应商。")
     public ApiResponse<LlmProviderResponse> enable(@PathVariable Long providerId) {
-        Long actorId = CurrentUserContext.requireRole(RoleCode.ADMIN).userId();
+        Long actorId = CurrentUserContext.requireRole(RoleCode.OWNER).userId();
         return ApiResponse.ok(llmProviderService.enable(actorId, providerId));
     }
 
     @PostMapping("/{providerId}/disable")
     @Operation(summary = "禁用供应商", description = "禁用大模型供应商。")
     public ApiResponse<LlmProviderResponse> disable(@PathVariable Long providerId) {
-        Long actorId = CurrentUserContext.requireRole(RoleCode.ADMIN).userId();
+        Long actorId = CurrentUserContext.requireRole(RoleCode.OWNER).userId();
         return ApiResponse.ok(llmProviderService.disable(actorId, providerId));
     }
 
@@ -72,7 +72,7 @@ public class LlmProviderController {
     @Operation(summary = "测试供应商", description = "测试大模型供应商连通性。")
     public ApiResponse<LlmProviderTestResponse> test(@PathVariable Long providerId,
                                                      @Valid @RequestBody TestLlmProviderRequest request) {
-        CurrentUserContext.requireRole(RoleCode.ADMIN);
-        return ApiResponse.ok(llmProviderService.test(providerId, request));
+        Long ownerId = CurrentUserContext.requireRole(RoleCode.OWNER).userId();
+        return ApiResponse.ok(llmProviderService.test(ownerId, providerId, request));
     }
 }

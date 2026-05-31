@@ -8,6 +8,7 @@ import static org.mockito.Mockito.when;
 
 import com.labelhub.modules.ai.service.LlmProviderRuntimeConfig;
 import com.labelhub.modules.ai.service.LlmProviderService;
+import com.labelhub.modules.ai.service.ProviderCapability;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -110,6 +111,33 @@ class DefaultLlmGatewayTest {
         assertThat(gateway.review(request(20L, null, "b")).status()).isEqualTo(LlmGatewayStatus.SUCCESS);
         verify(adapter).chat(config("qwen-plus"), List.of(new LlmMessage("user", "a")));
         verify(adapter).chat(config("gpt-4o-mini"), List.of(new LlmMessage("user", "b")));
+    }
+
+    @Test
+    void multimodalRequestUsesConfiguredVisionModel() {
+        when(llmProviderService.findEnabledRuntimeConfig(PROVIDER_ID, "qwen-plus"))
+                .thenReturn(Optional.of(new LlmProviderRuntimeConfig(
+                        "https://example.test/v1",
+                        "sk-test",
+                        "qwen-plus",
+                        Map.of(),
+                        new ProviderCapability(true, true, 10, "qwen-vl-plus")
+                )));
+        when(adapter.chat(any(), any())).thenReturn(OpenAiCompatibleResponse.success(200,
+                "{\"choices\":[{\"message\":{\"content\":\"{\\\"decision\\\":\\\"PASS\\\"}\"}}]}",
+                5L));
+
+        gateway.review(new LlmGatewayRequest(PROVIDER_ID, "qwen-plus", List.of(
+                LlmMessage.userParts(List.of(
+                        new LlmMessage.TextPart("look"),
+                        new LlmMessage.ImageUrlPart("https://e.com/a.jpg", "auto")
+                ))
+        )));
+
+        ArgumentCaptor<LlmProviderRuntimeConfig> configCaptor =
+                ArgumentCaptor.forClass(LlmProviderRuntimeConfig.class);
+        verify(adapter).chat(configCaptor.capture(), any());
+        assertThat(configCaptor.getValue().modelName()).isEqualTo("qwen-vl-plus");
     }
 
     private LlmGatewayRequest request(Long providerId, String modelName, String content) {

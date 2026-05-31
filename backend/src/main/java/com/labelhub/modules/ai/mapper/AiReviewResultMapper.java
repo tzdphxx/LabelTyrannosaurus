@@ -22,6 +22,25 @@ public interface AiReviewResultMapper extends BaseMapper<AiReviewResult> {
     AiReviewResult selectBySubmissionId(@Param("submissionId") Long submissionId);
 
     @Select("""
+            <script>
+            SELECT *
+            FROM ai_review_results
+            <choose>
+            <when test="submissionIds != null and submissionIds.size() > 0">
+            WHERE submission_id IN
+            <foreach collection="submissionIds" item="id" open="(" separator="," close=")">
+                #{id}
+            </foreach>
+            </when>
+            <otherwise>
+            WHERE 1 = 0
+            </otherwise>
+            </choose>
+            </script>
+            """)
+    List<AiReviewResult> selectBySubmissionIds(@Param("submissionIds") List<Long> submissionIds);
+
+    @Select("""
             SELECT *
             FROM ai_review_results
             WHERE status IN ('FAILED', 'RATE_LIMITED')

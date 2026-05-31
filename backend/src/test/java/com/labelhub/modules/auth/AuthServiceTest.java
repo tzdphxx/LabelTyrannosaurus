@@ -85,6 +85,8 @@ class AuthServiceTest {
         when(userMapper.selectByUsername("labeler")).thenReturn(new UserEntity());
 
         assertThatThrownBy(() -> authService.register(new RegisterRequest("labeler", "new@example.com", "Password123", "LABELER")))
+<<<<<<< HEAD
+=======
                 .isInstanceOf(BusinessException.class)
                 .extracting("code")
                 .isEqualTo(400102);
@@ -109,6 +111,7 @@ class AuthServiceTest {
     @Test
     void registerRejectsUnknownRole() {
         assertThatThrownBy(() -> authService.register(new RegisterRequest("bad", "bad@example.com", "Password123", "MANAGER")))
+>>>>>>> origin/dev
                 .isInstanceOf(BusinessException.class)
                 .extracting("code")
                 .isEqualTo(400102);

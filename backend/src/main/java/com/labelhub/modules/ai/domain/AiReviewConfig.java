@@ -44,6 +44,28 @@ public class AiReviewConfig {
 
     private Integer maxIterations;
 
+    private String aiFlowPolicy;
+
+    private Boolean allowAiDirectApprove;
+
+    private Boolean allowAiDirectReject;
+
+    private BigDecimal rejectThreshold;
+
+    private BigDecimal confidenceThreshold;
+
+    private String riskFlagsForceManual;
+
+    private Boolean multimodalEnabled;
+
+    private BigDecimal degradationPenalty;
+
+    private String visionDetail;
+
+    private Integer maxImagesPerRequest;
+
+    private Boolean allowAiDirectApproveWhenDegraded;
+
     private Long createdBy;
 
     private LocalDateTime createdAt;

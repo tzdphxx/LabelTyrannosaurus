@@ -47,8 +47,8 @@ class LlmProviderControllerTest {
     }
 
     @Test
-    void adminCreateUsesCurrentUserId() {
-        CurrentUserContext.set(admin());
+    void ownerCreateUsesCurrentUserId() {
+        CurrentUserContext.set(owner());
         LlmProviderController controller = new LlmProviderController(llmProviderService);
         CreateLlmProviderRequest request = createRequest();
         LlmProviderResponse serviceResponse = response();
@@ -81,21 +81,21 @@ class LlmProviderControllerTest {
     }
 
     @Test
-    void adminCanTestProvider() {
-        CurrentUserContext.set(admin());
+    void ownerCanTestProvider() {
+        CurrentUserContext.set(owner());
         LlmProviderController controller = new LlmProviderController(llmProviderService);
         TestLlmProviderRequest request = new TestLlmProviderRequest(null, "qwen-plus", Map.of());
         LlmProviderTestResponse serviceResponse = new LlmProviderTestResponse(true, 12L, "OK");
-        when(llmProviderService.test(10L, request)).thenReturn(serviceResponse);
+        when(llmProviderService.test(1L, 10L, request)).thenReturn(serviceResponse);
 
         ApiResponse<LlmProviderTestResponse> response = controller.test(10L, request);
 
         assertThat(response.data()).isEqualTo(serviceResponse);
-        verify(llmProviderService).test(10L, request);
+        verify(llmProviderService).test(1L, 10L, request);
     }
 
-    private CurrentUser admin() {
-        return new CurrentUser(1L, "admin", "admin@labelhub.dev", Set.of(RoleCode.ADMIN), 1);
+    private CurrentUser owner() {
+        return new CurrentUser(1L, "owner", "owner@labelhub.dev", Set.of(RoleCode.OWNER), 1);
     }
 
     private CurrentUser labeler() {
@@ -142,7 +142,12 @@ class LlmProviderControllerTest {
                 60,
                 30,
                 10,
+                false,
+                false,
+                10,
+                null,
                 true,
+                1L,
                 1L,
                 null,
                 null

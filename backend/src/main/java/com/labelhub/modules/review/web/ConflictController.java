@@ -16,6 +16,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
@@ -31,9 +32,11 @@ public class ConflictController {
 
     @GetMapping
     @Operation(summary = "冲突组列表", description = "查询待解决冲突组。")
-    public ApiResponse<List<ConflictGroupResponse>> listOpenGroups() {
+    public ApiResponse<List<ConflictGroupResponse>> listOpenGroups(
+            @RequestParam(defaultValue = "100") int limit) {
         CurrentUserContext.requireRole(RoleCode.REVIEWER);
-        return ApiResponse.ok(conflictResolveService.listOpenGroups());
+        int safeLimit = (limit <= 0 || limit > 500) ? 100 : limit;
+        return ApiResponse.ok(conflictResolveService.listOpenGroups(safeLimit));
     }
 
     @GetMapping("/{groupId}")

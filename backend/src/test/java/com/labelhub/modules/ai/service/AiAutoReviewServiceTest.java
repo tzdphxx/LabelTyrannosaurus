@@ -74,9 +74,18 @@ class AiAutoReviewServiceTest {
     @BeforeEach
     void setUp() {
         retryStrategy = new AiReviewRetryStrategy();
+        org.springframework.transaction.support.TransactionTemplate txTemplate =
+                new org.springframework.transaction.support.TransactionTemplate();
+        txTemplate.setTransactionManager(new org.springframework.transaction.support.AbstractPlatformTransactionManager() {
+            @Override protected Object doGetTransaction() { return new Object(); }
+            @Override protected void doBegin(Object transaction, org.springframework.transaction.TransactionDefinition definition) {}
+            @Override protected void doCommit(org.springframework.transaction.support.DefaultTransactionStatus status) {}
+            @Override protected void doRollback(org.springframework.transaction.support.DefaultTransactionStatus status) {}
+        });
         service = new AiAutoReviewService(submissionMapper, taskMapper, datasetItemMapper, aiReviewConfigMapper,
                 aiReviewResultMapper, rateLimiter, llmGateway, agentRunService, systemAgentProvider, auditAppender,
-                traceIdProvider, retryStrategy, retryScheduler, supervisorAgent);
+                traceIdProvider, new com.fasterxml.jackson.databind.ObjectMapper(),
+                retryStrategy, retryScheduler, supervisorAgent, txTemplate);
     }
 
     @Test
@@ -116,6 +125,8 @@ class AiAutoReviewServiceTest {
         verify(aiReviewResultMapper).insert(resultCaptor.capture());
         assertThat(resultCaptor.getValue().getStatus()).isEqualTo(AiReviewStatus.SUCCESS);
         assertThat(resultCaptor.getValue().getPromptSnapshot()).contains("Review answer strictly");
+        assertThat(resultCaptor.getValue().getPromptMode()).isEqualTo("TEXT_ONLY");
+        assertThat(resultCaptor.getValue().getDegraded()).isFalse();
         assertThat(resultCaptor.getValue().getRawResponse()).isEqualTo("{\"decision\":\"PASS\"}");
         ArgumentCaptor<Submission> submissionCaptor = ArgumentCaptor.forClass(Submission.class);
         verify(submissionMapper).updateById(submissionCaptor.capture());

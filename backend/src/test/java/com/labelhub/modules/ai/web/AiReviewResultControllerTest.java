@@ -36,7 +36,8 @@ class AiReviewResultControllerTest {
         CurrentUserContext.set(reviewer);
         AiReviewResultResponse serviceResponse = new AiReviewResultResponse(
                 100L, 70L, 80L, 30L, "qwen-plus", AiReviewStatus.SUCCESS, "PASS",
-                "92.50", Map.of("accuracy", 95), "[]", "Looks good", null, null);
+                "92.50", Map.of("accuracy", 95), "[]", "Looks good", null, null,
+                null, null, null, null);
         when(queryService.getForSubmission(reviewer, 70L)).thenReturn(serviceResponse);
 
         ApiResponse<AiReviewResultResponse> response = controller.get(70L);

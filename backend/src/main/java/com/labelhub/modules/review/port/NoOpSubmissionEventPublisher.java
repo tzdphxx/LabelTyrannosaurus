@@ -7,6 +7,6 @@ public class NoOpSubmissionEventPublisher implements SubmissionEventPublisher {
     }
 
     @Override
-    public void publishGoldenSelected(Long submissionId, Long reviewerId) {
+    public void publishGoldenSelected(Long conflictGroupId, Long submissionId, Long reviewerId) {
     }
 }

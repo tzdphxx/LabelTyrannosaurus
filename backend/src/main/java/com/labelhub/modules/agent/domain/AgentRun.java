@@ -19,6 +19,8 @@ public class AgentRun {
 
     private Long submissionId;
 
+    private Long assignmentId;
+
     private Long providerId;
 
     private String modelName;

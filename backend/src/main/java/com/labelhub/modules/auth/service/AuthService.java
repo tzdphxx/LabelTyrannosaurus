@@ -61,6 +61,7 @@ public class AuthService {
         if (userMapper.selectByUsername(request.username()) != null || userMapper.selectByEmail(request.email()) != null) {
             throw new BusinessException(400102, "Username or email already exists");
         }
+        RoleCode selectedRole = RoleCode.valueOf(request.role().toUpperCase());
         UserEntity user = new UserEntity();
         user.setUsername(request.username());
         user.setEmail(request.email());

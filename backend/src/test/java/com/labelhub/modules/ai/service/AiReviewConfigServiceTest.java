@@ -104,6 +104,10 @@ class AiReviewConfigServiceTest {
         assertThat(response.taskId()).isEqualTo(TASK_ID);
         assertThat(response.promptVersion()).isEqualTo("v1");
         assertThat(response.scoringDimensions()).containsExactly("accuracy", "safety");
+        assertThat(response.multimodalEnabled()).isTrue();
+        assertThat(response.degradationPenalty()).isEqualByComparingTo("0.20");
+        assertThat(response.visionDetail()).isEqualTo("auto");
+        assertThat(response.maxImagesPerRequest()).isEqualTo(5);
         ArgumentCaptor<Task> taskCaptor = ArgumentCaptor.forClass(Task.class);
         verify(taskMapper).updateById(taskCaptor.capture());
         assertThat(taskCaptor.getValue().getAiReviewConfigId()).isEqualTo(CONFIG_ID);
@@ -130,9 +134,11 @@ class AiReviewConfigServiceTest {
                 new BigDecimal("60.00"),
                 new BigDecimal("80.00"),
                 Map.of("type", "object"),
-                3
+                3,
+                null, null, null, null, null, null
         );
         when(taskMapper.selectById(TASK_ID)).thenReturn(draftTask());
+        when(llmProviderService.findEnabledById(PROVIDER_ID)).thenReturn(Optional.of(provider()));
 
         assertThatThrownBy(() -> service.save(OWNER_ID, TASK_ID, invalid))
                 .isInstanceOfSatisfying(BusinessException.class,
@@ -229,7 +235,8 @@ class AiReviewConfigServiceTest {
                 new BigDecimal("85.00"),
                 new BigDecimal("60.00"),
                 Map.of("type", "object", "required", List.of("decision")),
-                3
+                3,
+                null, null, null, null, null, null
         );
     }
 

@@ -5,13 +5,18 @@ export type DynamicFieldType =
   | 'checkbox'
   | 'select'
   | 'showItem'
+  | 'richText'
+  | 'fileUpload'
+  | 'jsonEditor'
+  | 'llmPrompt'
   | 'group'
   | 'tabs'
   | 'tabPane'
 
-export type DynamicMaterialGroup = 'text' | 'choice' | 'display' | 'layout'
+export type DynamicMaterialGroup = 'text' | 'choice' | 'display' | 'media' | 'smart' | 'layout'
 
 export type DynamicVisibleOperator = 'equals' | 'notEquals' | 'contains' | 'empty' | 'notEmpty'
+export type DynamicConditionLogic = 'and' | 'or'
 
 export type DynamicValidationRule =
   | {
@@ -34,10 +39,26 @@ export type DynamicValidationRule =
       message?: string
     }
 
-export interface DynamicVisibleRule {
+export interface DynamicConditionRule {
   fieldKey: string
   operator: DynamicVisibleOperator
   value?: string | number | boolean | Array<string | number | boolean>
+}
+
+export interface DynamicVisibleRule extends Partial<DynamicConditionRule> {
+  logic?: DynamicConditionLogic
+  conditions?: DynamicConditionRule[]
+}
+
+export interface DynamicLinkedOptionsCase {
+  when: DynamicConditionRule
+  options: DynamicFieldOption[]
+}
+
+export interface DynamicLinkageRule {
+  requiredWhen?: DynamicVisibleRule
+  disabledWhen?: DynamicVisibleRule
+  linkedOptions?: DynamicLinkedOptionsCase[]
 }
 
 export interface DynamicFieldOption {
@@ -55,11 +76,15 @@ export interface DynamicSchemaNode {
     placeholder?: string
     help?: string
     text?: string
+    accept?: string
+    maxCount?: number
+    prompt?: string
     options?: DynamicFieldOption[]
     mode?: 'multiple' | 'tags'
   } & Record<string, unknown>
   rules?: DynamicValidationRule[]
   visibleWhen?: DynamicVisibleRule
+  linkage?: DynamicLinkageRule
   children?: DynamicSchemaNode[]
 }
 

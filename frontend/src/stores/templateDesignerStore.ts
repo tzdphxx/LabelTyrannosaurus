@@ -24,6 +24,7 @@ interface TemplateDesignerStore {
   addNode: (type: DynamicFieldType, parentId?: string | null) => string | null
   selectNode: (nodeId: string | null) => void
   updateSelectedNode: (updates: Partial<DynamicSchemaNode>) => void
+  replaceSchema: (schema: DynamicFormSchema) => void
   deleteNode: (nodeId: string) => void
   deleteSelectedNode: () => void
   reorderNodes: (activeId: string, overId: string) => void
@@ -102,6 +103,15 @@ export const useTemplateDesignerStore = create<TemplateDesignerStore>((set, get)
         visibleWhen: Object.hasOwn(updates, 'visibleWhen') ? updates.visibleWhen : node.visibleWhen,
       })),
       hasUnsavedChanges: true,
+    })
+  },
+
+  replaceSchema: (schema) => {
+    set({
+      schema,
+      selectedNodeId: schema.nodes[0]?.id ?? null,
+      hasUnsavedChanges: true,
+      error: null,
     })
   },
 

@@ -6,10 +6,12 @@ import type { ReactNode } from 'react'
 import { useMemo, useState } from 'react'
 import type { DynamicFormSchema, DynamicFormSubmitResult } from '../../../types/dynamicForm'
 import { schemaToFormilySchema } from '../utils/formilySchema'
+import { FileUploadField, JsonEditorField, LlmPromptBlock, RichTextEditor } from './rendererFields'
 
 interface DynamicFormRendererProps {
   schema: DynamicFormSchema
   initialValues?: Record<string, unknown>
+  readOnly?: boolean
   onSubmit?: (result: DynamicFormSubmitResult) => void
 }
 
@@ -61,9 +63,13 @@ const SchemaField = createSchemaField({
   components: {
     Checkbox,
     FormItem,
+    FileUploadField,
     GroupSection,
     Input,
+    JsonEditorField,
+    LlmPromptBlock,
     Radio,
+    RichTextEditor,
     Select,
     ShowItem,
     TabPaneSection,
@@ -71,15 +77,16 @@ const SchemaField = createSchemaField({
   },
 })
 
-export function DynamicFormRenderer({ schema, initialValues, onSubmit }: DynamicFormRendererProps) {
+export function DynamicFormRenderer({ schema, initialValues, readOnly = false, onSubmit }: DynamicFormRendererProps) {
   const [messageApi, contextHolder] = message.useMessage()
   const [submitting, setSubmitting] = useState(false)
   const form = useMemo(
     () =>
       createForm({
         initialValues,
+        pattern: readOnly ? 'readPretty' : 'editable',
       }),
-    [initialValues, schema.id, schema.version],
+    [initialValues, readOnly, schema.id, schema.version],
   )
   const formilySchema = useMemo(() => schemaToFormilySchema(schema), [schema])
 
@@ -109,11 +116,13 @@ export function DynamicFormRenderer({ schema, initialValues, onSubmit }: Dynamic
           <SchemaField schema={formilySchema} />
         </FormLayout>
       </FormProvider>
-      <Space className="dynamic-renderer__actions">
-        <Button loading={submitting} onClick={() => void submitForm()} type="primary">
-          提交预览
-        </Button>
-      </Space>
+      {!readOnly ? (
+        <Space className="dynamic-renderer__actions">
+          <Button loading={submitting} onClick={() => void submitForm()} type="primary">
+            提交预览
+          </Button>
+        </Space>
+      ) : null}
     </div>
   )
 }

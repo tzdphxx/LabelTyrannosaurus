@@ -1,6 +1,8 @@
 import type { ISchema } from '@formily/react'
 import type {
+  DynamicConditionRule,
   DynamicFormSchema,
+  DynamicLinkageRule,
   DynamicSchemaNode,
   DynamicValidationRule,
   DynamicVisibleRule,
@@ -20,6 +22,14 @@ function getComponentName(node: DynamicSchemaNode) {
       return 'Select'
     case 'showItem':
       return 'ShowItem'
+    case 'richText':
+      return 'RichTextEditor'
+    case 'fileUpload':
+      return 'FileUploadField'
+    case 'jsonEditor':
+      return 'JsonEditorField'
+    case 'llmPrompt':
+      return 'LlmPromptBlock'
     case 'group':
       return 'GroupSection'
     case 'tabs':
@@ -32,11 +42,11 @@ function getComponentName(node: DynamicSchemaNode) {
 }
 
 function getSchemaType(node: DynamicSchemaNode) {
-  if (node.type === 'checkbox' || node.type === 'select') {
+  if (node.type === 'checkbox' || node.type === 'select' || node.type === 'fileUpload') {
     return 'array'
   }
 
-  if (node.type === 'group' || node.type === 'tabs' || node.type === 'tabPane' || node.type === 'showItem') {
+  if (node.type === 'group' || node.type === 'tabs' || node.type === 'tabPane' || node.type === 'showItem' || node.type === 'llmPrompt') {
     return 'void'
   }
 
@@ -75,26 +85,104 @@ function quoteValue(value: unknown) {
   return JSON.stringify(value)
 }
 
-function toVisibleExpression(rule: DynamicVisibleRule) {
-  if (rule.operator === 'empty') {
-    return '{{$deps[0] === undefined || $deps[0] === null || $deps[0] === "" || (Array.isArray($deps[0]) && $deps[0].length === 0)}}'
+function normalizeConditions(rule?: DynamicVisibleRule): DynamicConditionRule[] {
+  if (!rule) {
+    return []
   }
 
-  if (rule.operator === 'notEmpty') {
-    return '{{$deps[0] !== undefined && $deps[0] !== null && $deps[0] !== "" && (!Array.isArray($deps[0]) || $deps[0].length > 0)}}'
+  if (rule.conditions?.length) {
+    return rule.conditions
   }
 
-  if (rule.operator === 'equals') {
-    return `{{$deps[0] === ${quoteValue(rule.value)}}}`
+  if (rule.fieldKey && rule.operator) {
+    return [
+      {
+        fieldKey: rule.fieldKey,
+        operator: rule.operator,
+        value: rule.value,
+      },
+    ]
   }
 
-  if (rule.operator === 'notEquals') {
-    return `{{$deps[0] !== ${quoteValue(rule.value)}}}`
+  return []
+}
+
+function getDependencies(rule?: DynamicVisibleRule) {
+  return [...new Set(normalizeConditions(rule).map((condition) => condition.fieldKey).filter(Boolean))]
+}
+
+function toConditionExpression(condition: DynamicConditionRule, index: number) {
+  if (condition.operator === 'empty') {
+    return `($deps[${index}] === undefined || $deps[${index}] === null || $deps[${index}] === "" || (Array.isArray($deps[${index}]) && $deps[${index}].length === 0))`
   }
 
-  return `{{Array.isArray($deps[0]) ? $deps[0].includes(${quoteValue(rule.value)}) : String($deps[0] ?? "").includes(String(${quoteValue(
-    rule.value,
-  )}))}}`
+  if (condition.operator === 'notEmpty') {
+    return `($deps[${index}] !== undefined && $deps[${index}] !== null && $deps[${index}] !== "" && (!Array.isArray($deps[${index}]) || $deps[${index}].length > 0))`
+  }
+
+  if (condition.operator === 'equals') {
+    return `$deps[${index}] === ${quoteValue(condition.value)}`
+  }
+
+  if (condition.operator === 'notEquals') {
+    return `$deps[${index}] !== ${quoteValue(condition.value)}`
+  }
+
+  return `(Array.isArray($deps[${index}]) ? $deps[${index}].includes(${quoteValue(condition.value)}) : String($deps[${index}] ?? "").includes(String(${quoteValue(
+    condition.value,
+  )})))`
+}
+
+function toRuleExpression(rule?: DynamicVisibleRule) {
+  const conditions = normalizeConditions(rule)
+
+  if (!conditions.length) {
+    return '{{true}}'
+  }
+
+  const joiner = rule?.logic === 'or' ? ' || ' : ' && '
+  return `{{${conditions.map((condition, index) => toConditionExpression(condition, index)).join(joiner)}}}`
+}
+
+function toStateReaction(rule: DynamicVisibleRule | undefined, stateKey: 'visible' | 'required' | 'disabled') {
+  const dependencies = getDependencies(rule)
+
+  if (!dependencies.length) {
+    return null
+  }
+
+  return {
+    dependencies,
+    fulfill: {
+      state: {
+        [stateKey]: toRuleExpression(rule),
+      },
+    },
+    otherwise: {
+      state: {
+        [stateKey]: false,
+      },
+    },
+  }
+}
+
+function toLinkedOptionsReaction(linkage?: DynamicLinkageRule, fallbackOptions?: unknown) {
+  const linkedCase = linkage?.linkedOptions?.[0]
+
+  if (!linkedCase) {
+    return null
+  }
+
+  return {
+    dependencies: [linkedCase.when.fieldKey],
+    fulfill: {
+      state: {
+        componentProps: {
+          options: `{{${toConditionExpression(linkedCase.when, 0)} ? ${quoteValue(linkedCase.options)} : ${quoteValue(fallbackOptions ?? [])}}}`,
+        },
+      },
+    },
+  }
 }
 
 function toNodeSchema(node: DynamicSchemaNode): ISchema {
@@ -117,20 +205,15 @@ function toNodeSchema(node: DynamicSchemaNode): ISchema {
     schema['x-validator'] = node.rules.map((rule) => toValidator(rule, node))
   }
 
-  if (node.visibleWhen) {
-    schema['x-reactions'] = {
-      dependencies: [node.visibleWhen.fieldKey],
-      fulfill: {
-        state: {
-          visible: toVisibleExpression(node.visibleWhen),
-        },
-      },
-      otherwise: {
-        state: {
-          visible: false,
-        },
-      },
-    }
+  const reactions = [
+    toStateReaction(node.visibleWhen, 'visible'),
+    toStateReaction(node.linkage?.requiredWhen, 'required'),
+    toStateReaction(node.linkage?.disabledWhen, 'disabled'),
+    toLinkedOptionsReaction(node.linkage, node.props.options),
+  ].filter(Boolean)
+
+  if (reactions.length) {
+    schema['x-reactions'] = reactions
   }
 
   if (node.children?.length) {

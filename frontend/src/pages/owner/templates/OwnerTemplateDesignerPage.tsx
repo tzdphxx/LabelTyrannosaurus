@@ -10,6 +10,7 @@ import {
   DragPreview,
   MaterialPalette,
   PropertyPanel,
+  SchemaManagerPanel,
   type ActiveDragState,
 } from '../../../features/dynamic-form/components/designer'
 import { DynamicFormRenderer } from '../../../features/dynamic-form/components/DynamicFormRenderer'
@@ -39,6 +40,7 @@ export function OwnerTemplateDesignerPage() {
   const addNode = useTemplateDesignerStore((state) => state.addNode)
   const selectNode = useTemplateDesignerStore((state) => state.selectNode)
   const updateSelectedNode = useTemplateDesignerStore((state) => state.updateSelectedNode)
+  const replaceSchema = useTemplateDesignerStore((state) => state.replaceSchema)
   const deleteSelectedNode = useTemplateDesignerStore((state) => state.deleteSelectedNode)
   const deleteNode = useTemplateDesignerStore((state) => state.deleteNode)
   const reorderNodes = useTemplateDesignerStore((state) => state.reorderNodes)
@@ -216,6 +218,11 @@ export function OwnerTemplateDesignerPage() {
                       ) : null}
                     </Space>
                   ) : null,
+                },
+                {
+                  key: 'schema',
+                  label: 'Schema',
+                  children: <SchemaManagerPanel schema={schema} onImport={replaceSchema} />,
                 },
               ]}
             />

@@ -1,8 +1,10 @@
 import { DeleteOutlined } from '@ant-design/icons'
-import { Button, Divider, Empty, Input, Select, Space, Switch, Tag, Typography } from 'antd'
+import { Button, Divider, Empty, Input, InputNumber, Space, Switch, Tag } from 'antd'
 import type { DynamicSchemaNode } from '../../../../types/dynamicForm'
-import { optionsToText, textToOptions, visibleOperatorOptions } from '../../utils/designerFields'
+import { optionsToText, textToOptions } from '../../utils/designerFields'
 import { dynamicMaterialRegistry } from '../../materialRegistry'
+import { ConditionRuleEditor } from './ConditionRuleEditor'
+import { isChoiceNode, LinkageRuleEditor } from './LinkageRuleEditor'
 
 interface PropertyPanelProps {
   fieldKeys: string[]
@@ -12,8 +14,8 @@ interface PropertyPanelProps {
 }
 
 export function PropertyPanel({ fieldKeys, node, onDelete, onUpdate }: PropertyPanelProps) {
-  const isChoice = node?.type === 'radio' || node?.type === 'checkbox' || node?.type === 'select'
-  const isField = node?.type !== 'group' && node?.type !== 'tabs' && node?.type !== 'tabPane' && node?.type !== 'showItem'
+  const isChoice = isChoiceNode(node)
+  const isField = node?.type !== 'group' && node?.type !== 'tabs' && node?.type !== 'tabPane' && node?.type !== 'showItem' && node?.type !== 'llmPrompt'
   const required = Boolean(node?.rules?.some((rule) => rule.type === 'required'))
 
   if (!node) {
@@ -53,6 +55,40 @@ export function PropertyPanel({ fieldKeys, node, onDelete, onUpdate }: PropertyP
         </label>
       ) : null}
 
+      {node.type === 'llmPrompt' ? (
+        <>
+          <label className="owner-field">
+            <span>提示词</span>
+            <Input.TextArea
+              autoSize={{ minRows: 3, maxRows: 6 }}
+              value={String(node.props.prompt ?? '')}
+              onChange={(event) => onUpdate({ props: { prompt: event.target.value } })}
+            />
+          </label>
+          <label className="owner-field">
+            <span>占位回复</span>
+            <Input.TextArea
+              autoSize={{ minRows: 2, maxRows: 5 }}
+              value={String(node.props.text ?? '')}
+              onChange={(event) => onUpdate({ props: { text: event.target.value } })}
+            />
+          </label>
+        </>
+      ) : null}
+
+      {node.type === 'fileUpload' ? (
+        <>
+          <label className="owner-field">
+            <span>允许类型</span>
+            <Input value={String(node.props.accept ?? '')} onChange={(event) => onUpdate({ props: { accept: event.target.value } })} />
+          </label>
+          <label className="owner-field">
+            <span>最大文件数</span>
+            <InputNumber min={1} max={20} value={Number(node.props.maxCount ?? 1)} onChange={(maxCount) => onUpdate({ props: { maxCount: maxCount ?? 1 } })} />
+          </label>
+        </>
+      ) : null}
+
       {isChoice ? (
         <label className="owner-field">
           <span>选项</span>
@@ -68,7 +104,7 @@ export function PropertyPanel({ fieldKeys, node, onDelete, onUpdate }: PropertyP
         <>
           <Divider />
           <div className="designer-property__line">
-            <Typography.Text>必填校验</Typography.Text>
+            <span>必填校验</span>
             <Switch
               checked={required}
               onChange={(checked) =>
@@ -84,66 +120,8 @@ export function PropertyPanel({ fieldKeys, node, onDelete, onUpdate }: PropertyP
       {isField ? (
         <>
           <Divider />
-          <div className="designer-property__line">
-            <Typography.Text>条件显隐</Typography.Text>
-            <Switch
-              checked={Boolean(node.visibleWhen)}
-              onChange={(checked) =>
-                onUpdate({
-                  visibleWhen: checked
-                    ? {
-                      fieldKey: fieldKeys[0] ?? '',
-                      operator: 'equals',
-                      value: '',
-                    }
-                    : undefined,
-                })
-              }
-            />
-          </div>
-          {node.visibleWhen ? (
-            <Space direction="vertical" size={10}>
-              <Select
-                options={fieldKeys.map((key) => ({ label: key, value: key }))}
-                placeholder="依赖字段"
-                value={node.visibleWhen.fieldKey || undefined}
-                onChange={(fieldKey) =>
-                  onUpdate({
-                    visibleWhen: {
-                      ...node.visibleWhen,
-                      fieldKey,
-                    },
-                  })
-                }
-              />
-              <Select
-                options={visibleOperatorOptions}
-                value={node.visibleWhen.operator}
-                onChange={(operator) =>
-                  onUpdate({
-                    visibleWhen: {
-                      ...node.visibleWhen,
-                      operator,
-                    },
-                  })
-                }
-              />
-              {node.visibleWhen.operator === 'empty' || node.visibleWhen.operator === 'notEmpty' ? null : (
-                <Input
-                  placeholder="比较值"
-                  value={String(node.visibleWhen.value ?? '')}
-                  onChange={(event) =>
-                    onUpdate({
-                      visibleWhen: {
-                        ...node.visibleWhen,
-                        value: event.target.value,
-                      },
-                    })
-                  }
-                />
-              )}
-            </Space>
-          ) : null}
+          <ConditionRuleEditor fieldKeys={fieldKeys} title="条件显隐" value={node.visibleWhen} onChange={(visibleWhen) => onUpdate({ visibleWhen })} />
+          <LinkageRuleEditor fieldKeys={fieldKeys} isChoice={isChoice} value={node.linkage} onChange={(linkage) => onUpdate({ linkage })} />
         </>
       ) : null}
 

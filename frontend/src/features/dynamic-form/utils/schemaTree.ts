@@ -151,7 +151,7 @@ export function getSchemaNodeKeys(schema: DynamicFormSchema) {
   const keys: string[] = []
 
   walkSchemaNodes(schema.nodes, (node) => {
-    if (node.type !== 'group' && node.type !== 'tabs' && node.type !== 'tabPane') {
+    if (node.type !== 'group' && node.type !== 'tabs' && node.type !== 'tabPane' && node.type !== 'showItem' && node.type !== 'llmPrompt') {
       keys.push(node.key)
     }
   })

@@ -68,13 +68,55 @@ export const dynamicMaterialRegistry: Record<DynamicFieldType, MaterialDefinitio
       text: '这里展示只读说明或样本信息。',
     },
   },
+  richText: {
+    type: 'richText',
+    title: '富文本',
+    group: 'text',
+    description: '适合较长说明、证据描述和带格式内容。',
+    acceptsChildren: false,
+    defaultProps: {
+      placeholder: '请输入富文本内容',
+    },
+  },
+  fileUpload: {
+    type: 'fileUpload',
+    title: '文件/图片上传',
+    group: 'media',
+    description: '用于图片、附件或证据文件占位。',
+    acceptsChildren: false,
+    defaultProps: {
+      accept: 'image/*,.pdf,.txt',
+      maxCount: 3,
+    },
+  },
+  jsonEditor: {
+    type: 'jsonEditor',
+    title: 'JSON 编辑器',
+    group: 'display',
+    description: '用于结构化标注结果或 schema 调试。',
+    acceptsChildren: false,
+    defaultProps: {
+      placeholder: '{\n  \"key\": \"value\"\n}',
+    },
+  },
+  llmPrompt: {
+    type: 'llmPrompt',
+    title: 'LLM 交互占位',
+    group: 'smart',
+    description: '预留 AI 建议、提示词和回复展示区域。',
+    acceptsChildren: false,
+    defaultProps: {
+      prompt: '请根据当前样本给出辅助建议。',
+      text: 'P1 仅提供交互占位，不调用真实模型。',
+    },
+  },
   group: {
     type: 'group',
     title: '分组容器',
     group: 'layout',
     description: '把相关字段组织到一个分组内。',
     acceptsChildren: true,
-    allowedChildren: ['input', 'textarea', 'radio', 'checkbox', 'select', 'showItem'],
+    allowedChildren: ['input', 'textarea', 'radio', 'checkbox', 'select', 'showItem', 'richText', 'fileUpload', 'jsonEditor', 'llmPrompt'],
     defaultProps: {},
   },
   tabs: {
@@ -92,7 +134,7 @@ export const dynamicMaterialRegistry: Record<DynamicFieldType, MaterialDefinitio
     group: 'layout',
     description: 'Tab 容器内的单个面板。',
     acceptsChildren: true,
-    allowedChildren: ['input', 'textarea', 'radio', 'checkbox', 'select', 'showItem'],
+    allowedChildren: ['input', 'textarea', 'radio', 'checkbox', 'select', 'showItem', 'richText', 'fileUpload', 'jsonEditor', 'llmPrompt'],
     defaultProps: {},
   },
 }
@@ -101,6 +143,8 @@ export const dynamicMaterialGroups = [
   { key: 'text', title: '文本' },
   { key: 'choice', title: '选择' },
   { key: 'display', title: '展示' },
+  { key: 'media', title: '媒体' },
+  { key: 'smart', title: '智能' },
   { key: 'layout', title: '结构' },
 ] as const
 
@@ -111,6 +155,10 @@ export const paletteMaterialTypes: DynamicFieldType[] = [
   'checkbox',
   'select',
   'showItem',
+  'richText',
+  'fileUpload',
+  'jsonEditor',
+  'llmPrompt',
   'group',
   'tabs',
 ]

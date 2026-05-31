@@ -149,3 +149,61 @@
 
 - 按要求未运行 `npm run build`。
 - 按要求未运行 `npm run lint`。
+
+## 2026-05-31 - 计划三：动态表单核心修复与 P1 启动
+
+### 已实现
+
+- 修复并增强动态表单 P0 Designer 体验：
+  - 新增模板创建入口，Owner 可在模板管理页创建草稿模板并进入 Designer。
+  - 新增画布节点删除按钮，拖入画布后的物料可直接从画布删除。
+  - 增加 dnd-kit `DragOverlay`，拖拽过程中有可见的跟随反馈。
+  - 物料、画布、属性三个面板调整为等高工作台布局。
+  - 画布变为独立滚动容器，拖入新物料后会滚动到新节点位置。
+- 拆分过大的 `OwnerTemplateDesignerPage.tsx`：
+  - 页面文件从约 700 行降到约 230 行。
+  - 低层 Designer 组件拆到 `src/features/dynamic-form/components/designer/`。
+  - 拖拽状态解析、字段选项解析、画布滚动等工具拆到 `src/features/dynamic-form/utils/`。
+  - 页面文件保留路由参数、store 编排、拖拽流程和页面布局。
+- 更新 `agent.md` 编码限制：
+  - 手写源码文件接近 300 行时必须评估拆分。
+  - 超过 500 行原则上不得继续堆叠。
+  - 页面文件只保留编排逻辑，复杂 UI、工具、类型和配置应拆分到合适模块。
+- 启动计划三 P1 动态表单增强：
+  - 扩展动态表单 schema 类型，新增多条件显隐、联动规则和 P1 物料类型。
+  - 新增 P1 物料类型：
+    - 富文本
+    - 文件/图片上传
+    - JSON 编辑器
+    - LLM 交互占位
+  - 扩展物料注册中心，P1 物料可出现在物料面板并可放入分组或 Tab 面板。
+  - 扩展 schema 到 Formily schema 的转换层：
+    - 多条件显隐转换为 Formily reactions。
+    - 条件必填转换为 required reaction。
+    - 条件禁用转换为 disabled reaction。
+    - 联动选项初步转换为 options reaction。
+  - 新增 Renderer P1 组件：
+    - `RichTextEditor`
+    - `FileUploadField`
+    - `JsonEditorField`
+    - `LlmPromptBlock`
+  - `DynamicFormRenderer` 支持 `readOnly` 模式和初始值回填。
+  - 新增属性面板子组件：
+    - `ConditionRuleEditor`
+    - `LinkageRuleEditor`
+  - 属性面板支持编辑多条件显隐、条件必填、条件禁用和选择类字段的联动选项。
+  - 新增 `SchemaManagerPanel`，支持 schema JSON 预览、导入和复制导出。
+  - `templateDesignerStore` 新增 `replaceSchema`，用于导入 JSON 后整体替换当前 schema。
+
+### 当前约束
+
+- P1 仍然只使用前端 Mock 服务层，不接真实后端接口。
+- 文件/图片上传组件当前只做前端占位，不上传到后端。
+- LLM 交互组件当前只做 UI 与 schema 占位，不调用真实模型。
+- 联动选项当前实现为单条命中规则的基础版本，后续可扩展多 case 配置。
+- 没有加入虚拟化、缓存、懒加载等性能优化手段。
+
+### 未验证
+
+- 本阶段验证流程被中断，尚未完成 `npm run build` 和 `npm run lint`。
+- 当前环境此前多次出现 `nvm`、`npm`、`node` 不可用，后续需要在可用 Node 环境中重新执行验证。

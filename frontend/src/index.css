@@ -595,6 +595,31 @@ select {
   margin-bottom: 12px;
 }
 
+.dynamic-renderer__json-editor.ant-input {
+  font-family:
+    "Cascadia Code",
+    Consolas,
+    monospace;
+}
+
+.dynamic-renderer__llm.ant-card {
+  margin-bottom: 12px;
+  border-radius: 8px;
+}
+
+.designer-schema-panel {
+  width: 100%;
+}
+
+.designer-schema-panel__editor.ant-input {
+  font-family:
+    "Cascadia Code",
+    Consolas,
+    monospace;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
 @media (max-width: 960px) {
   .login-page {
     padding: 24px;

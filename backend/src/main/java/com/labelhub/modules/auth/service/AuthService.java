@@ -14,6 +14,7 @@ import com.labelhub.modules.auth.dto.TokenResponse;
 import com.labelhub.modules.auth.dto.UserProfileResponse;
 import com.labelhub.modules.auth.repository.UserMapper;
 import com.labelhub.modules.auth.repository.UserRoleMapper;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -27,9 +28,10 @@ import java.util.Set;
  * 都集中在这里，Controller 不直接处理安全细节。</p>
  */
 @Service
+@Slf4j
 public class AuthService {
 
-    private static final Set<RoleCode> DEFAULT_REGISTER_ROLES = Set.of(RoleCode.LABELER);
+    private static final Set<RoleCode> REGISTERABLE_ROLES = Set.of(RoleCode.LABELER, RoleCode.OWNER, RoleCode.REVIEWER);
 
     private final UserMapper userMapper;
     private final UserRoleMapper userRoleMapper;
@@ -54,6 +56,8 @@ public class AuthService {
      */
     @Transactional
     public TokenResponse register(RegisterRequest request) {
+        RoleCode registerRole = parseRegisterRole(request.role());
+
         if (userMapper.selectByUsername(request.username()) != null || userMapper.selectByEmail(request.email()) != null) {
             throw new BusinessException(400102, "Username or email already exists");
         }
@@ -66,8 +70,8 @@ public class AuthService {
         user.setLoginEnabled(true);
         user.setTokenVersion(1);
         userMapper.insert(user);
-        userRoleMapper.insert(new UserRoleEntity(user.getId(), RoleCode.LABELER));
-        return issueTokens(user, DEFAULT_REGISTER_ROLES);
+        userRoleMapper.insert(new UserRoleEntity(user.getId(), registerRole));
+        return issueTokens(user, Set.of(registerRole));
     }
 
     /**
@@ -116,6 +120,21 @@ public class AuthService {
                 jwtTokenService.createRefreshToken(user.getId(), user.getUsername(), user.getTokenVersion()),
                 user.getTokenVersion()
         );
+    }
+
+    private RoleCode parseRegisterRole(String rawRole) {
+        if (rawRole == null || rawRole.isBlank()) {
+            throw new BusinessException(400102, "Invalid register role");
+        }
+        try {
+            RoleCode role = RoleCode.valueOf(rawRole.trim().toUpperCase());
+            if (!REGISTERABLE_ROLES.contains(role)) {
+                throw new BusinessException(400102, "Invalid register role");
+            }
+            return role;
+        } catch (IllegalArgumentException ex) {
+            throw new BusinessException(400102, "Invalid register role");
+        }
     }
 
     private boolean canLogin(UserEntity user) {

@@ -45,7 +45,7 @@ public class AuthController {
      */
     @PostMapping("/auth/register")
     @SecurityRequirements
-    @Operation(summary = "用户注册", description = "创建普通用户，默认授予 LABELER 角色，并返回 accessToken 和 refreshToken。")
+    @Operation(summary = "用户注册", description = "创建普通用户，按 role 参数授予 LABELER、OWNER 或 REVIEWER，并返回 accessToken 和 refreshToken。")
     public ApiResponse<TokenResponse> register(@Valid @RequestBody RegisterRequest request) {
         return ApiResponse.ok(authService.register(request));
     }

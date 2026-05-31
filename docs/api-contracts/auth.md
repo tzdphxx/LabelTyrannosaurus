@@ -6,10 +6,10 @@ Owner: BE-B
 
 - URL: `POST /api/v1/auth/register`
 - Roles: public
-- Request: `username`, `email`, `password`
+- Request: `username`, `email`, `password`, `role` (`LABELER`, `OWNER`, or `REVIEWER`)
 - Response: `accessToken`, `refreshToken`, `tokenVersion`
-- Effects: creates `users` row with `userType=USER`, `enabled=true`, `loginEnabled=true`, BCrypt `passwordHash`, `tokenVersion=1`; creates default `LABELER` role.
-- Errors: `400102` duplicate username/email or invalid parameters.
+- Effects: creates `users` row with `userType=USER`, `enabled=true`, `loginEnabled=true`, BCrypt `passwordHash`, `tokenVersion=1`; creates selected `user_roles` row.
+- Errors: `400102` duplicate username/email, missing role, unsupported role, or invalid parameters.
 - Frontend: register page.
 
 ## Login

@@ -23,6 +23,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.mockito.ArgumentCaptor.forClass;
 
 class AuthServiceTest {
 
@@ -33,30 +34,77 @@ class AuthServiceTest {
     private final AuthService authService = new AuthService(userMapper, userRoleMapper, passwordEncoder, jwtTokenService);
 
     @Test
-    void registerCreatesEnabledLabelerWithBcryptPassword() {
-        when(userMapper.selectByUsername("labeler")).thenReturn(null);
-        when(userMapper.selectByEmail("labeler@example.com")).thenReturn(null);
+    void registerCreatesEnabledUserWithRequestedOwnerRole() {
+        when(userMapper.selectByUsername("owner")).thenReturn(null);
+        when(userMapper.selectByEmail("owner@example.com")).thenReturn(null);
         when(passwordEncoder.encode("Password123")).thenReturn("$2a$hash");
         doAnswer(invocation -> {
             UserEntity user = invocation.getArgument(0);
             user.setId(10L);
             return 1;
         }).when(userMapper).insert(any(UserEntity.class));
-        when(jwtTokenService.createAccessToken(10L, "labeler", Set.of(RoleCode.LABELER), 1)).thenReturn("access");
-        when(jwtTokenService.createRefreshToken(10L, "labeler", 1)).thenReturn("refresh");
+        when(jwtTokenService.createAccessToken(10L, "owner", Set.of(RoleCode.OWNER), 1)).thenReturn("access");
+        when(jwtTokenService.createRefreshToken(10L, "owner", 1)).thenReturn("refresh");
 
-        var response = authService.register(new RegisterRequest("labeler", "labeler@example.com", "Password123"));
+        var response = authService.register(new RegisterRequest("owner", "owner@example.com", "Password123", "OWNER"));
 
         assertThat(response.accessToken()).isEqualTo("access");
         verify(userMapper).insert(any(UserEntity.class));
-        verify(userRoleMapper).insert(any(UserRoleEntity.class));
+        var roleCaptor = forClass(UserRoleEntity.class);
+        verify(userRoleMapper).insert(roleCaptor.capture());
+        assertThat(roleCaptor.getValue().getRoleCode()).isEqualTo(RoleCode.OWNER);
+    }
+
+    @Test
+    void registerIssuesTokenWithRequestedReviewerRole() {
+        when(userMapper.selectByUsername("reviewer")).thenReturn(null);
+        when(userMapper.selectByEmail("reviewer@example.com")).thenReturn(null);
+        when(passwordEncoder.encode("Password123")).thenReturn("$2a$hash");
+        doAnswer(invocation -> {
+            UserEntity user = invocation.getArgument(0);
+            user.setId(20L);
+            return 1;
+        }).when(userMapper).insert(any(UserEntity.class));
+        when(jwtTokenService.createAccessToken(20L, "reviewer", Set.of(RoleCode.REVIEWER), 1)).thenReturn("access");
+        when(jwtTokenService.createRefreshToken(20L, "reviewer", 1)).thenReturn("refresh");
+
+        var response = authService.register(new RegisterRequest("reviewer", "reviewer@example.com", "Password123", "REVIEWER"));
+
+        assertThat(response.accessToken()).isEqualTo("access");
+        var roleCaptor = forClass(UserRoleEntity.class);
+        verify(userRoleMapper).insert(roleCaptor.capture());
+        assertThat(roleCaptor.getValue().getRoleCode()).isEqualTo(RoleCode.REVIEWER);
     }
 
     @Test
     void registerRejectsDuplicateUsername() {
         when(userMapper.selectByUsername("labeler")).thenReturn(new UserEntity());
 
-        assertThatThrownBy(() -> authService.register(new RegisterRequest("labeler", "new@example.com", "Password123")))
+        assertThatThrownBy(() -> authService.register(new RegisterRequest("labeler", "new@example.com", "Password123", "LABELER")))
+                .isInstanceOf(BusinessException.class)
+                .extracting("code")
+                .isEqualTo(400102);
+    }
+
+    @Test
+    void registerRejectsAdminRole() {
+        assertThatThrownBy(() -> authService.register(new RegisterRequest("admin", "admin@example.com", "Password123", "ADMIN")))
+                .isInstanceOf(BusinessException.class)
+                .extracting("code")
+                .isEqualTo(400102);
+    }
+
+    @Test
+    void registerRejectsSystemAgentRole() {
+        assertThatThrownBy(() -> authService.register(new RegisterRequest("agent", "agent@example.com", "Password123", "SYSTEM_AGENT")))
+                .isInstanceOf(BusinessException.class)
+                .extracting("code")
+                .isEqualTo(400102);
+    }
+
+    @Test
+    void registerRejectsUnknownRole() {
+        assertThatThrownBy(() -> authService.register(new RegisterRequest("bad", "bad@example.com", "Password123", "MANAGER")))
                 .isInstanceOf(BusinessException.class)
                 .extracting("code")
                 .isEqualTo(400102);

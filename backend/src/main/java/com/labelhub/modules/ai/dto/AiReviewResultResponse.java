@@ -2,6 +2,7 @@ package com.labelhub.modules.ai.dto;
 
 import com.labelhub.modules.ai.domain.AiReviewStatus;
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Map;
 
 public record AiReviewResultResponse(Long id,
@@ -19,7 +20,7 @@ public record AiReviewResultResponse(Long id,
                                      String flowAction,
                                      String promptMode,
                                      Boolean degraded,
-                                     String limitations,
+                                     List<String> limitations,
                                      String errorCode,
                                      String errorMessage,
                                      LocalDateTime createdAt,
@@ -32,6 +33,6 @@ public record AiReviewResultResponse(Long id,
                                   LocalDateTime createdAt, LocalDateTime updatedAt) {
         this(id, submissionId, agentRunId, providerId, modelName, status, decision, averageScore,
                 dimensionScores, riskFlags, suggestion, confidence, flowAction,
-                null, false, null, errorCode, errorMessage, createdAt, updatedAt);
+                null, false, List.of(), errorCode, errorMessage, createdAt, updatedAt);
     }
 }

@@ -46,7 +46,8 @@ public class DefaultLlmGateway implements LlmGateway {
             return failure(LlmGatewayStatus.PROVIDER_UNAVAILABLE, null, null, null,
                     PROVIDER_UNAVAILABLE, "LLM provider is unavailable");
         }
-        OpenAiCompatibleResponse adapterResponse = adapter.chat(runtimeConfig.get(), request.messages());
+        LlmProviderRuntimeConfig config = selectRuntimeModel(runtimeConfig.get(), request.messages());
+        OpenAiCompatibleResponse adapterResponse = adapter.chat(config, request.messages());
         if (adapterResponse.timedOut()) {
             return failure(LlmGatewayStatus.TIMEOUT, adapterResponse.rawResponse(), null, adapterResponse.latencyMs(),
                     TIMEOUT, adapterResponse.errorMessage());
@@ -56,6 +57,31 @@ public class DefaultLlmGateway implements LlmGateway {
                     PROVIDER_ERROR, adapterResponse.errorMessage());
         }
         return extractStructuredJson(adapterResponse);
+    }
+
+    private LlmProviderRuntimeConfig selectRuntimeModel(LlmProviderRuntimeConfig config, java.util.List<LlmMessage> messages) {
+        if (!containsImagePart(messages)
+                || config.capability() == null
+                || config.capability().visionModel() == null
+                || config.capability().visionModel().isBlank()) {
+            return config;
+        }
+        return new LlmProviderRuntimeConfig(
+                config.baseUrl(),
+                config.apiKey(),
+                config.capability().visionModel(),
+                config.customHeaders(),
+                config.capability());
+    }
+
+    private boolean containsImagePart(java.util.List<LlmMessage> messages) {
+        if (messages == null) {
+            return false;
+        }
+        return messages.stream()
+                .filter(message -> message.contentParts() != null)
+                .flatMap(message -> message.contentParts().stream())
+                .anyMatch(LlmMessage.ImageUrlPart.class::isInstance);
     }
 
     private LlmGatewayResponse extractStructuredJson(OpenAiCompatibleResponse adapterResponse) {

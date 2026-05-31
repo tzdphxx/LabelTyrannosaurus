@@ -20,7 +20,8 @@ public record ReviewerSubmissionDetailResponse(
         AiReviewSummary aiReviewResult,
         AgentRunSummary agentRunSummary,
         List<ReviewRecordItem> reviewRecords,
-        List<VersionHistoryItem> versionHistory
+        List<VersionHistoryItem> versionHistory,
+        LatestPreAnnotationSummary latestPreAnnotation
 ) {
     public record AiReviewSummary(
             Long aiReviewResultId,
@@ -30,7 +31,10 @@ public record ReviewerSubmissionDetailResponse(
             String averageScore,
             String riskFlags,
             String suggestion,
-            String errorCode
+            String errorCode,
+            String promptMode,
+            Boolean degraded,
+            String limitations
     ) {}
 
     public record AgentRunSummary(
@@ -58,5 +62,21 @@ public record ReviewerSubmissionDetailResponse(
             SubmissionStatus status,
             Boolean isGolden,
             LocalDateTime createdAt
+    ) {}
+
+    public record LatestPreAnnotationSummary(
+            Long preAnnotationId,
+            Long agentRunId,
+            String status,
+            String suggestedAnswerJson,
+            String fieldSuggestions,
+            String riskFlags,
+            String overallConfidence,
+            String limitations,
+            String promptMode,
+            Boolean degraded,
+            String ignoredFields,
+            String mediaUnderstanding,
+            String finalDiff
     ) {}
 }

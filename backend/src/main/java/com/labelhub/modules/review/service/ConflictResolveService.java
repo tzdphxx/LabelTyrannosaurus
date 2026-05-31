@@ -84,7 +84,7 @@ public class ConflictResolveService {
 
     @Transactional
     public ConflictResolveResponse resolve(Long groupId, Long reviewerId, ConflictResolveRequest request) {
-        ConflictGroup group = conflictGroupMapper.selectById(groupId);
+        ConflictGroup group = conflictGroupMapper.selectByIdForUpdate(groupId);
         if (group == null) {
             throw new BusinessException(GROUP_NOT_FOUND, "Conflict group not found");
         }

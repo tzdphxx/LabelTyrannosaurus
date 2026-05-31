@@ -68,7 +68,7 @@ class ConflictResolveServiceTest {
     void resolveSetsGoldenAndPublishesEvent() {
         ConflictGroup group = openGroup();
         Submission golden = submissionInGroup(50L);
-        when(conflictGroupMapper.selectById(GROUP_ID)).thenReturn(group);
+        when(conflictGroupMapper.selectByIdForUpdate(GROUP_ID)).thenReturn(group);
         when(submissionMapper.selectById(50L)).thenReturn(golden);
 
         ConflictResolveResponse response = service.resolve(
@@ -131,7 +131,7 @@ class ConflictResolveServiceTest {
 
     @Test
     void resolveWritesReviewRecord() {
-        when(conflictGroupMapper.selectById(GROUP_ID)).thenReturn(openGroup());
+        when(conflictGroupMapper.selectByIdForUpdate(GROUP_ID)).thenReturn(openGroup());
         when(submissionMapper.selectById(50L)).thenReturn(submissionInGroup(50L));
 
         service.resolve(GROUP_ID, REVIEWER_ID, new ConflictResolveRequest(50L, "Best"));
@@ -144,7 +144,7 @@ class ConflictResolveServiceTest {
 
     @Test
     void resolveNotFoundThrows() {
-        when(conflictGroupMapper.selectById(GROUP_ID)).thenReturn(null);
+        when(conflictGroupMapper.selectByIdForUpdate(GROUP_ID)).thenReturn(null);
 
         assertThatThrownBy(() -> service.resolve(
                 GROUP_ID, REVIEWER_ID, new ConflictResolveRequest(50L, "reason")))
@@ -156,7 +156,7 @@ class ConflictResolveServiceTest {
     void resolveAlreadyResolvedThrows() {
         ConflictGroup group = openGroup();
         group.setStatus(ConflictStatus.RESOLVED);
-        when(conflictGroupMapper.selectById(GROUP_ID)).thenReturn(group);
+        when(conflictGroupMapper.selectByIdForUpdate(GROUP_ID)).thenReturn(group);
 
         assertThatThrownBy(() -> service.resolve(
                 GROUP_ID, REVIEWER_ID, new ConflictResolveRequest(50L, "reason")))
@@ -172,7 +172,7 @@ class ConflictResolveServiceTest {
         wrongSubmission.setId(99L);
         wrongSubmission.setTaskId(999L);
         wrongSubmission.setDatasetItemId(999L);
-        when(conflictGroupMapper.selectById(GROUP_ID)).thenReturn(group);
+        when(conflictGroupMapper.selectByIdForUpdate(GROUP_ID)).thenReturn(group);
         when(submissionMapper.selectById(99L)).thenReturn(wrongSubmission);
 
         assertThatThrownBy(() -> service.resolve(
@@ -186,7 +186,7 @@ class ConflictResolveServiceTest {
         ConflictGroup group = openGroup();
         Submission approved = submissionInGroup(50L);
         approved.setStatus(SubmissionStatus.APPROVED);
-        when(conflictGroupMapper.selectById(GROUP_ID)).thenReturn(group);
+        when(conflictGroupMapper.selectByIdForUpdate(GROUP_ID)).thenReturn(group);
         when(submissionMapper.selectById(50L)).thenReturn(approved);
 
         assertThatThrownBy(() -> service.resolve(
@@ -199,7 +199,7 @@ class ConflictResolveServiceTest {
     void resolveClearsExistingGoldenForSameItem() {
         ConflictGroup group = openGroup();
         Submission golden = submissionInGroup(50L);
-        when(conflictGroupMapper.selectById(GROUP_ID)).thenReturn(group);
+        when(conflictGroupMapper.selectByIdForUpdate(GROUP_ID)).thenReturn(group);
         when(submissionMapper.selectById(50L)).thenReturn(golden);
 
         service.resolve(GROUP_ID, REVIEWER_ID, new ConflictResolveRequest(50L, "Best"));

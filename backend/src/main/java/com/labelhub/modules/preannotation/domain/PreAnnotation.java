@@ -42,6 +42,10 @@ public class PreAnnotation {
 
     private Boolean degraded;
 
+    private String ignoredFieldsJson;
+
+    private String mediaUnderstandingJson;
+
     private String rawResponse;
 
     private String errorCode;

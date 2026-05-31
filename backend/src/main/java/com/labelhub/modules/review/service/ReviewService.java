@@ -15,6 +15,7 @@ import com.labelhub.modules.review.dto.ReviewActionResponse;
 import com.labelhub.modules.review.dto.SubmissionReviewItem;
 import com.labelhub.modules.review.mapper.ReviewRecordMapper;
 import com.labelhub.modules.review.mapper.ReviewSubmissionMapper;
+import com.labelhub.modules.review.mapper.ReviewTaskMapper;
 import com.labelhub.modules.review.port.SubmissionEventPublisher;
 import com.labelhub.modules.submission.domain.Submission;
 import com.labelhub.modules.submission.domain.SubmissionStatus;
@@ -33,6 +34,7 @@ public class ReviewService {
     private static final int SUBMISSION_STATUS_NOT_REVIEWABLE = 400601;
     private static final int REJECT_REASON_REQUIRED = 400602;
     private static final int ASSIGNMENT_NOT_FOUND = 404602;
+    private static final int REVIEWER_NOT_ASSIGNED = 403601;
     private static final String SUBMISSION_BIZ_TYPE = "SUBMISSION";
     private static final String USER_ACTOR_TYPE = "USER";
 
@@ -40,6 +42,7 @@ public class ReviewService {
     private final AssignmentMapper assignmentMapper;
     private final ReviewRecordMapper reviewRecordMapper;
     private final ReviewSubmissionMapper reviewSubmissionMapper;
+    private final ReviewTaskMapper reviewTaskMapper;
     private final SubmissionEventPublisher eventPublisher;
     private final AuditAppender auditAppender;
     private final DatasetClaimService datasetClaimService;
@@ -49,6 +52,7 @@ public class ReviewService {
                          AssignmentMapper assignmentMapper,
                          ReviewRecordMapper reviewRecordMapper,
                          ReviewSubmissionMapper reviewSubmissionMapper,
+                         ReviewTaskMapper reviewTaskMapper,
                          SubmissionEventPublisher eventPublisher,
                          AuditAppender auditAppender,
                          DatasetClaimService datasetClaimService,
@@ -57,6 +61,7 @@ public class ReviewService {
         this.assignmentMapper = assignmentMapper;
         this.reviewRecordMapper = reviewRecordMapper;
         this.reviewSubmissionMapper = reviewSubmissionMapper;
+        this.reviewTaskMapper = reviewTaskMapper;
         this.eventPublisher = eventPublisher;
         this.auditAppender = auditAppender;
         this.datasetClaimService = datasetClaimService;
@@ -70,6 +75,7 @@ public class ReviewService {
     @Transactional
     public ReviewActionResponse approve(Long submissionId, Long reviewerId, ApproveRequest request) {
         Submission submission = requirePendingFinal(submissionId);
+        requireAssignedReviewer(submissionId, reviewerId);
         int currentLevel = request.reviewLevel();
         int maxLevel = escalationService.getMaxReviewLevel();
 
@@ -83,6 +89,12 @@ public class ReviewService {
             return new ReviewActionResponse(submissionId, submission.getStatus(), record.getId());
         }
 
+        int affected = submissionMapper.casUpdateStatus(submissionId,
+                SubmissionStatus.PENDING_FINAL.name(), SubmissionStatus.APPROVED.name());
+        if (affected == 0) {
+            throw new BusinessException(SUBMISSION_STATUS_NOT_REVIEWABLE,
+                    "Submission was already reviewed by another reviewer");
+        }
         submission.setStatus(SubmissionStatus.APPROVED);
         submission.setIsGolden(true);
         submission.setReviewFlowStatus("FINAL_APPROVED");
@@ -109,6 +121,7 @@ public class ReviewService {
             throw new BusinessException(REJECT_REASON_REQUIRED, "Reject reason is required");
         }
         Submission submission = requirePendingFinal(submissionId);
+        requireAssignedReviewer(submissionId, reviewerId);
 
         ReviewRecord record = createReviewRecord(
                 submissionId, reviewerId, ReviewAction.REJECT,
@@ -140,6 +153,14 @@ public class ReviewService {
                     "Submission is not in PENDING_FINAL status");
         }
         return submission;
+    }
+
+    private void requireAssignedReviewer(Long submissionId, Long reviewerId) {
+        int count = reviewTaskMapper.countBySubmissionAndReviewer(submissionId, reviewerId);
+        if (count == 0) {
+            throw new BusinessException(REVIEWER_NOT_ASSIGNED,
+                    "Reviewer is not assigned to this submission");
+        }
     }
 
     private ReviewRecord createReviewRecord(Long submissionId, Long reviewerId,

@@ -64,6 +64,9 @@ public class AssignmentClaimService {
         if (!CurrentUserContext.requireCurrentUser().roles().contains(RoleCode.LABELER)) {
             throw new BusinessException(PERMISSION_DENIED, "Permission denied");
         }
+        if (!CurrentUserContext.requireCurrentUser().userId().equals(labelerId)) {
+            throw new BusinessException(PERMISSION_DENIED, "Cannot claim assignment for another user");
+        }
         Task task = loadClaimableTask(taskId);
         String lockKey = "lock:claim:task:" + taskId;
         boolean locked = redisLockService.tryLock(lockKey, CLAIM_LOCK_WAIT_MILLIS, CLAIM_LOCK_LEASE_MILLIS);

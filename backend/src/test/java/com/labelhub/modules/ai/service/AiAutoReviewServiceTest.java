@@ -74,9 +74,18 @@ class AiAutoReviewServiceTest {
     @BeforeEach
     void setUp() {
         retryStrategy = new AiReviewRetryStrategy();
+        org.springframework.transaction.support.TransactionTemplate txTemplate =
+                new org.springframework.transaction.support.TransactionTemplate();
+        txTemplate.setTransactionManager(new org.springframework.transaction.support.AbstractPlatformTransactionManager() {
+            @Override protected Object doGetTransaction() { return new Object(); }
+            @Override protected void doBegin(Object transaction, org.springframework.transaction.TransactionDefinition definition) {}
+            @Override protected void doCommit(org.springframework.transaction.support.DefaultTransactionStatus status) {}
+            @Override protected void doRollback(org.springframework.transaction.support.DefaultTransactionStatus status) {}
+        });
         service = new AiAutoReviewService(submissionMapper, taskMapper, datasetItemMapper, aiReviewConfigMapper,
                 aiReviewResultMapper, rateLimiter, llmGateway, agentRunService, systemAgentProvider, auditAppender,
-                traceIdProvider, retryStrategy, retryScheduler, supervisorAgent);
+                traceIdProvider, new com.fasterxml.jackson.databind.ObjectMapper(),
+                retryStrategy, retryScheduler, supervisorAgent, txTemplate);
     }
 
     @Test

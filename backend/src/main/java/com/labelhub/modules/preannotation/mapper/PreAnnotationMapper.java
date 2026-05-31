@@ -17,4 +17,14 @@ public interface PreAnnotationMapper extends BaseMapper<PreAnnotation> {
             LIMIT 1
             """)
     PreAnnotation selectLatestByAssignmentId(@Param("assignmentId") Long assignmentId);
+
+    @Select("""
+            SELECT *
+            FROM pre_annotations
+            WHERE assignment_id = #{assignmentId}
+              AND status IN ('PENDING', 'RUNNING')
+            ORDER BY created_at DESC
+            LIMIT 1
+            """)
+    PreAnnotation selectRunningByAssignmentId(@Param("assignmentId") Long assignmentId);
 }

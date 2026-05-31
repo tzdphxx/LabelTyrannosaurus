@@ -42,6 +42,7 @@ import java.util.UUID;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 
 @Service
 public class AiAutoReviewService {
@@ -72,6 +73,7 @@ public class AiAutoReviewService {
     private final AiReviewRetryStrategy retryStrategy;
     private final AiReviewRetryScheduler retryScheduler;
     private final SupervisorAgent supervisorAgent;
+    private final TransactionTemplate transactionTemplate;
 
     @Autowired
     private AiFlowDecisionService flowDecisionService;
@@ -100,10 +102,11 @@ public class AiAutoReviewService {
                                TraceIdProvider traceIdProvider,
                                AiReviewRetryStrategy retryStrategy,
                                AiReviewRetryScheduler retryScheduler,
-                               SupervisorAgent supervisorAgent) {
+                               SupervisorAgent supervisorAgent,
+                               TransactionTemplate transactionTemplate) {
         this(submissionMapper, taskMapper, datasetItemMapper, aiReviewConfigMapper, aiReviewResultMapper, rateLimiter,
                 llmGateway, agentRunService, systemAgentProvider, auditAppender, traceIdProvider, new ObjectMapper(),
-                retryStrategy, retryScheduler, supervisorAgent);
+                retryStrategy, retryScheduler, supervisorAgent, transactionTemplate);
     }
 
     AiAutoReviewService(SubmissionMapper submissionMapper,
@@ -120,7 +123,8 @@ public class AiAutoReviewService {
                         ObjectMapper objectMapper,
                         AiReviewRetryStrategy retryStrategy,
                         AiReviewRetryScheduler retryScheduler,
-                        SupervisorAgent supervisorAgent) {
+                        SupervisorAgent supervisorAgent,
+                        TransactionTemplate transactionTemplate) {
         this.submissionMapper = submissionMapper;
         this.taskMapper = taskMapper;
         this.datasetItemMapper = datasetItemMapper;
@@ -136,46 +140,62 @@ public class AiAutoReviewService {
         this.retryStrategy = retryStrategy;
         this.retryScheduler = retryScheduler;
         this.supervisorAgent = supervisorAgent;
+        this.transactionTemplate = transactionTemplate;
         this.retryScheduler.setRetryCallback(this::retryReview);
     }
 
-    @Transactional
     public AiReviewResultResponse reviewSubmission(Long submissionId) {
-        AiReviewResult existing = aiReviewResultMapper.selectBySubmissionId(submissionId);
-        if (existing != null) {
-            return toResponse(existing);
+        // 事务 1: 幂等检查 + 准备数据 + 创建 AgentRun
+        ReviewPrepareResult prepared = transactionTemplate.execute(status -> {
+            AiReviewResult existing = aiReviewResultMapper.selectBySubmissionId(submissionId);
+            if (existing != null) {
+                return ReviewPrepareResult.alreadyExists(existing);
+            }
+            Submission submission = loadSubmission(submissionId);
+            Task task = taskMapper.selectById(submission.getTaskId());
+            AiReviewConfig config = loadConfig(task);
+            DatasetItem datasetItem = datasetItemMapper.selectById(submission.getDatasetItemId());
+            MediaPromptResult prompt = buildPrompt(submission, datasetItem, config);
+            AgentRun agentRun = agentRunService.create(AGENT_TYPE, submissionId, config.getProviderId(),
+                    config.getModelName(), config.getPromptVersion(), prompt.promptSnapshot());
+            agentRunService.start(agentRun.getId());
+            return ReviewPrepareResult.ready(submission, config, agentRun, prompt);
+        });
+
+        if (prepared.existing() != null) {
+            return toResponse(prepared.existing());
         }
 
-        Submission submission = loadSubmission(submissionId);
-        Task task = taskMapper.selectById(submission.getTaskId());
-        AiReviewConfig config = loadConfig(task);
-        DatasetItem datasetItem = datasetItemMapper.selectById(submission.getDatasetItemId());
-        MediaPromptResult prompt = buildPrompt(submission, datasetItem, config);
-        String promptSnapshot = prompt.promptSnapshot();
-
-        AgentRun agentRun = agentRunService.create(AGENT_TYPE, submissionId, config.getProviderId(),
-                config.getModelName(), config.getPromptVersion(), promptSnapshot);
-        agentRunService.start(agentRun.getId());
-
-        AttemptOutcome outcome = executeAttempt(submission, config, agentRun, prompt);
-
-        AiReviewResult result;
-        if (outcome.success()) {
-            result = outcome.result();
-            agentRunService.complete(agentRun.getId(), toJson(outcome.responseSnapshot()));
-        } else {
-            result = handleFailure(submission, config, agentRun, promptSnapshot, outcome, 0);
+        // 无事务: LLM 远程调用 (5-30s)
+        AttemptOutcome outcome;
+        try {
+            outcome = executeAttempt(prepared.submission(), prepared.config(),
+                    prepared.agentRun(), prepared.prompt());
+        } catch (Exception ex) {
+            transactionTemplate.executeWithoutResult(s ->
+                    agentRunService.fail(prepared.agentRun().getId(), AgentRunStatus.FAILED, ex.getMessage()));
+            throw ex;
         }
 
-        if (result.getStatus() == AiReviewStatus.SUCCESS && flowDecisionService != null) {
-            AiFlowAction flowAction = flowDecisionService.decide(result, config);
-            result.setFlowAction(flowAction.name());
-        }
-
-        aiReviewResultMapper.insert(result);
-        applyFlowAction(submission, result, config);
-        appendAudit(result);
-        return toResponse(result);
+        // 事务 2: 保存结果 + flowAction + 状态流转
+        return transactionTemplate.execute(status -> {
+            AiReviewResult result;
+            if (outcome.success()) {
+                result = outcome.result();
+                agentRunService.complete(prepared.agentRun().getId(), toJson(outcome.responseSnapshot()));
+            } else {
+                result = handleFailure(prepared.submission(), prepared.config(),
+                        prepared.agentRun(), prepared.prompt().promptSnapshot(), outcome, 0);
+            }
+            if (result.getStatus() == AiReviewStatus.SUCCESS && flowDecisionService != null) {
+                AiFlowAction flowAction = flowDecisionService.decide(result, prepared.config());
+                result.setFlowAction(flowAction.name());
+            }
+            aiReviewResultMapper.insert(result);
+            applyFlowAction(prepared.submission(), result, prepared.config());
+            appendAudit(result);
+            return toResponse(result);
+        });
     }
 
     public void retryReview(Long submissionId) {
@@ -203,18 +223,27 @@ public class AiAutoReviewService {
         int currentRetryCount = existing.getRetryCount();
 
         if (outcome.success()) {
-            agentRunService.complete(agentRun.getId(), toJson(outcome.responseSnapshot()));
-            AiReviewResult successResult = outcome.result();
-            aiReviewResultMapper.updateForSuccess(submissionId,
-                    AiReviewStatus.SUCCESS.name(),
-                    agentRun.getId(),
-                    successResult.getDecision(),
-                    successResult.getAverageScore(),
-                    successResult.getDimensionScores(),
-                    successResult.getRiskFlags(),
-                    successResult.getSuggestion(),
-                    successResult.getRawResponse());
-            appendAuditForRetrySuccess(submissionId, agentRun.getId());
+            transactionTemplate.executeWithoutResult(s -> {
+                agentRunService.complete(agentRun.getId(), toJson(outcome.responseSnapshot()));
+                AiReviewResult successResult = outcome.result();
+
+                if (flowDecisionService != null) {
+                    AiFlowAction flowAction = flowDecisionService.decide(successResult, config);
+                    successResult.setFlowAction(flowAction.name());
+                }
+
+                aiReviewResultMapper.updateForSuccess(submissionId,
+                        AiReviewStatus.SUCCESS.name(),
+                        agentRun.getId(),
+                        successResult.getDecision(),
+                        successResult.getAverageScore(),
+                        successResult.getDimensionScores(),
+                        successResult.getRiskFlags(),
+                        successResult.getSuggestion(),
+                        successResult.getRawResponse());
+                applyFlowAction(submission, successResult, config);
+                appendAuditForRetrySuccess(submissionId, agentRun.getId());
+            });
         } else {
             handleRetryFailure(submissionId, config, agentRun, outcome, currentRetryCount);
         }
@@ -599,7 +628,7 @@ public class AiAutoReviewService {
                 result.getFlowAction(),
                 result.getPromptMode(),
                 result.getDegraded(),
-                result.getLimitations(),
+                safeParseLimitations(result.getLimitations()),
                 result.getErrorCode(),
                 result.getErrorMessage(),
                 result.getCreatedAt(),
@@ -639,6 +668,17 @@ public class AiAutoReviewService {
             return Map.of();
         }
         return parseObjectMap(json);
+    }
+
+    private List<String> safeParseLimitations(String json) {
+        if (json == null || json.isBlank()) {
+            return List.of();
+        }
+        try {
+            return objectMapper.readValue(json, STRING_LIST);
+        } catch (JsonProcessingException ex) {
+            return List.of();
+        }
     }
 
     private String toJson(Object value) {
@@ -699,6 +739,23 @@ public class AiAutoReviewService {
 
         static AttemptOutcome failure(String errorCode, String errorMessage, String rawResponse) {
             return new AttemptOutcome(false, null, null, errorCode, errorMessage, rawResponse);
+        }
+    }
+
+    private record ReviewPrepareResult(
+            AiReviewResult existing,
+            Submission submission,
+            AiReviewConfig config,
+            AgentRun agentRun,
+            MediaPromptResult prompt) {
+
+        static ReviewPrepareResult alreadyExists(AiReviewResult existing) {
+            return new ReviewPrepareResult(existing, null, null, null, null);
+        }
+
+        static ReviewPrepareResult ready(Submission submission, AiReviewConfig config,
+                                         AgentRun agentRun, MediaPromptResult prompt) {
+            return new ReviewPrepareResult(null, submission, config, agentRun, prompt);
         }
     }
 }

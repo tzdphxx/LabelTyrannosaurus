@@ -66,6 +66,23 @@ class MediaPromptContextBuilderTest {
     }
 
     @Test
+    void providerWithoutMultiImageSupportUsesOneImageOnly() {
+        MediaPromptResult result = builder.build(new MediaPromptInput(
+                "{\"media_type\":\"video\",\"key_frame_urls\":[\"https://e.com/1.jpg\",\"https://e.com/2.jpg\"],\"video_transcript\":\"hello\"}",
+                "{}",
+                "Review video",
+                new ProviderCapability(true, false, 10, null),
+                true,
+                "auto",
+                5
+        ));
+
+        assertThat(result.messages().get(0).contentParts().stream()
+                .filter(LlmMessage.ImageUrlPart.class::isInstance)).hasSize(1);
+        assertThat(result.limitations()).contains("IMAGE_COUNT_EXCEEDED");
+    }
+
+    @Test
     void markdownExtractsEmbeddedImages() {
         MediaPromptResult result = builder.build(new MediaPromptInput(
                 "{\"media_type\":\"markdown\",\"content_markdown\":\"hello ![x](https://e.com/a.png) <img src=\\\"https://e.com/b.jpg\\\">\"}",
@@ -96,5 +113,43 @@ class MediaPromptContextBuilderTest {
 
         assertThat(result.degraded()).isTrue();
         assertThat(result.limitations()).contains("MEDIA_URL_MISSING");
+    }
+
+    @Test
+    void nonHttpImageUrlIsRejectedAndDoesNotCreateImagePart() {
+        MediaPromptResult result = builder.build(new MediaPromptInput(
+                "{\"media_type\":\"image\",\"media_url\":\"file:///etc/passwd\"}",
+                "{}",
+                "Describe image",
+                new ProviderCapability(true, true, 5, null),
+                true,
+                "auto",
+                5
+        ));
+
+        assertThat(result.degraded()).isTrue();
+        assertThat(result.promptMode()).isEqualTo(PromptMode.TEXT_ONLY);
+        assertThat(result.limitations()).contains("MEDIA_URL_INVALID");
+        assertThat(result.messages().get(0).contentParts()).isNull();
+    }
+
+    @Test
+    void promptSnapshotContainsSafeMediaSummaryWithoutSignedUrl() {
+        MediaPromptResult result = builder.build(new MediaPromptInput(
+                "{\"media_type\":\"image\",\"media_url\":\"https://cdn.example.com/image.jpg?signature=secret-token\"}",
+                "{}",
+                "Describe image",
+                new ProviderCapability(true, true, 5, null),
+                true,
+                "auto",
+                5
+        ));
+
+        assertThat(result.promptSnapshot()).contains("\"mediaType\":\"image\"");
+        assertThat(result.promptSnapshot()).contains("\"imageCount\":1");
+        assertThat(result.promptSnapshot()).contains("cdn.example.com");
+        assertThat(result.promptSnapshot()).doesNotContain("secret-token");
+        assertThat(result.mediaUnderstanding()).containsEntry("usedMedia", true);
+        assertThat(result.mediaUnderstanding()).containsEntry("mode", "IMAGE_SINGLE");
     }
 }

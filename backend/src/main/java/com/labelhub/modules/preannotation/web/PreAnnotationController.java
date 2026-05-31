@@ -3,11 +3,14 @@ package com.labelhub.modules.preannotation.web;
 import com.labelhub.common.api.ApiResponse;
 import com.labelhub.common.security.CurrentUserContext;
 import com.labelhub.common.security.RoleCode;
+import com.labelhub.modules.preannotation.dto.PreAnnotationRunRequest;
 import com.labelhub.modules.preannotation.dto.PreAnnotationResponse;
 import com.labelhub.modules.preannotation.service.PreAnnotationService;
+import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -21,9 +24,10 @@ public class PreAnnotationController {
     }
 
     @PostMapping("/api/v1/assignments/{assignmentId}/pre-annotations/run")
-    public ApiResponse<PreAnnotationResponse> run(@PathVariable Long assignmentId) {
+    public ApiResponse<PreAnnotationResponse> run(@PathVariable Long assignmentId,
+                                                  @Valid @RequestBody(required = false) PreAnnotationRunRequest request) {
         CurrentUserContext.requireRole(RoleCode.LABELER);
-        return ApiResponse.ok(preAnnotationService.run(assignmentId, CurrentUserContext.getUserId()));
+        return ApiResponse.ok(preAnnotationService.run(assignmentId, CurrentUserContext.getUserId(), request));
     }
 
     @GetMapping("/api/v1/assignments/{assignmentId}/pre-annotations/latest")

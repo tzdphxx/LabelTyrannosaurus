@@ -10,10 +10,13 @@ import com.labelhub.modules.assignment.domain.Assignment;
 import com.labelhub.modules.assignment.mapper.AssignmentMapper;
 import com.labelhub.modules.dataset.domain.DatasetItem;
 import com.labelhub.modules.dataset.mapper.DatasetItemMapper;
+import com.labelhub.modules.preannotation.domain.PreAnnotation;
+import com.labelhub.modules.preannotation.mapper.PreAnnotationMapper;
 import com.labelhub.modules.review.domain.ReviewRecord;
 import com.labelhub.modules.review.dto.ReviewerSubmissionDetailResponse;
 import com.labelhub.modules.review.dto.ReviewerSubmissionDetailResponse.AgentRunSummary;
 import com.labelhub.modules.review.dto.ReviewerSubmissionDetailResponse.AiReviewSummary;
+import com.labelhub.modules.review.dto.ReviewerSubmissionDetailResponse.LatestPreAnnotationSummary;
 import com.labelhub.modules.review.dto.ReviewerSubmissionDetailResponse.ReviewRecordItem;
 import com.labelhub.modules.review.dto.ReviewerSubmissionDetailResponse.VersionHistoryItem;
 import com.labelhub.modules.review.mapper.ReviewRecordMapper;
@@ -21,7 +24,9 @@ import com.labelhub.modules.submission.domain.Submission;
 import com.labelhub.modules.submission.mapper.SubmissionMapper;
 import com.labelhub.modules.template.domain.TemplateVersion;
 import com.labelhub.modules.template.mapper.TemplateVersionMapper;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import org.springframework.stereotype.Service;
 
 @Service
@@ -36,6 +41,7 @@ public class ReviewerSubmissionQueryService {
     private final AiReviewResultMapper aiReviewResultMapper;
     private final AgentRunMapper agentRunMapper;
     private final ReviewRecordMapper reviewRecordMapper;
+    private final PreAnnotationMapper preAnnotationMapper;
 
     public ReviewerSubmissionQueryService(SubmissionMapper submissionMapper,
                                           AssignmentMapper assignmentMapper,
@@ -43,7 +49,8 @@ public class ReviewerSubmissionQueryService {
                                           TemplateVersionMapper templateVersionMapper,
                                           AiReviewResultMapper aiReviewResultMapper,
                                           AgentRunMapper agentRunMapper,
-                                          ReviewRecordMapper reviewRecordMapper) {
+                                          ReviewRecordMapper reviewRecordMapper,
+                                          PreAnnotationMapper preAnnotationMapper) {
         this.submissionMapper = submissionMapper;
         this.assignmentMapper = assignmentMapper;
         this.datasetItemMapper = datasetItemMapper;
@@ -51,6 +58,7 @@ public class ReviewerSubmissionQueryService {
         this.aiReviewResultMapper = aiReviewResultMapper;
         this.agentRunMapper = agentRunMapper;
         this.reviewRecordMapper = reviewRecordMapper;
+        this.preAnnotationMapper = preAnnotationMapper;
     }
 
     public ReviewerSubmissionDetailResponse getDetail(Long submissionId) {
@@ -80,7 +88,8 @@ public class ReviewerSubmissionQueryService {
                     aiResult.getId(), aiResult.getEffectiveRunId(),
                     aiResult.getStatus(), aiResult.getDecision(),
                     aiResult.getAverageScore() != null ? aiResult.getAverageScore().toPlainString() : null,
-                    aiResult.getRiskFlags(), aiResult.getSuggestion(), aiResult.getErrorCode());
+                    aiResult.getRiskFlags(), aiResult.getSuggestion(), aiResult.getErrorCode(),
+                    aiResult.getPromptMode(), aiResult.getDegraded(), aiResult.getLimitations());
         }
 
         List<ReviewRecord> records = reviewRecordMapper.selectList(
@@ -103,6 +112,7 @@ public class ReviewerSubmissionQueryService {
                 .map(v -> new VersionHistoryItem(v.getId(), v.getVersionNo(),
                         v.getStatus(), v.getIsGolden(), v.getSubmittedAt()))
                 .toList();
+        LatestPreAnnotationSummary latestPreAnnotation = latestPreAnnotation(submission);
 
         return new ReviewerSubmissionDetailResponse(
                 submission.getId(),
@@ -119,7 +129,45 @@ public class ReviewerSubmissionQueryService {
                 aiSummary,
                 agentRunSummary,
                 reviewRecordItems,
-                versionHistory
+                versionHistory,
+                latestPreAnnotation
         );
+    }
+
+    private LatestPreAnnotationSummary latestPreAnnotation(Submission submission) {
+        if (preAnnotationMapper == null) {
+            return null;
+        }
+        PreAnnotation record = preAnnotationMapper.selectLatestByAssignmentId(submission.getAssignmentId());
+        if (record == null) {
+            return null;
+        }
+        Map<String, Object> diffMap = new LinkedHashMap<>();
+        diffMap.put("suggestedAnswerJson", record.getSuggestedAnswerJson());
+        diffMap.put("finalAnswerJson", submission.getAnswerJson());
+        String finalDiff = toJson(diffMap);
+        return new LatestPreAnnotationSummary(
+                record.getId(),
+                record.getAgentRunId(),
+                record.getStatus() == null ? null : record.getStatus().name(),
+                record.getSuggestedAnswerJson(),
+                record.getFieldSuggestions(),
+                record.getRiskFlags(),
+                record.getOverallConfidence() == null ? null : record.getOverallConfidence().toPlainString(),
+                record.getLimitations(),
+                record.getPromptMode(),
+                record.getDegraded(),
+                record.getIgnoredFieldsJson(),
+                record.getMediaUnderstandingJson(),
+                finalDiff
+        );
+    }
+
+    private String toJson(Object value) {
+        try {
+            return new com.fasterxml.jackson.databind.ObjectMapper().writeValueAsString(value);
+        } catch (Exception e) {
+            return "{}";
+        }
     }
 }

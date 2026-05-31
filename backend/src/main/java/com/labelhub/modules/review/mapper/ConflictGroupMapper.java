@@ -23,6 +23,14 @@ public interface ConflictGroupMapper extends BaseMapper<ConflictGroup> {
     @Select("""
             SELECT *
             FROM conflict_groups
+            WHERE id = #{groupId}
+            FOR UPDATE
+            """)
+    ConflictGroup selectByIdForUpdate(@Param("groupId") Long groupId);
+
+    @Select("""
+            SELECT *
+            FROM conflict_groups
             WHERE status = 'OPEN'
             ORDER BY created_at ASC
             LIMIT #{limit}

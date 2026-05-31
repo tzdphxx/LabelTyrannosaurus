@@ -101,4 +101,15 @@ public interface SubmissionMapper extends BaseMapper<Submission> {
             ORDER BY version_no ASC
             """)
     List<Submission> selectByAssignmentId(@Param("assignmentId") Long assignmentId);
+
+    @Update("""
+            UPDATE submissions
+            SET status = #{newStatus},
+                updated_at = CURRENT_TIMESTAMP(3)
+            WHERE id = #{submissionId}
+              AND status = #{expectedStatus}
+            """)
+    int casUpdateStatus(@Param("submissionId") Long submissionId,
+                        @Param("expectedStatus") String expectedStatus,
+                        @Param("newStatus") String newStatus);
 }

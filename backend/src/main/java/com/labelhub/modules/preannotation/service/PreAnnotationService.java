@@ -119,6 +119,12 @@ public class PreAnnotationService {
             throw new BusinessException(FORBIDDEN, "Forbidden");
         }
         validateRequest(assignment, request);
+
+        PreAnnotation running = preAnnotationMapper.selectRunningByAssignmentId(assignmentId);
+        if (running != null) {
+            return toResponse(running, false);
+        }
+
         Task task = taskMapper.selectById(assignment.getTaskId());
         AiReviewConfig config = loadConfig(task);
         Long datasetItemId = request != null && request.datasetItemId() != null
@@ -151,11 +157,24 @@ public class PreAnnotationService {
         preAnnotationMapper.updateById(record);
         agentRunService.start(run.getId());
 
-        LlmGatewayResponse gatewayResponse = llmGateway.review(new LlmGatewayRequest(
-                config.getProviderId(),
-                config.getModelName(),
-                withSystemPrompt(prompt.messages())
-        ));
+        LlmGatewayResponse gatewayResponse;
+        try {
+            gatewayResponse = llmGateway.review(new LlmGatewayRequest(
+                    config.getProviderId(),
+                    config.getModelName(),
+                    withSystemPrompt(prompt.messages())
+            ));
+        } catch (Exception llmEx) {
+            agentRunService.fail(run.getId(), AgentRunStatus.FAILED,
+                    "LLM call exception: " + llmEx.getMessage());
+            record.setStatus(PreAnnotationStatus.FAILED);
+            record.setErrorCode("LLM_EXCEPTION");
+            record.setErrorMessage(llmEx.getMessage());
+            record.setUpdatedAt(LocalDateTime.now());
+            preAnnotationMapper.updateById(record);
+            appendAudit(labelerId, task, record);
+            return toResponse(record, false);
+        }
         if (gatewayResponse.status() == LlmGatewayStatus.SUCCESS) {
             if (hasRequiredOutput(gatewayResponse.structuredJson())) {
                 agentRunService.complete(run.getId(), toJson(gatewayResponseSnapshot(gatewayResponse)));

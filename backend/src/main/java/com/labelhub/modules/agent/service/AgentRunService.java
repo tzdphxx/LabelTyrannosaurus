@@ -46,6 +46,10 @@ public class AgentRunService {
     @Transactional
     public void start(Long agentRunId) {
         AgentRun run = requireRun(agentRunId);
+        if (run.getStatus() != AgentRunStatus.PENDING) {
+            throw new IllegalStateException(
+                    "Cannot start AgentRun " + agentRunId + ": expected PENDING, got " + run.getStatus());
+        }
         run.setStatus(AgentRunStatus.RUNNING);
         run.setStartedAt(LocalDateTime.now());
         agentRunMapper.updateById(run);
@@ -54,6 +58,10 @@ public class AgentRunService {
     @Transactional
     public void complete(Long agentRunId, String outputSnapshot) {
         AgentRun run = requireRun(agentRunId);
+        if (run.getStatus() != AgentRunStatus.RUNNING) {
+            throw new IllegalStateException(
+                    "Cannot complete AgentRun " + agentRunId + ": expected RUNNING, got " + run.getStatus());
+        }
         run.setStatus(AgentRunStatus.SUCCESS);
         run.setOutputSnapshot(outputSnapshot);
         run.setFinishedAt(LocalDateTime.now());
@@ -67,6 +75,10 @@ public class AgentRunService {
                     "fail status must be FAILED, RATE_LIMITED or MANUAL_REQUIRED, got: " + failStatus);
         }
         AgentRun run = requireRun(agentRunId);
+        if (run.getStatus() != AgentRunStatus.RUNNING && run.getStatus() != AgentRunStatus.PENDING) {
+            throw new IllegalStateException(
+                    "Cannot fail AgentRun " + agentRunId + ": expected PENDING or RUNNING, got " + run.getStatus());
+        }
         run.setStatus(failStatus);
         run.setErrorMessage(errorMessage);
         run.setFinishedAt(LocalDateTime.now());

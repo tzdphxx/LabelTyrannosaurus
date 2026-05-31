@@ -44,6 +44,68 @@
 - 按要求未运行 `npm run build`。
 - 按要求未运行 `npm run lint`。
 
+## 2026-05-30 - 计划三：动态表单核心 P0
+
+### 已实现
+
+- 完成动态表单 P0 的基础类型与 schema 契约：
+  - `DynamicFormSchema`
+  - `DynamicSchemaNode`
+  - `DynamicValidationRule`
+  - `DynamicVisibleRule`
+  - `DynamicFormSubmitResult`
+- 新增 dnd-kit + Formily 动态表单能力目录：
+  - 物料注册中心
+  - schema tree 增删改查与排序工具
+  - schema 到 Formily schema 的转换层
+  - Formily Renderer 组件
+- 完成 P0 8 类基础物料：
+  - 单行输入
+  - 多行输入
+  - 单选
+  - 多选
+  - 标签选择
+  - ShowItem 展示项
+  - 分组容器
+  - Tab 容器
+- 扩展模板 Mock 数据，模板现在包含可读写的动态表单 schema。
+- 扩展 Owner 模板服务层：
+  - 查询模板列表
+  - 查询模板详情
+  - 查询模板 schema
+  - 保存模板 schema
+- 新增 `templateDesignerStore`，承载模板 Designer 的 schema、选中节点、保存状态、加载状态、错误状态和未保存状态。
+- 新增 Owner 模板管理页面：
+  - `/app/owner/templates`
+- 新增 Owner 模板 Designer 页面：
+  - `/app/owner/templates/:templateId/designer`
+- Designer P0 支持：
+  - 从物料区拖拽添加字段
+  - 画布内字段排序
+  - 容器内字段承载
+  - 字段选择
+  - 字段标题、key、占位提示、选项、必填、基础显隐条件编辑
+  - 字段删除二次确认
+  - schema 保存
+  - Formily 运行态预览
+  - 提交预览输出结构化结果
+- 补充 Designer、Renderer、画布、属性面板和预览区样式。
+
+### 当前约束
+
+- 当前环境中 `nvm`、`npm`、`node` 均不可用，无法实际执行 npm 脚本或本地 node_modules 可执行文件。
+- 真实后端接口未接入，模板 schema 仍通过 Mock 服务层读写。
+- P0 未实现富文本、文件/图片上传、JSON 编辑器和 LLM 交互组件。
+- P0 未加入虚拟化、缓存、懒加载等性能优化手段。
+
+### 未验证
+
+- `npm run build` 因当前 shell 找不到 `npm` 未能执行。
+- `npm run lint` 因当前 shell 找不到 `npm` 未能执行。
+- `node_modules/.bin/tsc.cmd -b` 因当前 shell 找不到 `node` 未能执行。
+- `node_modules/.bin/eslint.cmd .` 因当前 shell 找不到 `node` 未能执行。
+- 已执行 `git diff --check`，未发现空白错误，仅有 Git 行尾转换提示。
+
 ## 2026-05-30 - 计划二：Owner 闭环 P0
 
 ### 已实现

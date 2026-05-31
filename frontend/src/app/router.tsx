@@ -4,6 +4,8 @@ import { LoginPage } from '../pages/auth/LoginPage'
 import { OwnerDashboardPage } from '../pages/owner/OwnerDashboardPage'
 import { OwnerTaskEditorPage } from '../pages/owner/OwnerTaskEditorPage'
 import { OwnerTasksPage } from '../pages/owner/OwnerTasksPage'
+import { OwnerTemplateDesignerPage } from '../pages/owner/templates/OwnerTemplateDesignerPage'
+import { OwnerTemplatesPage } from '../pages/owner/templates/OwnerTemplatesPage'
 import { RoleHomePage } from '../pages/roles/RoleHomePage'
 import { useAuthStore } from '../stores/authStore'
 import { AppLayout } from './layout/AppLayout'
@@ -44,6 +46,8 @@ export function AppRouter() {
             <Route element={<OwnerTasksPage />} path="tasks" />
             <Route element={<OwnerTaskEditorPage />} path="tasks/new" />
             <Route element={<OwnerTaskEditorPage />} path="tasks/:taskId/edit" />
+            <Route element={<OwnerTemplatesPage />} path="templates" />
+            <Route element={<OwnerTemplateDesignerPage />} path="templates/:templateId/designer" />
             <Route
               element={<StatePlaceholder status="empty" message="该入口已预留，后续阶段接入业务页面。" />}
               path="*"

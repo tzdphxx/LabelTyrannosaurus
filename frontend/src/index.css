@@ -390,6 +390,211 @@ select {
   margin-bottom: 0;
 }
 
+.designer-shell {
+  display: grid;
+  grid-template-columns: 280px minmax(420px, 1fr) minmax(340px, 420px);
+  gap: 16px;
+  align-items: stretch;
+  height: calc(100vh - 190px);
+  min-height: 560px;
+}
+
+.designer-panel.ant-card {
+  display: flex;
+  height: 100%;
+  min-height: 0;
+  flex-direction: column;
+  border: 1px solid #d9e1e8;
+  border-radius: 8px;
+  box-shadow: 0 12px 30px rgba(20, 34, 48, 0.04);
+}
+
+.designer-panel .ant-card-head {
+  flex-shrink: 0;
+}
+
+.designer-panel .ant-card-body {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.designer-panel--materials .ant-card-body,
+.designer-panel--inspector .ant-card-body {
+  overflow: auto;
+}
+
+.designer-material-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 18px;
+}
+
+.designer-material-group__title {
+  color: #52616f;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.designer-material {
+  display: flex;
+  width: 100%;
+  min-height: 72px;
+  flex-direction: column;
+  gap: 6px;
+  align-items: flex-start;
+  padding: 12px;
+  border: 1px solid #d9e1e8;
+  border-radius: 8px;
+  background: #ffffff;
+  color: inherit;
+  cursor: grab;
+  text-align: left;
+}
+
+.designer-material:hover {
+  border-color: #1f4e79;
+  background: #f7fbff;
+}
+
+.designer-canvas-list {
+  display: flex;
+  min-height: 100%;
+  flex-direction: column;
+  gap: 12px;
+  padding: 12px;
+  border: 1px dashed #cbd6df;
+  border-radius: 8px;
+  background: #f8fafc;
+}
+
+.designer-canvas-scroll {
+  height: 100%;
+  min-height: 0;
+  overflow-y: auto;
+  padding-right: 2px;
+}
+
+.designer-canvas-list--over {
+  border-color: #1f4e79;
+  background: #f2f7fb;
+}
+
+.designer-node {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid #d9e1e8;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.designer-node--selected {
+  border-color: #1f4e79;
+  box-shadow: 0 0 0 2px rgba(31, 78, 121, 0.12);
+}
+
+.designer-node__head {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.designer-node__drag {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border: 1px solid #d9e1e8;
+  border-radius: 6px;
+  background: #ffffff;
+  color: #52616f;
+  cursor: grab;
+}
+
+.designer-node__head .ant-btn {
+  flex-shrink: 0;
+}
+
+.designer-node__title {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+}
+
+.designer-property {
+  width: 100%;
+}
+
+.designer-property__line {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.designer-preview {
+  width: 100%;
+}
+
+.designer-preview__result {
+  max-height: 240px;
+  margin: 0;
+  padding: 12px;
+  overflow: auto;
+  border: 1px solid #d9e1e8;
+  border-radius: 8px;
+  background: #0f1720;
+  color: #d7e2ec;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.designer-drag-overlay {
+  display: flex;
+  width: 260px;
+  min-height: 72px;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px;
+  border: 1px solid #1f4e79;
+  border-radius: 8px;
+  background: #ffffff;
+  box-shadow: 0 18px 38px rgba(17, 35, 56, 0.18);
+  cursor: grabbing;
+}
+
+.dynamic-renderer {
+  width: 100%;
+}
+
+.dynamic-renderer__actions {
+  margin-top: 12px;
+}
+
+.dynamic-renderer__group.ant-card {
+  margin-bottom: 12px;
+  border-radius: 8px;
+}
+
+.dynamic-renderer__tab-pane {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid #e5ebf0;
+  border-radius: 8px;
+  background: #fbfcfd;
+}
+
+.dynamic-renderer__show-item.ant-alert {
+  margin-bottom: 12px;
+}
+
 @media (max-width: 960px) {
   .login-page {
     padding: 24px;
@@ -412,6 +617,35 @@ select {
 
   .owner-form-grid {
     grid-template-columns: 1fr;
+  }
+
+  .designer-shell {
+    grid-template-columns: 1fr;
+    height: auto;
+    min-height: 0;
+  }
+
+  .designer-panel.ant-card {
+    height: auto;
+  }
+
+  .designer-panel--materials .ant-card-body,
+  .designer-panel--inspector .ant-card-body {
+    overflow: visible;
+  }
+
+  .designer-panel .ant-card-body {
+    min-height: 0;
+    overflow: visible;
+  }
+
+  .designer-canvas-scroll {
+    height: auto;
+    overflow: visible;
+  }
+
+  .designer-canvas-list {
+    min-height: 260px;
   }
 
   .owner-toolbar {

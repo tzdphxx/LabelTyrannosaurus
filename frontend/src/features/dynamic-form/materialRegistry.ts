@@ -1,0 +1,175 @@
+import type { DynamicFieldType, DynamicSchemaNode, MaterialDefinition } from '../../types/dynamicForm'
+
+const choiceOptions = [
+  { label: '选项 A', value: 'option_a' },
+  { label: '选项 B', value: 'option_b' },
+]
+
+export const dynamicMaterialRegistry: Record<DynamicFieldType, MaterialDefinition> = {
+  input: {
+    type: 'input',
+    title: '单行输入',
+    group: 'text',
+    description: '适合短文本、编号、名称等字段。',
+    acceptsChildren: false,
+    defaultProps: {
+      placeholder: '请输入',
+    },
+  },
+  textarea: {
+    type: 'textarea',
+    title: '多行输入',
+    group: 'text',
+    description: '适合描述、理由、证据片段等长文本。',
+    acceptsChildren: false,
+    defaultProps: {
+      placeholder: '请输入详细内容',
+    },
+  },
+  radio: {
+    type: 'radio',
+    title: '单选',
+    group: 'choice',
+    description: '从多个互斥选项中选择一个。',
+    acceptsChildren: false,
+    defaultProps: {
+      options: choiceOptions,
+    },
+  },
+  checkbox: {
+    type: 'checkbox',
+    title: '多选',
+    group: 'choice',
+    description: '从多个选项中选择一个或多个。',
+    acceptsChildren: false,
+    defaultProps: {
+      options: choiceOptions,
+    },
+  },
+  select: {
+    type: 'select',
+    title: '标签选择',
+    group: 'choice',
+    description: '用于标签、类别和枚举值选择。',
+    acceptsChildren: false,
+    defaultProps: {
+      mode: 'tags',
+      options: choiceOptions,
+      placeholder: '请选择或输入标签',
+    },
+  },
+  showItem: {
+    type: 'showItem',
+    title: '展示项',
+    group: 'display',
+    description: '展示说明、样本或不可编辑信息。',
+    acceptsChildren: false,
+    defaultProps: {
+      text: '这里展示只读说明或样本信息。',
+    },
+  },
+  group: {
+    type: 'group',
+    title: '分组容器',
+    group: 'layout',
+    description: '把相关字段组织到一个分组内。',
+    acceptsChildren: true,
+    allowedChildren: ['input', 'textarea', 'radio', 'checkbox', 'select', 'showItem'],
+    defaultProps: {},
+  },
+  tabs: {
+    type: 'tabs',
+    title: 'Tab 容器',
+    group: 'layout',
+    description: '把字段拆成多个页签区域。',
+    acceptsChildren: true,
+    allowedChildren: ['tabPane'],
+    defaultProps: {},
+  },
+  tabPane: {
+    type: 'tabPane',
+    title: 'Tab 面板',
+    group: 'layout',
+    description: 'Tab 容器内的单个面板。',
+    acceptsChildren: true,
+    allowedChildren: ['input', 'textarea', 'radio', 'checkbox', 'select', 'showItem'],
+    defaultProps: {},
+  },
+}
+
+export const dynamicMaterialGroups = [
+  { key: 'text', title: '文本' },
+  { key: 'choice', title: '选择' },
+  { key: 'display', title: '展示' },
+  { key: 'layout', title: '结构' },
+] as const
+
+export const paletteMaterialTypes: DynamicFieldType[] = [
+  'input',
+  'textarea',
+  'radio',
+  'checkbox',
+  'select',
+  'showItem',
+  'group',
+  'tabs',
+]
+
+export function createSchemaNodeFromMaterial(type: DynamicFieldType): DynamicSchemaNode {
+  const definition = dynamicMaterialRegistry[type]
+  const suffix = Math.random().toString(36).slice(2, 7)
+  const baseNode: DynamicSchemaNode = {
+    id: `node-${Date.now()}-${suffix}`,
+    key: `${type}_${suffix}`,
+    type,
+    title: definition.title,
+    props: { ...definition.defaultProps },
+    rules: definition.defaultRules ? [...definition.defaultRules] : [],
+  }
+
+  if (type === 'group') {
+    return {
+      ...baseNode,
+      children: [],
+    }
+  }
+
+  if (type === 'tabs') {
+    return {
+      ...baseNode,
+      children: [
+        createTabPaneNode('基础信息'),
+        createTabPaneNode('补充信息'),
+      ],
+    }
+  }
+
+  return baseNode
+}
+
+export function createTabPaneNode(title: string): DynamicSchemaNode {
+  const suffix = Math.random().toString(36).slice(2, 7)
+
+  return {
+    id: `node-${Date.now()}-${suffix}`,
+    key: `tab_${suffix}`,
+    type: 'tabPane',
+    title,
+    props: {},
+    children: [],
+  }
+}
+
+export function canAcceptChild(parentType: DynamicFieldType | null, childType: DynamicFieldType) {
+  if (!parentType) {
+    return childType !== 'tabPane'
+  }
+
+  const parentDefinition = dynamicMaterialRegistry[parentType]
+
+  if (!parentDefinition.acceptsChildren) {
+    return false
+  }
+
+  return parentDefinition.allowedChildren?.includes(childType) ?? false
+}

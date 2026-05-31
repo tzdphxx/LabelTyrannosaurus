@@ -1,9 +1,9 @@
-import { createForm } from '@formily/core'
+import { createForm, onFormValuesChange } from '@formily/core'
 import { createSchemaField, FormProvider } from '@formily/react'
 import { Checkbox, FormItem, FormLayout, Input, Radio, Select } from '@formily/antd-v5'
 import { Alert, Button, Card, Space, Tabs, Typography, message } from 'antd'
 import type { ReactNode } from 'react'
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type { DynamicFormSchema, DynamicFormSubmitResult } from '../../../types/dynamicForm'
 import { schemaToFormilySchema } from '../utils/formilySchema'
 import { FileUploadField, JsonEditorField, LlmPromptBlock, RichTextEditor } from './rendererFields'
@@ -12,6 +12,8 @@ interface DynamicFormRendererProps {
   schema: DynamicFormSchema
   initialValues?: Record<string, unknown>
   readOnly?: boolean
+  submitText?: string
+  onValuesChange?: (values: Record<string, unknown>) => void
   onSubmit?: (result: DynamicFormSubmitResult) => void
 }
 
@@ -77,14 +79,32 @@ const SchemaField = createSchemaField({
   },
 })
 
-export function DynamicFormRenderer({ schema, initialValues, readOnly = false, onSubmit }: DynamicFormRendererProps) {
+export function DynamicFormRenderer({
+  schema,
+  initialValues,
+  readOnly = false,
+  submitText = '提交预览',
+  onSubmit,
+  onValuesChange,
+}: DynamicFormRendererProps) {
   const [messageApi, contextHolder] = message.useMessage()
   const [submitting, setSubmitting] = useState(false)
+  const onValuesChangeRef = useRef(onValuesChange)
+
+  useEffect(() => {
+    onValuesChangeRef.current = onValuesChange
+  }, [onValuesChange])
+
   const form = useMemo(
     () =>
       createForm({
         initialValues,
         pattern: readOnly ? 'readPretty' : 'editable',
+        effects() {
+          onFormValuesChange((formInstance) => {
+            onValuesChangeRef.current?.({ ...formInstance.values })
+          })
+        },
       }),
     [initialValues, readOnly, schema.id, schema.version],
   )
@@ -119,7 +139,7 @@ export function DynamicFormRenderer({ schema, initialValues, readOnly = false, o
       {!readOnly ? (
         <Space className="dynamic-renderer__actions">
           <Button loading={submitting} onClick={() => void submitForm()} type="primary">
-            提交预览
+            {submitText}
           </Button>
         </Space>
       ) : null}

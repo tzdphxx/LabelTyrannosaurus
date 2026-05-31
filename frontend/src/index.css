@@ -390,6 +390,129 @@ select {
   margin-bottom: 0;
 }
 
+.labeler-page {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.labeler-hero.content-shell {
+  background:
+    linear-gradient(90deg, rgba(23, 75, 76, 0.07), transparent 58%),
+    #ffffff;
+}
+
+.labeler-filter-card.ant-card,
+.labeler-table-card.ant-card {
+  border: 1px solid #d9e1e8;
+  border-radius: 8px;
+  box-shadow: 0 12px 30px rgba(20, 34, 48, 0.04);
+}
+
+.labeler-toolbar {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+.labeler-toolbar__search {
+  max-width: 420px;
+}
+
+.labeler-toolbar__select {
+  width: 180px;
+}
+
+.labeler-table-progress {
+  width: 100%;
+}
+
+.labeler-reward-text {
+  color: #17615f;
+  font-weight: 600;
+}
+
+.labeler-stat-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.labeler-stat-card.ant-card {
+  border: 1px solid #d9e1e8;
+  border-radius: 8px;
+  box-shadow: 0 12px 30px rgba(20, 34, 48, 0.04);
+}
+
+.labeler-workbench {
+  display: grid;
+  grid-template-columns: 260px minmax(420px, 1fr) 300px;
+  gap: 16px;
+  align-items: start;
+}
+
+.labeler-workbench__nav.ant-card,
+.labeler-workbench__form.ant-card,
+.labeler-workbench__side.ant-card {
+  border: 1px solid #d9e1e8;
+  border-radius: 8px;
+  box-shadow: 0 12px 30px rgba(20, 34, 48, 0.04);
+}
+
+.labeler-workbench__nav .ant-list {
+  max-height: calc(100vh - 280px);
+  overflow: auto;
+}
+
+.labeler-question-item.ant-list-item {
+  padding: 12px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.labeler-question-item--active.ant-list-item {
+  border-color: #98c8c3;
+  background: #f1faf8;
+}
+
+.labeler-workbench__form-content {
+  width: 100%;
+}
+
+.labeler-workbench__side .ant-space,
+.labeler-workbench__pager {
+  width: 100%;
+}
+
+.labeler-workbench__pager {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.labeler-workbench__pager .ant-btn {
+  width: 100%;
+}
+
+.labeler-history-card.ant-card {
+  width: 100%;
+  border-radius: 8px;
+  background: #fbfcfd;
+}
+
+.labeler-history-card__content {
+  max-height: 180px;
+  margin: 0;
+  overflow: auto;
+  color: #34495e;
+  font-family:
+    "Cascadia Code",
+    Consolas,
+    monospace;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
 .designer-shell {
   display: grid;
   grid-template-columns: 280px minmax(420px, 1fr) minmax(340px, 420px);
@@ -644,6 +767,18 @@ select {
     grid-template-columns: 1fr;
   }
 
+  .labeler-stat-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .labeler-workbench {
+    grid-template-columns: 1fr;
+  }
+
+  .labeler-workbench__nav .ant-list {
+    max-height: none;
+  }
+
   .designer-shell {
     grid-template-columns: 1fr;
     height: auto;
@@ -679,9 +814,16 @@ select {
   }
 
   .owner-toolbar__search,
-  .owner-toolbar__select {
+  .owner-toolbar__select,
+  .labeler-toolbar__search,
+  .labeler-toolbar__select {
     width: 100%;
     max-width: none;
+  }
+
+  .labeler-toolbar {
+    align-items: stretch;
+    flex-direction: column;
   }
 }
 
@@ -708,5 +850,9 @@ select {
 
   .page-header {
     flex-direction: column;
+  }
+
+  .labeler-stat-grid {
+    grid-template-columns: 1fr;
   }
 }

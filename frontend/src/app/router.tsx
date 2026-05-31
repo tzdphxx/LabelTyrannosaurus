@@ -1,6 +1,9 @@
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router'
 import { StatePlaceholder } from '../components/states/StatePlaceholder'
 import { LoginPage } from '../pages/auth/LoginPage'
+import { LabelerMarketPage } from '../pages/labeler/LabelerMarketPage'
+import { LabelerSubmissionsPage } from '../pages/labeler/LabelerSubmissionsPage'
+import { LabelerWorkbenchPage } from '../pages/labeler/LabelerWorkbenchPage'
 import { OwnerDashboardPage } from '../pages/owner/OwnerDashboardPage'
 import { OwnerTaskEditorPage } from '../pages/owner/OwnerTaskEditorPage'
 import { OwnerTasksPage } from '../pages/owner/OwnerTasksPage'
@@ -53,7 +56,16 @@ export function AppRouter() {
               path="*"
             />
           </Route>
-          <Route element={<RoleHomePage role="labeler" />} path="labeler" />
+          <Route path="labeler">
+            <Route index element={<RoleHomePage role="labeler" />} />
+            <Route element={<LabelerMarketPage />} path="market" />
+            <Route element={<LabelerWorkbenchPage />} path="workbench/:taskId" />
+            <Route element={<LabelerSubmissionsPage />} path="submissions" />
+            <Route
+              element={<StatePlaceholder status="empty" message="该入口已预留，后续阶段接入业务页面。" />}
+              path="*"
+            />
+          </Route>
           <Route element={<RoleHomePage role="reviewer" />} path="reviewer" />
           <Route
             element={<StatePlaceholder status="empty" message="该入口已预留，后续阶段接入业务页面。" />}

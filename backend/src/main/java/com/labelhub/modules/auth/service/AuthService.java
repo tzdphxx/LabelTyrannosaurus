@@ -56,14 +56,8 @@ public class AuthService {
      */
     @Transactional
     public TokenResponse register(RegisterRequest request) {
-<<<<<<< HEAD
-        if (!ALLOWED_REGISTER_ROLES.contains(request.role().toUpperCase())) {
-            throw new BusinessException(400101, "Role must be OWNER or LABELER");
-        }
-=======
         RoleCode registerRole = parseRegisterRole(request.role());
 
->>>>>>> origin/dev
         if (userMapper.selectByUsername(request.username()) != null || userMapper.selectByEmail(request.email()) != null) {
             throw new BusinessException(400102, "Username or email already exists");
         }
@@ -77,13 +71,8 @@ public class AuthService {
         user.setLoginEnabled(true);
         user.setTokenVersion(1);
         userMapper.insert(user);
-<<<<<<< HEAD
-        userRoleMapper.insert(new UserRoleEntity(user.getId(), selectedRole));
-        return issueTokens(user, Set.of(selectedRole));
-=======
         userRoleMapper.insert(new UserRoleEntity(user.getId(), registerRole));
         return issueTokens(user, registerRole);
->>>>>>> origin/dev
     }
 
     /**

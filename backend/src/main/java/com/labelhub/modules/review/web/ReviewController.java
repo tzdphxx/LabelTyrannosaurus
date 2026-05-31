@@ -19,6 +19,7 @@ import com.labelhub.modules.review.service.BatchReviewService;
 import com.labelhub.modules.review.service.ReviewService;
 import com.labelhub.modules.review.service.ReviewerSubmissionQueryService;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import java.util.List;
@@ -51,21 +52,17 @@ public class ReviewController {
     }
 
     @GetMapping
-<<<<<<< HEAD
+    @Operation(summary = "待审提交列表", description = "查询审核员可处理的提交列表，支持按任务、提交状态、AI 结论、冲突状态、审核级别和分配审核员筛选。")
     public ApiResponse<List<ReviewerSubmissionListItem>> list(
-            @RequestParam(required = false) Long taskId,
-            @RequestParam(required = false) String submissionStatus,
-            @RequestParam(required = false) String aiDecision,
-            @RequestParam(required = false) String aiReviewStatus,
-            @RequestParam(required = false) String conflictStatus,
-            @RequestParam(required = false) Integer reviewLevel,
-            @RequestParam(required = false) Long assignedReviewerId,
-            @RequestParam(defaultValue = "1") int page,
-            @RequestParam(defaultValue = "20") int size) {
-=======
-    @Operation(summary = "待终审提交列表", description = "查询 REVIEWER 可处理的待终审提交。")
-    public ApiResponse<List<SubmissionReviewItem>> listPendingFinal() {
->>>>>>> origin/dev
+            @Parameter(description = "按任务 ID 筛选") @RequestParam(required = false) Long taskId,
+            @Parameter(description = "按提交状态筛选") @RequestParam(required = false) String submissionStatus,
+            @Parameter(description = "按 AI 结论筛选：PASS / REJECT / MANUAL_REVIEW") @RequestParam(required = false) String aiDecision,
+            @Parameter(description = "按 AI 审核状态筛选") @RequestParam(required = false) String aiReviewStatus,
+            @Parameter(description = "按冲突状态筛选") @RequestParam(required = false) String conflictStatus,
+            @Parameter(description = "按审核级别筛选") @RequestParam(required = false) Integer reviewLevel,
+            @Parameter(description = "按分配的审核员 ID 筛选") @RequestParam(required = false) Long assignedReviewerId,
+            @Parameter(description = "页码，从 1 开始") @RequestParam(defaultValue = "1") int page,
+            @Parameter(description = "每页条数，默认 20，最大 100") @RequestParam(defaultValue = "20") int size) {
         CurrentUserContext.requireRole(RoleCode.REVIEWER);
         int safePage = Math.max(1, page);
         int safeSize = Math.max(1, Math.min(size, 100));
@@ -76,7 +73,9 @@ public class ReviewController {
     }
 
     @GetMapping("/{submissionId}")
-    public ApiResponse<ReviewerSubmissionDetailResponse> getDetail(@PathVariable Long submissionId) {
+    @Operation(summary = "提交审核详情", description = "查询指定提交的审核详情，包含标注答案、AI 评分、审核历史、冲突信息等。")
+    public ApiResponse<ReviewerSubmissionDetailResponse> getDetail(
+            @Parameter(description = "提交 ID") @PathVariable Long submissionId) {
         CurrentUserContext.requireRole(RoleCode.REVIEWER);
         return ApiResponse.ok(reviewerQueryService.getDetail(submissionId));
     }

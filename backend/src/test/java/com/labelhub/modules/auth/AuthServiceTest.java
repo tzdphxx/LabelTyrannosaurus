@@ -1,6 +1,8 @@
 package com.labelhub.modules.auth;
 
 import com.labelhub.common.exception.BusinessException;
+import com.labelhub.common.security.CurrentUser;
+import com.labelhub.common.security.CurrentUserContext;
 import com.labelhub.common.security.JwtTokenService;
 import com.labelhub.common.security.RoleCode;
 import com.labelhub.modules.auth.domain.UserEntity;
@@ -49,6 +51,7 @@ class AuthServiceTest {
         var response = authService.register(new RegisterRequest("owner", "owner@example.com", "Password123", "OWNER"));
 
         assertThat(response.accessToken()).isEqualTo("access");
+        assertThat(response.role()).isEqualTo(RoleCode.OWNER);
         verify(userMapper).insert(any(UserEntity.class));
         var roleCaptor = forClass(UserRoleEntity.class);
         verify(userRoleMapper).insert(roleCaptor.capture());
@@ -71,6 +74,7 @@ class AuthServiceTest {
         var response = authService.register(new RegisterRequest("reviewer", "reviewer@example.com", "Password123", "REVIEWER"));
 
         assertThat(response.accessToken()).isEqualTo("access");
+        assertThat(response.role()).isEqualTo(RoleCode.REVIEWER);
         var roleCaptor = forClass(UserRoleEntity.class);
         verify(userRoleMapper).insert(roleCaptor.capture());
         assertThat(roleCaptor.getValue().getRoleCode()).isEqualTo(RoleCode.REVIEWER);
@@ -146,6 +150,33 @@ class AuthServiceTest {
     }
 
     @Test
+    void loginReturnsSingleRole() {
+        var user = user(30L, "labeler", true, true);
+        when(userMapper.selectByUsernameOrEmail("labeler")).thenReturn(user);
+        when(passwordEncoder.matches("Password123", "$2a$hash")).thenReturn(true);
+        when(userRoleMapper.selectRoleCodesByUserId(30L)).thenReturn(Set.of(RoleCode.LABELER));
+        when(jwtTokenService.createAccessToken(30L, "labeler", Set.of(RoleCode.LABELER), 1)).thenReturn("access");
+        when(jwtTokenService.createRefreshToken(30L, "labeler", 1)).thenReturn("refresh");
+
+        var response = authService.login(new LoginRequest("labeler", "Password123"));
+
+        assertThat(response.role()).isEqualTo(RoleCode.LABELER);
+    }
+
+    @Test
+    void loginRejectsUserWithoutExactlyOneRole() {
+        var user = user(30L, "labeler", true, true);
+        when(userMapper.selectByUsernameOrEmail("labeler")).thenReturn(user);
+        when(passwordEncoder.matches("Password123", "$2a$hash")).thenReturn(true);
+        when(userRoleMapper.selectRoleCodesByUserId(30L)).thenReturn(Set.of(RoleCode.LABELER, RoleCode.REVIEWER));
+
+        assertThatThrownBy(() -> authService.login(new LoginRequest("labeler", "Password123")))
+                .isInstanceOf(BusinessException.class)
+                .extracting("code")
+                .isEqualTo(400102);
+    }
+
+    @Test
     void refreshRejectsStaleTokenVersion() {
         when(jwtTokenService.parseRefreshToken("refresh")).thenReturn(new JwtTokenService.TokenClaims(10L, "labeler", Set.of(), 1, true));
         var user = user(10L, "labeler", true, true);
@@ -156,6 +187,32 @@ class AuthServiceTest {
                 .isInstanceOf(BusinessException.class)
                 .extracting("code")
                 .isEqualTo(401001);
+    }
+
+    @Test
+    void refreshReturnsSingleRole() {
+        when(jwtTokenService.parseRefreshToken("refresh")).thenReturn(new JwtTokenService.TokenClaims(10L, "labeler", Set.of(), 1, true));
+        var user = user(10L, "labeler", true, true);
+        when(userMapper.selectById(10L)).thenReturn(user);
+        when(userRoleMapper.selectRoleCodesByUserId(10L)).thenReturn(Set.of(RoleCode.LABELER));
+        when(jwtTokenService.createAccessToken(10L, "labeler", Set.of(RoleCode.LABELER), 1)).thenReturn("access");
+        when(jwtTokenService.createRefreshToken(10L, "labeler", 1)).thenReturn("refresh");
+
+        var response = authService.refresh("refresh");
+
+        assertThat(response.role()).isEqualTo(RoleCode.LABELER);
+    }
+
+    @Test
+    void currentUserReturnsSingleRole() {
+        CurrentUserContext.set(new CurrentUser(10L, "owner", "owner@example.com", Set.of(RoleCode.OWNER), 1));
+        try {
+            var response = authService.currentUser();
+
+            assertThat(response.role()).isEqualTo(RoleCode.OWNER);
+        } finally {
+            CurrentUserContext.clear();
+        }
     }
 
     private static UserEntity user(Long id, String username, boolean enabled, boolean loginEnabled) {

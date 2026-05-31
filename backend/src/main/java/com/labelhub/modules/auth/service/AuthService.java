@@ -71,7 +71,7 @@ public class AuthService {
         user.setTokenVersion(1);
         userMapper.insert(user);
         userRoleMapper.insert(new UserRoleEntity(user.getId(), registerRole));
-        return issueTokens(user, Set.of(registerRole));
+        return issueTokens(user, registerRole);
     }
 
     /**
@@ -86,8 +86,9 @@ public class AuthService {
             throw new BusinessException(401001, "Invalid account or password");
         }
         Set<RoleCode> roles = userRoleMapper.selectRoleCodesByUserId(user.getId());
+        RoleCode role = requireSingleRole(roles);
         userMapper.updateLastLoginAt(user.getId());
-        return issueTokens(user, roles);
+        return issueTokens(user, role);
     }
 
     /**
@@ -103,7 +104,8 @@ public class AuthService {
             throw new BusinessException(401001, "Invalid refresh token");
         }
         Set<RoleCode> roles = userRoleMapper.selectRoleCodesByUserId(user.getId());
-        return issueTokens(user, roles);
+        RoleCode role = requireSingleRole(roles);
+        return issueTokens(user, role);
     }
 
     /**
@@ -111,15 +113,24 @@ public class AuthService {
      */
     public UserProfileResponse currentUser() {
         CurrentUser currentUser = CurrentUserContext.requireCurrentUser();
-        return new UserProfileResponse(currentUser.userId(), currentUser.username(), currentUser.email(), currentUser.roles());
+        return new UserProfileResponse(currentUser.userId(), currentUser.username(), currentUser.email(), requireSingleRole(currentUser.roles()));
     }
 
-    private TokenResponse issueTokens(UserEntity user, Set<RoleCode> roles) {
+    private TokenResponse issueTokens(UserEntity user, RoleCode role) {
+        Set<RoleCode> roles = Set.of(role);
         return new TokenResponse(
                 jwtTokenService.createAccessToken(user.getId(), user.getUsername(), roles, user.getTokenVersion()),
                 jwtTokenService.createRefreshToken(user.getId(), user.getUsername(), user.getTokenVersion()),
-                user.getTokenVersion()
+                user.getTokenVersion(),
+                role
         );
+    }
+
+    private RoleCode requireSingleRole(Set<RoleCode> roles) {
+        if (roles == null || roles.size() != 1) {
+            throw new BusinessException(400102, "User must have exactly one role");
+        }
+        return roles.iterator().next();
     }
 
     private RoleCode parseRegisterRole(String rawRole) {

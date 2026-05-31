@@ -63,9 +63,9 @@ public class AdminUserController {
      * @return 空响应体
      */
     @PutMapping("/{userId}/roles")
-    @Operation(summary = "修改用户角色", description = "替换用户完整角色集合，并递增 tokenVersion 使旧令牌失效。")
-    public ApiResponse<Void> changeRoles(@PathVariable Long userId, @Valid @RequestBody UpdateUserRolesRequest request) {
-        adminUserService.changeRoles(userId, request.roles());
+    @Operation(summary = "修改用户角色", description = "替换用户的单个角色，并递增 tokenVersion 使旧令牌失效。")
+    public ApiResponse<Void> changeRole(@PathVariable Long userId, @Valid @RequestBody UpdateUserRolesRequest request) {
+        adminUserService.changeRole(userId, request.role());
         return ApiResponse.ok(null);
     }
 

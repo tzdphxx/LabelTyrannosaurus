@@ -45,14 +45,18 @@ public class AdminUserService {
      * 后台管理入口。</p>
      */
     @Transactional
-    public void changeRoles(Long userId, Set<RoleCode> roles) {
+    public void changeRole(Long userId, RoleCode role) {
+        if (role == null) {
+            throw new BusinessException(400102, "User role is required");
+        }
         UserEntity user = requireUser(userId);
         Set<RoleCode> oldRoles = userRoleMapper.selectRoleCodesByUserId(user.getId());
-        if (oldRoles.contains(RoleCode.ADMIN) && !roles.contains(RoleCode.ADMIN)
+        RoleCode oldRole = requireSingleRole(oldRoles);
+        if (oldRole == RoleCode.ADMIN && role != RoleCode.ADMIN
                 && userRoleMapper.countUsersWithRole(RoleCode.ADMIN) <= 1) {
             throw new BusinessException(400101, "Cannot remove the last admin");
         }
-        userRoleMapper.replaceRoles(userId, roles);
+        userRoleMapper.replaceRoles(userId, Set.of(role));
         userMapper.incrementTokenVersion(userId);
     }
 
@@ -91,7 +95,14 @@ public class AdminUserService {
                 user.getEnabled(),
                 user.getLoginEnabled(),
                 user.getTokenVersion(),
-                roles
+                requireSingleRole(roles)
         );
+    }
+
+    private RoleCode requireSingleRole(Set<RoleCode> roles) {
+        if (roles == null || roles.size() != 1) {
+            throw new BusinessException(400102, "User must have exactly one role");
+        }
+        return roles.iterator().next();
     }
 }

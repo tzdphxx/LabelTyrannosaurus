@@ -1,5 +1,6 @@
 package com.labelhub.modules.auth.dto;
 
+import com.labelhub.common.security.RoleCode;
 import io.swagger.v3.oas.annotations.media.Schema;
 
 @Schema(description = "令牌响应")
@@ -9,6 +10,8 @@ public record TokenResponse(
         @Schema(description = "刷新令牌，默认 14 天过期", example = "eyJhbGciOiJIUzI1NiJ9...")
         String refreshToken,
         @Schema(description = "令牌版本，账号状态或角色变化后旧令牌失效", example = "1")
-        Integer tokenVersion
+        Integer tokenVersion,
+        @Schema(description = "用户角色", example = "LABELER")
+        RoleCode role
 ) {
 }

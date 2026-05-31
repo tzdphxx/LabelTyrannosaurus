@@ -7,6 +7,9 @@ import com.labelhub.modules.auth.dto.RegisterRequest;
 import com.labelhub.modules.auth.dto.TokenResponse;
 import com.labelhub.modules.auth.dto.UserProfileResponse;
 import com.labelhub.modules.auth.service.AuthService;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.security.SecurityRequirements;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -22,6 +25,7 @@ import org.springframework.web.bind.annotation.RestController;
  */
 @RestController
 @RequestMapping("/api/v1")
+@Tag(name = "认证", description = "注册、登录、刷新令牌和当前用户信息")
 public class AuthController {
 
     private final AuthService authService;
@@ -40,6 +44,8 @@ public class AuthController {
      * @return accessToken、refreshToken 和当前 tokenVersion
      */
     @PostMapping("/auth/register")
+    @SecurityRequirements
+    @Operation(summary = "用户注册", description = "创建普通用户，按 role 参数授予 LABELER、OWNER 或 REVIEWER，并返回 accessToken 和 refreshToken。")
     public ApiResponse<TokenResponse> register(@Valid @RequestBody RegisterRequest request) {
         return ApiResponse.ok(authService.register(request));
     }
@@ -54,6 +60,8 @@ public class AuthController {
      * @return accessToken、refreshToken 和当前 tokenVersion
      */
     @PostMapping("/auth/login")
+    @SecurityRequirements
+    @Operation(summary = "用户登录", description = "支持用户名或邮箱登录。仅普通且启用登录的用户可以获取令牌。")
     public ApiResponse<TokenResponse> login(@Valid @RequestBody LoginRequest request) {
         return ApiResponse.ok(authService.login(request));
     }
@@ -68,6 +76,8 @@ public class AuthController {
      * @return 新的 accessToken、refreshToken 和当前 tokenVersion
      */
     @PostMapping("/auth/refresh")
+    @SecurityRequirements
+    @Operation(summary = "刷新令牌", description = "使用有效 refreshToken 换取新的 accessToken 和 refreshToken。")
     public ApiResponse<TokenResponse> refresh(@Valid @RequestBody RefreshRequest request) {
         return ApiResponse.ok(authService.refresh(request.refreshToken()));
     }
@@ -81,6 +91,7 @@ public class AuthController {
      * @return 当前用户 id、用户名、邮箱和角色集合
      */
     @GetMapping("/users/me")
+    @Operation(summary = "当前用户信息", description = "返回当前认证用户的最小资料和角色集合。")
     public ApiResponse<UserProfileResponse> currentUser() {
         return ApiResponse.ok(authService.currentUser());
     }

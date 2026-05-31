@@ -1,9 +1,7 @@
 package com.labelhub.modules.admin.dto;
 
 import com.labelhub.common.security.RoleCode;
-import jakarta.validation.constraints.NotEmpty;
+import jakarta.validation.constraints.NotNull;
 
-import java.util.Set;
-
-public record UpdateUserRolesRequest(@NotEmpty Set<RoleCode> roles) {
+public record UpdateUserRolesRequest(@NotNull RoleCode role) {
 }

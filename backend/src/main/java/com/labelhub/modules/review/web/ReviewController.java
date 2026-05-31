@@ -14,6 +14,8 @@ import com.labelhub.modules.review.dto.ReviewActionResponse;
 import com.labelhub.modules.review.dto.SubmissionReviewItem;
 import com.labelhub.modules.review.service.BatchReviewService;
 import com.labelhub.modules.review.service.ReviewService;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import java.util.List;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -25,6 +27,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/api/v1/reviewer/submissions")
+@Tag(name = "审核", description = "提交审核和批量审核")
 public class ReviewController {
 
     private final ReviewService reviewService;
@@ -37,12 +40,14 @@ public class ReviewController {
     }
 
     @GetMapping
+    @Operation(summary = "待终审提交列表", description = "查询 REVIEWER 可处理的待终审提交。")
     public ApiResponse<List<SubmissionReviewItem>> listPendingFinal() {
         CurrentUserContext.requireRole(RoleCode.REVIEWER);
         return ApiResponse.ok(reviewService.listPendingFinal());
     }
 
     @PostMapping("/{submissionId}/approve")
+    @Operation(summary = "通过提交", description = "审核通过指定提交。")
     public ApiResponse<ReviewActionResponse> approve(@PathVariable Long submissionId,
                                                       @Valid @RequestBody ApproveRequest request) {
         CurrentUserContext.requireRole(RoleCode.REVIEWER);
@@ -51,6 +56,7 @@ public class ReviewController {
     }
 
     @PostMapping("/{submissionId}/reject")
+    @Operation(summary = "驳回提交", description = "审核驳回指定提交。")
     public ApiResponse<ReviewActionResponse> reject(@PathVariable Long submissionId,
                                                      @Valid @RequestBody RejectRequest request) {
         CurrentUserContext.requireRole(RoleCode.REVIEWER);
@@ -59,6 +65,7 @@ public class ReviewController {
     }
 
     @PostMapping("/batch/approve")
+    @Operation(summary = "批量通过", description = "批量审核通过提交。")
     public ApiResponse<BatchReviewResponse> batchApprove(@Valid @RequestBody BatchApproveRequest request) {
         CurrentUserContext.requireRole(RoleCode.REVIEWER);
         return ApiResponse.ok(batchReviewService.batchApprove(
@@ -66,6 +73,7 @@ public class ReviewController {
     }
 
     @PostMapping("/batch/reject")
+    @Operation(summary = "批量驳回", description = "批量审核驳回提交。")
     public ApiResponse<BatchReviewResponse> batchReject(@Valid @RequestBody BatchRejectRequest request) {
         CurrentUserContext.requireRole(RoleCode.REVIEWER);
         return ApiResponse.ok(batchReviewService.batchReject(
@@ -73,6 +81,7 @@ public class ReviewController {
     }
 
     @PostMapping("/batch/mark-manual")
+    @Operation(summary = "批量转人工", description = "将提交批量标记为需要人工处理。")
     public ApiResponse<BatchReviewResponse> batchMarkManual(@Valid @RequestBody BatchMarkManualRequest request) {
         CurrentUserContext.requireRole(RoleCode.REVIEWER);
         return ApiResponse.ok(batchReviewService.batchMarkManual(
@@ -80,6 +89,7 @@ public class ReviewController {
     }
 
     @PostMapping("/batch/assign")
+    @Operation(summary = "批量分配审核", description = "批量分配提交给审核员。")
     public ApiResponse<BatchReviewResponse> batchAssign(@Valid @RequestBody BatchAssignRequest request) {
         CurrentUserContext.requireRole(RoleCode.REVIEWER);
         return ApiResponse.ok(batchReviewService.batchAssign(

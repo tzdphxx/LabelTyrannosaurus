@@ -7,6 +7,8 @@ import com.labelhub.modules.template.dto.TemplateResponse;
 import com.labelhub.modules.template.dto.TemplateVersionResponse;
 import com.labelhub.modules.template.service.TemplateService;
 import com.labelhub.modules.template.service.TemplateVersionService;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -26,6 +28,7 @@ import java.util.List;
 @RestController
 @RequestMapping("/api/v1")
 @PreAuthorize("hasAnyRole('ADMIN','OWNER')")
+@Tag(name = "模板", description = "任务模板和模板版本管理")
 public class TemplateController {
 
     private final TemplateService templateService;
@@ -40,6 +43,7 @@ public class TemplateController {
      * 创建任务模板并生成首个版本。
      */
     @PostMapping("/tasks/{taskId}/templates")
+    @Operation(summary = "创建模板", description = "为任务创建模板并生成首个版本。")
     public ApiResponse<TemplateResponse> createTemplate(@PathVariable Long taskId,
                                                         @Valid @RequestBody CreateTemplateRequest request) {
         return ApiResponse.ok(templateService.createTemplate(taskId, request));
@@ -49,6 +53,7 @@ public class TemplateController {
      * 查询任务下模板列表。
      */
     @GetMapping("/tasks/{taskId}/templates")
+    @Operation(summary = "模板列表", description = "查询任务下的模板列表。")
     public ApiResponse<List<TemplateResponse>> listTemplates(@PathVariable Long taskId) {
         return ApiResponse.ok(templateService.listTemplates(taskId));
     }
@@ -57,6 +62,7 @@ public class TemplateController {
      * 查询模板版本详情。
      */
     @GetMapping("/template-versions/{versionId}")
+    @Operation(summary = "模板版本详情", description = "查询指定模板版本详情。")
     public ApiResponse<TemplateVersionResponse> getVersion(@PathVariable Long versionId) {
         return ApiResponse.ok(templateVersionService.getVersion(versionId));
     }
@@ -65,6 +71,7 @@ public class TemplateController {
      * 基于已有版本 fork 新版本。
      */
     @PostMapping("/templates/{templateId}/fork")
+    @Operation(summary = "Fork 模板", description = "基于已有模板创建新版本。")
     public ApiResponse<TemplateResponse> forkTemplate(@PathVariable Long templateId,
                                                       @RequestBody ForkTemplateRequest request) {
         return ApiResponse.ok(templateService.forkTemplate(templateId, request));

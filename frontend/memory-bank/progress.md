@@ -375,3 +375,43 @@
 - 此前执行 `nvm list` 时当前 shell 找不到 `nvm`。
 - 此前尝试 `npm run build` 时被用户中断，后续按用户意图未继续执行 npm 命令。
 - 已执行 `git diff --check -- .\src`，未发现空白错误，仅有 Git 行尾转换提示。
+
+## 2026-06-01 - Owner 模板 Designer 画布体验与 CSS Module 迁移
+
+### 已实现
+
+- 调整 Owner 模板 Designer 页面顶部区域：
+  - 为顶部 `ContentShell` 增加页面专属 CSS Module 样式。
+  - 移除较长描述文案并压缩标题区域高度，使页面顶部更紧凑。
+- 优化物料面板展示：
+  - `MaterialPalette` 改为图标 + 标题 + 简短描述的紧凑物料项。
+  - 物料列不再使用内部滚动条，桌面端通过紧凑布局展示物料。
+  - 保持 dnd-kit 物料拖拽数据结构不变。
+- 将模板 Designer 页面相关样式从 `src/index.css` 迁移到 `OwnerTemplateDesignerPage.module.css`：
+  - 页面布局、三列面板、物料面板、画布、属性面板、拖拽浮层、Schema 面板等样式集中到页面 CSS Module。
+  - `src/index.css` 不再保留 `.designer-*` 样式。
+- 完善画布区域渲染器：
+  - 新增 `CanvasFieldPreview`，按 `DynamicSchemaNode.type` 在画布中渲染接近实际预览的字段外观。
+  - `CanvasNodeCard` 不再以 schema key/tag 为主展示节点，改为显示表单控件预览。
+  - 画布与实际预览的主要差异保留为设计态操作条、拖拽按钮、删除按钮、选中态和 drop 区域分割线。
+  - 容器类节点仍支持子节点拖放、排序和删除。
+- 迁移运行态表单渲染器样式：
+  - 新增 `DynamicFormRenderer.module.css`。
+  - `DynamicFormRenderer.tsx` 和 `rendererFields.tsx` 改用 CSS Module class。
+  - `src/index.css` 不再保留 `.dynamic-renderer*` 样式。
+
+### 当前约束
+
+- 未处理与本次需求无关的既有 TypeScript / lint 问题。
+- 工作区中存在无关修改，例如 `src/app/navigation.tsx` 和若干未跟踪目录，本次没有回退或修改它们。
+- 画布渲染器采用轻量 Ant Design 预览控件，不直接嵌入 Formily 运行态表单，以避免破坏节点级拖拽、选中和删除交互。
+
+### 已验证
+
+- 已执行 `nvm list`，当前 Node 为 `22.14.0`。
+- 已执行 `npm exec vite build`，通过。
+- 已执行 `npm run build`，失败于既有 TypeScript 错误：
+  - `src/app/navigation.tsx` 未使用导入。
+  - `RoleBadge.tsx` role key 类型不匹配。
+  - `designerDrag.ts` 与 `OwnerTemplateDesignerPage.tsx` 中已有 `never` 类型收窄问题。
+- 已执行 `npm run lint`，失败于既有 lint / React hooks 规则问题；新增 `CanvasFieldPreview` 未产生 lint 报错。

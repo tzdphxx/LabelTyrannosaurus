@@ -7,6 +7,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import type { DynamicFormSchema, DynamicFormSubmitResult } from '../../../types/dynamicForm'
 import { schemaToFormilySchema } from '../utils/formilySchema'
 import { FileUploadField, JsonEditorField, LlmPromptBlock, RichTextEditor } from './rendererFields'
+import styles from './DynamicFormRenderer.module.css'
 
 interface DynamicFormRendererProps {
   schema: DynamicFormSchema
@@ -20,7 +21,7 @@ interface DynamicFormRendererProps {
 function ShowItem(props: { text?: string }) {
   return (
     <Alert
-      className="dynamic-renderer__show-item"
+      className={styles.showItem}
       message={props.text ?? '展示信息'}
       showIcon
       type="info"
@@ -30,7 +31,7 @@ function ShowItem(props: { text?: string }) {
 
 function GroupSection({ children, title }: { children?: ReactNode; title?: string }) {
   return (
-    <Card className="dynamic-renderer__group" size="small" title={title}>
+    <Card className={styles.group} size="small" title={title}>
       {children}
     </Card>
   )
@@ -38,7 +39,7 @@ function GroupSection({ children, title }: { children?: ReactNode; title?: strin
 
 function TabsSection({ children, title }: { children?: ReactNode; title?: string }) {
   return (
-    <Card className="dynamic-renderer__group" size="small" title={title}>
+    <Card className={styles.group} size="small" title={title}>
       <Tabs
         items={[
           {
@@ -54,7 +55,7 @@ function TabsSection({ children, title }: { children?: ReactNode; title?: string
 
 function TabPaneSection({ children, title }: { children?: ReactNode; title?: string }) {
   return (
-    <div className="dynamic-renderer__tab-pane">
+    <div className={styles.tabPane}>
       <Typography.Text strong>{title}</Typography.Text>
       <div>{children}</div>
     </div>
@@ -129,7 +130,7 @@ export function DynamicFormRenderer({
   }
 
   return (
-    <div className="dynamic-renderer">
+    <div className={styles.renderer}>
       {contextHolder}
       <FormProvider form={form}>
         <FormLayout layout="vertical">
@@ -137,7 +138,7 @@ export function DynamicFormRenderer({
         </FormLayout>
       </FormProvider>
       {!readOnly ? (
-        <Space className="dynamic-renderer__actions">
+        <Space className={styles.actions}>
           <Button loading={submitting} onClick={() => void submitForm()} type="primary">
             {submitText}
           </Button>

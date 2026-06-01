@@ -20,6 +20,7 @@ import { scrollNodeIntoCanvasView } from '../../../features/dynamic-form/utils/d
 import { findSchemaNode, getSchemaNodeKeys } from '../../../features/dynamic-form/utils/schemaTree'
 import { useTemplateDesignerStore } from '../../../stores/templateDesignerStore'
 import type { DynamicFormSubmitResult } from '../../../types/dynamicForm'
+import styles from './OwnerTemplateDesignerPage.module.css'
 
 export function OwnerTemplateDesignerPage() {
   const navigate = useNavigate()
@@ -152,10 +153,9 @@ export function OwnerTemplateDesignerPage() {
   return (
     <main className="owner-page">
       {contextHolder}
-      <ContentShell>
+      <ContentShell className={styles.headerShell}>
         <PageHeader
           title={template?.name ?? '模板 Designer'}
-          description="使用 dnd-kit 搭建模板 schema，并通过 Formily Renderer 实时预览运行态表单。"
           extra={
             <>
               {hasUnsavedChanges ? <Tag color="warning">有未保存变更</Tag> : <Tag color="success">已同步</Tag>}
@@ -177,12 +177,12 @@ export function OwnerTemplateDesignerPage() {
         onDragStart={handleDragStart}
         sensors={sensors}
       >
-        <div className="designer-shell">
-          <Card className="designer-panel designer-panel--materials" loading={isLoading} title="物料">
+        <div className={styles.shell}>
+          <Card className={[styles.panel, styles.materialsPanel].join(' ')} loading={isLoading} title="物料">
             <MaterialPalette />
           </Card>
 
-          <Card className="designer-panel designer-panel--canvas" loading={isLoading} title="画布">
+          <Card className={styles.panel} loading={isLoading} title="画布">
             <DesignerCanvas
               schema={schema}
               scrollRef={canvasScrollRef}
@@ -192,7 +192,7 @@ export function OwnerTemplateDesignerPage() {
             />
           </Card>
 
-          <Card className="designer-panel designer-panel--inspector" loading={isLoading} title="属性与预览">
+          <Card className={[styles.panel, styles.inspectorPanel].join(' ')} loading={isLoading} title="属性与预览">
             <Tabs
               items={[
                 {
@@ -211,10 +211,10 @@ export function OwnerTemplateDesignerPage() {
                   key: 'preview',
                   label: '预览',
                   children: schema ? (
-                    <Space className="designer-preview" direction="vertical" size={14}>
+                    <Space className={styles.preview} direction="vertical" size={14}>
                       <DynamicFormRenderer schema={schema} onSubmit={setPreviewResult} />
                       {previewResult ? (
-                        <pre className="designer-preview__result">{JSON.stringify(previewResult, null, 2)}</pre>
+                        <pre className={styles.previewResult}>{JSON.stringify(previewResult, null, 2)}</pre>
                       ) : null}
                     </Space>
                   ) : null,

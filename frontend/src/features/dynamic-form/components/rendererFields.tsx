@@ -1,5 +1,6 @@
 import { Alert, Card, Input, Upload, Typography } from 'antd'
 import type { UploadFile } from 'antd/es/upload/interface'
+import styles from './DynamicFormRenderer.module.css'
 
 interface ValueFieldProps<T> {
   value?: T
@@ -21,7 +22,7 @@ export function JsonEditorField({ value, onChange, placeholder }: ValueFieldProp
   return (
     <Input.TextArea
       autoSize={{ minRows: 6, maxRows: 12 }}
-      className="dynamic-renderer__json-editor"
+      className={styles.jsonEditor}
       placeholder={placeholder}
       value={value}
       onChange={(event) => onChange?.(event.target.value)}
@@ -68,7 +69,7 @@ export function FileUploadField({
 
 export function LlmPromptBlock({ prompt, text, title }: { prompt?: string; text?: string; title?: string }) {
   return (
-    <Card className="dynamic-renderer__llm" size="small" title={title ?? 'LLM 交互占位'}>
+    <Card className={styles.llm} size="small" title={title ?? 'LLM 交互占位'}>
       <Typography.Paragraph>{prompt}</Typography.Paragraph>
       <Alert message={text ?? 'P1 阶段不调用真实模型。'} showIcon type="info" />
     </Card>

@@ -1,9 +1,10 @@
 import { useSortable } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import { DeleteOutlined, DragOutlined } from '@ant-design/icons'
-import { Button, Tag, Typography } from 'antd'
+import { Button, Typography } from 'antd'
 import type { DynamicSchemaNode } from '../../../../types/dynamicForm'
 import { dynamicMaterialRegistry } from '../../materialRegistry'
+import { CanvasFieldPreview } from './CanvasFieldPreview'
 import { CanvasDropZone } from './CanvasDropZone'
 
 interface CanvasNodeCardProps {
@@ -40,16 +41,15 @@ export function CanvasNodeCard({ node, parentId, selectedNodeId, onDelete, onSel
       }}
       style={style}
     >
-      <div className="designer-node__head">
-        <button className="designer-node__drag" type="button" {...attributes} {...listeners}>
+      <div className="designer-node__toolbar">
+        <button aria-label="拖拽字段" className="designer-node__drag" type="button" {...attributes} {...listeners}>
           <DragOutlined />
         </button>
-        <div className="designer-node__title">
-          <Typography.Text strong>{node.title}</Typography.Text>
-          <Typography.Text type="secondary">{node.key}</Typography.Text>
-        </div>
-        <Tag>{definition.title}</Tag>
+        <Typography.Text className="designer-node__type" type="secondary">
+          {definition.title}
+        </Typography.Text>
         <Button
+          aria-label="删除字段"
           danger
           icon={<DeleteOutlined />}
           onClick={(event) => {
@@ -62,20 +62,24 @@ export function CanvasNodeCard({ node, parentId, selectedNodeId, onDelete, onSel
         />
       </div>
 
-      {node.children ? (
-        <CanvasDropZone nodes={node.children} parentId={node.id}>
-          {node.children.map((child) => (
-            <CanvasNodeCard
-              key={child.id}
-              node={child}
-              parentId={node.id}
-              selectedNodeId={selectedNodeId}
-              onDelete={onDelete}
-              onSelect={onSelect}
-            />
-          ))}
-        </CanvasDropZone>
-      ) : null}
+      <div className="designer-node__content">
+        <CanvasFieldPreview node={node}>
+          {node.children ? (
+            <CanvasDropZone nodes={node.children} parentId={node.id}>
+              {node.children.map((child) => (
+                <CanvasNodeCard
+                  key={child.id}
+                  node={child}
+                  parentId={node.id}
+                  selectedNodeId={selectedNodeId}
+                  onDelete={onDelete}
+                  onSelect={onSelect}
+                />
+              ))}
+            </CanvasDropZone>
+          ) : null}
+        </CanvasFieldPreview>
+      </div>
     </div>
   )
 }

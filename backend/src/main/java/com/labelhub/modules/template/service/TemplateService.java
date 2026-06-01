@@ -25,8 +25,8 @@ import java.util.Map;
 /**
  * 模板管理应用服务。
  *
- * <p>BE-B 负责 schema 存储和版本递增。发布任务时冻结哪个 templateVersionId 属于 BE-A，
- * 因此本服务不会写 {@code tasks.published_template_version_id}。</p>
+ * <p>BE-B 负责 OWNER 模板库、schema 存储和版本递增。发布任务时冻结哪个 templateVersionId
+ * 属于 BE-A，因此本服务不会写 {@code tasks.published_template_version_id}。</p>
  */
 @Service
 public class TemplateService {
@@ -64,12 +64,36 @@ public class TemplateService {
 
         TemplateEntity template = new TemplateEntity();
         template.setTaskId(task.getId());
+        template.setOwnerId(task.getOwnerId());
         template.setName(request.name());
         template.setCurrentVersionNo(1);
         template.setCreatedBy(actor.userId());
         templateMapper.insert(template);
 
-        TemplateVersionEntity version = newVersion(template.getId(), task.getId(), 1, schemaJson,
+        TemplateVersionEntity version = newVersion(template.getId(), task.getOwnerId(), task.getId(), 1, schemaJson,
+                request.changeNote(), actor.userId());
+        templateVersionMapper.insert(version);
+        return toResponse(template, version);
+    }
+
+    /**
+     * 创建 OWNER 级模板并生成首个版本。新模板先于任务存在，因此不写入 taskId。
+     */
+    @Transactional
+    public TemplateResponse createOwnerTemplate(CreateTemplateRequest request) {
+        CurrentUser actor = CurrentUserContext.requireCurrentUser();
+        String schemaJson = writeJson(request.schemaJson());
+        schemaValidator.validateSchema(schemaJson);
+
+        TemplateEntity template = new TemplateEntity();
+        template.setTaskId(null);
+        template.setOwnerId(actor.userId());
+        template.setName(request.name());
+        template.setCurrentVersionNo(1);
+        template.setCreatedBy(actor.userId());
+        templateMapper.insert(template);
+
+        TemplateVersionEntity version = newVersion(template.getId(), actor.userId(), null, 1, schemaJson,
                 request.changeNote(), actor.userId());
         templateVersionMapper.insert(version);
         return toResponse(template, version);
@@ -86,19 +110,28 @@ public class TemplateService {
     }
 
     /**
+     * 查询当前 OWNER 的可复用模板库。
+     */
+    public List<TemplateResponse> listOwnerTemplates() {
+        CurrentUser actor = CurrentUserContext.requireCurrentUser();
+        return templateMapper.selectByOwnerId(actor.userId()).stream()
+                .map(template -> toResponse(template, currentVersion(template)))
+                .toList();
+    }
+
+    /**
      * 基于已有版本 fork 新版本。旧版本始终保持不可变。
      */
     @Transactional
     public TemplateResponse forkTemplate(Long templateId, ForkTemplateRequest request) {
-        TemplateEntity template = requireTemplate(templateId);
-        requireOwnedTask(template.getTaskId());
+        TemplateEntity template = requireOwnedTemplate(templateId);
         CurrentUser actor = CurrentUserContext.requireCurrentUser();
         TemplateVersionEntity baseVersion = resolveBaseVersion(template, request.baseVersionId());
         String schemaJson = request.schemaJson() == null ? baseVersion.getSchemaJson() : writeJson(request.schemaJson());
         schemaValidator.validateSchema(schemaJson);
 
         int nextVersionNo = template.getCurrentVersionNo() + 1;
-        TemplateVersionEntity newVersion = newVersion(template.getId(), template.getTaskId(), nextVersionNo,
+        TemplateVersionEntity newVersion = newVersion(template.getId(), template.getOwnerId(), template.getTaskId(), nextVersionNo,
                 schemaJson, request.changeNote(), actor.userId());
         templateVersionMapper.insert(newVersion);
         templateMapper.updateCurrentVersionNo(template.getId(), nextVersionNo);
@@ -133,6 +166,15 @@ public class TemplateService {
         return template;
     }
 
+    private TemplateEntity requireOwnedTemplate(Long templateId) {
+        TemplateEntity template = requireTemplate(templateId);
+        CurrentUser currentUser = CurrentUserContext.requireCurrentUser();
+        if (!currentUser.roles().contains(RoleCode.ADMIN) && !currentUser.userId().equals(template.getOwnerId())) {
+            throw new BusinessException(403001, "Forbidden");
+        }
+        return template;
+    }
+
     private TaskEntity requireOwnedTask(Long taskId) {
         CurrentUser currentUser = CurrentUserContext.requireCurrentUser();
         TaskEntity task = taskMapper.selectById(taskId);
@@ -146,6 +188,7 @@ public class TemplateService {
     }
 
     private TemplateVersionEntity newVersion(Long templateId,
+                                             Long ownerId,
                                              Long taskId,
                                              Integer versionNo,
                                              String schemaJson,
@@ -153,6 +196,7 @@ public class TemplateService {
                                              Long actorId) {
         TemplateVersionEntity version = new TemplateVersionEntity();
         version.setTemplateId(templateId);
+        version.setOwnerId(ownerId);
         version.setTaskId(taskId);
         version.setVersionNo(versionNo);
         version.setSchemaJson(schemaJson);
@@ -167,6 +211,7 @@ public class TemplateService {
         return new TemplateResponse(
                 template.getId(),
                 template.getTaskId(),
+                template.getOwnerId(),
                 template.getName(),
                 template.getCurrentVersionNo(),
                 versionResponse,

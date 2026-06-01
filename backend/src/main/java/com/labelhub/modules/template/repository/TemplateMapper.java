@@ -26,6 +26,16 @@ public interface TemplateMapper extends BaseMapper<TemplateEntity> {
     List<TemplateEntity> selectByTaskId(@Param("taskId") Long taskId);
 
     /**
+     * 查询当前 OWNER 的可复用模板库。
+     */
+    @Select("""
+            select * from templates
+            where owner_id = #{ownerId}
+            order by updated_at desc, id desc
+            """)
+    List<TemplateEntity> selectByOwnerId(@Param("ownerId") Long ownerId);
+
+    /**
      * fork 新版本后同步当前版本号。
      */
     @Update("""

@@ -19,6 +19,7 @@ import com.labelhub.modules.task.dto.TaskLifecycleResponse;
 import com.labelhub.modules.task.dto.UpdateTaskRequest;
 import com.labelhub.modules.task.mapper.TaskMapper;
 import com.labelhub.modules.task.mapper.TaskTagMapper;
+import com.labelhub.modules.template.service.TemplateVersionService;
 import java.time.LocalDateTime;
 import java.util.LinkedHashSet;
 import java.util.LinkedHashMap;
@@ -44,19 +45,22 @@ public class TaskLifecycleService {
     private final AuditAppender auditAppender;
     private final TraceIdProvider traceIdProvider;
     private final DatasetImportService datasetImportService;
+    private final TemplateVersionService templateVersionService;
 
     public TaskLifecycleService(TaskMapper taskMapper,
                                 TaskTagMapper taskTagMapper,
                                 TaskPublishDependencyChecker publishDependencyChecker,
                                 AuditAppender auditAppender,
                                 TraceIdProvider traceIdProvider,
-                                DatasetImportService datasetImportService) {
+                                DatasetImportService datasetImportService,
+                                TemplateVersionService templateVersionService) {
         this.taskMapper = taskMapper;
         this.taskTagMapper = taskTagMapper;
         this.publishDependencyChecker = publishDependencyChecker;
         this.auditAppender = auditAppender;
         this.traceIdProvider = traceIdProvider;
         this.datasetImportService = datasetImportService;
+        this.templateVersionService = templateVersionService;
     }
 
     public List<OwnerTaskSummaryResponse> listOwnerTasks(Long ownerId) {
@@ -88,6 +92,7 @@ public class TaskLifecycleService {
 
     @Transactional
     public TaskLifecycleResponse create(Long ownerId, CreateTaskRequest request) {
+        requireOwnerTemplateVersion(ownerId, request.publishedTemplateVersionId());
         Task task = new Task();
         task.setOwnerId(ownerId);
         task.setTitle(request.title());
@@ -126,6 +131,7 @@ public class TaskLifecycleService {
         if (task.getStatus() != TaskStatus.DRAFT) {
             throw new BusinessException(TASK_STATUS_NOT_ALLOWED, "Only draft tasks can be edited");
         }
+        requireOwnerTemplateVersion(ownerId, request.publishedTemplateVersionId());
         Map<String, Object> beforeJson = snapshot(task);
         task.setTitle(request.title());
         task.setDescription(request.description());
@@ -147,6 +153,7 @@ public class TaskLifecycleService {
         Task task = loadOwnedTask(ownerId, taskId);
         requireStatus(task, Set.of(TaskStatus.DRAFT));
         validatePublishRequirements(task);
+        templateVersionService.markPublishedSnapshot(task.getPublishedTemplateVersionId());
         task.setStatus(TaskStatus.PUBLISHED);
         task.setPublishedAt(LocalDateTime.now());
         return updateStatus(task, ownerId, "TASK_PUBLISHED", TaskStatus.DRAFT);
@@ -204,7 +211,7 @@ public class TaskLifecycleService {
         if (!publishDependencyChecker.datasetReady(task.getId())) {
             throw missingPublishRequirement("Task dataset is required");
         }
-        if (!publishDependencyChecker.templateVersionExists(task.getPublishedTemplateVersionId())) {
+        if (!publishDependencyChecker.templateVersionUsableByTask(task.getId(), task.getPublishedTemplateVersionId())) {
             throw missingPublishRequirement("Task template version is required");
         }
         if (!publishDependencyChecker.aiReviewConfigExists(task.getId(), task.getAiReviewConfigId())) {
@@ -217,6 +224,15 @@ public class TaskLifecycleService {
 
     private BusinessException missingPublishRequirement(String message) {
         return new BusinessException(TASK_PUBLISH_REQUIREMENT_MISSING, message);
+    }
+
+    private void requireOwnerTemplateVersion(Long ownerId, Long templateVersionId) {
+        if (templateVersionId == null) {
+            return;
+        }
+        if (!publishDependencyChecker.templateVersionOwnedBy(ownerId, templateVersionId)) {
+            throw new BusinessException(403001, "Template version is not owned by current owner");
+        }
     }
 
     private TaskDetailResponse toDetailResponse(Task task) {

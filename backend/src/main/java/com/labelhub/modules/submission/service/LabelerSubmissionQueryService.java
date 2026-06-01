@@ -1,6 +1,7 @@
 package com.labelhub.modules.submission.service;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.labelhub.common.api.PageResponse;
 import com.labelhub.common.exception.BusinessException;
 import com.labelhub.modules.assignment.domain.Assignment;
 import com.labelhub.modules.assignment.domain.AssignmentStatus;
@@ -54,11 +55,18 @@ public class LabelerSubmissionQueryService {
         this.templateVersionMapper = templateVersionMapper;
     }
 
-    public List<LabelerSubmissionListItem> listSubmissions(Long labelerId,
+    public PageResponse<LabelerSubmissionListItem> listSubmissions(Long labelerId,
                                                            Long taskId,
                                                            SubmissionStatus submissionStatus,
                                                            AssignmentStatus assignmentStatus,
                                                            int page, int size) {
+        LambdaQueryWrapper<Submission> countWrapper = new LambdaQueryWrapper<Submission>()
+                .eq(Submission::getLabelerId, labelerId)
+                .ne(Submission::getStatus, SubmissionStatus.SUPERSEDED)
+                .eq(taskId != null, Submission::getTaskId, taskId)
+                .eq(submissionStatus != null, Submission::getStatus, submissionStatus);
+        long total = submissionMapper.selectCount(countWrapper);
+
         LambdaQueryWrapper<Submission> wrapper = new LambdaQueryWrapper<Submission>()
                 .eq(Submission::getLabelerId, labelerId)
                 .ne(Submission::getStatus, SubmissionStatus.SUPERSEDED)
@@ -69,7 +77,7 @@ public class LabelerSubmissionQueryService {
 
         List<Submission> submissions = submissionMapper.selectList(wrapper);
 
-        return submissions.stream().map(s -> {
+        List<LabelerSubmissionListItem> items = submissions.stream().map(s -> {
             AiReviewResult aiResult = aiReviewResultMapper.selectBySubmissionId(s.getId());
             Assignment assignment = assignmentMapper.selectById(s.getAssignmentId());
 
@@ -106,6 +114,7 @@ public class LabelerSubmissionQueryService {
                     s.getUpdatedAt()
             );
         }).filter(item -> item != null).toList();
+        return new PageResponse<>(items, page, size, total);
     }
 
     public LabelerSubmissionDetailResponse getDetail(Long submissionId, Long labelerId) {

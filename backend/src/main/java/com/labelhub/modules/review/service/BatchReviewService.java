@@ -145,6 +145,8 @@ public class BatchReviewService {
             if (submission.getStatus() != SubmissionStatus.PENDING_FINAL) {
                 return BatchReviewItemResult.fail(submissionId, "Not in PENDING_FINAL status");
             }
+            submission.setAssignedReviewerId(targetReviewerId);
+            submissionMapper.updateById(submission);
             ReviewRecord record = new ReviewRecord();
             record.setSubmissionId(submissionId);
             record.setReviewerId(reviewerId);

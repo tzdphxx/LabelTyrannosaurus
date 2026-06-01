@@ -12,6 +12,8 @@ import com.labelhub.modules.auth.dto.LoginRequest;
 import com.labelhub.modules.auth.dto.RegisterRequest;
 import com.labelhub.modules.auth.dto.TokenResponse;
 import com.labelhub.modules.auth.dto.UserProfileResponse;
+import com.labelhub.modules.auth.dto.ChangePasswordRequest;
+import com.labelhub.modules.auth.dto.UpdateProfileRequest;
 import com.labelhub.modules.auth.repository.UserMapper;
 import com.labelhub.modules.auth.repository.UserRoleMapper;
 import lombok.extern.slf4j.Slf4j;
@@ -154,5 +156,38 @@ public class AuthService {
                 && Boolean.TRUE.equals(user.getEnabled())
                 && Boolean.TRUE.equals(user.getLoginEnabled())
                 && user.getPasswordHash() != null;
+    }
+
+    @Transactional
+    public void changePassword(Long userId, ChangePasswordRequest request) {
+        UserEntity user = userMapper.selectById(userId);
+        if (user == null) {
+            throw new BusinessException(401001, "User not found");
+        }
+        if (!passwordEncoder.matches(request.oldPassword(), user.getPasswordHash())) {
+            throw new BusinessException(401001, "Old password is incorrect");
+        }
+        user.setPasswordHash(passwordEncoder.encode(request.newPassword()));
+        userMapper.updateById(user);
+        userMapper.incrementTokenVersion(userId);
+    }
+
+    @Transactional
+    public void updateProfile(Long userId, UpdateProfileRequest request) {
+        UserEntity user = userMapper.selectById(userId);
+        if (user == null) {
+            throw new BusinessException(401001, "User not found");
+        }
+        if (request.email() != null && !request.email().isBlank()) {
+            UserEntity existing = userMapper.selectByEmail(request.email());
+            if (existing != null && !existing.getId().equals(userId)) {
+                throw new BusinessException(400102, "Email already in use");
+            }
+            user.setEmail(request.email());
+        }
+        if (request.displayName() != null) {
+            user.setDisplayName(request.displayName());
+        }
+        userMapper.updateById(user);
     }
 }

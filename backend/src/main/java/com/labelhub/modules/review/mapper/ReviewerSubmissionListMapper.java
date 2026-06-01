@@ -45,4 +45,45 @@ public interface ReviewerSubmissionListMapper {
             @Param("assignedReviewerId") Long assignedReviewerId,
             @Param("offset") int offset,
             @Param("limit") int limit);
+
+    @Select("""
+            <script>
+            SELECT COUNT(1)
+            FROM submissions s
+            LEFT JOIN ai_review_results ar ON ar.submission_id = s.id
+            LEFT JOIN conflict_groups cg ON cg.task_id = s.task_id
+                   AND cg.dataset_item_id = s.dataset_item_id
+            WHERE s.status NOT IN ('SUPERSEDED', 'APPROVED', 'REJECTED', 'AI_REVIEWING')
+            <if test="taskId != null"> AND s.task_id = #{taskId}</if>
+            <if test="submissionStatus != null"> AND s.status = #{submissionStatus}</if>
+            <if test="aiDecision != null"> AND ar.decision = #{aiDecision}</if>
+            <if test="aiReviewStatus != null"> AND ar.status = #{aiReviewStatus}</if>
+            <if test="conflictStatus != null"> AND cg.status = #{conflictStatus}</if>
+            <if test="reviewLevel != null"> AND s.current_review_level = #{reviewLevel}</if>
+            <if test="assignedReviewerId != null"> AND s.assigned_reviewer_id = #{assignedReviewerId}</if>
+            </script>
+            """)
+    long countWithFilters(
+            @Param("taskId") Long taskId,
+            @Param("submissionStatus") String submissionStatus,
+            @Param("aiDecision") String aiDecision,
+            @Param("aiReviewStatus") String aiReviewStatus,
+            @Param("conflictStatus") String conflictStatus,
+            @Param("reviewLevel") Integer reviewLevel,
+            @Param("assignedReviewerId") Long assignedReviewerId);
+
+    @Select("""
+            SELECT s.task_id AS taskId,
+                   t.title AS taskTitle,
+                   COUNT(1) AS pendingCount,
+                   SUM(CASE WHEN s.assigned_reviewer_id = #{reviewerId} THEN 1 ELSE 0 END) AS myPendingCount
+            FROM submissions s
+            JOIN tasks t ON t.id = s.task_id
+            WHERE s.status = 'PENDING_FINAL'
+            GROUP BY s.task_id, t.title
+            HAVING pendingCount > 0
+            ORDER BY pendingCount DESC
+            """)
+    List<com.labelhub.modules.review.dto.ReviewerTaskSummary> selectTaskSummariesForReviewer(
+            @Param("reviewerId") Long reviewerId);
 }

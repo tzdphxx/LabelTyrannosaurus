@@ -1,18 +1,16 @@
-# assignment
-
 # Assignment / Submission API Contract
 
-Owner：BE\-A
+Owner: BE-A
 
 ## GET /api/v1/market/tasks
 
 Description: Lists currently claimable published tasks for labelers in the task marketplace.
 
-权限：LABELER。
+Permission: `LABELER`
 
-响应字段：
+Response fields:
 
-```Plaintext
+```text
 taskId
 title
 tags
@@ -21,29 +19,39 @@ availableCount
 rewardSummary
 ```
 
-约束：
+Constraints:
 
-```Plaintext
-只返回 PUBLISHED 且未过期任务。
-MVP 任务分发只做先到先得。
+```text
+Only PUBLISHED and non-expired tasks are returned.
+Task overlapCount is fixed to 1.
+availableCount counts dataset items without a non-CANCELLED assignment.
 ```
 
-## POST /api/v1/tasks/\{taskId\}/assignments/claim
+## POST /api/v1/tasks/{taskId}/assignments/claim
 
 Description: Claims one available dataset item for the current labeler and returns the workbench payload.
 
-权限：LABELER。
+Permission: `LABELER`
 
-内部依赖：
+Internal dependencies:
 
-```Plaintext
-BE-B reserveClaimableItem(taskId,labelerId)
+```text
+BE-B reserveClaimableItem(taskId, labelerId)
 BE-B LockService
 ```
 
-响应字段：
+Claim constraints:
 
-```Plaintext
+```text
+One datasetItemId can have at most one non-CANCELLED assignment.
+Unclaimed items are shown as UNCLAIMED in dataset item lists.
+After claim succeeds, assignment.status = CLAIMED and itemStatus = CLAIMED.
+Overlapping multi-labeler claim is no longer supported.
+```
+
+Response fields:
+
+```text
 assignmentId
 datasetItemId
 templateVersionId
@@ -53,66 +61,74 @@ draftAnswerJson
 draftVersion
 ```
 
-状态影响：
+State impact:
 
-```Plaintext
+```text
 assignment.status = CLAIMED
 ```
 
-## PUT /api/v1/assignments/\{assignmentId\}/draft
+## PUT /api/v1/assignments/{assignmentId}/draft
 
 Description: Saves a labeler's draft answer with optimistic version control before final submission.
 
-请求字段：
+Request fields:
 
-```Plaintext
+```text
 answerJson
 clientVersion
 ```
 
-状态影响：
+State impact:
 
-```Plaintext
+```text
 CLAIMED -> DRAFTING
 DRAFTING -> DRAFTING
+RETURNED -> DRAFTING
 ```
 
-错误码：
+Dataset item status impact:
 
-```Plaintext
-409101 draftVersion 冲突
+```text
+CLAIMED -> DRAFT
+RETURNED -> DRAFT
 ```
 
-## POST /api/v1/assignments/\{assignmentId\}/submit
+Error codes:
+
+```text
+409101 draftVersion conflict
+```
+
+## POST /api/v1/assignments/{assignmentId}/submit
 
 Description: Validates and submits the assignment answer, creates a submission version, and schedules AI review.
 
-请求字段：
+Request fields:
 
-```Plaintext
+```text
 answerJson
 clientVersion
 ```
 
-内部依赖：
+Internal dependencies:
 
-```Plaintext
+```text
 BE-B validateAnswer(schemaVersionId, answerJson)
 ```
 
-状态影响：
+State impact:
 
-```Plaintext
+```text
 assignment.status = SUBMITTED
+dataset itemStatus = SUBMITTED
 submission.status = AI_REVIEWING
 create submission version
-enqueue ai review
+enqueue AI review
 ```
 
-打回后重提：
+Resubmit after return:
 
-```Plaintext
+```text
 assignment.status RETURNED -> SUBMITTED
 new submission.versionNo = previous + 1
 ```
-

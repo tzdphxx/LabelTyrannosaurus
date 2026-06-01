@@ -15,12 +15,12 @@ public interface DatasetItemMapper extends BaseMapper<DatasetItem> {
             FROM dataset_items di
             WHERE di.task_id = #{taskId}
               AND di.deleted = 0
-              AND di.assigned_count < #{overlapCount}
+              AND di.assigned_count = 0
               AND NOT EXISTS (
                 SELECT 1
                 FROM assignments a
                 WHERE a.dataset_item_id = di.id
-                  AND a.labeler_id = #{labelerId}
+                  AND a.status != 'CANCELLED'
               )
             ORDER BY di.id
             LIMIT 1
@@ -31,10 +31,10 @@ public interface DatasetItemMapper extends BaseMapper<DatasetItem> {
 
     @Update("""
             UPDATE dataset_items
-            SET assigned_count = assigned_count + 1
+            SET assigned_count = 1
             WHERE id = #{datasetItemId}
               AND deleted = 0
-              AND assigned_count < #{overlapCount}
+              AND assigned_count = 0
             """)
     int reserveIfAvailable(@Param("datasetItemId") Long datasetItemId,
                            @Param("overlapCount") Integer overlapCount);
@@ -44,12 +44,12 @@ public interface DatasetItemMapper extends BaseMapper<DatasetItem> {
             FROM dataset_items di
             WHERE di.task_id = #{taskId}
               AND di.deleted = 0
-              AND di.assigned_count < #{overlapCount}
+              AND di.assigned_count = 0
               AND NOT EXISTS (
                 SELECT 1
                 FROM assignments a
                 WHERE a.dataset_item_id = di.id
-                  AND a.labeler_id = #{labelerId}
+                  AND a.status != 'CANCELLED'
               )
             """)
     Integer countAvailableForLabeler(@Param("taskId") Long taskId,

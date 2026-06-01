@@ -15,6 +15,8 @@ public record DatasetItemResponse(Long itemId,
                                   Integer assignedCount,
                                   Integer submittedCount,
                                   Integer approvedCount,
+                                  DatasetItemStatus itemStatus,
+                                  Long labelerId,
                                   LocalDateTime createdAt,
                                   LocalDateTime updatedAt) {
 }

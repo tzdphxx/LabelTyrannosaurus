@@ -122,6 +122,8 @@ Description: Paginates active dataset items under a task for owner-side data man
         "assignedCount": 0,
         "submittedCount": 0,
         "approvedCount": 0,
+        "itemStatus": "UNCLAIMED",
+        "labelerId": null,
         "createdAt": "2026-05-28T10:00:00",
         "updatedAt": "2026-05-28T10:00:00"
       }
@@ -136,6 +138,8 @@ Description: Paginates active dataset items under a task for owner-side data man
 
 说明：
 - 只返回 `deleted=false` 的题目。
+- `itemStatus` 由有效 assignment 推导，取值为 `UNCLAIMED`（未领取）、`CLAIMED`（待标）、`DRAFT`（草稿）、`SUBMITTED`（已提交）、`RETURNED`（已打回）、`APPROVED`（已通过）。
+- `labelerId` 为当前有效领取人；`UNCLAIMED` 时为 `null`。
 - BE-B 仅读取任务归属和题目计数，不修改 BE-A 的 assignment/submission 状态。
 
 ## 批量追加题目
@@ -252,8 +256,9 @@ DatasetSnapshotService.increaseApprovedCount(itemId)
 
 规则：
 - `getDatasetItemSnapshot` 只返回未删除题目的稳定数据快照。
-- `reserveClaimableItem` 只递增 `dataset_items.assigned_count`，不创建 assignment。
-- `reserveClaimableItem` 仅允许 `PUBLISHED` 任务，并要求 `assignedCount < task.overlapCount`。
+- `reserveClaimableItem` 只把 `dataset_items.assigned_count` 标记为 `1`，不创建 assignment。
+- `reserveClaimableItem` 仅允许 `PUBLISHED` 任务，并要求题目当前不存在非 `CANCELLED` assignment。
+- 一题最多一个有效标注员；任务 `overlapCount` 当前固定为 `1`，不再用于放量领取。
 - 无可领取题目返回 `409201`。
 - `increaseSubmittedCount` 和 `increaseApprovedCount` 必须由 BE-A 或事件消费链路显式调用，BE-B 不私自推断 submission 状态。
 

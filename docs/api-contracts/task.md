@@ -57,7 +57,7 @@ instructionRichText optional
 tags optional, each tag max 64
 quota required, >= 1
 deadlineAt required, must be future time
-overlapCount required, >= 1
+overlapCount required, must be 1
 publishedTemplateVersionId optional, must belong to current OWNER
 aiReviewConfigId optional
 ```
@@ -136,7 +136,7 @@ instructionRichText optional
 tags optional, each tag max 64
 quota required, >= 1
 deadlineAt required, must be future time
-overlapCount required, >= 1
+overlapCount required, must be 1
 publishedTemplateVersionId optional, must belong to current OWNER
 aiReviewConfigId optional
 ```
@@ -179,7 +179,7 @@ Publish checks:
 ```text
 Task status must be DRAFT.
 Task quota must be > 0.
-Task overlapCount must be >= 1.
+Task overlapCount must be 1.
 Task deadlineAt must be in the future.
 BE-B dataset must be ready.
 BE-B template version must exist and belong to the task owner.

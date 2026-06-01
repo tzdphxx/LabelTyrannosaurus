@@ -2,6 +2,7 @@ package com.labelhub.modules.task.dto;
 
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.Future;
+import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -29,9 +30,10 @@ public record CreateTaskRequest(
         @NotNull
         @Future
         LocalDateTime deadlineAt,
-        @Schema(description = "每条数据需要的标注份数", example = "3")
+        @Schema(description = "每条数据需要的标注份数，当前固定为 1", example = "1")
         @NotNull
         @Min(1)
+        @Max(1)
         Integer overlapCount,
         @Schema(description = "已发布模板版本 ID", example = "20")
         Long publishedTemplateVersionId,

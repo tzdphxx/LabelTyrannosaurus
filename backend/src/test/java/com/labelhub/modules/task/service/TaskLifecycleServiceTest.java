@@ -106,6 +106,15 @@ class TaskLifecycleServiceTest {
     }
 
     @Test
+    void rejectsTaskCreationWhenOverlapCountIsNotOne() {
+        assertThatThrownBy(() -> taskLifecycleService.create(OWNER_ID, createRequestWithOverlapCount(2)))
+                .isInstanceOfSatisfying(BusinessException.class,
+                        ex -> assertThat(ex.getCode()).isEqualTo(400101));
+
+        verify(taskMapper, never()).insert(any(Task.class));
+    }
+
+    @Test
     void createsDraftTaskAndStartsDatasetImportWhenFileProvided() {
         when(traceIdProvider.currentTraceId()).thenReturn("trace-1");
         when(publishDependencyChecker.templateVersionOwnedBy(OWNER_ID, 100L)).thenReturn(true);
@@ -184,6 +193,18 @@ class TaskLifecycleServiceTest {
         assertThat(response.status()).isEqualTo(TaskStatus.DRAFT);
         assertThat(task.getTitle()).isEqualTo("Updated task");
         verify(auditAppender).append(any(AuditCommand.class));
+    }
+
+    @Test
+    void rejectsDraftUpdateWhenOverlapCountIsNotOne() {
+        Task task = draftTask();
+        when(taskMapper.selectById(TASK_ID)).thenReturn(task);
+
+        assertThatThrownBy(() -> taskLifecycleService.updateDraft(OWNER_ID, TASK_ID, updateRequestWithOverlapCount(2)))
+                .isInstanceOfSatisfying(BusinessException.class,
+                        ex -> assertThat(ex.getCode()).isEqualTo(400101));
+
+        verify(taskMapper, never()).updateById(any(Task.class));
     }
 
     @Test
@@ -305,6 +326,10 @@ class TaskLifecycleServiceTest {
     }
 
     private CreateTaskRequest createRequest() {
+        return createRequestWithOverlapCount(1);
+    }
+
+    private CreateTaskRequest createRequestWithOverlapCount(int overlapCount) {
         return new CreateTaskRequest(
                 "New task",
                 "Description",
@@ -312,7 +337,7 @@ class TaskLifecycleServiceTest {
                 List.of("qa"),
                 10,
                 LocalDateTime.now().plusDays(1),
-                1,
+                overlapCount,
                 100L,
                 200L,
                 null
@@ -335,6 +360,10 @@ class TaskLifecycleServiceTest {
     }
 
     private UpdateTaskRequest updateRequest() {
+        return updateRequestWithOverlapCount(1);
+    }
+
+    private UpdateTaskRequest updateRequestWithOverlapCount(int overlapCount) {
         return new UpdateTaskRequest(
                 "Updated task",
                 "Updated description",
@@ -342,7 +371,7 @@ class TaskLifecycleServiceTest {
                 List.of("review"),
                 20,
                 LocalDateTime.now().plusDays(2),
-                2,
+                overlapCount,
                 100L,
                 200L
         );

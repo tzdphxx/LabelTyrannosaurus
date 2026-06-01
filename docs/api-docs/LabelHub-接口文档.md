@@ -160,6 +160,44 @@ Authorization: Bearer <accessToken>
 
 ---
 
+### 1.5 PUT /api/v1/users/me/password
+
+**作用**：修改当前用户密码。校验旧密码后更新为新密码，成功后 tokenVersion 递增，旧令牌失效需重新登录。
+
+**权限**：需认证（任意角色）
+
+**请求体** `ChangePasswordRequest`：
+
+| 字段 | 类型 | 必填 | 约束 | 说明 |
+|------|------|------|------|------|
+| oldPassword | String | 是 | 非空 | 当前密码 |
+| newPassword | String | 是 | 8~128 字符 | 新密码 |
+
+**响应体**：空（code=0 表示成功）
+
+**错误码**：401001（旧密码错误）
+
+---
+
+### 1.6 PUT /api/v1/users/me/profile
+
+**作用**：更新当前用户的个人信息。支持修改显示名称和邮箱，邮箱需全局唯一。
+
+**权限**：需认证（任意角色）
+
+**请求体** `UpdateProfileRequest`：
+
+| 字段 | 类型 | 必填 | 约束 | 说明 |
+|------|------|------|------|------|
+| displayName | String | 否 | 最大 64 字符 | 显示名称 |
+| email | String | 否 | 合法邮箱格式，最大 255 字符 | 新邮箱（需全局唯一） |
+
+**响应体**：空（code=0 表示成功）
+
+**错误码**：400102（邮箱已被占用）
+
+---
+
 ## 2. 管理员用户管理
 
 ### 2.1 GET /api/v1/admin/users
@@ -1127,7 +1165,7 @@ Authorization: Bearer <accessToken>
 
 ---
 
-### 9.3 GET /api/v1/reviewer/submissions/{submissionId}
+### 9.5 GET /api/v1/reviewer/submissions/{submissionId}
 
 **作用**：查询指定提交的审核详情，包含标注答案、AI 评分、审核历史、冲突信息等。用于审核员工作台渲染。
 
@@ -1223,7 +1261,7 @@ Authorization: Bearer <accessToken>
 
 ---
 
-### 9.4 POST /api/v1/reviewer/submissions/{submissionId}/approve
+### 9.6 POST /api/v1/reviewer/submissions/{submissionId}/approve
 
 **作用**：审核通过指定提交。通过后 submission 状态变为 APPROVED，触发 SubmissionApproved 事件用于奖励结算。
 
@@ -1246,7 +1284,7 @@ Authorization: Bearer <accessToken>
 
 ---
 
-### 9.5 POST /api/v1/reviewer/submissions/{submissionId}/reject
+### 9.7 POST /api/v1/reviewer/submissions/{submissionId}/reject
 
 **作用**：审核驳回指定提交。驳回后 submission 状态变为 REJECTED，assignment 状态变为 RETURNED，标注员可重新修改后提交。
 
@@ -1263,7 +1301,7 @@ Authorization: Bearer <accessToken>
 
 ---
 
-### 9.6 POST /api/v1/reviewer/submissions/batch/approve
+### 9.8 POST /api/v1/reviewer/submissions/batch/approve
 
 **作用**：批量审核通过多个提交。
 
@@ -1285,7 +1323,7 @@ Authorization: Bearer <accessToken>
 
 ---
 
-### 9.7 POST /api/v1/reviewer/submissions/batch/reject
+### 9.9 POST /api/v1/reviewer/submissions/batch/reject
 
 **作用**：批量审核驳回多个提交。
 
@@ -1302,7 +1340,7 @@ Authorization: Bearer <accessToken>
 
 ---
 
-### 9.8 POST /api/v1/reviewer/submissions/batch/mark-manual
+### 9.10 POST /api/v1/reviewer/submissions/batch/mark-manual
 
 **作用**：将多个提交批量标记为需要人工处理（转人工复核）。用于 AI 预审结论不确定时由审核员手动标记。
 
@@ -1318,7 +1356,7 @@ Authorization: Bearer <accessToken>
 
 ---
 
-### 9.9 POST /api/v1/reviewer/submissions/batch/assign
+### 9.11 POST /api/v1/reviewer/submissions/batch/assign
 
 **作用**：批量将提交分配给指定审核员。用于审核任务调度。
 
@@ -2274,6 +2312,7 @@ Authorization: Bearer <accessToken>
 | 409101 | 版本冲突（乐观锁） | 提示刷新后重试 |
 | 409201 | 领取冲突（无可用题目） | 提示重新领取 |
 | 409301 | Schema 校验失败 | 定位字段错误 |
+| 409401 | Assignment 状态不可放弃 | 提示当前状态不允许操作 |
 | 429001 | LLM 限流 | 展示等待或重试中 |
 | 500001 | 系统内部错误 | 展示 traceId 供排查 |
 | 500301 | LLM 加密密钥未配置 | 联系管理员 |
@@ -2312,8 +2351,8 @@ Authorization: Bearer <accessToken>
 
 | 建议接口 | 说明 | 优先级 |
 |------|------|------|
-| `GET /api/v1/labeler/assignments` | 标注员查看自己所有进行中的领取记录（CLAIMED / DRAFTING / RETURNED 状态）。当前 `/labeler/submissions` 只展示已提交的，标注员无法回到未完成的工作台 | ❌ 高 |
-| `POST /api/v1/assignments/{assignmentId}/cancel` | 标注员主动放弃已领取的任务。AssignmentStatus 枚举中有 CANCELLED 但无触发入口 | ❌ 高 |
+| `GET /api/v1/labeler/assignments` | 标注员查看自己所有进行中的领取记录（CLAIMED / DRAFTING / RETURNED 状态）。当前 `/labeler/submissions` 只展示已提交的，标注员无法回到未完成的工作台 | ✅ 已实现（6.4） |
+| `POST /api/v1/assignments/{assignmentId}/cancel` | 标注员主动放弃已领取的任务。AssignmentStatus 枚举中有 CANCELLED 但无触发入口 | ✅ 已实现（6.5） |
 | AI 审核完成通知（轮询/WebSocket） | 提交后 AI 审核异步执行，前端只能轮询 `GET /submissions/{id}/ai-review-result`，无推送机制 | ❌ 中 |
 
 **说明**：`GET /api/v1/labeler/submissions` 支持按 `assignmentStatus` 筛选（CLAIMED/SUBMITTED/RETURNED/APPROVED），可部分覆盖"进行中领取"的需求，但语义上是"提交记录"视角而非"工作台"视角，且未提交的 CLAIMED 状态可能无 submission 记录。
@@ -2324,11 +2363,11 @@ Authorization: Bearer <accessToken>
 
 | 建议接口 | 说明 | 优先级 |
 |------|------|------|
-| `GET /api/v1/owner/tasks` 增加筛选参数 | 当前返回全量列表，不支持按 status / keyword / tag 筛选。任务多时无法快速定位 | ❌ 中 |
-| `DELETE /api/v1/tasks/{taskId}` | 删除草稿任务。当前只能 end 不能删除，DRAFT 状态的废弃任务会一直存在 | ❌ 中 |
-| `GET /api/v1/owner/tasks/{taskId}/statistics` | Owner 查看任务统计看板：提交总数、通过数、驳回数、通过率、标注完成进度 | ❌ 中 |
+| `GET /api/v1/owner/tasks` 增加筛选参数 | 当前返回全量列表，不支持按 status / keyword / tag 筛选。任务多时无法快速定位 | ✅ 已实现（3.10） |
+| `DELETE /api/v1/tasks/{taskId}` | 删除草稿任务。当前只能 end 不能删除，DRAFT 状态的废弃任务会一直存在 | ✅ 已实现（3.9） |
+| `GET /api/v1/tasks/{taskId}/statistics` | Owner 查看任务统计看板：提交总数、通过数、驳回数、通过率、标注完成进度 | ✅ 已实现（3.11） |
 | `GET /api/v1/tasks/{taskId}/labelers` | Owner 查看任务下参与的标注员列表及其进度 | ❌ 低 |
-| `GET /api/v1/owner/tasks/{taskId}/review-progress` | Owner 查看任务审核进度：待审/已审/通过/驳回数量 | ❌ 中 |
+| `GET /api/v1/owner/tasks/{taskId}/review-progress` | Owner 查看任务审核进度：待审/已审/通过/驳回数量 | ✅ 已合并至 3.11 统计接口 |
 
 ---
 
@@ -2342,22 +2381,25 @@ Authorization: Bearer <accessToken>
 
 ---
 
-### C.5 用户账号管理缺口（低优先级）
+### C.5 用户账号管理缺口
 
-| 建议接口 | 说明 | 优先级 |
+| 接口 | 说明 | 状态 |
 |------|------|------|
-| `PUT /api/v1/users/me/password` | 用户修改密码 | ❌ 低 |
-| `PUT /api/v1/users/me/profile` | 用户更新个人信息（邮箱等） | ❌ 低 |
+| `PUT /api/v1/users/me/password` | 用户修改密码（校验旧密码，成功后旧令牌失效） | ✅ 已实现 |
+| `PUT /api/v1/users/me/profile` | 用户更新个人信息（displayName、email） | ✅ 已实现 |
 
 ---
 
-### C.6 通知与实时推送缺口（低优先级）
+### C.6 通知与状态查询（轮询方案）
 
-| 建议接口 | 说明 | 优先级 |
+| 接口 | 说明 | 状态 |
 |------|------|------|
-| WebSocket `/ws/notifications` | 实时通知通道：提交被驳回、AI 审核完成、任务到期提醒 | ❌ 低 |
-| `GET /api/v1/notifications` | 通知列表查询（如不做 WebSocket 的降级方案） | ❌ 低 |
-| 批量导入进度推送 | 大文件导入实时进度（当前只能轮询 import-jobs/{jobId}） | ❌ 低 |
+| `GET /api/v1/submissions/{id}/ai-review` | 轮询 AI 审核结果（提交后前端定时查询） | ✅ 已有 |
+| `GET /api/v1/tasks/{taskId}/dataset/import-jobs/{jobId}` | 轮询数据集导入进度 | ✅ 已有 |
+| `GET /api/v1/tasks/{taskId}/exports/{exportJobId}` | 轮询导出任务状态 | ✅ 已有 |
+| `GET /api/v1/labeler/submissions?submissionStatus=REJECTED` | 标注员轮询被驳回的提交 | ✅ 已有 |
+
+> 说明：不实现 WebSocket 推送，所有异步状态变更通过前端定时轮询对应接口获取。轮询间隔建议：AI 审核 3-5 秒，导入/导出 5-10 秒。
 
 ---
 
@@ -2377,8 +2419,8 @@ Authorization: Bearer <accessToken>
 标注员完整工作流：
   [✅] 浏览任务市场 → [✅] 领取任务 → [✅] 查看题目详情
   → [✅] 保存草稿 → [✅] 提交答案 → [✅] 查看提交状态
-  → [❌] 查看进行中的领取列表（回到工作台）
-  → [❌] 放弃已领取任务
+  → [✅] 查看进行中的领取列表（回到工作台）
+  → [✅] 放弃已领取任务
   → [✅] 被驳回后重新提交（隐式，再次调用 submit）
   → [❌] 收到驳回通知
 
@@ -2397,9 +2439,9 @@ Owner 完整工作流：
   [✅] 创建任务 → [✅] 导入数据集 → [✅] 配置模板
   → [✅] 配置 AI 审核 → [✅] 配置奖励规则 → [✅] 发布任务
   → [✅] 暂停/恢复/结束任务
-  → [❌] 删除草稿任务
-  → [❌] 搜索/筛选自己的任务
-  → [❌] 查看任务统计（提交数、通过率、进度）
+  → [✅] 删除草稿任务
+  → [✅] 搜索/筛选自己的任务
+  → [✅] 查看任务统计（提交数、通过率、进度）
   → [❌] 查看任务下的标注员列表
   → [❌] 将审核员预分配到任务
   → [✅] 导出金标数据

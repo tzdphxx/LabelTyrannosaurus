@@ -4,6 +4,18 @@ ALTER TABLE llm_providers ADD COLUMN owner_id BIGINT NULL AFTER user_rate_limit_
 
 UPDATE llm_providers SET owner_id = created_by WHERE owner_id IS NULL;
 
+CREATE TEMPORARY TABLE flyway_v15_llm_provider_owner_precheck AS
+SELECT COUNT(*) AS ambiguous_owner_count
+FROM llm_providers
+WHERE owner_id IS NULL
+  AND created_by IS NULL;
+
+ALTER TABLE flyway_v15_llm_provider_owner_precheck
+    ADD CONSTRAINT chk_llm_provider_owner_backfill_source
+        CHECK (ambiguous_owner_count = 0);
+
+DROP TEMPORARY TABLE flyway_v15_llm_provider_owner_precheck;
+
 ALTER TABLE llm_providers MODIFY COLUMN owner_id BIGINT NOT NULL;
 
 ALTER TABLE llm_providers ADD CONSTRAINT fk_llm_providers_owner FOREIGN KEY (owner_id) REFERENCES users(id);

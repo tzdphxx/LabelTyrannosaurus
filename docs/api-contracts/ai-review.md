@@ -4,6 +4,7 @@ Owner: BE-A
 
 ## POST /api/v1/tasks/{taskId}/ai-review-configs
 
+Description: Creates or saves the AI review configuration used when the task later schedules automated review.
 Permission: OWNER.
 
 Request fields:
@@ -44,6 +45,7 @@ Saving config backfills tasks.aiReviewConfigId for publish validation.
 
 ## PUT /api/v1/tasks/{taskId}/ai-review-configs/{configId}
 
+Description: Updates an existing draft-task AI review configuration and advances its prompt version.
 Permission: OWNER.
 Request and response fields are the same as POST.
 
@@ -56,11 +58,13 @@ Each update increments promptVersion.
 
 ## GET /api/v1/tasks/{taskId}/ai-review-configs
 
+Description: Reads the current AI review configuration for an owner task so the editor can reopen saved settings.
 Permission: OWNER.
 Response fields are the same as POST.
 
 ## POST /api/v1/tasks/{taskId}/ai-review-configs/{configId}/test
 
+Description: Runs a one-off model call against sample input to validate prompt behavior before publishing a task.
 Permission: OWNER.
 
 Request fields:
@@ -91,6 +95,7 @@ Prompt test does not create submission or ai_review_result records.
 
 ## POST /api/v1/llm/triggers/run
 
+Description: Executes a template LlmTrigger component for designer preview or labeler workbench assistance.
 Permission: OWNER / LABELER.
 Use cases:
 ```Plaintext
@@ -140,6 +145,7 @@ Successful calls complete the agentRun; failed model calls mark the agentRun FAI
 
 ## GET /api/v1/submissions/{submissionId}/ai-review
 
+Description: Returns the AI review guidance attached to a submission for owner or reviewer inspection.
 Permission: REVIEWER / OWNER.
 
 Response fields:

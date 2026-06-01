@@ -3,6 +3,7 @@ package com.labelhub.modules.task.web;
 import com.labelhub.common.api.ApiResponse;
 import com.labelhub.common.security.CurrentUserContext;
 import com.labelhub.modules.task.dto.CreateTaskRequest;
+import com.labelhub.modules.task.dto.CreateTaskResponse;
 import com.labelhub.modules.task.dto.OwnerTaskSummaryResponse;
 import com.labelhub.modules.task.dto.TaskDetailResponse;
 import com.labelhub.modules.task.dto.TaskLifecycleResponse;
@@ -33,8 +34,8 @@ public class TaskController {
 
     @PostMapping
     @Operation(summary = "创建任务", description = "创建草稿任务，归属当前 OWNER 用户。")
-    public ApiResponse<TaskLifecycleResponse> create(@Valid @RequestBody CreateTaskRequest request) {
-        return ApiResponse.ok(taskLifecycleService.create(CurrentUserContext.getUserId(), request));
+    public ApiResponse<CreateTaskResponse> create(@Valid @RequestBody CreateTaskRequest request) {
+        return ApiResponse.ok(taskLifecycleService.createWithDataset(CurrentUserContext.getUserId(), request));
     }
 
     @GetMapping("/{taskId}")

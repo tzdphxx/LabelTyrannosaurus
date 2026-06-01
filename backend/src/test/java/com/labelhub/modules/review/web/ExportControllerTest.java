@@ -35,7 +35,7 @@ class ExportControllerTest {
     @Test
     void labelerCannotQueryGoldenSubmissions() {
         CurrentUserContext.set(labeler());
-        ExportController controller = new ExportController(exportSnapshotService);
+        GoldenSubmissionExportController controller = new GoldenSubmissionExportController(exportSnapshotService);
 
         assertThatThrownBy(() -> controller.queryGoldenSubmissions(10L, null, 50))
                 .isInstanceOfSatisfying(BusinessException.class,
@@ -45,7 +45,7 @@ class ExportControllerTest {
     @Test
     void ownerCanQueryGoldenSubmissions() {
         CurrentUserContext.set(owner());
-        ExportController controller = new ExportController(exportSnapshotService);
+        GoldenSubmissionExportController controller = new GoldenSubmissionExportController(exportSnapshotService);
         ExportPageResponse serviceResponse = new ExportPageResponse(List.of(), null, false);
         when(exportSnapshotService.queryExportableGoldenSubmissions(
                 1L, new ExportPageRequest(10L, 20L, 30))).thenReturn(serviceResponse);

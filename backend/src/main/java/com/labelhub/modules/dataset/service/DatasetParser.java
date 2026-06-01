@@ -1,7 +1,6 @@
 package com.labelhub.modules.dataset.service;
 
 import com.labelhub.modules.dataset.domain.DatasetFileFormat;
-import com.labelhub.modules.dataset.domain.DatasetType;
 
 import java.io.InputStream;
 
@@ -22,5 +21,5 @@ public interface DatasetParser {
      *
      * <p>解析器不负责关闭输入流，输入流生命周期由调用方统一管理。</p>
      */
-    DatasetParseResult parse(InputStream inputStream, DatasetType datasetType);
+    DatasetParseResult parse(InputStream inputStream);
 }

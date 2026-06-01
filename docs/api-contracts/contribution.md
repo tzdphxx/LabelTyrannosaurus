@@ -2,6 +2,10 @@
 
 ## 贡献总览
 
+Description: Returns the current labeler's aggregate submission, review, approval, and reward counters.
+
+Description: Returns the current labeler's aggregate contribution and reward summary.
+
 - URL: `/api/v1/labeler/contribution/overview`
 - Method: `GET`
 - 权限角色: `LABELER`、`ADMIN`
@@ -33,6 +37,10 @@
 
 ## 贡献趋势
 
+Description: Returns daily contribution and reward statistics for the current labeler over a bounded date range.
+
+Description: Returns daily contribution metrics for the current labeler across a recent date range.
+
 - URL: `/api/v1/labeler/contribution/trend`
 - Method: `GET`
 - Query: `days`，默认 7，最大 31
@@ -61,6 +69,10 @@
 
 ## 任务贡献
 
+Description: Lists the current labeler's contribution totals grouped by task.
+
+Description: Lists the current labeler's contribution statistics grouped by task.
+
 - URL: `/api/v1/labeler/contribution/tasks`
 - Method: `GET`
 - Query: `limit` 默认 20，最大 100；`offset` 默认 0
@@ -86,6 +98,10 @@
 ```
 
 ## 奖励流水
+
+Description: Lists append-only reward ledger entries for the current labeler.
+
+Description: Lists append-only reward ledger entries for the current labeler.
 
 - URL: `/api/v1/labeler/rewards/ledger`
 - Method: `GET`

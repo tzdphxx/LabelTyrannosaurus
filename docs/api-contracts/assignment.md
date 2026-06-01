@@ -6,6 +6,8 @@ Owner：BE\-A
 
 ## GET /api/v1/market/tasks
 
+Description: Lists currently claimable published tasks for labelers in the task marketplace.
+
 权限：LABELER。
 
 响应字段：
@@ -27,6 +29,8 @@ MVP 任务分发只做先到先得。
 ```
 
 ## POST /api/v1/tasks/\{taskId\}/assignments/claim
+
+Description: Claims one available dataset item for the current labeler and returns the workbench payload.
 
 权限：LABELER。
 
@@ -57,6 +61,8 @@ assignment.status = CLAIMED
 
 ## PUT /api/v1/assignments/\{assignmentId\}/draft
 
+Description: Saves a labeler's draft answer with optimistic version control before final submission.
+
 请求字段：
 
 ```Plaintext
@@ -78,6 +84,8 @@ DRAFTING -> DRAFTING
 ```
 
 ## POST /api/v1/assignments/\{assignmentId\}/submit
+
+Description: Validates and submits the assignment answer, creates a submission version, and schedules AI review.
 
 请求字段：
 

@@ -36,6 +36,8 @@ public record CreateTaskRequest(
         @Schema(description = "已发布模板版本 ID", example = "20")
         Long publishedTemplateVersionId,
         @Schema(description = "AI 审核配置 ID", example = "30")
-        Long aiReviewConfigId
+        Long aiReviewConfigId,
+        @Schema(description = "Dataset file ID uploaded by /api/v1/files/upload", example = "99")
+        Long datasetFileId
 ) {
 }

@@ -2,6 +2,8 @@
 
 ## 校验答案
 
+Description: Validates submitted answer JSON against a saved template schema version and returns field-level errors.
+
 - URL: `/api/v1/schema/validate-answer`
 - Method: `POST`
 - 权限角色: `ADMIN`、`OWNER`

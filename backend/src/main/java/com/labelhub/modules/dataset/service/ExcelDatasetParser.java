@@ -3,7 +3,6 @@ package com.labelhub.modules.dataset.service;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.labelhub.modules.dataset.domain.DatasetFileFormat;
-import com.labelhub.modules.dataset.domain.DatasetType;
 import org.apache.poi.ss.usermodel.Cell;
 import org.apache.poi.ss.usermodel.DataFormatter;
 import org.apache.poi.ss.usermodel.Row;
@@ -33,7 +32,7 @@ public class ExcelDatasetParser extends AbstractDatasetParser {
     }
 
     @Override
-    public DatasetParseResult parse(InputStream inputStream, DatasetType datasetType) {
+    public DatasetParseResult parse(InputStream inputStream) {
         List<DatasetImportRow> rows = new ArrayList<>();
         List<DatasetImportError> errors = new ArrayList<>();
         DataFormatter formatter = new DataFormatter();
@@ -70,7 +69,7 @@ public class ExcelDatasetParser extends AbstractDatasetParser {
                     rawRow.set("metadata", metadata);
                 }
                 try {
-                    rows.add(toRow(i + 1, rawRow, datasetType));
+                    rows.add(toRow(i + 1, rawRow));
                 } catch (Exception ex) {
                     errors.add(invalidRow(i + 1, ex.getMessage(), rawRow));
                 }

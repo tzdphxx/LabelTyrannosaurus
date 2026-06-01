@@ -1,7 +1,6 @@
 package com.labelhub.modules.dataset.controller;
 
 import com.labelhub.common.api.ApiResponse;
-import com.labelhub.modules.dataset.domain.DatasetType;
 import com.labelhub.modules.dataset.dto.BatchAppendItemsRequest;
 import com.labelhub.modules.dataset.dto.BatchDeleteItemsRequest;
 import com.labelhub.modules.dataset.dto.BatchItemResult;
@@ -48,10 +47,9 @@ public class DatasetItemController {
     public ApiResponse<DatasetItemPageResponse> listItems(@PathVariable Long taskId,
                                                           @RequestParam(required = false) Integer page,
                                                           @RequestParam(required = false) Integer pageSize,
-                                                          @RequestParam(required = false) DatasetType datasetType,
                                                           @RequestParam(required = false) String externalId) {
         return ApiResponse.ok(datasetItemService.listItems(taskId,
-                new DatasetItemQuery(page, pageSize, datasetType, externalId)));
+                new DatasetItemQuery(page, pageSize, externalId)));
     }
 
     /**

@@ -20,6 +20,9 @@ import com.labelhub.modules.agent.domain.AgentRunStatus;
 import com.labelhub.modules.agent.domain.SystemActorContext;
 import com.labelhub.modules.agent.service.AgentRunService;
 import com.labelhub.modules.agent.service.SystemAgentProvider;
+import com.labelhub.modules.assignment.domain.Assignment;
+import com.labelhub.modules.assignment.domain.AssignmentStatus;
+import com.labelhub.modules.assignment.mapper.AssignmentMapper;
 import com.labelhub.modules.ai.domain.AiReviewConfig;
 import com.labelhub.modules.ai.domain.AiReviewResult;
 import com.labelhub.modules.ai.domain.AiReviewStatus;
@@ -28,6 +31,11 @@ import com.labelhub.modules.ai.mapper.AiReviewConfigMapper;
 import com.labelhub.modules.ai.mapper.AiReviewResultMapper;
 import com.labelhub.modules.dataset.domain.DatasetItem;
 import com.labelhub.modules.dataset.mapper.DatasetItemMapper;
+import com.labelhub.modules.dataset.service.DatasetClaimService;
+import com.labelhub.modules.review.domain.ReviewAction;
+import com.labelhub.modules.review.domain.ReviewRecord;
+import com.labelhub.modules.review.mapper.ReviewRecordMapper;
+import com.labelhub.modules.review.port.SubmissionEventPublisher;
 import com.labelhub.modules.submission.domain.Submission;
 import com.labelhub.modules.submission.domain.SubmissionStatus;
 import com.labelhub.modules.submission.mapper.SubmissionMapper;
@@ -43,6 +51,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.test.util.ReflectionTestUtils;
 
 @ExtendWith(MockitoExtension.class)
 class AiAutoReviewServiceTest {
@@ -67,6 +76,10 @@ class AiAutoReviewServiceTest {
     @Mock private TraceIdProvider traceIdProvider;
     @Mock private AiReviewRetryScheduler retryScheduler;
     @Mock private SupervisorAgent supervisorAgent;
+    @Mock private SubmissionEventPublisher eventPublisher;
+    @Mock private AssignmentMapper assignmentMapper;
+    @Mock private ReviewRecordMapper reviewRecordMapper;
+    @Mock private DatasetClaimService datasetClaimService;
 
     private AiReviewRetryStrategy retryStrategy;
     private AiAutoReviewService service;
@@ -86,6 +99,11 @@ class AiAutoReviewServiceTest {
                 aiReviewResultMapper, rateLimiter, llmGateway, agentRunService, systemAgentProvider, auditAppender,
                 traceIdProvider, new com.fasterxml.jackson.databind.ObjectMapper(),
                 retryStrategy, retryScheduler, supervisorAgent, txTemplate);
+        ReflectionTestUtils.setField(service, "flowDecisionService", new AiFlowDecisionService());
+        ReflectionTestUtils.setField(service, "eventPublisher", eventPublisher);
+        ReflectionTestUtils.setField(service, "assignmentMapper", assignmentMapper);
+        ReflectionTestUtils.setField(service, "reviewRecordMapper", reviewRecordMapper);
+        ReflectionTestUtils.setField(service, "datasetClaimService", datasetClaimService);
     }
 
     @Test
@@ -133,6 +151,107 @@ class AiAutoReviewServiceTest {
         assertThat(submissionCaptor.getValue().getStatus()).isEqualTo(SubmissionStatus.PENDING_FINAL);
         verify(agentRunService).complete(eq(AGENT_RUN_ID), any());
         verify(auditAppender).append(any(AuditCommand.class));
+    }
+
+    @Test
+    void directApproveCompletesAssignmentGoldenSnapshotAndApprovedCountForSingleOverlap() {
+        AiReviewConfig directApproveConfig = config();
+        directApproveConfig.setAiFlowPolicy("AI_PASS_ONLY");
+        directApproveConfig.setAllowAiDirectApprove(true);
+        directApproveConfig.setConfidenceThreshold(new BigDecimal("0.70"));
+        when(aiReviewResultMapper.selectBySubmissionId(SUBMISSION_ID)).thenReturn(null);
+        when(submissionMapper.selectById(SUBMISSION_ID)).thenReturn(submission());
+        Task task = task();
+        task.setOverlapCount(1);
+        when(taskMapper.selectById(TASK_ID)).thenReturn(task);
+        when(datasetItemMapper.selectById(DATASET_ITEM_ID)).thenReturn(datasetItem());
+        when(aiReviewConfigMapper.selectById(CONFIG_ID)).thenReturn(directApproveConfig);
+        when(rateLimiter.acquire(TASK_ID, PROVIDER_ID)).thenReturn(true);
+        when(agentRunService.create(eq("AI_REVIEW"), eq(SUBMISSION_ID), eq(PROVIDER_ID), eq("qwen-plus"),
+                eq("v2"), any())).thenReturn(agentRun());
+        when(llmGateway.review(any(LlmGatewayRequest.class))).thenReturn(successGateway("PASS", 95.0, 0.95));
+        when(assignmentMapper.selectById(200L)).thenReturn(assignment());
+        when(systemAgentProvider.get()).thenReturn(new SystemActorContext(900L));
+
+        AiReviewResultResponse response = service.reviewSubmission(SUBMISSION_ID);
+
+        assertThat(response.flowAction()).isEqualTo("AI_DIRECT_APPROVE");
+        ArgumentCaptor<Submission> submissionCaptor = ArgumentCaptor.forClass(Submission.class);
+        verify(submissionMapper).updateById(submissionCaptor.capture());
+        assertThat(submissionCaptor.getValue().getStatus()).isEqualTo(SubmissionStatus.APPROVED);
+        assertThat(submissionCaptor.getValue().getIsGolden()).isTrue();
+        assertThat(submissionCaptor.getValue().getReviewFlowStatus()).isEqualTo("FINAL_APPROVED");
+        ArgumentCaptor<Assignment> assignmentCaptor = ArgumentCaptor.forClass(Assignment.class);
+        verify(assignmentMapper).updateById(assignmentCaptor.capture());
+        assertThat(assignmentCaptor.getValue().getStatus()).isEqualTo(AssignmentStatus.APPROVED);
+        assertThat(assignmentCaptor.getValue().getApprovedAt()).isNotNull();
+        verify(eventPublisher).publishApproved(SUBMISSION_ID, null);
+        verify(datasetClaimService).increaseApprovedCount(DATASET_ITEM_ID);
+    }
+
+    @Test
+    void directApproveForOverlappedTaskFallsBackToManualReview() {
+        AiReviewConfig directApproveConfig = config();
+        directApproveConfig.setAiFlowPolicy("AI_PASS_ONLY");
+        directApproveConfig.setAllowAiDirectApprove(true);
+        directApproveConfig.setConfidenceThreshold(new BigDecimal("0.70"));
+        when(aiReviewResultMapper.selectBySubmissionId(SUBMISSION_ID)).thenReturn(null);
+        when(submissionMapper.selectById(SUBMISSION_ID)).thenReturn(submission());
+        Task task = task();
+        task.setOverlapCount(2);
+        when(taskMapper.selectById(TASK_ID)).thenReturn(task);
+        when(datasetItemMapper.selectById(DATASET_ITEM_ID)).thenReturn(datasetItem());
+        when(aiReviewConfigMapper.selectById(CONFIG_ID)).thenReturn(directApproveConfig);
+        when(rateLimiter.acquire(TASK_ID, PROVIDER_ID)).thenReturn(true);
+        when(agentRunService.create(eq("AI_REVIEW"), eq(SUBMISSION_ID), eq(PROVIDER_ID), eq("qwen-plus"),
+                eq("v2"), any())).thenReturn(agentRun());
+        when(llmGateway.review(any(LlmGatewayRequest.class))).thenReturn(successGateway("PASS", 95.0, 0.95));
+        when(systemAgentProvider.get()).thenReturn(new SystemActorContext(900L));
+
+        AiReviewResultResponse response = service.reviewSubmission(SUBMISSION_ID);
+
+        assertThat(response.flowAction()).isEqualTo("AI_ASSIGN_MANUAL_REVIEW");
+        ArgumentCaptor<Submission> submissionCaptor = ArgumentCaptor.forClass(Submission.class);
+        verify(submissionMapper).updateById(submissionCaptor.capture());
+        assertThat(submissionCaptor.getValue().getStatus()).isEqualTo(SubmissionStatus.PENDING_FINAL);
+        verify(eventPublisher, never()).publishApproved(anyLong(), any());
+        verify(datasetClaimService, never()).increaseApprovedCount(anyLong());
+    }
+
+    @Test
+    void directRejectReturnsAssignmentAndRecordsVisibleReason() {
+        AiReviewConfig directRejectConfig = config();
+        directRejectConfig.setAiFlowPolicy("AI_REJECT_ONLY");
+        directRejectConfig.setAllowAiDirectReject(true);
+        directRejectConfig.setRejectThreshold(new BigDecimal("50.00"));
+        directRejectConfig.setConfidenceThreshold(new BigDecimal("0.70"));
+        when(aiReviewResultMapper.selectBySubmissionId(SUBMISSION_ID)).thenReturn(null);
+        when(submissionMapper.selectById(SUBMISSION_ID)).thenReturn(submission());
+        when(taskMapper.selectById(TASK_ID)).thenReturn(task());
+        when(datasetItemMapper.selectById(DATASET_ITEM_ID)).thenReturn(datasetItem());
+        when(aiReviewConfigMapper.selectById(CONFIG_ID)).thenReturn(directRejectConfig);
+        when(rateLimiter.acquire(TASK_ID, PROVIDER_ID)).thenReturn(true);
+        when(agentRunService.create(eq("AI_REVIEW"), eq(SUBMISSION_ID), eq(PROVIDER_ID), eq("qwen-plus"),
+                eq("v2"), any())).thenReturn(agentRun());
+        when(llmGateway.review(any(LlmGatewayRequest.class))).thenReturn(successGateway("REJECT", 20.0, 0.93));
+        when(assignmentMapper.selectById(200L)).thenReturn(assignment());
+        when(systemAgentProvider.get()).thenReturn(new SystemActorContext(900L));
+
+        AiReviewResultResponse response = service.reviewSubmission(SUBMISSION_ID);
+
+        assertThat(response.flowAction()).isEqualTo("AI_DIRECT_REJECT");
+        ArgumentCaptor<Submission> submissionCaptor = ArgumentCaptor.forClass(Submission.class);
+        verify(submissionMapper).updateById(submissionCaptor.capture());
+        assertThat(submissionCaptor.getValue().getStatus()).isEqualTo(SubmissionStatus.REJECTED);
+        assertThat(submissionCaptor.getValue().getReviewFlowStatus()).isEqualTo("REJECTED");
+        ArgumentCaptor<Assignment> assignmentCaptor = ArgumentCaptor.forClass(Assignment.class);
+        verify(assignmentMapper).updateById(assignmentCaptor.capture());
+        assertThat(assignmentCaptor.getValue().getStatus()).isEqualTo(AssignmentStatus.RETURNED);
+        assertThat(assignmentCaptor.getValue().getReturnedAt()).isNotNull();
+        ArgumentCaptor<ReviewRecord> recordCaptor = ArgumentCaptor.forClass(ReviewRecord.class);
+        verify(reviewRecordMapper).insert(recordCaptor.capture());
+        assertThat(recordCaptor.getValue().getAction()).isEqualTo(ReviewAction.AI_DIRECT_REJECT);
+        assertThat(recordCaptor.getValue().getReason()).isEqualTo("Looks good");
     }
 
     @Test
@@ -275,7 +394,8 @@ class AiAutoReviewServiceTest {
 
         verify(agentRunService).complete(eq(AGENT_RUN_ID), any());
         verify(aiReviewResultMapper).updateForSuccess(eq(SUBMISSION_ID), eq("SUCCESS"),
-                eq(AGENT_RUN_ID), eq("PASS"), any(), any(), any(), any(), any());
+                eq(AGENT_RUN_ID), eq("PASS"), any(), any(), any(), any(), any(),
+                any(), any(), any(), any(), any());
         verify(auditAppender).append(any(AuditCommand.class));
     }
 
@@ -299,6 +419,7 @@ class AiAutoReviewServiceTest {
     private Submission submission() {
         Submission submission = new Submission();
         submission.setId(SUBMISSION_ID);
+        submission.setAssignmentId(200L);
         submission.setTaskId(TASK_ID);
         submission.setDatasetItemId(DATASET_ITEM_ID);
         submission.setAnswerJson("{\"answer\":\"ok\"}");
@@ -310,7 +431,15 @@ class AiAutoReviewServiceTest {
         Task task = new Task();
         task.setId(TASK_ID);
         task.setAiReviewConfigId(CONFIG_ID);
+        task.setOverlapCount(1);
         return task;
+    }
+
+    private Assignment assignment() {
+        Assignment assignment = new Assignment();
+        assignment.setId(200L);
+        assignment.setStatus(AssignmentStatus.SUBMITTED);
+        return assignment;
     }
 
     private DatasetItem datasetItem() {
@@ -339,5 +468,24 @@ class AiAutoReviewServiceTest {
         AgentRun run = new AgentRun();
         run.setId(AGENT_RUN_ID);
         return run;
+    }
+
+    private LlmGatewayResponse successGateway(String decision, double averageScore, double confidence) {
+        return new LlmGatewayResponse(
+                LlmGatewayStatus.SUCCESS,
+                "{\"decision\":\"" + decision + "\"}",
+                "{\"decision\":\"" + decision + "\"}",
+                Map.of(
+                        "decision", decision,
+                        "averageScore", averageScore,
+                        "confidence", confidence,
+                        "dimensionScores", Map.of("accuracy", averageScore),
+                        "riskFlags", List.of(),
+                        "suggestion", "Looks good"
+                ),
+                88L,
+                null,
+                null
+        );
     }
 }

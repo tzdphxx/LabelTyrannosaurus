@@ -28,4 +28,12 @@ public final class RedisKeyBuilder {
     public static String aiReviewStream(Long taskId) {
         return "ai:review:stream:task:%d".formatted(taskId);
     }
+
+    public static String llmTaskStream(String taskType) {
+        return "labelhub:llm:stream:%s".formatted(taskType.toLowerCase().replace('_', '-'));
+    }
+
+    public static String aiReviewLock(Long submissionId) {
+        return "lock:ai-review:submission:%d".formatted(submissionId);
+    }
 }

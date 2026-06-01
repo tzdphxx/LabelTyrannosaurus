@@ -100,11 +100,15 @@ public class OpenAiCompatibleAdapter {
     private HttpRequest buildRequest(LlmProviderRuntimeConfig config, List<LlmMessage> messages,
                                      Integer maxTokens, List<ToolDefinition> tools)
             throws JsonProcessingException {
-        validateBaseUrl(config.baseUrl());
+        URI originalUri = URI.create(config.baseUrl() + CHAT_COMPLETIONS_PATH);
+        URI requestUri = resolveAndValidateUri(config.baseUrl(), originalUri);
         HttpRequest.Builder builder = HttpRequest.newBuilder()
-                .uri(URI.create(config.baseUrl() + CHAT_COMPLETIONS_PATH))
+                .uri(requestUri)
                 .timeout(containsImagePart(messages) ? visionTimeout : timeout)
                 .header("Content-Type", "application/json");
+        if (requestUri != originalUri) {
+            builder.header("Host", originalUri.getHost());
+        }
         if (config.customHeaders() != null) {
             config.customHeaders().forEach((key, value) -> {
                 if (!BLOCKED_HEADER_KEYS.contains(key.toLowerCase(Locale.ROOT))
@@ -224,15 +228,15 @@ public class OpenAiCompatibleAdapter {
         return sanitized;
     }
 
-    private void validateBaseUrl(String baseUrl) {
+    private URI resolveAndValidateUri(String baseUrl, URI originalUri) {
         if (!validateUrls) {
-            return;
+            return originalUri;
         }
         if (baseUrl == null || baseUrl.isBlank()) {
             throw new IllegalArgumentException("LLM baseUrl must not be empty");
         }
-        URI uri = URI.create(baseUrl);
-        String host = uri.getHost();
+        URI baseUri = URI.create(baseUrl);
+        String host = baseUri.getHost();
         if (host == null) {
             throw new IllegalArgumentException("LLM baseUrl must have a valid host");
         }
@@ -243,8 +247,14 @@ public class OpenAiCompatibleAdapter {
                 throw new IllegalArgumentException(
                         "LLM baseUrl must not resolve to a private/loopback address");
             }
+            int port = originalUri.getPort();
+            String resolvedAuthority = addr.getHostAddress() + (port > 0 ? ":" + port : "");
+            return new URI(originalUri.getScheme(), resolvedAuthority,
+                    originalUri.getPath(), originalUri.getQuery(), null);
         } catch (UnknownHostException e) {
             throw new IllegalArgumentException("LLM baseUrl host cannot be resolved: " + host);
+        } catch (java.net.URISyntaxException e) {
+            throw new IllegalArgumentException("LLM baseUrl produces invalid resolved URI: " + host);
         }
     }
 }

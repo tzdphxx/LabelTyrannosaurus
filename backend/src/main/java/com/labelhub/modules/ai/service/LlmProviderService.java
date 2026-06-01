@@ -123,6 +123,11 @@ public class LlmProviderService {
         return Optional.of(provider);
     }
 
+    public Optional<LlmProvider> findEnabledOwnedById(Long ownerId, Long providerId) {
+        return findEnabledById(providerId)
+                .filter(provider -> ownerId != null && ownerId.equals(provider.getOwnerId()));
+    }
+
     public Optional<LlmProviderRuntimeConfig> findEnabledRuntimeConfig(Long providerId, String modelName) {
         return findEnabledById(providerId)
                 .map(provider -> new LlmProviderRuntimeConfig(

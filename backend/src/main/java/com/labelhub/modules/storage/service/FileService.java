@@ -17,9 +17,12 @@ import org.springframework.web.multipart.MultipartFile;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.URL;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
+import java.util.HexFormat;
 import java.util.Locale;
 import java.util.Set;
 import java.util.UUID;
@@ -27,8 +30,14 @@ import java.util.UUID;
 @Service
 public class FileService {
 
-    private static final Set<String> SUPPORTED_EXTENSIONS = Set.of("json", "jsonl", "csv", "xlsx", "xls", "txt");
-    private static final Set<String> SUPPORTED_BUSINESS_TYPES = Set.of("dataset", "template", "export", "misc");
+    private static final Set<String> SUPPORTED_EXTENSIONS = Set.of(
+            "json", "jsonl", "csv", "xlsx", "xls", "txt",
+            "jpg", "jpeg", "png", "webp", "gif",
+            "mp4", "mov", "webm",
+            "mp3", "wav", "m4a",
+            "md"
+    );
+    private static final Set<String> SUPPORTED_BUSINESS_TYPES = Set.of("dataset", "template", "export", "misc", "media");
 
     private final ObjectFileMapper objectFileMapper;
     private final ObjectStorageService objectStorageService;
@@ -49,11 +58,15 @@ public class FileService {
         String originalFilename = StringUtils.cleanPath(file.getOriginalFilename());
         String contentType = StringUtils.hasText(file.getContentType()) ? file.getContentType() : "application/octet-stream";
         String objectKey = buildObjectKey(businessType, originalFilename);
+        byte[] bytes;
         try (InputStream inputStream = file.getInputStream()) {
-            objectStorageService.upload(properties.bucket(), objectKey, contentType, inputStream, file.getSize());
+            bytes = inputStream.readAllBytes();
+            objectStorageService.upload(properties.bucket(), objectKey, contentType,
+                    new java.io.ByteArrayInputStream(bytes), file.getSize());
         } catch (IOException ex) {
             throw new BusinessException(500001, "File upload failed");
         }
+        String checksum = sha256(bytes);
 
         ObjectFileEntity entity = new ObjectFileEntity();
         entity.setOwnerId(currentUser.userId());
@@ -62,6 +75,7 @@ public class FileService {
         entity.setOriginalFilename(originalFilename);
         entity.setContentType(contentType);
         entity.setFileSize(file.getSize());
+        entity.setChecksum(checksum);
         entity.setStorageProvider("COS");
         objectFileMapper.insert(entity);
 
@@ -71,7 +85,8 @@ public class FileService {
                 originalFilename,
                 Instant.now().plus(properties.signedUrlTtl())
         );
-        return new FileUploadResponse(entity.getId(), originalFilename, contentType, file.getSize(), objectKey, downloadUrl.toString());
+        return new FileUploadResponse(entity.getId(), originalFilename, contentType, file.getSize(), objectKey,
+                checksum, downloadUrl.toString());
     }
 
     public SignedUrlResponse generateSignedUrl(Long fileId) {
@@ -142,5 +157,13 @@ public class FileService {
 
     private String normalize(String value) {
         return value == null ? "" : value.trim().toLowerCase(Locale.ROOT);
+    }
+
+    private String sha256(byte[] bytes) {
+        try {
+            return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(bytes));
+        } catch (NoSuchAlgorithmException ex) {
+            throw new IllegalStateException(ex);
+        }
     }
 }

@@ -39,7 +39,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             if (authorization != null && authorization.startsWith("Bearer ")) {
                 try {
                     authenticate(authorization.substring(7));
-                } catch (BusinessException ignored) {
+                } catch (Exception ignored) {
                     SecurityContextHolder.clearContext();
                     CurrentUserContext.clear();
                 }

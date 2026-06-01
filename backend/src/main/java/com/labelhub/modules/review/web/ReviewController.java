@@ -106,12 +106,24 @@ public class ReviewController {
                 CurrentUserContext.getUserId(), request));
     }
 
+    @PostMapping("/batch-approve")
+    @Operation(summary = "批量通过", description = "兼容契约路径，批量审核通过提交。")
+    public ApiResponse<BatchReviewResponse> batchApproveAlias(@Valid @RequestBody BatchApproveRequest request) {
+        return batchApprove(request);
+    }
+
     @PostMapping("/batch/reject")
     @Operation(summary = "批量驳回", description = "批量审核驳回提交。")
     public ApiResponse<BatchReviewResponse> batchReject(@Valid @RequestBody BatchRejectRequest request) {
         CurrentUserContext.requireRole(RoleCode.REVIEWER);
         return ApiResponse.ok(batchReviewService.batchReject(
                 CurrentUserContext.getUserId(), request));
+    }
+
+    @PostMapping("/batch-reject")
+    @Operation(summary = "批量驳回", description = "兼容契约路径，批量审核驳回提交。")
+    public ApiResponse<BatchReviewResponse> batchRejectAlias(@Valid @RequestBody BatchRejectRequest request) {
+        return batchReject(request);
     }
 
     @PostMapping("/batch/mark-manual")
@@ -122,11 +134,23 @@ public class ReviewController {
                 CurrentUserContext.getUserId(), request));
     }
 
+    @PostMapping("/batch-mark-manual")
+    @Operation(summary = "批量转人工", description = "兼容契约路径，将提交批量标记为需要人工处理。")
+    public ApiResponse<BatchReviewResponse> batchMarkManualAlias(@Valid @RequestBody BatchMarkManualRequest request) {
+        return batchMarkManual(request);
+    }
+
     @PostMapping("/batch/assign")
     @Operation(summary = "批量分配审核", description = "批量分配提交给审核员。")
     public ApiResponse<BatchReviewResponse> batchAssign(@Valid @RequestBody BatchAssignRequest request) {
         CurrentUserContext.requireRole(RoleCode.REVIEWER);
         return ApiResponse.ok(batchReviewService.batchAssign(
                 CurrentUserContext.getUserId(), request));
+    }
+
+    @PostMapping("/batch-assign")
+    @Operation(summary = "批量分配审核", description = "兼容契约路径，批量分配提交给审核员。")
+    public ApiResponse<BatchReviewResponse> batchAssignAlias(@Valid @RequestBody BatchAssignRequest request) {
+        return batchAssign(request);
     }
 }

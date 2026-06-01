@@ -82,6 +82,11 @@ public interface AiReviewResultMapper extends BaseMapper<AiReviewResult> {
                 risk_flags = #{riskFlags},
                 suggestion = #{suggestion},
                 raw_response = #{rawResponse},
+                confidence = #{confidence},
+                flow_action = #{flowAction},
+                prompt_mode = #{promptMode},
+                degraded = #{degraded},
+                limitations = #{limitations},
                 error_code = NULL,
                 error_message = NULL,
                 next_retry_at = NULL,
@@ -96,5 +101,10 @@ public interface AiReviewResultMapper extends BaseMapper<AiReviewResult> {
                          @Param("dimensionScores") String dimensionScores,
                          @Param("riskFlags") String riskFlags,
                          @Param("suggestion") String suggestion,
-                         @Param("rawResponse") String rawResponse);
+                         @Param("rawResponse") String rawResponse,
+                         @Param("confidence") BigDecimal confidence,
+                         @Param("flowAction") String flowAction,
+                         @Param("promptMode") String promptMode,
+                         @Param("degraded") Boolean degraded,
+                         @Param("limitations") String limitations);
 }

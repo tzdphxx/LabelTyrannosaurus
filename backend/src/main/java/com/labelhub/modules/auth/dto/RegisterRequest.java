@@ -13,8 +13,8 @@ public record RegisterRequest(
         @NotBlank @Email @Size(max = 255) String email,
         @Schema(description = "登录密码，8 到 128 字符", example = "Password123", format = "password")
         @NotBlank @Size(min = 8, max = 128) String password,
-        @Schema(description = "注册身份，可选 LABELER、OWNER、REVIEWER", example = "LABELER",
-                allowableValues = {"LABELER", "OWNER", "REVIEWER"})
+        @Schema(description = "注册身份，可选 LABELER、OWNER", example = "LABELER",
+                allowableValues = {"LABELER", "OWNER"})
         @NotBlank @Size(max = 32) String role
 ) {
 }

@@ -31,7 +31,7 @@ import java.util.Set;
 @Slf4j
 public class AuthService {
 
-    private static final Set<RoleCode> REGISTERABLE_ROLES = Set.of(RoleCode.LABELER, RoleCode.OWNER, RoleCode.REVIEWER);
+    private static final Set<RoleCode> REGISTERABLE_ROLES = Set.of(RoleCode.LABELER, RoleCode.OWNER);
 
     private final UserMapper userMapper;
     private final UserRoleMapper userRoleMapper;
@@ -51,8 +51,8 @@ public class AuthService {
     /**
      * 注册普通用户并签发令牌。
      *
-     * <p>注册用户固定为 {@code USER} 类型，默认可登录、可用，并授予 {@code LABELER}
-     * 角色。用户名和邮箱任一重复都会返回参数非法错误。</p>
+     * <p>注册用户固定为 {@code USER} 类型，默认可登录、可用，并授予公开注册允许的
+     * {@code LABELER} 或 {@code OWNER} 角色。用户名和邮箱任一重复都会返回参数非法错误。</p>
      */
     @Transactional
     public TokenResponse register(RegisterRequest request) {
@@ -61,7 +61,6 @@ public class AuthService {
         if (userMapper.selectByUsername(request.username()) != null || userMapper.selectByEmail(request.email()) != null) {
             throw new BusinessException(400102, "Username or email already exists");
         }
-        RoleCode selectedRole = RoleCode.valueOf(request.role().toUpperCase());
         UserEntity user = new UserEntity();
         user.setUsername(request.username());
         user.setEmail(request.email());
@@ -128,8 +127,8 @@ public class AuthService {
     }
 
     private RoleCode requireSingleRole(Set<RoleCode> roles) {
-        if (roles == null || roles.size() != 1) {
-            throw new BusinessException(400102, "User must have exactly one role");
+        if (roles == null || roles.isEmpty()) {
+            throw new BusinessException(400102, "User has no role assigned");
         }
         return roles.iterator().next();
     }

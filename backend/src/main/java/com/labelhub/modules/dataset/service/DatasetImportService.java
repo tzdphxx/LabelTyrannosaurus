@@ -23,6 +23,7 @@ import com.labelhub.modules.dataset.repository.DatasetFileMapper;
 import com.labelhub.modules.dataset.repository.DatasetImportJobMapper;
 import com.labelhub.modules.dataset.repository.DatasetItemChangeLogMapper;
 import com.labelhub.modules.dataset.repository.DatasetItemRepositoryMapper;
+import com.labelhub.modules.media.service.MediaProcessingService;
 import com.labelhub.modules.storage.domain.ObjectFileEntity;
 import com.labelhub.modules.storage.repository.ObjectFileMapper;
 import com.labelhub.modules.storage.service.FileStorageProperties;
@@ -77,6 +78,7 @@ public class DatasetImportService {
     private final TransactionOperations transactionOperations;
     private final ObjectMapper objectMapper;
     private final Map<DatasetFileFormat, DatasetParser> parsers;
+    private final MediaProcessingService mediaProcessingService;
 
     @Autowired
     public DatasetImportService(TaskRepositoryMapper taskMapper,
@@ -90,10 +92,11 @@ public class DatasetImportService {
                                 AsyncJobService asyncJobService,
                                 PlatformTransactionManager transactionManager,
                                 ObjectMapper objectMapper,
-                                List<DatasetParser> parsers) {
+                                List<DatasetParser> parsers,
+                                @Autowired(required = false) MediaProcessingService mediaProcessingService) {
         this(taskMapper, objectFileMapper, datasetFileMapper, importJobMapper, datasetItemMapper, changeLogMapper,
                 objectStorageService, storageProperties, asyncJobService, new TransactionTemplate(transactionManager),
-                objectMapper, parsers);
+                objectMapper, parsers, mediaProcessingService);
     }
 
     public DatasetImportService(TaskRepositoryMapper taskMapper,
@@ -109,7 +112,7 @@ public class DatasetImportService {
                                 List<DatasetParser> parsers) {
         this(taskMapper, objectFileMapper, datasetFileMapper, importJobMapper, datasetItemMapper, changeLogMapper,
                 objectStorageService, storageProperties, asyncJobService, new ImmediateTransactionOperations(),
-                objectMapper, parsers);
+                objectMapper, parsers, null);
     }
 
     private DatasetImportService(TaskRepositoryMapper taskMapper,
@@ -123,7 +126,8 @@ public class DatasetImportService {
                                  AsyncJobService asyncJobService,
                                  TransactionOperations transactionOperations,
                                  ObjectMapper objectMapper,
-                                 List<DatasetParser> parsers) {
+                                 List<DatasetParser> parsers,
+                                 MediaProcessingService mediaProcessingService) {
         this.taskMapper = taskMapper;
         this.objectFileMapper = objectFileMapper;
         this.datasetFileMapper = datasetFileMapper;
@@ -136,6 +140,7 @@ public class DatasetImportService {
         this.transactionOperations = transactionOperations;
         this.objectMapper = objectMapper;
         this.parsers = parsers.stream().collect(Collectors.toMap(DatasetParser::format, Function.identity()));
+        this.mediaProcessingService = mediaProcessingService;
     }
 
     /**
@@ -300,6 +305,7 @@ public class DatasetImportService {
             }
             for (DatasetItemEntity item : batch.items()) {
                 datasetItemMapper.insert(item);
+                refreshMediaContext(job.getTaskId(), item, actorId);
                 appendChangeLog(job.getTaskId(), item, actorId, mode);
             }
             finishJob(job, batch.totalCount(), batch.items().size(), batch.errors(), actorId);
@@ -342,6 +348,12 @@ public class DatasetImportService {
         changeLog.setAfterJson(item.getItemJson());
         changeLog.setActorId(actorId);
         changeLogMapper.insert(changeLog);
+    }
+
+    private void refreshMediaContext(Long taskId, DatasetItemEntity item, Long actorId) {
+        if (mediaProcessingService != null) {
+            mediaProcessingService.refreshContext(taskId, item.getId(), item.getItemJson(), actorId);
+        }
     }
 
     private void finishJob(DatasetImportJobEntity job,

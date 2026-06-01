@@ -13,6 +13,7 @@ import com.labelhub.modules.agent.domain.AgentRunStatus;
 import com.labelhub.modules.agent.domain.SystemActorContext;
 import com.labelhub.modules.agent.service.AgentRunService;
 import com.labelhub.modules.agent.service.SystemAgentProvider;
+import com.labelhub.modules.ai.domain.AiFlowAction;
 import com.labelhub.modules.ai.domain.AiReviewConfig;
 import com.labelhub.modules.ai.domain.AiReviewResult;
 import com.labelhub.modules.ai.domain.AiReviewStatus;
@@ -55,6 +56,7 @@ public class AiReviewRetryService implements AiReviewRetryCallback {
     private final AuditAppender auditAppender;
     private final TraceIdProvider traceIdProvider;
     private final AiReviewRetryScheduler retryScheduler;
+    private final AiFlowDecisionService flowDecisionService;
 
     public AiReviewRetryService(AiReviewResultMapper aiReviewResultMapper,
                                 AiReviewConfigMapper aiReviewConfigMapper,
@@ -67,7 +69,8 @@ public class AiReviewRetryService implements AiReviewRetryCallback {
                                 SystemAgentProvider systemAgentProvider,
                                 AuditAppender auditAppender,
                                 TraceIdProvider traceIdProvider,
-                                AiReviewRetryScheduler retryScheduler) {
+                                AiReviewRetryScheduler retryScheduler,
+                                AiFlowDecisionService flowDecisionService) {
         this.aiReviewResultMapper = aiReviewResultMapper;
         this.aiReviewConfigMapper = aiReviewConfigMapper;
         this.submissionMapper = submissionMapper;
@@ -80,6 +83,7 @@ public class AiReviewRetryService implements AiReviewRetryCallback {
         this.auditAppender = auditAppender;
         this.traceIdProvider = traceIdProvider;
         this.retryScheduler = retryScheduler;
+        this.flowDecisionService = flowDecisionService;
     }
 
     public boolean scheduleRetryIfAllowed(AiReviewResult result, AiReviewConfig config,
@@ -161,13 +165,34 @@ public class AiReviewRetryService implements AiReviewRetryCallback {
         agentRunService.complete(agentRun.getId(), response.rawResponse());
         BigDecimal avgScore = structured.get("averageScore") instanceof Number n
                 ? BigDecimal.valueOf(n.doubleValue()) : null;
+        BigDecimal confidence = structured.get("confidence") instanceof Number n
+                ? BigDecimal.valueOf(n.doubleValue()) : null;
+        String decision = String.valueOf(structured.get("decision"));
+
+        AiReviewResult tempResult = new AiReviewResult();
+        tempResult.setDecision(decision);
+        tempResult.setAverageScore(avgScore);
+        tempResult.setConfidence(confidence);
+        tempResult.setRiskFlags(toJsonSafe(structured.getOrDefault("riskFlags", List.of())));
+        tempResult.setDegraded(false);
+        String flowAction = null;
+        if (config != null) {
+            AiFlowAction action = flowDecisionService.decide(tempResult, config);
+            flowAction = action.name();
+        }
+
         aiReviewResultMapper.updateForSuccess(
                 submissionId, AiReviewStatus.SUCCESS.name(), agentRun.getId(),
-                String.valueOf(structured.get("decision")), avgScore,
+                decision, avgScore,
                 toJsonSafe(structured.getOrDefault("dimensionScores", Map.of())),
                 toJsonSafe(structured.getOrDefault("riskFlags", List.of())),
                 structured.get("suggestion") != null ? String.valueOf(structured.get("suggestion")) : null,
-                response.rawResponse()
+                response.rawResponse(),
+                confidence,
+                flowAction,
+                null,
+                false,
+                toJsonSafe(structured.getOrDefault("limitations", List.of()))
         );
         appendAudit(submissionId, agentRun.getId(), AiReviewStatus.SUCCESS);
         log.info("Retry succeeded for submission {}", submissionId);

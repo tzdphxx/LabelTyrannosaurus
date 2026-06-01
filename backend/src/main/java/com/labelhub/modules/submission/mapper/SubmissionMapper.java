@@ -66,7 +66,7 @@ public interface SubmissionMapper extends BaseMapper<Submission> {
               AND dataset_item_id = #{datasetItemId}
               AND status <> 'SUPERSEDED'
             ORDER BY FIELD(status, 'PENDING_FINAL', 'APPROVED', 'REJECTED',
-                           'AI_REVIEWING', 'SUBMITTED', 'AI_REJECTED'),
+                           'AI_REVIEWING', 'SUBMITTED'),
                      version_no DESC,
                      id ASC
             """)

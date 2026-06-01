@@ -15,6 +15,11 @@ import com.labelhub.infrastructure.llm.LlmGatewayRequest;
 import com.labelhub.infrastructure.llm.LlmGatewayResponse;
 import com.labelhub.infrastructure.llm.LlmGatewayStatus;
 import com.labelhub.infrastructure.llm.LlmMessage;
+import com.labelhub.infrastructure.llmtask.LlmTaskClaimResult;
+import com.labelhub.infrastructure.llmtask.LlmTaskQueueMessage;
+import com.labelhub.infrastructure.llmtask.LlmTaskQueueRecord;
+import com.labelhub.infrastructure.llmtask.LlmTaskQueueService;
+import com.labelhub.infrastructure.llmtask.LlmTaskType;
 import com.labelhub.infrastructure.redis.RedisLockService;
 import com.labelhub.modules.agent.domain.AgentRun;
 import com.labelhub.modules.agent.domain.AgentRunStatus;
@@ -31,6 +36,7 @@ import com.labelhub.modules.assignment.domain.Assignment;
 import com.labelhub.modules.assignment.mapper.AssignmentMapper;
 import com.labelhub.modules.dataset.domain.DatasetItem;
 import com.labelhub.modules.dataset.mapper.DatasetItemMapper;
+import com.labelhub.modules.media.service.MediaContextResolver;
 import com.labelhub.modules.preannotation.domain.PreAnnotation;
 import com.labelhub.modules.preannotation.domain.PreAnnotationStatus;
 import com.labelhub.modules.preannotation.dto.PreAnnotationRunRequest;
@@ -43,6 +49,8 @@ import com.labelhub.modules.task.mapper.TaskMapper;
 import com.labelhub.modules.template.domain.TemplateVersion;
 import com.labelhub.modules.template.mapper.TemplateVersionMapper;
 import java.math.BigDecimal;
+import java.time.Duration;
+import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -52,6 +60,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import org.springframework.stereotype.Service;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
@@ -81,7 +90,42 @@ public class PreAnnotationService {
     private final TraceIdProvider traceIdProvider;
     private final MediaPromptContextBuilder mediaPromptContextBuilder;
     private final RedisLockService redisLockService;
+    private final LlmTaskQueueService llmTaskQueueService;
     private final ObjectMapper objectMapper = new ObjectMapper();
+    @Autowired(required = false)
+    private MediaContextResolver mediaContextResolver;
+
+    public PreAnnotationService(AssignmentMapper assignmentMapper,
+                                TaskMapper taskMapper,
+                                DatasetItemMapper datasetItemMapper,
+                                TemplateVersionMapper templateVersionMapper,
+                                AiReviewConfigMapper aiReviewConfigMapper,
+                                LlmProviderService llmProviderService,
+                                LlmGateway llmGateway,
+                                AgentRunService agentRunService,
+                                PreAnnotationMapper preAnnotationMapper,
+                                SubmissionMapper submissionMapper,
+                                AuditAppender auditAppender,
+                                TraceIdProvider traceIdProvider,
+                                MediaPromptContextBuilder mediaPromptContextBuilder,
+                                RedisLockService redisLockService,
+                                LlmTaskQueueService llmTaskQueueService) {
+        this.assignmentMapper = assignmentMapper;
+        this.taskMapper = taskMapper;
+        this.datasetItemMapper = datasetItemMapper;
+        this.templateVersionMapper = templateVersionMapper;
+        this.aiReviewConfigMapper = aiReviewConfigMapper;
+        this.llmProviderService = llmProviderService;
+        this.llmGateway = llmGateway;
+        this.agentRunService = agentRunService;
+        this.preAnnotationMapper = preAnnotationMapper;
+        this.submissionMapper = submissionMapper;
+        this.auditAppender = auditAppender;
+        this.traceIdProvider = traceIdProvider;
+        this.mediaPromptContextBuilder = mediaPromptContextBuilder;
+        this.redisLockService = redisLockService;
+        this.llmTaskQueueService = llmTaskQueueService;
+    }
 
     public PreAnnotationService(AssignmentMapper assignmentMapper,
                                 TaskMapper taskMapper,
@@ -97,20 +141,10 @@ public class PreAnnotationService {
                                 TraceIdProvider traceIdProvider,
                                 MediaPromptContextBuilder mediaPromptContextBuilder,
                                 RedisLockService redisLockService) {
-        this.assignmentMapper = assignmentMapper;
-        this.taskMapper = taskMapper;
-        this.datasetItemMapper = datasetItemMapper;
-        this.templateVersionMapper = templateVersionMapper;
-        this.aiReviewConfigMapper = aiReviewConfigMapper;
-        this.llmProviderService = llmProviderService;
-        this.llmGateway = llmGateway;
-        this.agentRunService = agentRunService;
-        this.preAnnotationMapper = preAnnotationMapper;
-        this.submissionMapper = submissionMapper;
-        this.auditAppender = auditAppender;
-        this.traceIdProvider = traceIdProvider;
-        this.mediaPromptContextBuilder = mediaPromptContextBuilder;
-        this.redisLockService = redisLockService;
+        this(assignmentMapper, taskMapper, datasetItemMapper, templateVersionMapper, aiReviewConfigMapper,
+                llmProviderService, llmGateway, agentRunService, preAnnotationMapper, submissionMapper,
+                auditAppender, traceIdProvider, mediaPromptContextBuilder, redisLockService,
+                new NoOpLlmTaskQueueService());
     }
 
     public PreAnnotationResponse run(Long assignmentId, Long labelerId) {
@@ -145,10 +179,11 @@ public class PreAnnotationService {
         String currentAnswerJson = request != null && request.currentAnswerJson() != null
                 ? request.currentAnswerJson() : assignment.getDraftAnswerJson();
         DatasetItem item = datasetItemMapper.selectById(datasetItemId);
+        String itemJson = resolveItemJson(datasetItemId, item);
         LlmProvider provider = loadProvider(config.getProviderId());
         ProviderCapability capability = llmProviderService.capability(provider);
         MediaPromptResult prompt = mediaPromptContextBuilder.build(new MediaPromptInput(
-                item == null ? null : item.getItemJson(),
+                itemJson,
                 currentAnswerJson,
                 preAnnotationPrompt(config),
                 capability,
@@ -167,6 +202,51 @@ public class PreAnnotationService {
         record.setUpdatedAt(LocalDateTime.now());
         preAnnotationMapper.updateById(record);
         agentRunService.start(run.getId());
+        llmTaskQueueService.enqueue(new LlmTaskQueueMessage(
+                LlmTaskType.PRE_ANNOTATION,
+                record.getId(),
+                assignment.getTaskId(),
+                assignment.getId(),
+                null,
+                record.getId(),
+                null,
+                run.getId(),
+                traceIdProvider.currentTraceId(),
+                0,
+                Instant.now()
+        ));
+        appendAudit(labelerId, task, record);
+        return toResponse(record, false);
+    }
+
+    public void executeQueuedPreAnnotation(Long preAnnotationId) {
+        PreAnnotation record = preAnnotationMapper.selectById(preAnnotationId);
+        if (record == null || record.getStatus() == PreAnnotationStatus.SUCCESS) {
+            return;
+        }
+        Assignment assignment = assignmentMapper.selectById(record.getAssignmentId());
+        if (assignment == null) {
+            return;
+        }
+        Long labelerId = assignment.getLabelerId();
+        Task task = taskMapper.selectById(assignment.getTaskId());
+        AiReviewConfig config = loadConfig(task);
+        Long datasetItemId = record.getDatasetItemId();
+        Long templateVersionId = assignment.getTemplateVersionId();
+        String currentAnswerJson = assignment.getDraftAnswerJson();
+        DatasetItem item = datasetItemMapper.selectById(datasetItemId);
+        String itemJson = resolveItemJson(datasetItemId, item);
+        LlmProvider provider = loadProvider(config.getProviderId());
+        ProviderCapability capability = llmProviderService.capability(provider);
+        MediaPromptResult prompt = mediaPromptContextBuilder.build(new MediaPromptInput(
+                itemJson,
+                currentAnswerJson,
+                preAnnotationPrompt(config),
+                capability,
+                config.getMultimodalEnabled() == null || Boolean.TRUE.equals(config.getMultimodalEnabled()),
+                config.getVisionDetail() != null ? config.getVisionDetail() : "auto",
+                config.getMaxImagesPerRequest() != null ? config.getMaxImagesPerRequest() : 5
+        ));
 
         LlmGatewayResponse gatewayResponse;
         try {
@@ -176,7 +256,7 @@ public class PreAnnotationService {
                     withSystemPrompt(prompt.messages())
             ));
         } catch (Exception llmEx) {
-            agentRunService.fail(run.getId(), AgentRunStatus.FAILED,
+            agentRunService.fail(record.getAgentRunId(), AgentRunStatus.FAILED,
                     "LLM call exception: " + llmEx.getMessage());
             record.setStatus(PreAnnotationStatus.FAILED);
             record.setErrorCode("LLM_EXCEPTION");
@@ -184,14 +264,14 @@ public class PreAnnotationService {
             record.setUpdatedAt(LocalDateTime.now());
             preAnnotationMapper.updateById(record);
             appendAudit(labelerId, task, record);
-            return toResponse(record, false);
+            return;
         }
         if (gatewayResponse.status() == LlmGatewayStatus.SUCCESS) {
             if (hasRequiredOutput(gatewayResponse.structuredJson())) {
-                agentRunService.complete(run.getId(), toJson(gatewayResponseSnapshot(gatewayResponse)));
+                agentRunService.complete(record.getAgentRunId(), toJson(gatewayResponseSnapshot(gatewayResponse)));
                 fillSuccess(record, gatewayResponse, prompt, templateVersionId, config);
             } else {
-                agentRunService.fail(run.getId(), AgentRunStatus.MANUAL_REQUIRED,
+                agentRunService.fail(record.getAgentRunId(), AgentRunStatus.MANUAL_REQUIRED,
                         "Pre-annotation output is incomplete");
                 record.setStatus(PreAnnotationStatus.MANUAL_REQUIRED);
                 record.setErrorCode("MISSING_PRE_ANNOTATION_OUTPUT");
@@ -201,7 +281,7 @@ public class PreAnnotationService {
         } else {
             AgentRunStatus runStatus = gatewayResponse.status() == LlmGatewayStatus.RATE_LIMITED
                     ? AgentRunStatus.RATE_LIMITED : AgentRunStatus.FAILED;
-            agentRunService.fail(run.getId(), runStatus, gatewayResponse.errorMessage());
+            agentRunService.fail(record.getAgentRunId(), runStatus, gatewayResponse.errorMessage());
             record.setStatus(gatewayResponse.status() == LlmGatewayStatus.RATE_LIMITED
                     ? PreAnnotationStatus.RATE_LIMITED : PreAnnotationStatus.FAILED);
             record.setErrorCode(gatewayResponse.errorCode());
@@ -213,13 +293,12 @@ public class PreAnnotationService {
             preAnnotationMapper.updateById(record);
         } catch (Exception persistEx) {
             if (record.getStatus() == PreAnnotationStatus.SUCCESS) {
-                agentRunService.fail(run.getId(), AgentRunStatus.FAILED,
+                agentRunService.fail(record.getAgentRunId(), AgentRunStatus.FAILED,
                         "PreAnnotation persist failed: " + persistEx.getMessage());
             }
             throw persistEx;
         }
         appendAudit(labelerId, task, record);
-        return toResponse(record, false);
     }
 
     public PreAnnotationResponse latest(Long assignmentId, Long labelerId) {
@@ -306,6 +385,14 @@ public class PreAnnotationService {
         return java.util.stream.Stream.concat(
                 java.util.stream.Stream.of(new LlmMessage("system", "Return valid JSON only.")),
                 messages.stream()).toList();
+    }
+
+    private String resolveItemJson(Long datasetItemId, DatasetItem item) {
+        String itemJson = item == null ? null : item.getItemJson();
+        if (mediaContextResolver != null) {
+            return mediaContextResolver.resolveItemJson(datasetItemId, itemJson);
+        }
+        return itemJson;
     }
 
     private PreAnnotation baseRecord(Assignment assignment, Long datasetItemId, MediaPromptResult prompt) {
@@ -578,5 +665,28 @@ public class PreAnnotationService {
     private record FieldFilterResult(Map<String, Object> suggestedAnswerJson,
                                      List<Map<String, Object>> fieldSuggestions,
                                      List<String> ignoredFields) {
+    }
+
+    private static class NoOpLlmTaskQueueService implements LlmTaskQueueService {
+        @Override
+        public String enqueue(LlmTaskQueueMessage message) {
+            return "";
+        }
+
+        @Override
+        public List<LlmTaskQueueRecord> read(LlmTaskType taskType, String consumerName, int count, Duration waitTime) {
+            return List.of();
+        }
+
+        @Override
+        public LlmTaskClaimResult claimStale(LlmTaskType taskType, String consumerName, Duration minIdleTime,
+                                             String startMessageId, int count) {
+            return new LlmTaskClaimResult("0-0", List.of());
+        }
+
+        @Override
+        public boolean ack(LlmTaskType taskType, String messageId) {
+            return true;
+        }
     }
 }

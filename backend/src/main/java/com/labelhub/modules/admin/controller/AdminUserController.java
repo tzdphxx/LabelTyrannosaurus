@@ -23,13 +23,13 @@ import java.util.List;
 /**
  * Admin 用户管理接口入口。
  *
- * <p>类级别要求 {@code ADMIN} 角色。接口用于用户列表、角色调整和账号启停，
+ * <p>类级别要求 {@code ADMIN} 角色。接口用于用户列表、审核员创建和账号启停，
  * 任何会影响用户权限或登录态的操作都必须让旧 token 失效。</p>
  */
 @RestController
 @RequestMapping("/api/v1/admin/users")
 @PreAuthorize("hasRole('ADMIN')")
-@Tag(name = "用户管理", description = "管理员用户列表、角色调整和账号启停")
+@Tag(name = "用户管理", description = "管理员用户列表、审核员创建和账号启停")
 public class AdminUserController {
 
     private final AdminUserService adminUserService;
@@ -51,23 +51,6 @@ public class AdminUserController {
     @Operation(summary = "用户列表", description = "查询后台用户列表，默认排除系统用户。")
     public ApiResponse<List<AdminUserResponse>> listUsers(@RequestParam(defaultValue = "false") boolean includeSystem) {
         return ApiResponse.ok(adminUserService.listUsers(includeSystem));
-    }
-
-    /**
-     * 修改用户角色。
-     *
-     * <p>替换目标用户的完整角色集合，并递增 tokenVersion 使旧 token 失效。
-     * 服务层会阻止移除系统中的最后一个 {@code ADMIN}。</p>
-     *
-     * @param userId 目标用户 id
-     * @param request 新角色集合
-     * @return 空响应体
-     */
-    @PutMapping("/{userId}/roles")
-    @Operation(summary = "修改用户角色", description = "替换用户的单个角色，并递增 tokenVersion 使旧令牌失效。")
-    public ApiResponse<Void> changeRole(@PathVariable Long userId, @Valid @RequestBody UpdateUserRolesRequest request) {
-        adminUserService.changeRole(userId, request.role());
-        return ApiResponse.ok(null);
     }
 
     /**
@@ -103,5 +86,13 @@ public class AdminUserController {
     @PostMapping("/reviewers")
     public ApiResponse<AdminUserResponse> createReviewer(@Valid @RequestBody CreateReviewerRequest request) {
         return ApiResponse.ok(adminUserService.createReviewer(request));
+    }
+
+    @PutMapping("/{userId}/roles")
+    @Operation(summary = "更新用户角色", description = "替换用户的单一角色并递增 tokenVersion，使已有令牌失效。")
+    public ApiResponse<Void> updateRole(@PathVariable Long userId,
+                                        @Valid @RequestBody UpdateUserRolesRequest request) {
+        adminUserService.changeRole(userId, request.role());
+        return ApiResponse.ok(null);
     }
 }

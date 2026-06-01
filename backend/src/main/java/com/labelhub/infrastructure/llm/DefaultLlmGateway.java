@@ -107,6 +107,14 @@ public class DefaultLlmGateway implements LlmGateway {
             if (content.isMissingNode() || content.isNull()) {
                 return null;
             }
+            if (content.isArray()) {
+                for (JsonNode part : content) {
+                    if ("text".equals(part.path("type").asText()) && part.has("text")) {
+                        return part.get("text").asText();
+                    }
+                }
+                return null;
+            }
             return content.asText();
         } catch (JsonProcessingException ex) {
             return null;
@@ -119,8 +127,11 @@ public class DefaultLlmGateway implements LlmGateway {
             return trimmed;
         }
         int firstLineEnd = trimmed.indexOf('\n');
-        int lastFenceStart = trimmed.lastIndexOf("```");
-        if (firstLineEnd < 0 || lastFenceStart <= firstLineEnd) {
+        if (firstLineEnd < 0) {
+            return trimmed;
+        }
+        int lastFenceStart = trimmed.lastIndexOf("\n```");
+        if (lastFenceStart <= firstLineEnd) {
             return trimmed;
         }
         return trimmed.substring(firstLineEnd + 1, lastFenceStart).trim();

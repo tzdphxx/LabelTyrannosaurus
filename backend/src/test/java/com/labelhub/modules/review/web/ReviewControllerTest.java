@@ -113,6 +113,20 @@ class ReviewControllerTest {
     }
 
     @Test
+    void contractBatchApproveAliasDelegatesToBatchService() {
+        CurrentUserContext.set(new CurrentUser(1L, "reviewer", "test@labelhub.dev", Set.of(RoleCode.REVIEWER), 1));
+        BatchReviewResponse serviceResponse = new BatchReviewResponse(
+                1, 1, 0, List.of(BatchReviewItemResult.ok(100L)));
+        when(batchReviewService.batchApprove(eq(1L), any(BatchApproveRequest.class)))
+                .thenReturn(serviceResponse);
+
+        ApiResponse<BatchReviewResponse> response = controller.batchApproveAlias(
+                new BatchApproveRequest(List.of(100L), "ok", 1));
+
+        assertThat(response.data().successCount()).isEqualTo(1);
+    }
+
+    @Test
     void labelerCannotList() {
         CurrentUserContext.set(new CurrentUser(2L, "labeler", "test@labelhub.dev", Set.of(RoleCode.LABELER), 1));
 

@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -18,12 +19,15 @@ import com.labelhub.infrastructure.llm.LlmGateway;
 import com.labelhub.infrastructure.llm.LlmGatewayRequest;
 import com.labelhub.infrastructure.llm.LlmGatewayResponse;
 import com.labelhub.infrastructure.llm.LlmGatewayStatus;
+import com.labelhub.infrastructure.llmtask.LlmTaskQueueService;
+import com.labelhub.infrastructure.llmtask.LlmTaskStatus;
 import com.labelhub.modules.agent.domain.AgentRun;
-import com.labelhub.modules.agent.domain.AgentRunStatus;
 import com.labelhub.modules.agent.service.AgentRunService;
+import com.labelhub.modules.ai.domain.LlmTriggerRun;
 import com.labelhub.modules.ai.domain.LlmProvider;
 import com.labelhub.modules.ai.dto.LlmTriggerRunRequest;
 import com.labelhub.modules.ai.dto.LlmTriggerRunResponse;
+import com.labelhub.modules.ai.mapper.LlmTriggerRunMapper;
 import com.labelhub.modules.assignment.domain.Assignment;
 import com.labelhub.modules.assignment.mapper.AssignmentMapper;
 import com.labelhub.modules.dataset.domain.DatasetItem;
@@ -52,6 +56,7 @@ class LlmTriggerServiceTest {
     private static final Long ASSIGNMENT_ID = 40L;
     private static final Long PROVIDER_ID = 50L;
     private static final Long AGENT_RUN_ID = 60L;
+    private static final Long TRIGGER_RUN_ID = 70L;
 
     @Mock
     private TaskMapper taskMapper;
@@ -83,42 +88,45 @@ class LlmTriggerServiceTest {
     @Mock
     private TraceIdProvider traceIdProvider;
 
+    @Mock
+    private LlmTaskQueueService llmTaskQueueService;
+
+    @Mock
+    private LlmTriggerRunMapper llmTriggerRunMapper;
+
     private LlmTriggerService service;
 
     @BeforeEach
     void setUp() {
         service = new LlmTriggerService(taskMapper, templateVersionMapper, datasetItemMapper, assignmentMapper,
-                llmProviderService, rateLimiter, llmGateway, agentRunService, auditAppender, traceIdProvider);
+                llmProviderService, rateLimiter, llmGateway, agentRunService, auditAppender, traceIdProvider,
+                llmTaskQueueService, llmTriggerRunMapper);
     }
 
     @Test
-    void ownerPreviewRunsLlmTriggerAndReturnsSuggestion() {
+    void ownerPreviewEnqueuesLlmTriggerAndReturnsRunning() {
         when(taskMapper.selectById(TASK_ID)).thenReturn(task());
         when(templateVersionMapper.selectById(TEMPLATE_VERSION_ID)).thenReturn(templateVersion());
         when(datasetItemMapper.selectById(DATASET_ITEM_ID)).thenReturn(datasetItem());
-        when(llmProviderService.findEnabledById(PROVIDER_ID)).thenReturn(Optional.of(provider()));
+        when(llmProviderService.findEnabledOwnedById(OWNER_ID, PROVIDER_ID)).thenReturn(Optional.of(provider()));
         when(agentRunService.create(eq("LLM_TRIGGER"), isNull(), eq(PROVIDER_ID), eq("qwen-plus"),
                 eq("component:assist-summary"), any(), isNull())).thenReturn(agentRun());
-        when(rateLimiter.acquire(TASK_ID, OWNER_ID, PROVIDER_ID)).thenReturn(true);
         when(traceIdProvider.currentTraceId()).thenReturn("trace-1");
-        when(llmGateway.review(any(LlmGatewayRequest.class))).thenReturn(new LlmGatewayResponse(
-                LlmGatewayStatus.SUCCESS,
-                "{\"suggestion\":\"Looks good\"}",
-                "Looks good",
-                Map.of("suggestion", "Looks good"),
-                42L,
-                null,
-                null
-        ));
+        doAnswer(invocation -> {
+            LlmTriggerRun run = invocation.getArgument(0);
+            run.setId(TRIGGER_RUN_ID);
+            return 1;
+        }).when(llmTriggerRunMapper).insert(any(LlmTriggerRun.class));
 
         LlmTriggerRunResponse response = service.run(owner(), request(true, null));
 
+        assertThat(response.triggerRunId()).isEqualTo(TRIGGER_RUN_ID);
         assertThat(response.agentRunId()).isEqualTo(AGENT_RUN_ID);
         assertThat(response.componentId()).isEqualTo("assist-summary");
-        assertThat(response.suggestionJson()).containsEntry("suggestion", "Looks good");
+        assertThat(response.status()).isEqualTo(LlmTaskStatus.RUNNING.name());
         assertThat(response.targetFields()).containsExactly("summary");
         verify(agentRunService).start(AGENT_RUN_ID);
-        verify(agentRunService).complete(eq(AGENT_RUN_ID), any());
+        verify(llmTaskQueueService).enqueue(any());
         verify(auditAppender).append(any(AuditCommand.class));
     }
 
@@ -148,13 +156,10 @@ class LlmTriggerServiceTest {
     }
 
     @Test
-    void marksAgentRunFailedWhenGatewayFails() {
+    void workerMarksRunFailedWhenGatewayFails() {
+        LlmTriggerRun run = triggerRun();
+        when(llmTriggerRunMapper.selectById(TRIGGER_RUN_ID)).thenReturn(run);
         when(taskMapper.selectById(TASK_ID)).thenReturn(task());
-        when(templateVersionMapper.selectById(TEMPLATE_VERSION_ID)).thenReturn(templateVersion());
-        when(datasetItemMapper.selectById(DATASET_ITEM_ID)).thenReturn(datasetItem());
-        when(llmProviderService.findEnabledById(PROVIDER_ID)).thenReturn(Optional.of(provider()));
-        when(agentRunService.create(eq("LLM_TRIGGER"), isNull(), eq(PROVIDER_ID), eq("qwen-plus"),
-                eq("component:assist-summary"), any(), isNull())).thenReturn(agentRun());
         when(rateLimiter.acquire(TASK_ID, OWNER_ID, PROVIDER_ID)).thenReturn(true);
         when(llmGateway.review(any(LlmGatewayRequest.class))).thenReturn(new LlmGatewayResponse(
                 LlmGatewayStatus.TIMEOUT,
@@ -166,28 +171,35 @@ class LlmTriggerServiceTest {
                 "Provider timed out"
         ));
 
-        LlmTriggerRunResponse response = service.run(owner(), request(true, null));
+        service.executeQueuedTrigger(TRIGGER_RUN_ID);
 
-        assertThat(response.status()).isEqualTo(LlmGatewayStatus.TIMEOUT);
-        assertThat(response.errorMessage()).isEqualTo("Provider timed out");
-        verify(agentRunService).fail(AGENT_RUN_ID, AgentRunStatus.FAILED, "Provider timed out");
+        assertThat(run.getStatus()).isEqualTo(LlmTaskStatus.FAILED.name());
+        assertThat(run.getErrorMessage()).isEqualTo("Provider timed out");
     }
 
     @Test
-    void rateLimitedCallMarksAgentRunAndSkipsGateway() {
+    void rateLimitedWorkerRunSkipsGateway() {
+        LlmTriggerRun run = triggerRun();
+        when(llmTriggerRunMapper.selectById(TRIGGER_RUN_ID)).thenReturn(run);
+        when(taskMapper.selectById(TASK_ID)).thenReturn(task());
+        when(rateLimiter.acquire(TASK_ID, OWNER_ID, PROVIDER_ID)).thenReturn(false);
+
+        service.executeQueuedTrigger(TRIGGER_RUN_ID);
+
+        assertThat(run.getStatus()).isEqualTo(LlmTaskStatus.RATE_LIMITED.name());
+        assertThat(run.getErrorCode()).isEqualTo("RATE_LIMITED");
+    }
+
+    @Test
+    void rejectsProviderNotOwnedByTaskOwner() {
         when(taskMapper.selectById(TASK_ID)).thenReturn(task());
         when(templateVersionMapper.selectById(TEMPLATE_VERSION_ID)).thenReturn(templateVersion());
         when(datasetItemMapper.selectById(DATASET_ITEM_ID)).thenReturn(datasetItem());
-        when(llmProviderService.findEnabledById(PROVIDER_ID)).thenReturn(Optional.of(provider()));
-        when(agentRunService.create(eq("LLM_TRIGGER"), isNull(), eq(PROVIDER_ID), eq("qwen-plus"),
-                eq("component:assist-summary"), any(), isNull())).thenReturn(agentRun());
-        when(rateLimiter.acquire(TASK_ID, OWNER_ID, PROVIDER_ID)).thenReturn(false);
+        when(llmProviderService.findEnabledOwnedById(OWNER_ID, PROVIDER_ID)).thenReturn(Optional.empty());
 
-        LlmTriggerRunResponse response = service.run(owner(), request(true, null));
-
-        assertThat(response.status()).isEqualTo(LlmGatewayStatus.RATE_LIMITED);
-        assertThat(response.errorCode()).isEqualTo("RATE_LIMITED");
-        verify(agentRunService).fail(AGENT_RUN_ID, AgentRunStatus.RATE_LIMITED, "LLM trigger rate limited");
+        assertThatThrownBy(() -> service.run(owner(), request(true, null)))
+                .isInstanceOfSatisfying(BusinessException.class,
+                        ex -> assertThat(ex.getCode()).isEqualTo(400503));
     }
 
     private CurrentUser owner() {
@@ -260,6 +272,24 @@ class LlmTriggerServiceTest {
     private AgentRun agentRun() {
         AgentRun run = new AgentRun();
         run.setId(AGENT_RUN_ID);
+        return run;
+    }
+
+    private LlmTriggerRun triggerRun() {
+        LlmTriggerRun run = new LlmTriggerRun();
+        run.setId(TRIGGER_RUN_ID);
+        run.setTaskId(TASK_ID);
+        run.setAssignmentId(ASSIGNMENT_ID);
+        run.setTemplateVersionId(TEMPLATE_VERSION_ID);
+        run.setDatasetItemId(DATASET_ITEM_ID);
+        run.setComponentId("assist-summary");
+        run.setProviderId(PROVIDER_ID);
+        run.setModelName("qwen-plus");
+        run.setAgentRunId(AGENT_RUN_ID);
+        run.setStatus(LlmTaskStatus.RUNNING.name());
+        run.setTargetFieldsJson("[\"summary\"]");
+        run.setInputSnapshotJson("{\"componentId\":\"assist-summary\"}");
+        run.setCreatedBy(OWNER_ID);
         return run;
     }
 }

@@ -312,7 +312,8 @@ public class AiAutoReviewService {
                 config.getModelName(),
                 java.util.stream.Stream.concat(
                         java.util.stream.Stream.of(new LlmMessage("system", "You are LabelHub AI reviewer. Return valid JSON only.")),
-                        prompt.messages().stream()).toList()
+                        prompt.messages().stream()).toList(),
+                com.labelhub.infrastructure.llm.ResponseFormat.jsonSchema(AiReviewSchema.NAME, AiReviewSchema.SCHEMA)
         ));
         if (response.status() != LlmGatewayStatus.SUCCESS) {
             agentRunService.fail(agentRun.getId(), AgentRunStatus.FAILED, response.errorMessage());
@@ -639,6 +640,9 @@ public class AiAutoReviewService {
             assignment.setStatus(AssignmentStatus.RETURNED);
             assignment.setReturnedAt(LocalDateTime.now());
             assignmentMapper.updateById(assignment);
+        }
+        if (eventPublisher != null) {
+            eventPublisher.publishRejected(submission.getId(), null, "AI direct reject");
         }
         if (reviewRecordMapper != null) {
             com.labelhub.modules.review.domain.ReviewRecord record = new com.labelhub.modules.review.domain.ReviewRecord();

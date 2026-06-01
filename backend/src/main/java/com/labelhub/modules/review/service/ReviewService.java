@@ -142,6 +142,8 @@ public class ReviewService {
 
         appendAudit(submission, reviewerId, "SUBMISSION_REJECTED", record.getId());
 
+        eventPublisher.publishRejected(submissionId, reviewerId, request.reason());
+
         return new ReviewActionResponse(submissionId, SubmissionStatus.REJECTED, record.getId());
     }
 

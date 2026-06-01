@@ -131,4 +131,12 @@ public interface AssignmentMapper extends BaseMapper<Assignment> {
             ORDER BY last_activity_at DESC
             """)
     java.util.List<java.util.Map<String, Object>> selectLabelersByTask(@Param("taskId") Long taskId);
+
+    @Select("""
+            SELECT DISTINCT labeler_id
+            FROM assignments
+            WHERE task_id = #{taskId}
+              AND status <> 'CANCELLED'
+            """)
+    java.util.List<Long> selectDistinctLabelersByTask(@Param("taskId") Long taskId);
 }

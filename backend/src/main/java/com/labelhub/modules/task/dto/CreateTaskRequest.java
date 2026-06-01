@@ -1,5 +1,6 @@
 package com.labelhub.modules.task.dto;
 
+import com.labelhub.modules.dataset.domain.DatasetType;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.Future;
 import jakarta.validation.constraints.Min;
@@ -36,6 +37,10 @@ public record CreateTaskRequest(
         @Schema(description = "已发布模板版本 ID", example = "20")
         Long publishedTemplateVersionId,
         @Schema(description = "AI 审核配置 ID", example = "30")
-        Long aiReviewConfigId
+        Long aiReviewConfigId,
+        @Schema(description = "Dataset file ID uploaded by /api/v1/files/upload; must be provided with datasetType", example = "99")
+        Long datasetFileId,
+        @Schema(description = "Dataset type; must be provided with datasetFileId", example = "QA_QUALITY")
+        DatasetType datasetType
 ) {
 }

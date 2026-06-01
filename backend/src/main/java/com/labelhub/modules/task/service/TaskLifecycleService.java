@@ -5,9 +5,13 @@ import com.labelhub.common.audit.AuditAppender;
 import com.labelhub.common.audit.AuditCommand;
 import com.labelhub.common.exception.BusinessException;
 import com.labelhub.common.web.TraceIdProvider;
+import com.labelhub.modules.dataset.dto.DatasetImportJobResponse;
+import com.labelhub.modules.dataset.dto.DatasetImportRequest;
+import com.labelhub.modules.dataset.service.DatasetImportService;
 import com.labelhub.modules.task.domain.Task;
 import com.labelhub.modules.task.domain.TaskStatus;
 import com.labelhub.modules.task.domain.TaskTag;
+import com.labelhub.modules.task.dto.CreateTaskResponse;
 import com.labelhub.modules.task.dto.CreateTaskRequest;
 import com.labelhub.modules.task.dto.OwnerTaskSummaryResponse;
 import com.labelhub.modules.task.dto.TaskDetailResponse;
@@ -31,6 +35,7 @@ public class TaskLifecycleService {
     private static final int TASK_NOT_FOUND = 404001;
     private static final int TASK_STATUS_NOT_ALLOWED = 400101;
     private static final int TASK_PUBLISH_REQUIREMENT_MISSING = 400102;
+    private static final int TASK_DATASET_IMPORT_INVALID = 400102;
     private static final String TASK_BIZ_TYPE = "TASK";
     private static final String USER_ACTOR_TYPE = "USER";
 
@@ -39,17 +44,20 @@ public class TaskLifecycleService {
     private final TaskPublishDependencyChecker publishDependencyChecker;
     private final AuditAppender auditAppender;
     private final TraceIdProvider traceIdProvider;
+    private final DatasetImportService datasetImportService;
 
     public TaskLifecycleService(TaskMapper taskMapper,
                                 TaskTagMapper taskTagMapper,
                                 TaskPublishDependencyChecker publishDependencyChecker,
                                 AuditAppender auditAppender,
-                                TraceIdProvider traceIdProvider) {
+                                TraceIdProvider traceIdProvider,
+                                DatasetImportService datasetImportService) {
         this.taskMapper = taskMapper;
         this.taskTagMapper = taskTagMapper;
         this.publishDependencyChecker = publishDependencyChecker;
         this.auditAppender = auditAppender;
         this.traceIdProvider = traceIdProvider;
+        this.datasetImportService = datasetImportService;
     }
 
     public List<OwnerTaskSummaryResponse> listOwnerTasks(Long ownerId) {
@@ -98,6 +106,20 @@ public class TaskLifecycleService {
         replaceTags(task.getId(), request.tags());
         appendAudit(task, ownerId, "TASK_CREATED", null, snapshot(task));
         return new TaskLifecycleResponse(task.getId(), task.getStatus());
+    }
+
+    @Transactional
+    public CreateTaskResponse createWithDataset(Long ownerId, CreateTaskRequest request) {
+        validateDatasetImportRequest(request);
+        TaskLifecycleResponse task = create(ownerId, request);
+        DatasetImportJobResponse importJob = null;
+        if (request.datasetFileId() != null) {
+            importJob = datasetImportService.createAppendImport(
+                    task.taskId(),
+                    new DatasetImportRequest(request.datasetFileId(), request.datasetType())
+            );
+        }
+        return new CreateTaskResponse(task.taskId(), task.status(), importJob);
     }
 
     @Transactional
@@ -197,6 +219,15 @@ public class TaskLifecycleService {
 
     private BusinessException missingPublishRequirement(String message) {
         return new BusinessException(TASK_PUBLISH_REQUIREMENT_MISSING, message);
+    }
+
+    private void validateDatasetImportRequest(CreateTaskRequest request) {
+        boolean hasFile = request.datasetFileId() != null;
+        boolean hasType = request.datasetType() != null;
+        if (hasFile != hasType) {
+            throw new BusinessException(TASK_DATASET_IMPORT_INVALID,
+                    "datasetFileId and datasetType must be provided together");
+        }
     }
 
     private TaskDetailResponse toDetailResponse(Task task) {

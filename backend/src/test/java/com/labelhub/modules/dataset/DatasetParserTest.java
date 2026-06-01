@@ -58,6 +58,24 @@ class DatasetParserTest {
     }
 
     @Test
+    void jsonParserUsesIdAsExternalIdFallback() {
+        JsonDatasetParser parser = new JsonDatasetParser(objectMapper);
+        String content = """
+                [
+                  {"id":"Q0001","prompt":"question","model_answer":"answer"}
+                ]
+                """;
+
+        var result = parser.parse(new ByteArrayInputStream(content.getBytes(StandardCharsets.UTF_8)), DatasetType.QA_QUALITY);
+
+        assertThat(result.errors()).isEmpty();
+        assertThat(result.rows()).hasSize(1);
+        assertThat(result.rows().get(0).externalId()).isEqualTo("Q0001");
+        assertThat(result.rows().get(0).itemJson().get("id").asText()).isEqualTo("Q0001");
+        assertThat(result.rows().get(0).itemJson().get("prompt").asText()).isEqualTo("question");
+    }
+
+    @Test
     void excelParserUsesFirstRowAsHeader() throws Exception {
         ExcelDatasetParser parser = new ExcelDatasetParser(objectMapper);
         XSSFWorkbook workbook = new XSSFWorkbook();

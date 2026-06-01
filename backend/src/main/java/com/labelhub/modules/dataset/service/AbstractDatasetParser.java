@@ -28,7 +28,7 @@ abstract class AbstractDatasetParser implements DatasetParser {
     }
 
     protected DatasetImportError invalidRow(int rowNo, String message, JsonNode rawRow) {
-        String externalId = rawRow != null && rawRow.hasNonNull("externalId") ? rawRow.get("externalId").asText() : null;
+        String externalId = extractExternalId(rawRow);
         return new DatasetImportError(rowNo, externalId, "INVALID_ROW", message, rawRow);
     }
 
@@ -42,10 +42,7 @@ abstract class AbstractDatasetParser implements DatasetParser {
         if (!rawRow.isObject()) {
             throw new IllegalArgumentException("Dataset row must be a JSON object");
         }
-        JsonNode externalIdNode = rawRow.get("externalId");
-        String externalId = externalIdNode == null || externalIdNode.asText().isBlank()
-                ? ""
-                : externalIdNode.asText().trim();
+        String externalId = extractExternalId(rawRow);
         if (externalId.isBlank()) {
             throw new IllegalArgumentException("externalId is required");
         }
@@ -57,5 +54,15 @@ abstract class AbstractDatasetParser implements DatasetParser {
         }
         itemJson.put("datasetType", datasetType.name());
         return new DatasetImportRow(rowNo, externalId, itemJson, metadataJson, rawRow);
+    }
+
+    private String extractExternalId(JsonNode rawRow) {
+        if (rawRow == null || !rawRow.isObject()) {
+            return null;
+        }
+        JsonNode externalIdNode = rawRow.hasNonNull("externalId") ? rawRow.get("externalId") : rawRow.get("id");
+        return externalIdNode == null || externalIdNode.asText().isBlank()
+                ? ""
+                : externalIdNode.asText().trim();
     }
 }

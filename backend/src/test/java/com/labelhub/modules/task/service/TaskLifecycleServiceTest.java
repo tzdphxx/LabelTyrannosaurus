@@ -3,7 +3,9 @@ package com.labelhub.modules.task.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.when;
 
 import com.baomidou.mybatisplus.core.conditions.Wrapper;
@@ -12,12 +14,17 @@ import com.labelhub.common.audit.AuditCommand;
 import com.labelhub.common.exception.BusinessException;
 import com.labelhub.common.web.TraceIdProvider;
 import com.labelhub.modules.ai.mapper.AiReviewConfigMapper;
+import com.labelhub.modules.dataset.domain.DatasetType;
+import com.labelhub.modules.dataset.dto.DatasetImportJobResponse;
+import com.labelhub.modules.dataset.dto.DatasetImportRequest;
+import com.labelhub.modules.dataset.service.DatasetImportService;
 import com.labelhub.modules.dataset.mapper.DatasetItemMapper;
 import com.labelhub.modules.reward.mapper.RewardRuleMapper;
 import com.labelhub.modules.template.mapper.TemplateVersionMapper;
 import com.labelhub.modules.task.domain.Task;
 import com.labelhub.modules.task.domain.TaskStatus;
 import com.labelhub.modules.task.domain.TaskTag;
+import com.labelhub.modules.task.dto.CreateTaskResponse;
 import com.labelhub.modules.task.dto.CreateTaskRequest;
 import com.labelhub.modules.task.dto.OwnerTaskSummaryResponse;
 import com.labelhub.modules.task.dto.TaskDetailResponse;
@@ -56,6 +63,9 @@ class TaskLifecycleServiceTest {
     @Mock
     private TraceIdProvider traceIdProvider;
 
+    @Mock
+    private DatasetImportService datasetImportService;
+
     private TaskLifecycleService taskLifecycleService;
 
     @BeforeEach
@@ -65,7 +75,8 @@ class TaskLifecycleServiceTest {
                 taskTagMapper,
                 publishDependencyChecker,
                 auditAppender,
-                traceIdProvider
+                traceIdProvider,
+                datasetImportService
         );
     }
 
@@ -87,6 +98,40 @@ class TaskLifecycleServiceTest {
         assertThat(taskCaptor.getValue().getStatus()).isEqualTo(TaskStatus.DRAFT);
         verify(taskTagMapper).insert(any(TaskTag.class));
         verify(auditAppender).append(any(AuditCommand.class));
+    }
+
+    @Test
+    void createsDraftTaskAndStartsDatasetImportWhenFileProvided() {
+        when(traceIdProvider.currentTraceId()).thenReturn("trace-1");
+        when(taskMapper.insert(any(Task.class))).thenAnswer(invocation -> {
+            Task task = invocation.getArgument(0);
+            task.setId(TASK_ID);
+            return 1;
+        });
+        DatasetImportJobResponse importJob = new DatasetImportJobResponse(
+                300L, TASK_ID, "PENDING", "APPEND", 0, 0, 0,
+                null, null, null, null, null, null
+        );
+        when(datasetImportService.createAppendImport(
+                eq(TASK_ID),
+                eq(new DatasetImportRequest(99L, DatasetType.QA_QUALITY))
+        )).thenReturn(importJob);
+
+        CreateTaskResponse response = taskLifecycleService.createWithDataset(OWNER_ID, createRequestWithDataset());
+
+        assertThat(response.taskId()).isEqualTo(TASK_ID);
+        assertThat(response.status()).isEqualTo(TaskStatus.DRAFT);
+        assertThat(response.datasetImportJob()).isEqualTo(importJob);
+        verify(datasetImportService).createAppendImport(TASK_ID, new DatasetImportRequest(99L, DatasetType.QA_QUALITY));
+    }
+
+    @Test
+    void rejectsCreateWhenOnlyDatasetFileIdProvided() {
+        assertThatThrownBy(() -> taskLifecycleService.createWithDataset(OWNER_ID, createRequestWithOnlyDatasetFileId()))
+                .isInstanceOfSatisfying(BusinessException.class,
+                        ex -> assertThat(ex.getCode()).isEqualTo(400102));
+
+        verify(taskMapper, never()).insert(any(Task.class));
     }
 
     @Test
@@ -209,7 +254,41 @@ class TaskLifecycleServiceTest {
                 LocalDateTime.now().plusDays(1),
                 1,
                 100L,
-                200L
+                200L,
+                null,
+                null
+        );
+    }
+
+    private CreateTaskRequest createRequestWithDataset() {
+        return new CreateTaskRequest(
+                "New task",
+                "Description",
+                "Instruction",
+                List.of("qa"),
+                10,
+                LocalDateTime.now().plusDays(1),
+                1,
+                100L,
+                200L,
+                99L,
+                DatasetType.QA_QUALITY
+        );
+    }
+
+    private CreateTaskRequest createRequestWithOnlyDatasetFileId() {
+        return new CreateTaskRequest(
+                "New task",
+                "Description",
+                "Instruction",
+                List.of("qa"),
+                10,
+                LocalDateTime.now().plusDays(1),
+                1,
+                100L,
+                200L,
+                99L,
+                null
         );
     }
 

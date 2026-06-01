@@ -7,7 +7,6 @@ import com.labelhub.common.security.CurrentUserContext;
 import com.labelhub.common.security.RoleCode;
 import com.labelhub.modules.dataset.domain.DatasetItemChangeLogEntity;
 import com.labelhub.modules.dataset.domain.DatasetItemEntity;
-import com.labelhub.modules.dataset.domain.DatasetType;
 import com.labelhub.modules.dataset.dto.BatchAppendItemsRequest;
 import com.labelhub.modules.dataset.dto.BatchDeleteItemsRequest;
 import com.labelhub.modules.dataset.dto.BatchUpdateItemsRequest;
@@ -65,10 +64,10 @@ class DatasetItemServiceTest {
         CurrentUserContext.set(new CurrentUser(10L, "owner", "owner@example.com", Set.of(RoleCode.OWNER), 1));
         stubTask(10L, TaskStatus.DRAFT, 2);
         DatasetItemEntity item = item(100L, "q1", 0, 0, false);
-        when(datasetItemMapper.selectActivePage(1L, "QA_QUALITY", "q", 20, 0)).thenReturn(List.of(item));
-        when(datasetItemMapper.countActivePage(1L, "QA_QUALITY", "q")).thenReturn(1L);
+        when(datasetItemMapper.selectActivePage(1L, "q", 20, 0)).thenReturn(List.of(item));
+        when(datasetItemMapper.countActivePage(1L, "q")).thenReturn(1L);
 
-        var response = itemService.listItems(1L, new DatasetItemQuery(1, 20, DatasetType.QA_QUALITY, "q"));
+        var response = itemService.listItems(1L, new DatasetItemQuery(1, 20, "q"));
 
         assertThat(response.total()).isEqualTo(1L);
         assertThat(response.items()).hasSize(1);
@@ -81,7 +80,7 @@ class DatasetItemServiceTest {
         stubTask(10L, TaskStatus.DRAFT, 2);
 
         assertThatThrownBy(() -> itemService.batchAppend(1L, new BatchAppendItemsRequest(List.of(
-                new DatasetItemAppendRequest("q1", DatasetType.QA_QUALITY, Map.of("question", "one"), Map.of())
+                new DatasetItemAppendRequest("q1", Map.of("question", "one"), Map.of())
         ))))
                 .isInstanceOf(BusinessException.class)
                 .extracting("code")
@@ -96,8 +95,8 @@ class DatasetItemServiceTest {
         when(datasetItemMapper.selectActiveByTaskIdAndExternalId(1L, "q2")).thenReturn(item(101L, "q2", 0, 0, false));
 
         var results = itemService.batchAppend(1L, new BatchAppendItemsRequest(List.of(
-                new DatasetItemAppendRequest("q1", DatasetType.QA_QUALITY, Map.of("question", "one"), Map.of("source", "manual")),
-                new DatasetItemAppendRequest("q2", DatasetType.QA_QUALITY, Map.of("question", "two"), Map.of())
+                new DatasetItemAppendRequest("q1", Map.of("question", "one"), Map.of("source", "manual")),
+                new DatasetItemAppendRequest("q2", Map.of("question", "two"), Map.of())
         )));
 
         assertThat(results).extracting("success").containsExactly(true, false);
@@ -231,7 +230,6 @@ class DatasetItemServiceTest {
         item.setId(id);
         item.setTaskId(1L);
         item.setExternalId(externalId);
-        item.setDatasetType("QA_QUALITY");
         item.setItemJson("{\"question\":\"one\"}");
         item.setMetadataJson("{\"source\":\"seed\"}");
         item.setAssignedCount(assignedCount);

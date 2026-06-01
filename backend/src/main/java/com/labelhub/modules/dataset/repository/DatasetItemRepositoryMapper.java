@@ -34,9 +34,6 @@ public interface DatasetItemRepositoryMapper extends BaseMapper<DatasetItemEntit
             select * from dataset_items
             where task_id = #{taskId}
               and deleted = 0
-              <if test="datasetType != null and datasetType != ''">
-                and dataset_type = #{datasetType}
-              </if>
               <if test="externalId != null and externalId != ''">
                 and external_id like concat('%', #{externalId}, '%')
               </if>
@@ -45,7 +42,6 @@ public interface DatasetItemRepositoryMapper extends BaseMapper<DatasetItemEntit
             </script>
             """)
     List<DatasetItemEntity> selectActivePage(@Param("taskId") Long taskId,
-                                             @Param("datasetType") String datasetType,
                                              @Param("externalId") String externalId,
                                              @Param("limit") int limit,
                                              @Param("offset") int offset);
@@ -58,16 +54,12 @@ public interface DatasetItemRepositoryMapper extends BaseMapper<DatasetItemEntit
             select count(1) from dataset_items
             where task_id = #{taskId}
               and deleted = 0
-              <if test="datasetType != null and datasetType != ''">
-                and dataset_type = #{datasetType}
-              </if>
               <if test="externalId != null and externalId != ''">
                 and external_id like concat('%', #{externalId}, '%')
               </if>
             </script>
             """)
     long countActivePage(@Param("taskId") Long taskId,
-                         @Param("datasetType") String datasetType,
                          @Param("externalId") String externalId);
 
     /**

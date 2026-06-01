@@ -134,7 +134,6 @@ alter table dataset_items comment = '数据集数据条目表，存储数据集�
 alter table dataset_items modify column id bigint auto_increment comment '主键ID';
 alter table dataset_items modify column task_id bigint not null comment '任务ID';
 alter table dataset_items modify column external_id varchar(128) not null comment '外部ID';
-alter table dataset_items modify column dataset_type varchar(40) not null comment '数据集类型';
 alter table dataset_items modify column item_json json not null comment '数据条目JSON';
 alter table dataset_items modify column metadata_json json null comment '元数据JSON';
 alter table dataset_items modify column assigned_count int default 0 not null comment '分配数量';

@@ -14,7 +14,6 @@ import com.labelhub.common.audit.AuditCommand;
 import com.labelhub.common.exception.BusinessException;
 import com.labelhub.common.web.TraceIdProvider;
 import com.labelhub.modules.ai.mapper.AiReviewConfigMapper;
-import com.labelhub.modules.dataset.domain.DatasetType;
 import com.labelhub.modules.dataset.dto.DatasetImportJobResponse;
 import com.labelhub.modules.dataset.dto.DatasetImportRequest;
 import com.labelhub.modules.dataset.service.DatasetImportService;
@@ -114,7 +113,7 @@ class TaskLifecycleServiceTest {
         );
         when(datasetImportService.createAppendImport(
                 eq(TASK_ID),
-                eq(new DatasetImportRequest(99L, DatasetType.QA_QUALITY))
+                eq(new DatasetImportRequest(99L))
         )).thenReturn(importJob);
 
         CreateTaskResponse response = taskLifecycleService.createWithDataset(OWNER_ID, createRequestWithDataset());
@@ -122,16 +121,7 @@ class TaskLifecycleServiceTest {
         assertThat(response.taskId()).isEqualTo(TASK_ID);
         assertThat(response.status()).isEqualTo(TaskStatus.DRAFT);
         assertThat(response.datasetImportJob()).isEqualTo(importJob);
-        verify(datasetImportService).createAppendImport(TASK_ID, new DatasetImportRequest(99L, DatasetType.QA_QUALITY));
-    }
-
-    @Test
-    void rejectsCreateWhenOnlyDatasetFileIdProvided() {
-        assertThatThrownBy(() -> taskLifecycleService.createWithDataset(OWNER_ID, createRequestWithOnlyDatasetFileId()))
-                .isInstanceOfSatisfying(BusinessException.class,
-                        ex -> assertThat(ex.getCode()).isEqualTo(400102));
-
-        verify(taskMapper, never()).insert(any(Task.class));
+        verify(datasetImportService).createAppendImport(TASK_ID, new DatasetImportRequest(99L));
     }
 
     @Test
@@ -255,7 +245,6 @@ class TaskLifecycleServiceTest {
                 1,
                 100L,
                 200L,
-                null,
                 null
         );
     }
@@ -271,24 +260,7 @@ class TaskLifecycleServiceTest {
                 1,
                 100L,
                 200L,
-                99L,
-                DatasetType.QA_QUALITY
-        );
-    }
-
-    private CreateTaskRequest createRequestWithOnlyDatasetFileId() {
-        return new CreateTaskRequest(
-                "New task",
-                "Description",
-                "Instruction",
-                List.of("qa"),
-                10,
-                LocalDateTime.now().plusDays(1),
-                1,
-                100L,
-                200L,
-                99L,
-                null
+                99L
         );
     }
 

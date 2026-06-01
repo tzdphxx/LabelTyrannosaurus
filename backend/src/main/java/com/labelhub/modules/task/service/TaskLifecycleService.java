@@ -35,7 +35,6 @@ public class TaskLifecycleService {
     private static final int TASK_NOT_FOUND = 404001;
     private static final int TASK_STATUS_NOT_ALLOWED = 400101;
     private static final int TASK_PUBLISH_REQUIREMENT_MISSING = 400102;
-    private static final int TASK_DATASET_IMPORT_INVALID = 400102;
     private static final String TASK_BIZ_TYPE = "TASK";
     private static final String USER_ACTOR_TYPE = "USER";
 
@@ -110,13 +109,12 @@ public class TaskLifecycleService {
 
     @Transactional
     public CreateTaskResponse createWithDataset(Long ownerId, CreateTaskRequest request) {
-        validateDatasetImportRequest(request);
         TaskLifecycleResponse task = create(ownerId, request);
         DatasetImportJobResponse importJob = null;
         if (request.datasetFileId() != null) {
             importJob = datasetImportService.createAppendImport(
                     task.taskId(),
-                    new DatasetImportRequest(request.datasetFileId(), request.datasetType())
+                    new DatasetImportRequest(request.datasetFileId())
             );
         }
         return new CreateTaskResponse(task.taskId(), task.status(), importJob);
@@ -219,15 +217,6 @@ public class TaskLifecycleService {
 
     private BusinessException missingPublishRequirement(String message) {
         return new BusinessException(TASK_PUBLISH_REQUIREMENT_MISSING, message);
-    }
-
-    private void validateDatasetImportRequest(CreateTaskRequest request) {
-        boolean hasFile = request.datasetFileId() != null;
-        boolean hasType = request.datasetType() != null;
-        if (hasFile != hasType) {
-            throw new BusinessException(TASK_DATASET_IMPORT_INVALID,
-                    "datasetFileId and datasetType must be provided together");
-        }
     }
 
     private TaskDetailResponse toDetailResponse(Task task) {

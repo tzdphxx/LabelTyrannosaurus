@@ -13,14 +13,12 @@ Description: Starts an asynchronous append import job that adds dataset items fr
 
 ```json
 {
-  "fileId": 99,
-  "datasetType": "QA_QUALITY"
+  "fileId": 99
 }
 ```
 
 说明：
 - `fileId` 来自 `/api/v1/files/upload`，导入接口不重复接收 multipart。
-- `datasetType` 当前只允许 `QA_QUALITY`、`PREFERENCE_COMPARE`。
 - 支持源文件格式：JSON、JSONL、Excel。
 - 同一任务下 `externalId` 唯一；重复行进入错误报告，不中断其他行。
 
@@ -105,7 +103,6 @@ Description: Paginates active dataset items under a task for owner-side data man
 |---|---|---|---|
 | `page` | number | 否 | 页码，从 1 开始，默认 1 |
 | `pageSize` | number | 否 | 每页条数，默认 20，最大 100 |
-| `datasetType` | string | 否 | `QA_QUALITY` 或 `PREFERENCE_COMPARE` |
 | `externalId` | string | 否 | 按题目业务编号查询 |
 
 响应体：
@@ -120,7 +117,6 @@ Description: Paginates active dataset items under a task for owner-side data man
         "itemId": 100,
         "taskId": 1,
         "externalId": "q1",
-        "datasetType": "QA_QUALITY",
         "itemJson": {"question": "示例问题"},
         "metadataJson": {"source": "manual"},
         "assignedCount": 0,
@@ -158,7 +154,6 @@ Description: Adds multiple dataset items directly from request JSON without uplo
   "items": [
     {
       "externalId": "q1",
-      "datasetType": "QA_QUALITY",
       "itemJson": {"question": "示例问题"},
       "metadataJson": {"source": "manual"}
     }

@@ -158,7 +158,6 @@ CREATE TABLE dataset_items (
   id BIGINT PRIMARY KEY AUTO_INCREMENT,
   task_id BIGINT NOT NULL,
   external_id VARCHAR(128) NOT NULL,
-  dataset_type VARCHAR(40) NOT NULL,
   item_json JSON NOT NULL COMMENT 'Normalized dataset payload, independent from original JSON/JSONL/Excel file format.',
   metadata_json JSON NULL,
   assigned_count INT NOT NULL DEFAULT 0,
@@ -169,9 +168,7 @@ CREATE TABLE dataset_items (
   updated_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
   UNIQUE KEY uk_dataset_items_task_external (task_id, external_id),
   KEY idx_dataset_items_claim (task_id, deleted, assigned_count),
-  KEY idx_dataset_items_type (task_id, dataset_type),
-  CONSTRAINT fk_dataset_items_task FOREIGN KEY (task_id) REFERENCES tasks(id),
-  CONSTRAINT chk_dataset_items_type CHECK (dataset_type IN ('QA_QUALITY', 'PREFERENCE_COMPARE'))
+  CONSTRAINT fk_dataset_items_task FOREIGN KEY (task_id) REFERENCES tasks(id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='Dataset items available for labeler claim and review.';
 
 CREATE TABLE dataset_files (

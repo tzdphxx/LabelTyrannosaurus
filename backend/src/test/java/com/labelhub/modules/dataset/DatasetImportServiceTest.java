@@ -11,7 +11,6 @@ import com.labelhub.infrastructure.storage.ObjectStorageService;
 import com.labelhub.modules.dataset.domain.DatasetFileEntity;
 import com.labelhub.modules.dataset.domain.DatasetImportJobEntity;
 import com.labelhub.modules.dataset.domain.DatasetItemEntity;
-import com.labelhub.modules.dataset.domain.DatasetType;
 import com.labelhub.modules.dataset.dto.DatasetImportRequest;
 import com.labelhub.modules.dataset.repository.DatasetFileMapper;
 import com.labelhub.modules.dataset.repository.DatasetImportJobMapper;
@@ -91,12 +90,14 @@ class DatasetImportServiceTest {
                         """.getBytes(StandardCharsets.UTF_8)));
         when(datasetItemMapper.countActiveByTaskIdAndExternalId(eq(1L), any())).thenReturn(0);
 
-        var response = service.createAppendImport(1L, new DatasetImportRequest(99L, DatasetType.QA_QUALITY));
+        var response = service.createAppendImport(1L, new DatasetImportRequest(99L));
 
         assertThat(response.jobId()).isEqualTo(300L);
         ArgumentCaptor<DatasetItemEntity> itemCaptor = ArgumentCaptor.forClass(DatasetItemEntity.class);
         verify(datasetItemMapper, org.mockito.Mockito.times(2)).insert(itemCaptor.capture());
         assertThat(itemCaptor.getAllValues()).extracting("externalId").containsExactly("q1", "q2");
+        assertThat(itemCaptor.getAllValues()).allSatisfy(item ->
+                assertThat(objectMapper.readTree(item.getItemJson()).has("datasetType")).isFalse());
         ArgumentCaptor<DatasetImportJobEntity> jobCaptor = ArgumentCaptor.forClass(DatasetImportJobEntity.class);
         verify(importJobMapper, org.mockito.Mockito.atLeastOnce()).updateById(jobCaptor.capture());
         assertThat(jobCaptor.getAllValues().get(jobCaptor.getAllValues().size() - 1).getStatus()).isEqualTo("SUCCESS");
@@ -118,7 +119,7 @@ class DatasetImportServiceTest {
         when(objectStorageService.generatePresignedDownloadUrl(eq("labelhub-test"), any(), eq("dataset-import-300-errors.jsonl"), any()))
                 .thenReturn(new URL("https://cos.example.com/errors"));
 
-        service.createAppendImport(1L, new DatasetImportRequest(99L, DatasetType.QA_QUALITY));
+        service.createAppendImport(1L, new DatasetImportRequest(99L));
 
         verify(datasetItemMapper, org.mockito.Mockito.times(1)).insert(any(DatasetItemEntity.class));
         verify(objectStorageService).upload(eq("labelhub-test"), org.mockito.Mockito.contains("dataset-import-300-errors.jsonl"),
@@ -138,7 +139,7 @@ class DatasetImportServiceTest {
         stubTask(TaskStatus.PUBLISHED);
         stubSourceFile("qa_quality.jsonl");
 
-        assertThatThrownBy(() -> service.createOverwriteImport(1L, new DatasetImportRequest(99L, DatasetType.QA_QUALITY)))
+        assertThatThrownBy(() -> service.createOverwriteImport(1L, new DatasetImportRequest(99L)))
                 .isInstanceOf(BusinessException.class)
                 .extracting("code")
                 .isEqualTo(409301);
@@ -153,7 +154,7 @@ class DatasetImportServiceTest {
         when(objectStorageService.openReadStream("labelhub-test", "uploads/dataset/qa_quality.jsonl"))
                 .thenThrow(new IllegalStateException("storage unavailable"));
 
-        service.createOverwriteImport(1L, new DatasetImportRequest(99L, DatasetType.QA_QUALITY));
+        service.createOverwriteImport(1L, new DatasetImportRequest(99L));
 
         verify(datasetItemMapper, never()).softDeleteActiveByTaskId(1L);
         verify(datasetItemMapper, never()).insert(any(DatasetItemEntity.class));
@@ -176,7 +177,7 @@ class DatasetImportServiceTest {
                         """.getBytes(StandardCharsets.UTF_8)));
         when(datasetItemMapper.countActiveByTaskIdAndExternalId(1L, "q1")).thenReturn(1);
 
-        service.createOverwriteImport(1L, new DatasetImportRequest(99L, DatasetType.QA_QUALITY));
+        service.createOverwriteImport(1L, new DatasetImportRequest(99L));
 
         verify(datasetItemMapper).softDeleteActiveByTaskId(1L);
         ArgumentCaptor<DatasetItemEntity> itemCaptor = ArgumentCaptor.forClass(DatasetItemEntity.class);

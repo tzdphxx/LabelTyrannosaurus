@@ -10,7 +10,6 @@ import com.fasterxml.jackson.databind.JsonNode;
 public record DatasetItemSnapshot(Long itemId,
                                   Long taskId,
                                   String externalId,
-                                  String datasetType,
                                   JsonNode itemJson,
                                   JsonNode metadataJson) {
 }

@@ -98,7 +98,6 @@ public class DatasetSnapshotService {
                 item.getId(),
                 item.getTaskId(),
                 item.getExternalId(),
-                item.getDatasetType(),
                 readJson(item.getItemJson()),
                 readJson(item.getMetadataJson())
         );

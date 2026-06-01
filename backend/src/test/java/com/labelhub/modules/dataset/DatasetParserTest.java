@@ -1,7 +1,6 @@
 package com.labelhub.modules.dataset;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.labelhub.modules.dataset.domain.DatasetType;
 import com.labelhub.modules.dataset.service.ExcelDatasetParser;
 import com.labelhub.modules.dataset.service.JsonDatasetParser;
 import com.labelhub.modules.dataset.service.JsonlDatasetParser;
@@ -28,12 +27,13 @@ class DatasetParserTest {
                 {"externalId":"q2","prompt":"two"}
                 """;
 
-        var result = parser.parse(new ByteArrayInputStream(content.getBytes(StandardCharsets.UTF_8)), DatasetType.QA_QUALITY);
+        var result = parser.parse(new ByteArrayInputStream(content.getBytes(StandardCharsets.UTF_8)));
 
         assertThat(result.rows()).hasSize(2);
         assertThat(result.rows().get(0).rowNo()).isEqualTo(1);
         assertThat(result.rows().get(0).externalId()).isEqualTo("q1");
         assertThat(result.rows().get(0).itemJson().get("question").asText()).isEqualTo("one");
+        assertThat(result.rows().get(0).itemJson().has("datasetType")).isFalse();
         assertThat(result.rows().get(0).metadataJson().get("source").asText()).isEqualTo("seed");
         assertThat(result.rows().get(1).externalId()).isEqualTo("q2");
         assertThat(result.errors()).extracting("rowNo").containsExactly(2, 3);
@@ -49,7 +49,7 @@ class DatasetParserTest {
                 ]
                 """;
 
-        var result = parser.parse(new ByteArrayInputStream(content.getBytes(StandardCharsets.UTF_8)), DatasetType.PREFERENCE_COMPARE);
+        var result = parser.parse(new ByteArrayInputStream(content.getBytes(StandardCharsets.UTF_8)));
 
         assertThat(result.errors()).isEmpty();
         assertThat(result.rows()).hasSize(2);
@@ -66,7 +66,7 @@ class DatasetParserTest {
                 ]
                 """;
 
-        var result = parser.parse(new ByteArrayInputStream(content.getBytes(StandardCharsets.UTF_8)), DatasetType.QA_QUALITY);
+        var result = parser.parse(new ByteArrayInputStream(content.getBytes(StandardCharsets.UTF_8)));
 
         assertThat(result.errors()).isEmpty();
         assertThat(result.rows()).hasSize(1);
@@ -92,7 +92,7 @@ class DatasetParserTest {
         workbook.write(out);
         workbook.close();
 
-        var result = parser.parse(new ByteArrayInputStream(out.toByteArray()), DatasetType.QA_QUALITY);
+        var result = parser.parse(new ByteArrayInputStream(out.toByteArray()));
 
         assertThat(result.errors()).isEmpty();
         assertThat(result.rows()).hasSize(1);

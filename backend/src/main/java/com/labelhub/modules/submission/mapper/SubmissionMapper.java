@@ -112,4 +112,58 @@ public interface SubmissionMapper extends BaseMapper<Submission> {
     int casUpdateStatus(@Param("submissionId") Long submissionId,
                         @Param("expectedStatus") String expectedStatus,
                         @Param("newStatus") String newStatus);
+
+    @Select("""
+            SELECT id
+            FROM submissions
+            WHERE status = 'PENDING_FINAL'
+              AND assigned_reviewer_id IS NULL
+            ORDER BY submitted_at ASC
+            LIMIT #{limit}
+            FOR UPDATE SKIP LOCKED
+            """)
+    List<Long> selectUnassignedPendingFinal(@Param("limit") int limit);
+
+    @Select("""
+            <script>
+            SELECT id
+            FROM submissions
+            WHERE status = 'PENDING_FINAL'
+              AND assigned_reviewer_id IS NULL
+              <if test="taskId != null"> AND task_id = #{taskId}</if>
+            ORDER BY submitted_at ASC
+            LIMIT #{limit}
+            FOR UPDATE SKIP LOCKED
+            </script>
+            """)
+    List<Long> selectUnassignedPendingFinalByTask(@Param("taskId") Long taskId,
+                                                   @Param("limit") int limit);
+
+    @Update("""
+            UPDATE submissions
+            SET assigned_reviewer_id = #{reviewerId},
+                updated_at = CURRENT_TIMESTAMP(3)
+            WHERE id = #{submissionId}
+              AND assigned_reviewer_id IS NULL
+            """)
+    int assignReviewer(@Param("submissionId") Long submissionId,
+                       @Param("reviewerId") Long reviewerId);
+
+    @Select("""
+            SELECT COUNT(1)
+            FROM submissions
+            WHERE assigned_reviewer_id = #{reviewerId}
+              AND status = 'PENDING_FINAL'
+            """)
+    int countPendingByReviewer(@Param("reviewerId") Long reviewerId);
+
+    @Select("""
+            SELECT COUNT(1)
+            FROM submissions
+            WHERE task_id = #{taskId}
+              AND status = #{status}
+              AND status <> 'SUPERSEDED'
+            """)
+    int countByTaskIdAndStatus(@Param("taskId") Long taskId,
+                               @Param("status") String status);
 }

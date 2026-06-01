@@ -408,6 +408,71 @@ Authorization: Bearer <accessToken>
 
 ---
 
+### 3.9 DELETE /api/v1/tasks/{taskId}
+
+**作用**：删除草稿任务。仅允许删除 DRAFT 状态的任务，已发布/暂停/结束的任务不可删除。删除时同时清除关联的标签数据。
+
+**权限**：OWNER（仅能删除自己创建的任务）
+
+**路径参数**：
+
+| 参数 | 类型 | 说明 |
+|------|------|------|
+| taskId | Long | 任务 ID |
+
+**响应体**：空（code=0 表示成功）
+
+**错误码**：404001（任务不存在）；400101（任务状态不允许删除）
+
+---
+
+### 3.10 GET /api/v1/owner/tasks（分页版）
+
+**作用**：分页查询当前 OWNER 用户创建的任务列表，支持按状态和关键词筛选。替代原有无分页列表接口。
+
+**权限**：OWNER
+
+**请求参数**：
+
+| 参数 | 类型 | 必填 | 默认值 | 说明 |
+|------|------|------|--------|------|
+| status | String | 否 | - | 按状态筛选：DRAFT / PUBLISHED / PAUSED / ENDED |
+| keyword | String | 否 | - | 按标题或描述模糊搜索 |
+| page | int | 否 | 1 | 页码，从 1 开始 |
+| size | int | 否 | 20 | 每页条数，最大 100 |
+
+**响应体** `OwnerTaskPageResponse`：
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| items | List&lt;OwnerTaskSummaryResponse&gt; | 当前页任务列表 |
+| page | int | 当前页码 |
+| pageSize | int | 每页条数 |
+| total | long | 总记录数 |
+
+---
+
+### 3.11 GET /api/v1/tasks/{taskId}/statistics
+
+**作用**：查询任务的提交统计数据，包含总题目数、已领取、已提交、通过、驳回、待审核数量和通过率。用于 OWNER 任务管理仪表盘。
+
+**权限**：OWNER（仅能查看自己创建的任务）
+
+**响应体** `TaskStatisticsResponse`：
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| taskId | Long | 任务 ID |
+| totalItems | int | 数据集总题目数 |
+| claimedCount | int | 已领取数量 |
+| submittedCount | int | 已提交总数（含通过和驳回） |
+| approvedCount | int | 已通过数量 |
+| rejectedCount | int | 已驳回数量 |
+| pendingReviewCount | int | 待审核数量 |
+| passRate | String | 通过率（如 "85.71%"） |
+
+---
+
 ## 4. 数据集管理
 
 ### 4.1 GET /api/v1/tasks/{taskId}/dataset/items
@@ -2267,13 +2332,13 @@ Authorization: Bearer <accessToken>
 
 ---
 
-### C.4 分页与列表缺口（中优先级）
+### C.4 分页与列表缺口
 
-| 建议接口/改进 | 说明 | 优先级 |
+| 改进项 | 说明 | 状态 |
 |------|------|------|
-| `GET /api/v1/reviewer/submissions` 响应增加 total 字段 | 当前返回 `List` 无总数，前端无法渲染分页控件 | ❌ 中 |
-| `GET /api/v1/labeler/submissions` 响应增加 total 字段 | 同上 | ❌ 中 |
-| 批量操作接口增加 size 限制文档 | batch-approve/reject/assign 等未文档化最大批量数 | ⚠️ 文档缺失 |
+| `GET /api/v1/reviewer/submissions` 响应增加 total 字段 | 返回 `PageResponse(items, page, pageSize, total)` | ✅ 已实现 |
+| `GET /api/v1/labeler/submissions` 响应增加 total 字段 | 同上 | ✅ 已实现 |
+| 批量操作接口 size 限制 | batch-approve/reject/assign 无硬性上限，建议前端控制在 100 条以内 | ⚠️ 无硬限制 |
 
 ---
 

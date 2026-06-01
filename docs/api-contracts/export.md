@@ -2,6 +2,10 @@
 
 ## 创建导出任务
 
+Description: Creates an asynchronous export job for approved golden submissions under a task.
+
+Description: Creates an asynchronous export job for approved golden submissions under a task.
+
 - URL: `/api/v1/tasks/{taskId}/exports`
 - Method: `POST`
 - 权限角色: `ADMIN`、任务 `OWNER`
@@ -68,6 +72,10 @@
 
 ## 查询导出历史
 
+Description: Paginates export jobs created for a task.
+
+Description: Paginates export jobs for a task so the owner can monitor generation history.
+
 - URL: `/api/v1/tasks/{taskId}/exports?page=1&pageSize=20`
 - Method: `GET`
 - 权限角色: `ADMIN`、任务 `OWNER`
@@ -89,6 +97,10 @@
 ```
 
 ## 查询导出详情
+
+Description: Reads one export job, including generated download URL or failure details.
+
+Description: Reads one export job, including signed download URL when the generated file is ready.
 
 - URL: `/api/v1/tasks/{taskId}/exports/{exportJobId}`
 - Method: `GET`

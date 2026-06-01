@@ -4,6 +4,7 @@ Owner: BE-A
 
 ## GET /api/v1/admin/llm-providers
 
+Description: Lists configured model providers and masks all sensitive credentials for management UI display.
 Permission: ADMIN, enforced by BE-B Auth later.
 
 Response fields:
@@ -36,6 +37,7 @@ Sensitive custom header values such as Authorization, Cookie, token, secret, api
 
 ## POST /api/v1/admin/llm-providers
 
+Description: Creates an OpenAI-compatible provider configuration and stores its API key encrypted.
 Permission: ADMIN, enforced by BE-B Auth later.
 
 Request fields:
@@ -64,6 +66,7 @@ createdBy is recorded from X-User-Id until BE-B Auth supplies unified context.
 
 ## PUT /api/v1/admin/llm-providers/{id}
 
+Description: Updates provider metadata, rate limits, model capability fields, and optionally rotates the API key.
 Permission: ADMIN, enforced by BE-B Auth later.
 
 Request fields:
@@ -89,6 +92,8 @@ If apiKey is provided, it replaces the previous key after encryption.
 
 ## POST /api/v1/admin/llm-providers/{id}/enable
 
+Description: Enables a provider so it can be selected and used by AI review and trigger flows.
+
 Status impact:
 
 ```text
@@ -96,6 +101,8 @@ enabled=false -> enabled=true
 ```
 
 ## POST /api/v1/admin/llm-providers/{id}/disable
+
+Description: Disables a provider to prevent new AI review configuration or model execution from using it.
 
 Status impact:
 
@@ -105,6 +112,8 @@ Disabled providers must not be selectable by AI review config or new AI review s
 ```
 
 ## POST /api/v1/admin/llm-providers/{id}/test
+
+Description: Performs a live compatibility check against the provider using supplied or stored credentials.
 
 Request fields:
 

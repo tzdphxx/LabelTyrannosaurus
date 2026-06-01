@@ -2,6 +2,8 @@
 
 ## 创建追加导入任务
 
+Description: Starts an asynchronous append import job that adds dataset items from an uploaded file.
+
 - URL: `/api/v1/tasks/{taskId}/dataset/import`
 - Method: `POST`
 - 权限角色: `ADMIN`、任务 `OWNER`
@@ -24,6 +26,8 @@
 
 ## 创建覆盖导入任务
 
+Description: Starts an asynchronous overwrite import job for a draft task, replacing existing active dataset items.
+
 - URL: `/api/v1/tasks/{taskId}/dataset/import/overwrite`
 - Method: `POST`
 - 权限角色: `ADMIN`、任务 `OWNER`
@@ -31,6 +35,8 @@
 请求体同追加导入。覆盖导入仅允许任务状态为 `DRAFT`，否则返回 `409301`。
 
 ## 查询导入任务
+
+Description: Returns the current status, counters, error report, and timing information for one import job.
 
 - URL: `/api/v1/tasks/{taskId}/dataset/import-jobs/{jobId}`
 - Method: `GET`
@@ -86,6 +92,8 @@
 
 ## 查询题目列表
 
+Description: Paginates active dataset items under a task for owner-side data management.
+
 - URL: `/api/v1/tasks/{taskId}/dataset/items`
 - Method: `GET`
 - 权限角色: `ADMIN`、任务 `OWNER`
@@ -136,6 +144,8 @@
 
 ## 批量追加题目
 
+Description: Adds multiple dataset items directly from request JSON without uploading a source file.
+
 - URL: `/api/v1/tasks/{taskId}/dataset/items/batch-append`
 - Method: `POST`
 - 权限角色: `ADMIN`、任务 `OWNER`
@@ -182,6 +192,8 @@
 
 ## 批量更新题目
 
+Description: Updates mutable dataset item content and metadata before the items are claimed or submitted.
+
 - URL: `/api/v1/tasks/{taskId}/dataset/items/batch-update`
 - Method: `POST`
 - 权限角色: `ADMIN`、任务 `OWNER`
@@ -209,6 +221,8 @@
 - 成功更新会写入 `dataset_item_change_logs`，`changeType=BATCH_UPDATE`。
 
 ## 批量删除题目
+
+Description: Soft-deletes unclaimed and unsubmitted dataset items in batch.
 
 - URL: `/api/v1/tasks/{taskId}/dataset/items/batch-delete`
 - Method: `POST`

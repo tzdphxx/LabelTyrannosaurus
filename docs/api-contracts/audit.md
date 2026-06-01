@@ -2,6 +2,7 @@
 
 ## 查询业务审计日志
 
+- Description: Queries the append-only audit timeline for a specific business object.
 - 接口名称：查询业务对象审计时间线
 - URL：`/api/v1/audit-logs?bizType={bizType}&bizId={bizId}`
 - Method：`GET`

@@ -15,7 +15,7 @@ const roleHomeContent: Record<
     nextSteps: string[]
   }
 > = {
-  owner: {
+  OWNER: {
     headline: '任务负责人工作台',
     summary: '后续承载任务创建、模板搭建、发布分发、质量追踪和导出审计。',
     metrics: [
@@ -25,7 +25,7 @@ const roleHomeContent: Record<
     ],
     nextSteps: ['创建任务入口', '模板搭建器入口', '发布与导出状态入口'],
   },
-  labeler: {
+  LABELER: {
     headline: '标注员工作台',
     summary: '后续承载任务领取、Schema 表单作答、草稿保存、提交和打回修改。',
     metrics: [
@@ -35,7 +35,7 @@ const roleHomeContent: Record<
     ],
     nextSteps: ['任务领取入口', '标注工作台入口', '提交历史入口'],
   },
-  reviewer: {
+  REVIEWER: {
     headline: '审核员工作台',
     summary: '后续承载 AI 人工复核队列、审核详情、AI 审核结果回看和审核历史。',
     metrics: [
@@ -52,6 +52,7 @@ interface RoleHomePageProps {
 }
 
 export function RoleHomePage({ role }: RoleHomePageProps) {
+  console.log('RoleHomePage', role)
   const currentUser = useAuthStore((state) => state.currentUser)
   const content = roleHomeContent[role]
 

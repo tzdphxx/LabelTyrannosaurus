@@ -60,7 +60,7 @@ export function AppRouter() {
             />
           </Route>
           <Route path="labeler">
-            <Route index element={<RoleHomePage role="labeler" />} />
+            <Route index element={<RoleHomePage role="LABELER" />} />
             <Route element={<LabelerMarketPage />} path="market" />
             <Route element={<LabelerWorkbenchPage />} path="workbench/:taskId" />
             <Route element={<LabelerSubmissionsPage />} path="submissions" />
@@ -70,7 +70,7 @@ export function AppRouter() {
             />
           </Route>
           <Route path="reviewer">
-            <Route index element={<RoleHomePage role="reviewer" />} />
+            <Route index element={<RoleHomePage role="REVIEWER" />} />
             <Route element={<ReviewerQueuePage />} path="queue" />
             <Route element={<ReviewerHistoryPage />} path="history" />
             <Route element={<ReviewerReviewDetailPage />} path="tasks/:reviewId" />

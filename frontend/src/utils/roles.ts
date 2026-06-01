@@ -1,34 +1,34 @@
 import type { Role, User } from '../types/auth'
 
 export const roleLabels: Record<Role, string> = {
-  owner: '任务负责人',
-  labeler: '标注员',
-  reviewer: '审核员',
+  OWNER: '任务负责人',
+  LABELER: '标注员',
+  REVIEWER: '审核员',
 }
 
 export const roleHomePaths: Record<Role, string> = {
-  owner: '/app/owner',
-  labeler: '/app/labeler',
-  reviewer: '/app/reviewer',
+  OWNER: '/app/owner',
+  LABELER: '/app/labeler',
+  REVIEWER: '/app/reviewer',
 }
 
 export const demoUsers: Record<Role, User> = {
-  owner: {
+  OWNER: {
     id: 'owner-demo',
     name: 'Owner Demo',
-    role: 'owner',
+    role: 'OWNER',
     title: '任务负责人',
   },
-  labeler: {
+  LABELER: {
     id: 'labeler-demo',
     name: 'Labeler Demo',
-    role: 'labeler',
+    role: 'LABELER',
     title: '标注员',
   },
-  reviewer: {
+  REVIEWER: {
     id: 'reviewer-demo',
     name: 'Reviewer Demo',
-    role: 'reviewer',
+    role: 'REVIEWER',
     title: '审核员',
   },
 }
@@ -40,4 +40,3 @@ export function getRoleHomePath(role: Role) {
 export function isRolePathAllowed(role: Role, pathname: string) {
   return pathname === roleHomePaths[role] || pathname.startsWith(`${roleHomePaths[role]}/`)
 }
-

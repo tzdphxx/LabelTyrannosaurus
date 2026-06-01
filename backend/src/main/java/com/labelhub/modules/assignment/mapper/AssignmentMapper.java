@@ -112,4 +112,23 @@ public interface AssignmentMapper extends BaseMapper<Assignment> {
             """)
     int markCancelled(@Param("assignmentId") Long assignmentId,
                       @Param("labelerId") Long labelerId);
+
+    @Select("""
+            SELECT a.labeler_id,
+                   u.username,
+                   u.display_name,
+                   SUM(CASE WHEN a.status = 'CLAIMED' OR a.status = 'DRAFTING' THEN 1 ELSE 0 END) AS claimed_count,
+                   SUM(CASE WHEN a.status = 'SUBMITTED' THEN 1 ELSE 0 END) AS submitted_count,
+                   SUM(CASE WHEN a.status = 'APPROVED' THEN 1 ELSE 0 END) AS approved_count,
+                   SUM(CASE WHEN a.status = 'RETURNED' THEN 1 ELSE 0 END) AS rejected_count,
+                   SUM(CASE WHEN a.status = 'CANCELLED' THEN 1 ELSE 0 END) AS cancelled_count,
+                   MIN(a.claimed_at) AS first_claimed_at,
+                   MAX(a.updated_at) AS last_activity_at
+            FROM assignments a
+            INNER JOIN users u ON u.id = a.labeler_id
+            WHERE a.task_id = #{taskId}
+            GROUP BY a.labeler_id, u.username, u.display_name
+            ORDER BY last_activity_at DESC
+            """)
+    java.util.List<java.util.Map<String, Object>> selectLabelersByTask(@Param("taskId") Long taskId);
 }

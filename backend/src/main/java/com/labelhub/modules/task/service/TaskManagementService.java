@@ -5,6 +5,7 @@ import com.labelhub.common.audit.AuditAppender;
 import com.labelhub.common.audit.AuditCommand;
 import com.labelhub.common.exception.BusinessException;
 import com.labelhub.common.web.TraceIdProvider;
+import com.labelhub.modules.assignment.mapper.AssignmentMapper;
 import com.labelhub.modules.dataset.mapper.DatasetItemMapper;
 import com.labelhub.modules.submission.mapper.SubmissionMapper;
 import com.labelhub.modules.task.domain.Task;
@@ -12,6 +13,7 @@ import com.labelhub.modules.task.domain.TaskStatus;
 import com.labelhub.modules.task.domain.TaskTag;
 import com.labelhub.modules.task.dto.OwnerTaskPageResponse;
 import com.labelhub.modules.task.dto.OwnerTaskSummaryResponse;
+import com.labelhub.modules.task.dto.TaskLabelerResponse;
 import com.labelhub.modules.task.dto.TaskStatisticsResponse;
 import com.labelhub.modules.task.mapper.TaskMapper;
 import com.labelhub.modules.task.mapper.TaskTagMapper;
@@ -30,6 +32,7 @@ public class TaskManagementService {
 
     private final TaskMapper taskMapper;
     private final TaskTagMapper taskTagMapper;
+    private final AssignmentMapper assignmentMapper;
     private final DatasetItemMapper datasetItemMapper;
     private final SubmissionMapper submissionMapper;
     private final AuditAppender auditAppender;
@@ -37,12 +40,14 @@ public class TaskManagementService {
 
     public TaskManagementService(TaskMapper taskMapper,
                                  TaskTagMapper taskTagMapper,
+                                 AssignmentMapper assignmentMapper,
                                  DatasetItemMapper datasetItemMapper,
                                  SubmissionMapper submissionMapper,
                                  AuditAppender auditAppender,
                                  TraceIdProvider traceIdProvider) {
         this.taskMapper = taskMapper;
         this.taskTagMapper = taskTagMapper;
+        this.assignmentMapper = assignmentMapper;
         this.datasetItemMapper = datasetItemMapper;
         this.submissionMapper = submissionMapper;
         this.auditAppender = auditAppender;
@@ -108,6 +113,42 @@ public class TaskManagementService {
         auditAppender.append(new AuditCommand("USER", ownerId, "TASK", taskId,
                 "TASK_DELETED", Map.of("status", "DRAFT"), null,
                 traceIdProvider.currentTraceId(), null));
+    }
+
+    public List<TaskLabelerResponse> getLabelers(Long ownerId, Long taskId) {
+        loadOwnedTask(ownerId, taskId);
+        return assignmentMapper.selectLabelersByTask(taskId)
+                .stream()
+                .map(row -> new TaskLabelerResponse(
+                        toLong(row.get("labeler_id")),
+                        (String) row.get("username"),
+                        (String) row.get("display_name"),
+                        toInt(row.get("claimed_count")),
+                        toInt(row.get("submitted_count")),
+                        toInt(row.get("approved_count")),
+                        toInt(row.get("rejected_count")),
+                        toInt(row.get("cancelled_count")),
+                        toLocalDateTime(row.get("first_claimed_at")),
+                        toLocalDateTime(row.get("last_activity_at"))
+                ))
+                .toList();
+    }
+
+    private Long toLong(Object val) {
+        if (val == null) return null;
+        if (val instanceof Long l) return l;
+        return ((Number) val).longValue();
+    }
+
+    private int toInt(Object val) {
+        if (val == null) return 0;
+        if (val instanceof Integer i) return i;
+        return ((Number) val).intValue();
+    }
+
+    private java.time.LocalDateTime toLocalDateTime(Object val) {
+        if (val == null) return null;
+        return (java.time.LocalDateTime) val;
     }
 
     private Task loadOwnedTask(Long ownerId, Long taskId) {

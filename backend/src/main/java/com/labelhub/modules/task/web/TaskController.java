@@ -2,16 +2,20 @@ package com.labelhub.modules.task.web;
 
 import com.labelhub.common.api.ApiResponse;
 import com.labelhub.common.security.CurrentUserContext;
+import com.labelhub.modules.task.dto.AssignTaskReviewersRequest;
 import com.labelhub.modules.task.dto.CreateTaskRequest;
 import com.labelhub.modules.task.dto.CreateTaskResponse;
 import com.labelhub.modules.task.dto.OwnerTaskPageResponse;
 import com.labelhub.modules.task.dto.OwnerTaskSummaryResponse;
 import com.labelhub.modules.task.dto.TaskDetailResponse;
+import com.labelhub.modules.task.dto.TaskLabelerResponse;
 import com.labelhub.modules.task.dto.TaskLifecycleResponse;
+import com.labelhub.modules.task.dto.TaskReviewerResponse;
 import com.labelhub.modules.task.dto.TaskStatisticsResponse;
 import com.labelhub.modules.task.dto.UpdateTaskRequest;
 import com.labelhub.modules.task.service.TaskLifecycleService;
 import com.labelhub.modules.task.service.TaskManagementService;
+import com.labelhub.modules.task.service.TaskReviewerService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -33,11 +37,14 @@ public class TaskController {
 
     private final TaskLifecycleService taskLifecycleService;
     private final TaskManagementService taskManagementService;
+    private final TaskReviewerService taskReviewerService;
 
     public TaskController(TaskLifecycleService taskLifecycleService,
-                          TaskManagementService taskManagementService) {
+                          TaskManagementService taskManagementService,
+                          TaskReviewerService taskReviewerService) {
         this.taskLifecycleService = taskLifecycleService;
         this.taskManagementService = taskManagementService;
+        this.taskReviewerService = taskReviewerService;
     }
 
     @PostMapping
@@ -74,6 +81,29 @@ public class TaskController {
     @Operation(summary = "任务统计", description = "查询任务的提交统计数据，包含总题目数、已领取、已提交、通过、驳回、待审核数量和通过率。")
     public ApiResponse<TaskStatisticsResponse> statistics(@PathVariable Long taskId) {
         return ApiResponse.ok(taskManagementService.getStatistics(
+                CurrentUserContext.getUserId(), taskId));
+    }
+
+    @GetMapping("/{taskId}/labelers")
+    @Operation(summary = "任务标注员列表", description = "查询任务下参与的标注员列表及其进度统计。")
+    public ApiResponse<java.util.List<TaskLabelerResponse>> labelers(@PathVariable Long taskId) {
+        return ApiResponse.ok(taskManagementService.getLabelers(
+                CurrentUserContext.getUserId(), taskId));
+    }
+
+    @PostMapping("/{taskId}/reviewers")
+    @Operation(summary = "预分配审核员", description = "Owner 将审核员预分配到任务级别，替换已有分配。")
+    public ApiResponse<Void> assignReviewers(@PathVariable Long taskId,
+                                             @Valid @RequestBody AssignTaskReviewersRequest request) {
+        taskReviewerService.assignReviewers(
+                CurrentUserContext.getUserId(), taskId, request.reviewerIds());
+        return ApiResponse.ok(null);
+    }
+
+    @GetMapping("/{taskId}/reviewers")
+    @Operation(summary = "查看任务审核员", description = "查询任务预分配的审核员列表。")
+    public ApiResponse<java.util.List<TaskReviewerResponse>> reviewers(@PathVariable Long taskId) {
+        return ApiResponse.ok(taskReviewerService.getReviewers(
                 CurrentUserContext.getUserId(), taskId));
     }
 

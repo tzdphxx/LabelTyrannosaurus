@@ -77,7 +77,8 @@ public class LlmProviderService {
         applyProviderFields(provider, request.providerCode(), request.providerName(), request.baseUrl(),
                 request.defaultModel(), request.customHeaders(), request.platformRateLimitPerMinute(),
                 request.taskRateLimitPerMinute(), request.userRateLimitPerMinute(),
-                request.supportVision(), request.supportMultiImage(), request.maxImageCount(), request.visionModel());
+                request.supportVision(), request.supportMultiImage(), request.maxImageCount(), request.visionModel(),
+                request.structuredOutputMode());
         provider.setEncryptedApiKey(encryptor.encrypt(request.apiKey()));
         provider.setEnabled(true);
         provider.setOwnerId(actorId);
@@ -95,7 +96,8 @@ public class LlmProviderService {
         applyProviderFields(provider, request.providerCode(), request.providerName(), request.baseUrl(),
                 request.defaultModel(), request.customHeaders(), request.platformRateLimitPerMinute(),
                 request.taskRateLimitPerMinute(), request.userRateLimitPerMinute(),
-                request.supportVision(), request.supportMultiImage(), request.maxImageCount(), request.visionModel());
+                request.supportVision(), request.supportMultiImage(), request.maxImageCount(), request.visionModel(),
+                request.structuredOutputMode());
         if (hasText(request.apiKey())) {
             provider.setEncryptedApiKey(encryptor.encrypt(request.apiKey().trim()));
         }
@@ -172,7 +174,8 @@ public class LlmProviderService {
                                      Boolean supportVision,
                                      Boolean supportMultiImage,
                                      Integer maxImageCount,
-                                     String visionModel) {
+                                     String visionModel,
+                                     String structuredOutputMode) {
         provider.setProviderCode(providerCode.trim());
         provider.setProviderName(providerName.trim());
         provider.setBaseUrl(trimTrailingSlash(baseUrl.trim()));
@@ -185,6 +188,18 @@ public class LlmProviderService {
         provider.setSupportMultiImage(Boolean.TRUE.equals(supportMultiImage));
         provider.setMaxImageCount(maxImageCount != null ? maxImageCount : 10);
         provider.setVisionModel(hasText(visionModel) ? visionModel.trim() : null);
+        provider.setStructuredOutputMode(normalizeStructuredOutputMode(structuredOutputMode));
+    }
+
+    private String normalizeStructuredOutputMode(String mode) {
+        if (!hasText(mode)) {
+            return "NONE";
+        }
+        String normalized = mode.trim().toUpperCase(java.util.Locale.ROOT);
+        return switch (normalized) {
+            case "JSON_OBJECT", "JSON_SCHEMA", "NONE" -> normalized;
+            default -> "NONE";
+        };
     }
 
     private LlmProvider loadProvider(Long providerId) {
@@ -215,10 +230,11 @@ public class LlmProviderService {
                 provider.getPlatformRateLimitPerMinute(),
                 provider.getTaskRateLimitPerMinute(),
                 provider.getUserRateLimitPerMinute(),
-                Boolean.TRUE.equals(provider.getSupportVision()),
-                Boolean.TRUE.equals(provider.getSupportMultiImage()),
-                provider.getMaxImageCount() != null ? provider.getMaxImageCount() : 10,
+                provider.getSupportVision(),
+                provider.getSupportMultiImage(),
+                provider.getMaxImageCount(),
                 provider.getVisionModel(),
+                provider.getStructuredOutputMode(),
                 hasText(provider.getEncryptedApiKey()),
                 provider.getOwnerId(),
                 provider.getCreatedBy(),
@@ -243,6 +259,8 @@ public class LlmProviderService {
         snapshot.put("supportMultiImage", Boolean.TRUE.equals(provider.getSupportMultiImage()));
         snapshot.put("maxImageCount", provider.getMaxImageCount() != null ? provider.getMaxImageCount() : 10);
         snapshot.put("visionModel", provider.getVisionModel());
+        snapshot.put("structuredOutputMode",
+                hasText(provider.getStructuredOutputMode()) ? provider.getStructuredOutputMode() : "NONE");
         snapshot.put("apiKeyConfigured", hasText(provider.getEncryptedApiKey()));
         return snapshot;
     }
@@ -255,7 +273,8 @@ public class LlmProviderService {
                 Boolean.TRUE.equals(provider.getSupportVision()),
                 Boolean.TRUE.equals(provider.getSupportMultiImage()),
                 provider.getMaxImageCount() != null ? provider.getMaxImageCount() : 10,
-                provider.getVisionModel()
+                provider.getVisionModel(),
+                hasText(provider.getStructuredOutputMode()) ? provider.getStructuredOutputMode() : "NONE"
         );
     }
 

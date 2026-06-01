@@ -336,6 +336,7 @@ Authorization: Bearer <accessToken>
 | overlapCount | Integer | 是 | ≥ 1 | 每条数据需要的标注份数 |
 | publishedTemplateVersionId | Long | 否 | - | 关联的模板版本 ID |
 | aiReviewConfigId | Long | 否 | - | 关联的 AI 审核配置 ID |
+| reviewLevelCount | Integer | 否 | ≥ 1，默认 1 | 审核级别数（1=单级，2=初审+终审，3=初审+复审+终审） |
 | datasetFileId | Long | 否 | - | 已上传的数据集文件 ID |
 
 **响应体** `CreateTaskResponse`：
@@ -377,6 +378,7 @@ Authorization: Bearer <accessToken>
 | deadlineAt | LocalDateTime | 截止时间 |
 | publishedTemplateVersionId | Long | 模板版本 ID |
 | aiReviewConfigId | Long | AI 审核配置 ID |
+| reviewLevelCount | Integer | 审核级别数（1=单级，2=初审+终审，3=初审+复审+终审） |
 | rewardVisible | Boolean | 奖励是否对标注员可见 |
 | publishedAt | LocalDateTime | 发布时间 |
 | endedAt | LocalDateTime | 结束时间 |
@@ -508,6 +510,64 @@ Authorization: Bearer <accessToken>
 | rejectedCount | int | 已驳回数量 |
 | pendingReviewCount | int | 待审核数量 |
 | passRate | String | 通过率（如 "85.71%"） |
+
+---
+
+### 3.12 GET /api/v1/tasks/{taskId}/labelers
+
+**作用**：查询任务下参与的标注员列表及其进度统计。用于 OWNER 查看任务参与情况。
+
+**权限**：OWNER（仅能查看自己创建的任务）
+
+**响应体** `List<TaskLabelerResponse>`：
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| labelerId | Long | 标注员 ID |
+| username | String | 用户名 |
+| displayName | String | 显示名称 |
+| claimedCount | int | 已领取/编辑中数量 |
+| submittedCount | int | 已提交数量 |
+| approvedCount | int | 已通过数量 |
+| rejectedCount | int | 已退回数量 |
+| cancelledCount | int | 已放弃数量 |
+| firstClaimedAt | DateTime | 首次领取时间 |
+| lastActivityAt | DateTime | 最后活动时间 |
+
+---
+
+### 3.13 POST /api/v1/tasks/{taskId}/reviewers
+
+**作用**：Owner 将审核员预分配到任务级别。替换已有分配（全量覆盖）。预分配后，自动分配调度器优先将该任务的提交分配给预分配的审核员。
+
+**权限**：OWNER（仅能操作自己创建的任务）
+
+**请求体** `AssignTaskReviewersRequest`：
+
+| 字段 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| reviewerIds | List&lt;Long&gt; | 是 | 审核员 ID 列表 |
+
+**响应体**：空（code=0 表示成功）
+
+**错误码**：404001（任务不存在）；400103（指定用户不是审核员角色）
+
+---
+
+### 3.14 GET /api/v1/tasks/{taskId}/reviewers
+
+**作用**：查询任务预分配的审核员列表。
+
+**权限**：OWNER（仅能查看自己创建的任务）
+
+**响应体** `List<TaskReviewerResponse>`：
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| reviewerId | Long | 审核员 ID |
+| username | String | 用户名 |
+| displayName | String | 显示名称 |
+| assignedAt | DateTime | 分配时间 |
 
 ---
 
@@ -2333,7 +2393,7 @@ Authorization: Bearer <accessToken>
 | `GET /api/v1/reviewer/tasks` | 审核员可审核的任务列表入口 | ✅ 已实现 |
 | `GET /api/v1/reviewer/dashboard` | 审核员工作台概览统计 | ✅ 已实现 |
 | 定时自动分配（`ReviewAutoAssignScheduler`） | 按负载均衡将未分配提交自动分配给审核员 | ✅ 已实现 |
-| `POST /api/v1/tasks/{taskId}/reviewers` | Owner 将审核员预分配到任务级别 | ❌ 中 |
+| `POST /api/v1/tasks/{taskId}/reviewers` | Owner 将审核员预分配到任务级别 | ✅ 已实现（3.13） |
 | `GET /api/v1/admin/reviewers/workload` | 管理员查看各审核员工作量和审核效率统计 | ❌ 低 |
 
 **当前审核流程**（已实现）：
@@ -2366,7 +2426,7 @@ Authorization: Bearer <accessToken>
 | `GET /api/v1/owner/tasks` 增加筛选参数 | 当前返回全量列表，不支持按 status / keyword / tag 筛选。任务多时无法快速定位 | ✅ 已实现（3.10） |
 | `DELETE /api/v1/tasks/{taskId}` | 删除草稿任务。当前只能 end 不能删除，DRAFT 状态的废弃任务会一直存在 | ✅ 已实现（3.9） |
 | `GET /api/v1/tasks/{taskId}/statistics` | Owner 查看任务统计看板：提交总数、通过数、驳回数、通过率、标注完成进度 | ✅ 已实现（3.11） |
-| `GET /api/v1/tasks/{taskId}/labelers` | Owner 查看任务下参与的标注员列表及其进度 | ❌ 低 |
+| `GET /api/v1/tasks/{taskId}/labelers` | Owner 查看任务下参与的标注员列表及其进度 | ✅ 已实现（3.12） |
 | `GET /api/v1/owner/tasks/{taskId}/review-progress` | Owner 查看任务审核进度：待审/已审/通过/驳回数量 | ✅ 已合并至 3.11 统计接口 |
 
 ---
@@ -2442,8 +2502,8 @@ Owner 完整工作流：
   → [✅] 删除草稿任务
   → [✅] 搜索/筛选自己的任务
   → [✅] 查看任务统计（提交数、通过率、进度）
-  → [❌] 查看任务下的标注员列表
-  → [❌] 将审核员预分配到任务
+  → [✅] 查看任务下的标注员列表
+  → [✅] 将审核员预分配到任务
   → [✅] 导出金标数据
 ```
 

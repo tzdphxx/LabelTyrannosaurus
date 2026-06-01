@@ -100,6 +100,7 @@ public class TaskLifecycleService {
         task.setDeadlineAt(request.deadlineAt());
         task.setPublishedTemplateVersionId(request.publishedTemplateVersionId());
         task.setAiReviewConfigId(request.aiReviewConfigId());
+        task.setReviewLevelCount(request.reviewLevelCount() != null ? request.reviewLevelCount() : 1);
         task.setRewardVisible(true);
         taskMapper.insert(task);
         replaceTags(task.getId(), request.tags());
@@ -135,6 +136,9 @@ public class TaskLifecycleService {
         task.setDeadlineAt(request.deadlineAt());
         task.setPublishedTemplateVersionId(request.publishedTemplateVersionId());
         task.setAiReviewConfigId(request.aiReviewConfigId());
+        if (request.reviewLevelCount() != null) {
+            task.setReviewLevelCount(request.reviewLevelCount());
+        }
         taskMapper.updateById(task);
         taskTagMapper.delete(new QueryWrapper<TaskTag>().eq("task_id", taskId));
         replaceTags(taskId, request.tags());
@@ -234,6 +238,7 @@ public class TaskLifecycleService {
                 task.getDeadlineAt(),
                 task.getPublishedTemplateVersionId(),
                 task.getAiReviewConfigId(),
+                task.getReviewLevelCount(),
                 task.getRewardVisible(),
                 task.getPublishedAt(),
                 task.getEndedAt(),

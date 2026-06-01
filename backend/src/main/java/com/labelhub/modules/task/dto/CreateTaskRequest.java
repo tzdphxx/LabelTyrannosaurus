@@ -37,6 +37,9 @@ public record CreateTaskRequest(
         Long publishedTemplateVersionId,
         @Schema(description = "AI 审核配置 ID", example = "30")
         Long aiReviewConfigId,
+        @Schema(description = "审核级别数（1=单级审核，2=初审+终审，3=初审+复审+终审）", example = "3")
+        @Min(1)
+        Integer reviewLevelCount,
         @Schema(description = "Dataset file ID uploaded by /api/v1/files/upload", example = "99")
         Long datasetFileId
 ) {

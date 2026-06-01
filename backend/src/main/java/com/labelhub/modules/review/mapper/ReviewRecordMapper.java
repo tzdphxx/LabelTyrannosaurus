@@ -54,4 +54,16 @@ public interface ReviewRecordMapper extends BaseMapper<ReviewRecord> {
               AND action = 'REJECT'
             """)
     int countTotalRejected(@Param("reviewerId") Long reviewerId);
+
+    @Select("""
+            SELECT COUNT(1)
+            FROM review_records
+            WHERE submission_id = #{submissionId}
+              AND reviewer_id = #{reviewerId}
+              AND review_level <> #{excludeLevel}
+              AND action IN ('APPROVE', 'REJECT')
+            """)
+    int countBySubmissionAndReviewerExcludingLevel(@Param("submissionId") Long submissionId,
+                                                   @Param("reviewerId") Long reviewerId,
+                                                   @Param("excludeLevel") int excludeLevel);
 }

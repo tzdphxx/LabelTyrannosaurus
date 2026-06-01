@@ -18,6 +18,7 @@ public record TaskDetailResponse(
         LocalDateTime deadlineAt,
         Long publishedTemplateVersionId,
         Long aiReviewConfigId,
+        Integer reviewLevelCount,
         Boolean rewardVisible,
         LocalDateTime publishedAt,
         LocalDateTime endedAt,

@@ -1116,6 +1116,8 @@ Authorization: Bearer <accessToken>
 
 ## 9. 审核模块
 
+> **多级审核流程**：任务创建时通过 `reviewLevelCount` 设置审核级别数（默认 1）。设置为 3 时流程为：初审(level 1) → 复审(level 2) → 终审(level 3)。每级通过后自动升级到下一级并清空分配，等待新的审核员认领/分配。**同一审核员不能审同一条提交的多个级别**（403601 错误码）。
+
 ### 9.1 POST /api/v1/reviewer/submissions/claim
 
 **作用**：审核员主动从未分配池中领取待审提交。使用 Redis 锁防止同一审核员并发领取，数据库行锁（`FOR UPDATE SKIP LOCKED`）保证多审核员同时领取不会拿到同一条。领取后自动更新 `submission.assigned_reviewer_id`，写入 ReviewRecord 和审计日志。

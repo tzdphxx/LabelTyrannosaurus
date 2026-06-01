@@ -77,7 +77,8 @@ public class ReviewService {
         Submission submission = requirePendingFinal(submissionId);
         requireAssignedReviewer(submissionId, reviewerId);
         int currentLevel = request.reviewLevel();
-        int maxLevel = escalationService.getMaxReviewLevel();
+        int maxLevel = escalationService.getMaxReviewLevel(submission.getTaskId());
+        requireNotReviewedAtOtherLevel(submissionId, reviewerId, currentLevel);
 
         ReviewRecord record = createReviewRecord(
                 submissionId, reviewerId, ReviewAction.APPROVE,
@@ -122,6 +123,7 @@ public class ReviewService {
         }
         Submission submission = requirePendingFinal(submissionId);
         requireAssignedReviewer(submissionId, reviewerId);
+        requireNotReviewedAtOtherLevel(submissionId, reviewerId, request.reviewLevel());
 
         ReviewRecord record = createReviewRecord(
                 submissionId, reviewerId, ReviewAction.REJECT,
@@ -160,6 +162,15 @@ public class ReviewService {
         if (count == 0) {
             throw new BusinessException(REVIEWER_NOT_ASSIGNED,
                     "Reviewer is not assigned to this submission");
+        }
+    }
+
+    private void requireNotReviewedAtOtherLevel(Long submissionId, Long reviewerId, int currentLevel) {
+        int count = reviewRecordMapper.countBySubmissionAndReviewerExcludingLevel(
+                submissionId, reviewerId, currentLevel);
+        if (count > 0) {
+            throw new BusinessException(403601,
+                    "Same reviewer cannot review at multiple levels for the same submission");
         }
     }
 

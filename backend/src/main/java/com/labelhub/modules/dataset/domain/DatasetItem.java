@@ -19,8 +19,6 @@ public class DatasetItem {
 
     private String externalId;
 
-    private DatasetType datasetType;
-
     private String itemJson;
 
     private String metadataJson;

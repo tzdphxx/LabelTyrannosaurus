@@ -3,8 +3,10 @@ package com.labelhub.modules.preannotation.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -16,6 +18,7 @@ import com.labelhub.infrastructure.llm.LlmGateway;
 import com.labelhub.infrastructure.llm.LlmGatewayRequest;
 import com.labelhub.infrastructure.llm.LlmGatewayResponse;
 import com.labelhub.infrastructure.llm.LlmGatewayStatus;
+import com.labelhub.infrastructure.redis.RedisLockService;
 import com.labelhub.modules.agent.domain.AgentRun;
 import com.labelhub.modules.agent.domain.AgentRunStatus;
 import com.labelhub.modules.agent.service.AgentRunService;
@@ -46,6 +49,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.function.Supplier;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -75,6 +79,7 @@ class PreAnnotationServiceTest {
     @Mock private SubmissionMapper submissionMapper;
     @Mock private AuditAppender auditAppender;
     @Mock private TraceIdProvider traceIdProvider;
+    @Mock private RedisLockService redisLockService;
 
     private PreAnnotationService service;
 
@@ -83,7 +88,10 @@ class PreAnnotationServiceTest {
         service = new PreAnnotationService(
                 assignmentMapper, taskMapper, datasetItemMapper, templateVersionMapper, aiReviewConfigMapper,
                 llmProviderService, llmGateway, agentRunService, preAnnotationMapper, submissionMapper,
-                auditAppender, traceIdProvider, new DefaultMediaPromptContextBuilder());
+                auditAppender, traceIdProvider, new DefaultMediaPromptContextBuilder(), redisLockService);
+        lenient().when(redisLockService.withLock(any(), anyLong(), anyLong(),
+                org.mockito.ArgumentMatchers.<Supplier<PreAnnotationResponse>>any()))
+                .thenAnswer(invocation -> invocation.<Supplier<PreAnnotationResponse>>getArgument(3).get());
     }
 
     @Test

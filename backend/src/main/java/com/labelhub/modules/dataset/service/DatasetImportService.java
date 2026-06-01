@@ -249,7 +249,7 @@ public class DatasetImportService {
             markRunning(job);
             DatasetParseResult result;
             try (InputStream inputStream = objectStorageService.openReadStream(sourceFile.getBucketName(), sourceFile.getObjectKey())) {
-                result = parser.parse(inputStream, request.datasetType());
+                result = parser.parse(inputStream);
             }
 
             ImportBatch batch = prepareBatch(job, request, mode, result);
@@ -287,7 +287,7 @@ public class DatasetImportService {
                         "externalId already exists in this task", row.rawRow()));
                 continue;
             }
-            items.add(toEntity(job.getTaskId(), request.datasetType().name(), row));
+            items.add(toEntity(job.getTaskId(), row));
         }
         return new ImportBatch(result.rows().size() + result.errors().size(), items, errors);
     }
@@ -321,11 +321,10 @@ public class DatasetImportService {
         importJobMapper.updateById(job);
     }
 
-    private DatasetItemEntity toEntity(Long taskId, String datasetType, DatasetImportRow row) throws JsonProcessingException {
+    private DatasetItemEntity toEntity(Long taskId, DatasetImportRow row) throws JsonProcessingException {
         DatasetItemEntity item = new DatasetItemEntity();
         item.setTaskId(taskId);
         item.setExternalId(row.externalId());
-        item.setDatasetType(datasetType);
         item.setItemJson(objectMapper.writeValueAsString(row.itemJson()));
         item.setMetadataJson(objectMapper.writeValueAsString(row.metadataJson()));
         item.setAssignedCount(0);

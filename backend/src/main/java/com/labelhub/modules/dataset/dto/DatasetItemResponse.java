@@ -10,7 +10,6 @@ import java.time.LocalDateTime;
 public record DatasetItemResponse(Long itemId,
                                   Long taskId,
                                   String externalId,
-                                  String datasetType,
                                   JsonNode itemJson,
                                   JsonNode metadataJson,
                                   Integer assignedCount,

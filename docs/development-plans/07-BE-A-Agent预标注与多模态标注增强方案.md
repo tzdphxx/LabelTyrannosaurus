@@ -546,7 +546,7 @@ outputContract
 
 | 部分 | 内容 |
 |---|---|
-| taskContext | taskId、datasetType、任务标题、评分维度 |
+| taskContext | taskId、任务标题、评分维度 |
 | itemSnapshot | datasetItem.itemJson |
 | templateFields | 可提交字段及类型、options、required |
 | currentAnswerJson | 用户当前草稿 |
@@ -619,7 +619,6 @@ Labeler 需要判断模型回答是否准确描述图片。
 {
   "task": {
     "taskId": 1,
-    "datasetType": "QA_QUALITY",
     "annotationGuideline": "按相关性、准确性、格式合规、安全性评分。"
   },
   "item": {

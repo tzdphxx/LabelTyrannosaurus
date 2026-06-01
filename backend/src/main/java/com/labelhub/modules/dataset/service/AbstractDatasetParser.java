@@ -3,7 +3,6 @@ package com.labelhub.modules.dataset.service;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
-import com.labelhub.modules.dataset.domain.DatasetType;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -28,7 +27,7 @@ abstract class AbstractDatasetParser implements DatasetParser {
     }
 
     protected DatasetImportError invalidRow(int rowNo, String message, JsonNode rawRow) {
-        String externalId = rawRow != null && rawRow.hasNonNull("externalId") ? rawRow.get("externalId").asText() : null;
+        String externalId = extractExternalId(rawRow);
         return new DatasetImportError(rowNo, externalId, "INVALID_ROW", message, rawRow);
     }
 
@@ -38,14 +37,11 @@ abstract class AbstractDatasetParser implements DatasetParser {
      * <p>仅 {@code externalId} 是导入协议字段，不进入题目内容；{@code metadata}
      * 作为元数据单独存储，其余字段完整保留给后续标注工作台展示。</p>
      */
-    protected DatasetImportRow toRow(int rowNo, JsonNode rawRow, DatasetType datasetType) {
+    protected DatasetImportRow toRow(int rowNo, JsonNode rawRow) {
         if (!rawRow.isObject()) {
             throw new IllegalArgumentException("Dataset row must be a JSON object");
         }
-        JsonNode externalIdNode = rawRow.get("externalId");
-        String externalId = externalIdNode == null || externalIdNode.asText().isBlank()
-                ? ""
-                : externalIdNode.asText().trim();
+        String externalId = extractExternalId(rawRow);
         if (externalId.isBlank()) {
             throw new IllegalArgumentException("externalId is required");
         }
@@ -55,7 +51,16 @@ abstract class AbstractDatasetParser implements DatasetParser {
         if (metadataJson == null || metadataJson.isNull()) {
             metadataJson = objectMapper.createObjectNode();
         }
-        itemJson.put("datasetType", datasetType.name());
         return new DatasetImportRow(rowNo, externalId, itemJson, metadataJson, rawRow);
+    }
+
+    private String extractExternalId(JsonNode rawRow) {
+        if (rawRow == null || !rawRow.isObject()) {
+            return null;
+        }
+        JsonNode externalIdNode = rawRow.hasNonNull("externalId") ? rawRow.get("externalId") : rawRow.get("id");
+        return externalIdNode == null || externalIdNode.asText().isBlank()
+                ? ""
+                : externalIdNode.asText().trim();
     }
 }

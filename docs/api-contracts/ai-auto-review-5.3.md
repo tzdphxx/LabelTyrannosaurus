@@ -15,6 +15,8 @@ The AI review creates exactly one `ai_review_results` row per submission through
 
 ## Query API
 
+Description: Reads the persisted AI review result for a submission without re-running the model.
+
 ```Plaintext
 GET /api/v1/submissions/{submissionId}/ai-review-result
 ```

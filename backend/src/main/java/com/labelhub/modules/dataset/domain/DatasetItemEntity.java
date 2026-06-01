@@ -19,7 +19,6 @@ public class DatasetItemEntity {
     private Long id;
     private Long taskId;
     private String externalId;
-    private String datasetType;
     private String itemJson;
     private String metadataJson;
     private Integer assignedCount;
@@ -51,14 +50,6 @@ public class DatasetItemEntity {
 
     public void setExternalId(String externalId) {
         this.externalId = externalId;
-    }
-
-    public String getDatasetType() {
-        return datasetType;
-    }
-
-    public void setDatasetType(String datasetType) {
-        this.datasetType = datasetType;
     }
 
     public String getItemJson() {

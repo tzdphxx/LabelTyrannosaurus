@@ -222,7 +222,6 @@ CREATE TABLE `dataset_items` (
   `id` bigint NOT NULL AUTO_INCREMENT,
   `task_id` bigint NOT NULL,
   `external_id` varchar(128) NOT NULL,
-  `dataset_type` varchar(40) NOT NULL,
   `item_json` json NOT NULL COMMENT 'Normalized dataset payload, independent from original JSON/JSONL/Excel file format.',
   `metadata_json` json DEFAULT NULL,
   `assigned_count` int NOT NULL DEFAULT '0',
@@ -235,9 +234,7 @@ CREATE TABLE `dataset_items` (
   PRIMARY KEY (`id`),
   UNIQUE KEY `uk_dataset_items_task_external` (`task_id`,`active_external_id`),
   KEY `idx_dataset_items_claim` (`task_id`,`deleted`,`assigned_count`),
-  KEY `idx_dataset_items_type` (`task_id`,`dataset_type`),
-  CONSTRAINT `fk_dataset_items_task` FOREIGN KEY (`task_id`) REFERENCES `tasks` (`id`),
-  CONSTRAINT `chk_dataset_items_type` CHECK ((`dataset_type` in (_utf8mb4'QA_QUALITY',_utf8mb4'PREFERENCE_COMPARE')))
+  CONSTRAINT `fk_dataset_items_task` FOREIGN KEY (`task_id`) REFERENCES `tasks` (`id`)
 ) ENGINE=InnoDB AUTO_INCREMENT=900602 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='Dataset items available for labeler claim and review.';
 CREATE TABLE `export_jobs` (
   `id` bigint NOT NULL AUTO_INCREMENT,

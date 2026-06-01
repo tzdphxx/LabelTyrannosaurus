@@ -2,6 +2,10 @@
 
 ## 保存奖励规则
 
+Description: Saves the latest reward rule for a task and creates a new effective version.
+
+Description: Saves the latest reward rule for a task and creates a new effective version.
+
 - URL: `/api/v1/tasks/{taskId}/reward-rule`
 - Method: `POST`
 - 权限角色: `ADMIN`、任务 `OWNER`
@@ -46,6 +50,10 @@
 - 每次保存都会追加 `effectiveVersion`，历史 `reward_ledger` 不重算。
 
 ## 查询奖励规则
+
+Description: Reads the current effective reward rule for a task.
+
+Description: Reads the current effective reward rule for a task.
 
 - URL: `/api/v1/tasks/{taskId}/reward-rule`
 - Method: `GET`

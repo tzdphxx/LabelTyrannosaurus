@@ -60,16 +60,14 @@ public class DatasetItemService {
      */
     public DatasetItemPageResponse listItems(Long taskId, DatasetItemQuery query) {
         requireOwnedTask(taskId);
-        DatasetItemQuery effectiveQuery = query == null ? new DatasetItemQuery(null, null, null, null) : query;
-        String datasetType = effectiveQuery.datasetType() == null ? null : effectiveQuery.datasetType().name();
+        DatasetItemQuery effectiveQuery = query == null ? new DatasetItemQuery(null, null, null) : query;
         List<DatasetItemEntity> entities = datasetItemMapper.selectActivePage(
                 taskId,
-                datasetType,
                 effectiveQuery.externalId(),
                 effectiveQuery.normalizedPageSize(),
                 effectiveQuery.offset()
         );
-        long total = datasetItemMapper.countActivePage(taskId, datasetType, effectiveQuery.externalId());
+        long total = datasetItemMapper.countActivePage(taskId, effectiveQuery.externalId());
         return new DatasetItemPageResponse(
                 entities.stream().map(this::toResponse).toList(),
                 effectiveQuery.normalizedPage(),
@@ -134,7 +132,6 @@ public class DatasetItemService {
             DatasetItemEntity entity = new DatasetItemEntity();
             entity.setTaskId(task.getId());
             entity.setExternalId(externalId);
-            entity.setDatasetType(request.datasetType().name());
             entity.setItemJson(writeJson(request.itemJson()));
             entity.setMetadataJson(writeJson(request.metadataJson()));
             entity.setAssignedCount(0);
@@ -230,7 +227,6 @@ public class DatasetItemService {
                 entity.getId(),
                 entity.getTaskId(),
                 entity.getExternalId(),
-                entity.getDatasetType(),
                 readJson(entity.getItemJson()),
                 readJson(entity.getMetadataJson()),
                 entity.getAssignedCount(),

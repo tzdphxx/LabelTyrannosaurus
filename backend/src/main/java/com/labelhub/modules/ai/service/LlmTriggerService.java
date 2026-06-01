@@ -410,7 +410,7 @@ public class LlmTriggerService {
         return input;
     }
 
-    private LlmTriggerRunResponse toRunResponse(LlmTriggerRun run) {
+    public LlmTriggerRunResponse toRunResponse(LlmTriggerRun run) {
         return new LlmTriggerRunResponse(
                 run.getId(),
                 run.getAgentRunId(),

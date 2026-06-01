@@ -49,6 +49,52 @@ public interface AiReviewResultMapper extends BaseMapper<AiReviewResult> {
             """)
     List<AiReviewResult> selectPendingRetries();
 
+    @Select("""
+            <script>
+            SELECT r.*
+            FROM ai_review_results r
+            INNER JOIN submissions s ON s.id = r.submission_id
+            WHERE s.task_id = #{query.taskId}
+            <if test="query.status != null and query.status != ''">
+              AND r.status = #{query.status}
+            </if>
+            <if test="query.decision != null and query.decision != ''">
+              AND r.decision = #{query.decision}
+            </if>
+            <if test="query.startTime != null">
+              AND r.created_at &gt;= #{query.startTime}
+            </if>
+            <if test="query.endTime != null">
+              AND r.created_at &lt;= #{query.endTime}
+            </if>
+            ORDER BY r.created_at DESC
+            LIMIT #{query.normalizedPageSize} OFFSET #{query.offset}
+            </script>
+            """)
+    List<AiReviewResult> selectPageByTaskId(@Param("query") com.labelhub.modules.ai.dto.AiReviewResultQuery query);
+
+    @Select("""
+            <script>
+            SELECT COUNT(*)
+            FROM ai_review_results r
+            INNER JOIN submissions s ON s.id = r.submission_id
+            WHERE s.task_id = #{query.taskId}
+            <if test="query.status != null and query.status != ''">
+              AND r.status = #{query.status}
+            </if>
+            <if test="query.decision != null and query.decision != ''">
+              AND r.decision = #{query.decision}
+            </if>
+            <if test="query.startTime != null">
+              AND r.created_at &gt;= #{query.startTime}
+            </if>
+            <if test="query.endTime != null">
+              AND r.created_at &lt;= #{query.endTime}
+            </if>
+            </script>
+            """)
+    long countByTaskId(@Param("query") com.labelhub.modules.ai.dto.AiReviewResultQuery query);
+
     @Update("""
             UPDATE ai_review_results
             SET status = #{status},

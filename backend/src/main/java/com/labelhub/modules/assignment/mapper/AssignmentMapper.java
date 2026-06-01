@@ -60,4 +60,56 @@ public interface AssignmentMapper extends BaseMapper<Assignment> {
                                @Param("labelerId") Long labelerId,
                                @Param("expectedDraftVersion") Integer expectedDraftVersion,
                                @Param("nextStatus") AssignmentStatus nextStatus);
+
+    @Select("""
+            <script>
+            SELECT a.*, t.title AS task_title
+            FROM assignments a
+            INNER JOIN tasks t ON t.id = a.task_id
+            WHERE a.labeler_id = #{labelerId}
+            <if test="taskId != null">
+              AND a.task_id = #{taskId}
+            </if>
+            <if test="status != null">
+              AND a.status = #{status}
+            </if>
+            ORDER BY a.updated_at DESC
+            LIMIT #{limit} OFFSET #{offset}
+            </script>
+            """)
+    java.util.List<java.util.Map<String, Object>> selectLabelerAssignments(
+            @Param("labelerId") Long labelerId,
+            @Param("taskId") Long taskId,
+            @Param("status") String status,
+            @Param("limit") int limit,
+            @Param("offset") int offset);
+
+    @Select("""
+            <script>
+            SELECT COUNT(1)
+            FROM assignments a
+            WHERE a.labeler_id = #{labelerId}
+            <if test="taskId != null">
+              AND a.task_id = #{taskId}
+            </if>
+            <if test="status != null">
+              AND a.status = #{status}
+            </if>
+            </script>
+            """)
+    long countLabelerAssignments(@Param("labelerId") Long labelerId,
+                                 @Param("taskId") Long taskId,
+                                 @Param("status") String status);
+
+    @Update("""
+            UPDATE assignments
+            SET status = 'CANCELLED',
+                cancelled_at = CURRENT_TIMESTAMP(3),
+                updated_at = CURRENT_TIMESTAMP(3)
+            WHERE id = #{assignmentId}
+              AND labeler_id = #{labelerId}
+              AND status IN ('CLAIMED', 'DRAFTING', 'RETURNED')
+            """)
+    int markCancelled(@Param("assignmentId") Long assignmentId,
+                      @Param("labelerId") Long labelerId);
 }

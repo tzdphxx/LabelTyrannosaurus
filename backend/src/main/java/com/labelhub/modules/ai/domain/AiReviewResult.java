@@ -36,6 +36,16 @@ public class AiReviewResult {
 
     private String suggestion;
 
+    private String flowAction;
+
+    private BigDecimal confidence;
+
+    private String promptMode;
+
+    private Boolean degraded;
+
+    private String limitations;
+
     private String promptSnapshot;
 
     private String rawResponse;

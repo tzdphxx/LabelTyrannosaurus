@@ -62,8 +62,10 @@ public class LlmProviderService {
         this.objectMapper = objectMapper;
     }
 
-    public List<LlmProviderResponse> list() {
-        return llmProviderMapper.selectList(new QueryWrapper<LlmProvider>().orderByDesc("updated_at"))
+    public List<LlmProviderResponse> list(Long ownerId) {
+        return llmProviderMapper.selectList(new QueryWrapper<LlmProvider>()
+                        .eq("owner_id", ownerId)
+                        .orderByDesc("updated_at"))
                 .stream()
                 .map(this::toResponse)
                 .toList();
@@ -74,9 +76,11 @@ public class LlmProviderService {
         LlmProvider provider = new LlmProvider();
         applyProviderFields(provider, request.providerCode(), request.providerName(), request.baseUrl(),
                 request.defaultModel(), request.customHeaders(), request.platformRateLimitPerMinute(),
-                request.taskRateLimitPerMinute(), request.userRateLimitPerMinute());
+                request.taskRateLimitPerMinute(), request.userRateLimitPerMinute(),
+                request.supportVision(), request.supportMultiImage(), request.maxImageCount(), request.visionModel());
         provider.setEncryptedApiKey(encryptor.encrypt(request.apiKey()));
         provider.setEnabled(true);
+        provider.setOwnerId(actorId);
         provider.setCreatedBy(actorId);
         llmProviderMapper.insert(provider);
         auditAppender.append(new AuditCommand(USER_ACTOR_TYPE, actorId, BIZ_TYPE, provider.getId(), "LLM_PROVIDER_CREATED",
@@ -86,11 +90,12 @@ public class LlmProviderService {
 
     @Transactional
     public LlmProviderResponse update(Long actorId, Long providerId, UpdateLlmProviderRequest request) {
-        LlmProvider provider = loadProvider(providerId);
+        LlmProvider provider = loadOwnedProvider(actorId, providerId);
         Map<String, Object> beforeJson = auditSnapshot(provider);
         applyProviderFields(provider, request.providerCode(), request.providerName(), request.baseUrl(),
                 request.defaultModel(), request.customHeaders(), request.platformRateLimitPerMinute(),
-                request.taskRateLimitPerMinute(), request.userRateLimitPerMinute());
+                request.taskRateLimitPerMinute(), request.userRateLimitPerMinute(),
+                request.supportVision(), request.supportMultiImage(), request.maxImageCount(), request.visionModel());
         if (hasText(request.apiKey())) {
             provider.setEncryptedApiKey(encryptor.encrypt(request.apiKey().trim()));
         }
@@ -124,12 +129,13 @@ public class LlmProviderService {
                         provider.getBaseUrl(),
                         decryptStoredApiKey(provider.getEncryptedApiKey()),
                         hasText(modelName) ? modelName.trim() : provider.getDefaultModel(),
-                        parseHeaders(provider.getCustomHeadersJson())
+                        parseHeaders(provider.getCustomHeadersJson()),
+                        capability(provider)
                 ));
     }
 
-    public LlmProviderTestResponse test(Long providerId, TestLlmProviderRequest request) {
-        LlmProvider provider = loadProvider(providerId);
+    public LlmProviderTestResponse test(Long ownerId, Long providerId, TestLlmProviderRequest request) {
+        LlmProvider provider = loadOwnedProvider(ownerId, providerId);
         Map<String, String> headers = parseHeaders(provider.getCustomHeadersJson());
         headers.putAll(normalizeHeaders(request.customHeaders()));
         String apiKey = hasText(request.apiKey())
@@ -140,7 +146,7 @@ public class LlmProviderService {
     }
 
     private LlmProviderResponse setEnabled(Long actorId, Long providerId, boolean enabled, String action) {
-        LlmProvider provider = loadProvider(providerId);
+        LlmProvider provider = loadOwnedProvider(actorId, providerId);
         Map<String, Object> beforeJson = auditSnapshot(provider);
         provider.setEnabled(enabled);
         llmProviderMapper.updateById(provider);
@@ -157,7 +163,11 @@ public class LlmProviderService {
                                      Map<String, String> customHeaders,
                                      Integer platformRateLimitPerMinute,
                                      Integer taskRateLimitPerMinute,
-                                     Integer userRateLimitPerMinute) {
+                                     Integer userRateLimitPerMinute,
+                                     Boolean supportVision,
+                                     Boolean supportMultiImage,
+                                     Integer maxImageCount,
+                                     String visionModel) {
         provider.setProviderCode(providerCode.trim());
         provider.setProviderName(providerName.trim());
         provider.setBaseUrl(trimTrailingSlash(baseUrl.trim()));
@@ -166,11 +176,23 @@ public class LlmProviderService {
         provider.setPlatformRateLimitPerMinute(platformRateLimitPerMinute);
         provider.setTaskRateLimitPerMinute(taskRateLimitPerMinute);
         provider.setUserRateLimitPerMinute(userRateLimitPerMinute);
+        provider.setSupportVision(Boolean.TRUE.equals(supportVision));
+        provider.setSupportMultiImage(Boolean.TRUE.equals(supportMultiImage));
+        provider.setMaxImageCount(maxImageCount != null ? maxImageCount : 10);
+        provider.setVisionModel(hasText(visionModel) ? visionModel.trim() : null);
     }
 
     private LlmProvider loadProvider(Long providerId) {
         LlmProvider provider = llmProviderMapper.selectById(providerId);
         if (provider == null) {
+            throw new BusinessException(PROVIDER_NOT_FOUND, "LLM provider not found");
+        }
+        return provider;
+    }
+
+    private LlmProvider loadOwnedProvider(Long ownerId, Long providerId) {
+        LlmProvider provider = loadProvider(providerId);
+        if (!ownerId.equals(provider.getOwnerId())) {
             throw new BusinessException(PROVIDER_NOT_FOUND, "LLM provider not found");
         }
         return provider;
@@ -188,7 +210,12 @@ public class LlmProviderService {
                 provider.getPlatformRateLimitPerMinute(),
                 provider.getTaskRateLimitPerMinute(),
                 provider.getUserRateLimitPerMinute(),
+                Boolean.TRUE.equals(provider.getSupportVision()),
+                Boolean.TRUE.equals(provider.getSupportMultiImage()),
+                provider.getMaxImageCount() != null ? provider.getMaxImageCount() : 10,
+                provider.getVisionModel(),
                 hasText(provider.getEncryptedApiKey()),
+                provider.getOwnerId(),
                 provider.getCreatedBy(),
                 provider.getCreatedAt(),
                 provider.getUpdatedAt()
@@ -207,8 +234,24 @@ public class LlmProviderService {
         snapshot.put("platformRateLimitPerMinute", provider.getPlatformRateLimitPerMinute());
         snapshot.put("taskRateLimitPerMinute", provider.getTaskRateLimitPerMinute());
         snapshot.put("userRateLimitPerMinute", provider.getUserRateLimitPerMinute());
+        snapshot.put("supportVision", Boolean.TRUE.equals(provider.getSupportVision()));
+        snapshot.put("supportMultiImage", Boolean.TRUE.equals(provider.getSupportMultiImage()));
+        snapshot.put("maxImageCount", provider.getMaxImageCount() != null ? provider.getMaxImageCount() : 10);
+        snapshot.put("visionModel", provider.getVisionModel());
         snapshot.put("apiKeyConfigured", hasText(provider.getEncryptedApiKey()));
         return snapshot;
+    }
+
+    public ProviderCapability capability(LlmProvider provider) {
+        if (provider == null) {
+            return ProviderCapability.textOnly();
+        }
+        return new ProviderCapability(
+                Boolean.TRUE.equals(provider.getSupportVision()),
+                Boolean.TRUE.equals(provider.getSupportMultiImage()),
+                provider.getMaxImageCount() != null ? provider.getMaxImageCount() : 10,
+                provider.getVisionModel()
+        );
     }
 
     private Map<String, String> normalizeHeaders(Map<String, String> customHeaders) {

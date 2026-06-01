@@ -80,7 +80,6 @@ public class AiReviewRetryService implements AiReviewRetryCallback {
         this.auditAppender = auditAppender;
         this.traceIdProvider = traceIdProvider;
         this.retryScheduler = retryScheduler;
-        retryScheduler.setRetryCallback(this);
     }
 
     public boolean scheduleRetryIfAllowed(AiReviewResult result, AiReviewConfig config,

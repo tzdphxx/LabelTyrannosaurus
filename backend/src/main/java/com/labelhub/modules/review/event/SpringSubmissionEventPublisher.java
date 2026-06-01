@@ -38,7 +38,7 @@ public class SpringSubmissionEventPublisher implements SubmissionEventPublisher 
     }
 
     @Override
-    public void publishGoldenSelected(Long submissionId, Long reviewerId) {
+    public void publishGoldenSelected(Long conflictGroupId, Long submissionId, Long reviewerId) {
         Submission submission = submissionMapper.selectById(submissionId);
         if (submission == null) {
             return;
@@ -47,7 +47,7 @@ public class SpringSubmissionEventPublisher implements SubmissionEventPublisher 
                 this,
                 submission.getTaskId(),
                 submission.getDatasetItemId(),
-                null,
+                conflictGroupId,
                 submission.getId(),
                 submission.getLabelerId(),
                 reviewerId,

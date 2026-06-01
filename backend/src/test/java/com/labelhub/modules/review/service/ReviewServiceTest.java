@@ -23,6 +23,7 @@ import com.labelhub.modules.review.dto.ReviewActionResponse;
 import com.labelhub.modules.review.dto.SubmissionReviewItem;
 import com.labelhub.modules.review.mapper.ReviewRecordMapper;
 import com.labelhub.modules.review.mapper.ReviewSubmissionMapper;
+import com.labelhub.modules.review.mapper.ReviewTaskMapper;
 import com.labelhub.modules.review.port.SubmissionEventPublisher;
 import com.labelhub.modules.submission.domain.Submission;
 import com.labelhub.modules.submission.domain.SubmissionStatus;
@@ -46,6 +47,7 @@ class ReviewServiceTest {
     @Mock private AssignmentMapper assignmentMapper;
     @Mock private ReviewRecordMapper reviewRecordMapper;
     @Mock private ReviewSubmissionMapper reviewSubmissionMapper;
+    @Mock private ReviewTaskMapper reviewTaskMapper;
     @Mock private SubmissionEventPublisher eventPublisher;
     @Mock private AuditAppender auditAppender;
     @Mock private DatasetClaimService datasetClaimService;
@@ -56,9 +58,11 @@ class ReviewServiceTest {
     @BeforeEach
     void setUp() {
         lenient().when(escalationService.getMaxReviewLevel()).thenReturn(1);
+        lenient().when(reviewTaskMapper.countBySubmissionAndReviewer(any(), any())).thenReturn(1);
+        lenient().when(submissionMapper.casUpdateStatus(any(), any(), any())).thenReturn(1);
         reviewService = new ReviewService(
                 submissionMapper, assignmentMapper, reviewRecordMapper,
-                reviewSubmissionMapper, eventPublisher, auditAppender, datasetClaimService,
+                reviewSubmissionMapper, reviewTaskMapper, eventPublisher, auditAppender, datasetClaimService,
                 escalationService);
     }
 

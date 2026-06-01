@@ -35,6 +35,16 @@ public class LlmProvider {
 
     private Integer userRateLimitPerMinute;
 
+    private Long ownerId;
+
+    private Boolean supportVision;
+
+    private Boolean supportMultiImage;
+
+    private Integer maxImageCount;
+
+    private String visionModel;
+
     private Long createdBy;
 
     private LocalDateTime createdAt;

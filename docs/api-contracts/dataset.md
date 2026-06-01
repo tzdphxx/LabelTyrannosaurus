@@ -2,6 +2,8 @@
 
 ## 创建追加导入任务
 
+Description: Starts an asynchronous append import job that adds dataset items from an uploaded file.
+
 - URL: `/api/v1/tasks/{taskId}/dataset/import`
 - Method: `POST`
 - 权限角色: `ADMIN`、任务 `OWNER`
@@ -11,18 +13,18 @@
 
 ```json
 {
-  "fileId": 99,
-  "datasetType": "QA_QUALITY"
+  "fileId": 99
 }
 ```
 
 说明：
 - `fileId` 来自 `/api/v1/files/upload`，导入接口不重复接收 multipart。
-- `datasetType` 当前只允许 `QA_QUALITY`、`PREFERENCE_COMPARE`。
 - 支持源文件格式：JSON、JSONL、Excel。
 - 同一任务下 `externalId` 唯一；重复行进入错误报告，不中断其他行。
 
 ## 创建覆盖导入任务
+
+Description: Starts an asynchronous overwrite import job for a draft task, replacing existing active dataset items.
 
 - URL: `/api/v1/tasks/{taskId}/dataset/import/overwrite`
 - Method: `POST`
@@ -31,6 +33,8 @@
 请求体同追加导入。覆盖导入仅允许任务状态为 `DRAFT`，否则返回 `409301`。
 
 ## 查询导入任务
+
+Description: Returns the current status, counters, error report, and timing information for one import job.
 
 - URL: `/api/v1/tasks/{taskId}/dataset/import-jobs/{jobId}`
 - Method: `GET`
@@ -86,6 +90,8 @@
 
 ## 查询题目列表
 
+Description: Paginates active dataset items under a task for owner-side data management.
+
 - URL: `/api/v1/tasks/{taskId}/dataset/items`
 - Method: `GET`
 - 权限角色: `ADMIN`、任务 `OWNER`
@@ -97,7 +103,6 @@
 |---|---|---|---|
 | `page` | number | 否 | 页码，从 1 开始，默认 1 |
 | `pageSize` | number | 否 | 每页条数，默认 20，最大 100 |
-| `datasetType` | string | 否 | `QA_QUALITY` 或 `PREFERENCE_COMPARE` |
 | `externalId` | string | 否 | 按题目业务编号查询 |
 
 响应体：
@@ -112,7 +117,6 @@
         "itemId": 100,
         "taskId": 1,
         "externalId": "q1",
-        "datasetType": "QA_QUALITY",
         "itemJson": {"question": "示例问题"},
         "metadataJson": {"source": "manual"},
         "assignedCount": 0,
@@ -136,6 +140,8 @@
 
 ## 批量追加题目
 
+Description: Adds multiple dataset items directly from request JSON without uploading a source file.
+
 - URL: `/api/v1/tasks/{taskId}/dataset/items/batch-append`
 - Method: `POST`
 - 权限角色: `ADMIN`、任务 `OWNER`
@@ -148,7 +154,6 @@
   "items": [
     {
       "externalId": "q1",
-      "datasetType": "QA_QUALITY",
       "itemJson": {"question": "示例问题"},
       "metadataJson": {"source": "manual"}
     }
@@ -182,6 +187,8 @@
 
 ## 批量更新题目
 
+Description: Updates mutable dataset item content and metadata before the items are claimed or submitted.
+
 - URL: `/api/v1/tasks/{taskId}/dataset/items/batch-update`
 - Method: `POST`
 - 权限角色: `ADMIN`、任务 `OWNER`
@@ -209,6 +216,8 @@
 - 成功更新会写入 `dataset_item_change_logs`，`changeType=BATCH_UPDATE`。
 
 ## 批量删除题目
+
+Description: Soft-deletes unclaimed and unsubmitted dataset items in batch.
 
 - URL: `/api/v1/tasks/{taskId}/dataset/items/batch-delete`
 - Method: `POST`

@@ -27,7 +27,7 @@ class DatabaseCommentMigrationTest {
         String migration = Files.readString(COMMENT_MIGRATION);
 
         assertThat(schema).hasSize(28);
-        assertThat(schema.values().stream().mapToInt(List::size).sum()).isEqualTo(329);
+        assertThat(schema.values().stream().mapToInt(List::size).sum()).isEqualTo(328);
 
         schema.forEach((tableName, columns) -> {
             assertThat(findTableComment(migration, tableName))

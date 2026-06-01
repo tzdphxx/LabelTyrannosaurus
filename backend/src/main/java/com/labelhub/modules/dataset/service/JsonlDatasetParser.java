@@ -3,7 +3,6 @@ package com.labelhub.modules.dataset.service;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.labelhub.modules.dataset.domain.DatasetFileFormat;
-import com.labelhub.modules.dataset.domain.DatasetType;
 import org.springframework.stereotype.Component;
 
 import java.io.BufferedReader;
@@ -33,7 +32,7 @@ public class JsonlDatasetParser extends AbstractDatasetParser {
     }
 
     @Override
-    public DatasetParseResult parse(InputStream inputStream, DatasetType datasetType) {
+    public DatasetParseResult parse(InputStream inputStream) {
         List<DatasetImportRow> rows = new ArrayList<>();
         List<DatasetImportError> errors = new ArrayList<>();
         try (BufferedReader reader = new BufferedReader(new InputStreamReader(inputStream, StandardCharsets.UTF_8))) {
@@ -47,7 +46,7 @@ public class JsonlDatasetParser extends AbstractDatasetParser {
                 JsonNode rawRow = null;
                 try {
                     rawRow = objectMapper.readTree(line);
-                    rows.add(toRow(rowNo, rawRow, datasetType));
+                    rows.add(toRow(rowNo, rawRow));
                 } catch (Exception ex) {
                     errors.add(invalidRow(rowNo, ex.getMessage(), rawRow));
                 }

@@ -3,9 +3,13 @@ package com.labelhub.modules.admin.service;
 import com.labelhub.common.exception.BusinessException;
 import com.labelhub.common.security.RoleCode;
 import com.labelhub.modules.admin.dto.AdminUserResponse;
+import com.labelhub.modules.admin.dto.CreateReviewerRequest;
 import com.labelhub.modules.auth.domain.UserEntity;
+import com.labelhub.modules.auth.domain.UserRoleEntity;
+import com.labelhub.modules.auth.domain.UserType;
 import com.labelhub.modules.auth.repository.UserMapper;
 import com.labelhub.modules.auth.repository.UserRoleMapper;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -23,10 +27,12 @@ public class AdminUserService {
 
     private final UserMapper userMapper;
     private final UserRoleMapper userRoleMapper;
+    private final PasswordEncoder passwordEncoder;
 
-    public AdminUserService(UserMapper userMapper, UserRoleMapper userRoleMapper) {
+    public AdminUserService(UserMapper userMapper, UserRoleMapper userRoleMapper, PasswordEncoder passwordEncoder) {
         this.userMapper = userMapper;
         this.userRoleMapper = userRoleMapper;
+        this.passwordEncoder = passwordEncoder;
     }
 
     /**
@@ -45,14 +51,18 @@ public class AdminUserService {
      * 后台管理入口。</p>
      */
     @Transactional
-    public void changeRoles(Long userId, Set<RoleCode> roles) {
+    public void changeRole(Long userId, RoleCode role) {
+        if (role == null) {
+            throw new BusinessException(400102, "User role is required");
+        }
         UserEntity user = requireUser(userId);
         Set<RoleCode> oldRoles = userRoleMapper.selectRoleCodesByUserId(user.getId());
-        if (oldRoles.contains(RoleCode.ADMIN) && !roles.contains(RoleCode.ADMIN)
+        RoleCode oldRole = requireSingleRole(oldRoles);
+        if (oldRole == RoleCode.ADMIN && role != RoleCode.ADMIN
                 && userRoleMapper.countUsersWithRole(RoleCode.ADMIN) <= 1) {
             throw new BusinessException(400101, "Cannot remove the last admin");
         }
-        userRoleMapper.replaceRoles(userId, roles);
+        userRoleMapper.replaceRoles(userId, Set.of(role));
         userMapper.incrementTokenVersion(userId);
     }
 
@@ -74,6 +84,25 @@ public class AdminUserService {
         userMapper.setEnabled(userId, false);
     }
 
+    @Transactional
+    public AdminUserResponse createReviewer(CreateReviewerRequest request) {
+        if (userMapper.selectByUsername(request.username()) != null
+                || userMapper.selectByEmail(request.email()) != null) {
+            throw new BusinessException(400102, "Username or email already exists");
+        }
+        UserEntity user = new UserEntity();
+        user.setUsername(request.username());
+        user.setEmail(request.email());
+        user.setPasswordHash(passwordEncoder.encode(request.password()));
+        user.setUserType(UserType.USER);
+        user.setEnabled(true);
+        user.setLoginEnabled(true);
+        user.setTokenVersion(1);
+        userMapper.insert(user);
+        userRoleMapper.insert(new UserRoleEntity(user.getId(), RoleCode.REVIEWER));
+        return toResponse(user, Set.of(RoleCode.REVIEWER));
+    }
+
     private UserEntity requireUser(Long userId) {
         UserEntity user = userMapper.selectById(userId);
         if (user == null) {
@@ -91,7 +120,14 @@ public class AdminUserService {
                 user.getEnabled(),
                 user.getLoginEnabled(),
                 user.getTokenVersion(),
-                roles
+                requireSingleRole(roles)
         );
+    }
+
+    private RoleCode requireSingleRole(Set<RoleCode> roles) {
+        if (roles == null || roles.size() != 1) {
+            throw new BusinessException(400102, "User must have exactly one role");
+        }
+        return roles.iterator().next();
     }
 }

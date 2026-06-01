@@ -33,7 +33,6 @@ import java.util.List;
 import java.util.Map;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class LlmTriggerService {
@@ -101,7 +100,6 @@ public class LlmTriggerService {
         this.objectMapper = objectMapper;
     }
 
-    @Transactional
     public LlmTriggerRunResponse run(CurrentUser currentUser, LlmTriggerRunRequest request) {
         Task task = loadTask(request.taskId());
         TemplateVersion templateVersion = loadTemplateVersion(request.templateVersionId(), task.getId());
@@ -112,7 +110,7 @@ public class LlmTriggerService {
 
         Map<String, Object> inputSnapshot = inputSnapshot(component, datasetItem, request);
         AgentRun agentRun = agentRunService.create(AGENT_TYPE, null, component.providerId(), component.modelName(),
-                "component:" + component.componentId(), toJson(inputSnapshot));
+                "component:" + component.componentId(), toJson(inputSnapshot), request.assignmentId());
         agentRunService.start(agentRun.getId());
         if (!rateLimiter.acquire(task.getId(), currentUser.userId(), component.providerId())) {
             agentRunService.fail(agentRun.getId(), AgentRunStatus.RATE_LIMITED, "LLM trigger rate limited");

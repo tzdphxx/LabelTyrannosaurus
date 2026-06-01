@@ -17,4 +17,13 @@ public interface ReviewTaskMapper extends BaseMapper<ReviewTask> {
             """)
     ReviewTask selectBySubmissionAndLevel(@Param("submissionId") Long submissionId,
                                           @Param("level") int level);
+
+    @Select("""
+            SELECT COUNT(1) FROM review_tasks
+            WHERE submission_id = #{submissionId}
+              AND assigned_reviewer_id = #{reviewerId}
+              AND status <> 'CANCELLED'
+            """)
+    int countBySubmissionAndReviewer(@Param("submissionId") Long submissionId,
+                                     @Param("reviewerId") Long reviewerId);
 }

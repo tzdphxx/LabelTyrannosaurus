@@ -17,6 +17,7 @@ import com.labelhub.modules.agent.domain.AgentRun;
 import com.labelhub.modules.agent.domain.AgentRunStatus;
 import com.labelhub.modules.agent.service.AgentRunService;
 import com.labelhub.modules.ai.domain.AiReviewConfig;
+import com.labelhub.modules.ai.domain.LlmProvider;
 import com.labelhub.modules.ai.dto.AiReviewConfigRequest;
 import com.labelhub.modules.ai.dto.AiReviewConfigResponse;
 import com.labelhub.modules.ai.dto.AiReviewPromptTestRequest;
@@ -90,8 +91,8 @@ public class AiReviewConfigService {
     @Transactional
     public AiReviewConfigResponse save(Long ownerId, Long taskId, AiReviewConfigRequest request) {
         Task task = loadOwnedDraftTask(ownerId, taskId);
-        validateRequest(request);
-        requireEnabledProvider(request.providerId());
+        LlmProvider provider = requireEnabledProvider(request.providerId());
+        validateRequest(request, provider);
         AiReviewConfig existing = findByTaskId(taskId);
         if (existing != null) {
             return updateExisting(ownerId, task, existing, request, "AI_REVIEW_CONFIG_UPDATED");
@@ -113,8 +114,8 @@ public class AiReviewConfigService {
     public AiReviewConfigResponse update(Long ownerId, Long taskId, Long configId, AiReviewConfigRequest request) {
         Task task = loadOwnedDraftTask(ownerId, taskId);
         AiReviewConfig config = loadTaskConfig(taskId, configId);
-        validateRequest(request);
-        requireEnabledProvider(request.providerId());
+        LlmProvider provider = requireEnabledProvider(request.providerId());
+        validateRequest(request, provider);
         return updateExisting(ownerId, task, config, request, "AI_REVIEW_CONFIG_UPDATED");
     }
 
@@ -195,9 +196,23 @@ public class AiReviewConfigService {
         config.setManualReviewThreshold(request.manualReviewThreshold());
         config.setOutputSchemaJson(toJson(request.outputSchema()));
         config.setMaxRetry(request.maxRetry() != null ? request.maxRetry() : 3);
+        config.setAiFlowPolicy(request.aiFlowPolicy() != null ? request.aiFlowPolicy() : "MANUAL_FIRST");
+        config.setAllowAiDirectApprove(Boolean.TRUE.equals(request.allowAiDirectApprove()));
+        config.setAllowAiDirectReject(Boolean.TRUE.equals(request.allowAiDirectReject()));
+        config.setRejectThreshold(request.rejectThreshold());
+        config.setConfidenceThreshold(request.confidenceThreshold());
+        config.setRiskFlagsForceManual(request.riskFlagsForceManual() != null
+                ? toJson(request.riskFlagsForceManual()) : null);
+        config.setMultimodalEnabled(request.multimodalEnabled() == null || Boolean.TRUE.equals(request.multimodalEnabled()));
+        config.setDegradationPenalty(request.degradationPenalty() != null
+                ? request.degradationPenalty() : new BigDecimal("0.20"));
+        config.setVisionDetail(request.visionDetail() != null && !request.visionDetail().isBlank()
+                ? request.visionDetail().trim() : "auto");
+        config.setMaxImagesPerRequest(request.maxImagesPerRequest() != null ? request.maxImagesPerRequest() : 5);
+        config.setAllowAiDirectApproveWhenDegraded(Boolean.TRUE.equals(request.allowAiDirectApproveWhenDegraded()));
     }
 
-    private void validateRequest(AiReviewConfigRequest request) {
+    private void validateRequest(AiReviewConfigRequest request, LlmProvider provider) {
         if (request.manualReviewThreshold().compareTo(request.passThreshold()) > 0) {
             throw new BusinessException(AI_REVIEW_CONFIG_INVALID,
                     "Manual review threshold must not be greater than pass threshold");
@@ -208,12 +223,24 @@ public class AiReviewConfigService {
         if (request.outputSchema() == null || request.outputSchema().isEmpty()) {
             throw new BusinessException(AI_REVIEW_CONFIG_INVALID, "AI review output schema is required");
         }
+        String visionDetail = request.visionDetail();
+        if (visionDetail != null && !visionDetail.isBlank()
+                && !List.of("auto", "low", "high").contains(visionDetail.trim())) {
+            throw new BusinessException(AI_REVIEW_CONFIG_INVALID,
+                    "Vision detail must be one of auto, low or high");
+        }
+        Integer maxImages = request.maxImagesPerRequest();
+        Integer providerMaxImages = provider.getMaxImageCount() != null ? provider.getMaxImageCount() : 10;
+        if (maxImages != null && maxImages > providerMaxImages) {
+            throw new BusinessException(AI_REVIEW_CONFIG_INVALID,
+                    "Max images per request exceeds provider capability");
+        }
     }
 
-    private void requireEnabledProvider(Long providerId) {
-        if (llmProviderService.findEnabledById(providerId).isEmpty()) {
-            throw new BusinessException(AI_REVIEW_PROVIDER_DISABLED, "Enabled LLM provider is required");
-        }
+    private LlmProvider requireEnabledProvider(Long providerId) {
+        return llmProviderService.findEnabledById(providerId)
+                .orElseThrow(() -> new BusinessException(AI_REVIEW_PROVIDER_DISABLED,
+                        "Enabled LLM provider is required"));
     }
 
     private Task loadOwnedDraftTask(Long ownerId, Long taskId) {
@@ -256,7 +283,18 @@ public class AiReviewConfigService {
                 config.getManualReviewThreshold(),
                 parseObjectMap(config.getOutputSchemaJson()),
                 config.getPromptVersion(),
-                config.getMaxRetry()
+                config.getMaxRetry(),
+                config.getAiFlowPolicy(),
+                config.getAllowAiDirectApprove(),
+                config.getAllowAiDirectReject(),
+                config.getRejectThreshold(),
+                config.getConfidenceThreshold(),
+                parseStringListOrNull(config.getRiskFlagsForceManual()),
+                config.getMultimodalEnabled() == null || Boolean.TRUE.equals(config.getMultimodalEnabled()),
+                config.getDegradationPenalty() != null ? config.getDegradationPenalty() : new BigDecimal("0.20"),
+                config.getVisionDetail() != null ? config.getVisionDetail() : "auto",
+                config.getMaxImagesPerRequest() != null ? config.getMaxImagesPerRequest() : 5,
+                Boolean.TRUE.equals(config.getAllowAiDirectApproveWhenDegraded())
         );
     }
 
@@ -272,6 +310,10 @@ public class AiReviewConfigService {
         snapshot.put("manualReviewThreshold", config.getManualReviewThreshold());
         snapshot.put("outputSchema", parseObjectMap(config.getOutputSchemaJson()));
         snapshot.put("promptVersion", config.getPromptVersion());
+        snapshot.put("multimodalEnabled", config.getMultimodalEnabled());
+        snapshot.put("degradationPenalty", config.getDegradationPenalty());
+        snapshot.put("visionDetail", config.getVisionDetail());
+        snapshot.put("maxImagesPerRequest", config.getMaxImagesPerRequest());
         return snapshot;
     }
 
@@ -334,6 +376,17 @@ public class AiReviewConfigService {
             return objectMapper.readValue(json, STRING_LIST);
         } catch (JsonProcessingException ex) {
             throw new BusinessException(AI_REVIEW_CONFIG_INVALID, "AI review scoring dimensions are invalid");
+        }
+    }
+
+    private List<String> parseStringListOrNull(String json) {
+        if (json == null || json.isBlank()) {
+            return null;
+        }
+        try {
+            return objectMapper.readValue(json, STRING_LIST);
+        } catch (JsonProcessingException ex) {
+            return null;
         }
     }
 

@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -96,8 +97,8 @@ class LlmTriggerServiceTest {
         when(templateVersionMapper.selectById(TEMPLATE_VERSION_ID)).thenReturn(templateVersion());
         when(datasetItemMapper.selectById(DATASET_ITEM_ID)).thenReturn(datasetItem());
         when(llmProviderService.findEnabledById(PROVIDER_ID)).thenReturn(Optional.of(provider()));
-        when(agentRunService.create(eq("LLM_TRIGGER"), eq(null), eq(PROVIDER_ID), eq("qwen-plus"),
-                eq("component:assist-summary"), any())).thenReturn(agentRun());
+        when(agentRunService.create(eq("LLM_TRIGGER"), isNull(), eq(PROVIDER_ID), eq("qwen-plus"),
+                eq("component:assist-summary"), any(), isNull())).thenReturn(agentRun());
         when(rateLimiter.acquire(TASK_ID, OWNER_ID, PROVIDER_ID)).thenReturn(true);
         when(traceIdProvider.currentTraceId()).thenReturn("trace-1");
         when(llmGateway.review(any(LlmGatewayRequest.class))).thenReturn(new LlmGatewayResponse(
@@ -152,8 +153,8 @@ class LlmTriggerServiceTest {
         when(templateVersionMapper.selectById(TEMPLATE_VERSION_ID)).thenReturn(templateVersion());
         when(datasetItemMapper.selectById(DATASET_ITEM_ID)).thenReturn(datasetItem());
         when(llmProviderService.findEnabledById(PROVIDER_ID)).thenReturn(Optional.of(provider()));
-        when(agentRunService.create(eq("LLM_TRIGGER"), eq(null), eq(PROVIDER_ID), eq("qwen-plus"),
-                eq("component:assist-summary"), any())).thenReturn(agentRun());
+        when(agentRunService.create(eq("LLM_TRIGGER"), isNull(), eq(PROVIDER_ID), eq("qwen-plus"),
+                eq("component:assist-summary"), any(), isNull())).thenReturn(agentRun());
         when(rateLimiter.acquire(TASK_ID, OWNER_ID, PROVIDER_ID)).thenReturn(true);
         when(llmGateway.review(any(LlmGatewayRequest.class))).thenReturn(new LlmGatewayResponse(
                 LlmGatewayStatus.TIMEOUT,
@@ -178,8 +179,8 @@ class LlmTriggerServiceTest {
         when(templateVersionMapper.selectById(TEMPLATE_VERSION_ID)).thenReturn(templateVersion());
         when(datasetItemMapper.selectById(DATASET_ITEM_ID)).thenReturn(datasetItem());
         when(llmProviderService.findEnabledById(PROVIDER_ID)).thenReturn(Optional.of(provider()));
-        when(agentRunService.create(eq("LLM_TRIGGER"), eq(null), eq(PROVIDER_ID), eq("qwen-plus"),
-                eq("component:assist-summary"), any())).thenReturn(agentRun());
+        when(agentRunService.create(eq("LLM_TRIGGER"), isNull(), eq(PROVIDER_ID), eq("qwen-plus"),
+                eq("component:assist-summary"), any(), isNull())).thenReturn(agentRun());
         when(rateLimiter.acquire(TASK_ID, OWNER_ID, PROVIDER_ID)).thenReturn(false);
 
         LlmTriggerRunResponse response = service.run(owner(), request(true, null));

@@ -2,6 +2,8 @@
 
 ## 创建模板
 
+Description: Creates a template and its first draft version for a task.
+
 - URL: `/api/v1/tasks/{taskId}/templates`
 - Method: `POST`
 - 权限角色: `ADMIN`、任务 `OWNER`
@@ -63,6 +65,8 @@
 
 ## 查询任务模板
 
+Description: Lists templates and their current versions under a task.
+
 - URL: `/api/v1/tasks/{taskId}/templates`
 - Method: `GET`
 - 权限角色: `ADMIN`、任务 `OWNER`
@@ -103,6 +107,8 @@
 
 ## 查询模板版本
 
+Description: Reads one immutable or draft template version by id for rendering or validation.
+
 - URL: `/api/v1/template-versions/{versionId}`
 - Method: `GET`
 - 权限角色: `ADMIN`、任务 `OWNER`
@@ -115,6 +121,8 @@
 - 非管理员且不是任务 Owner 返回 `403001`。
 
 ## Fork 模板版本
+
+Description: Creates a new template version from an existing version or the current template version.
 
 - URL: `/api/v1/templates/{templateId}/fork`
 - Method: `POST`

@@ -74,9 +74,9 @@ public class SupervisorAgent {
             }
 
             if (parsed.toolCalls != null && !parsed.toolCalls.isEmpty()) {
-                messages.add(LlmMessage.assistant(parsed.toolCalls));
                 List<ToolCall> calls = parsed.toolCalls.size() > MAX_TOOL_CALLS_PER_TURN
                         ? parsed.toolCalls.subList(0, MAX_TOOL_CALLS_PER_TURN) : parsed.toolCalls;
+                messages.add(LlmMessage.assistant(calls));
                 for (ToolCall call : calls) {
                     ToolResult result = executeTool(call, request.toolContext());
                     String output = result.success() ? result.output() : "ERROR: " + result.errorMessage();

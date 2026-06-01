@@ -14,6 +14,18 @@ public record UpdateLlmProviderRequest(
         Map<String, String> customHeaders,
         @Min(0) Integer platformRateLimitPerMinute,
         @Min(0) Integer taskRateLimitPerMinute,
-        @Min(0) Integer userRateLimitPerMinute
+        @Min(0) Integer userRateLimitPerMinute,
+        Boolean supportVision,
+        Boolean supportMultiImage,
+        @Min(0) Integer maxImageCount,
+        @Size(max = 100) String visionModel
 ) {
+    public UpdateLlmProviderRequest(String providerCode, String providerName, String baseUrl, String apiKey,
+                                    String defaultModel, Map<String, String> customHeaders,
+                                    Integer platformRateLimitPerMinute, Integer taskRateLimitPerMinute,
+                                    Integer userRateLimitPerMinute) {
+        this(providerCode, providerName, baseUrl, apiKey, defaultModel, customHeaders,
+                platformRateLimitPerMinute, taskRateLimitPerMinute, userRateLimitPerMinute,
+                false, false, 10, null);
+    }
 }

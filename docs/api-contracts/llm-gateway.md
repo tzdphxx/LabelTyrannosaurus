@@ -4,6 +4,8 @@ Owner: BE-A
 
 ## Internal Interface
 
+Description: Normalizes all model provider calls behind one internal gateway contract for AI review and LlmTrigger flows.
+
 ```text
 LlmGatewayResponse review(LlmGatewayRequest request)
 ```

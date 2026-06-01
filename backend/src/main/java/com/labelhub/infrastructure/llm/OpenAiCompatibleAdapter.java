@@ -4,7 +4,9 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.labelhub.modules.ai.service.LlmProviderRuntimeConfig;
 import java.io.IOException;
+import java.net.InetAddress;
 import java.net.URI;
+import java.net.UnknownHostException;
 import java.net.http.HttpClient;
 import java.net.http.HttpConnectTimeoutException;
 import java.net.http.HttpRequest;
@@ -13,7 +15,9 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.TimeoutException;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
@@ -24,22 +28,38 @@ public class OpenAiCompatibleAdapter {
 
     private static final String CHAT_COMPLETIONS_PATH = "/chat/completions";
     private static final int MAX_RESPONSE_MESSAGE_LENGTH = 180;
+    private static final Set<String> BLOCKED_HEADER_KEYS = Set.of(
+            "host", "authorization", "content-type", "content-length",
+            "transfer-encoding", "connection", "cookie");
 
     private final ObjectMapper objectMapper;
     private final HttpClient httpClient;
     private final Duration timeout;
+    private final Duration visionTimeout;
+    private final boolean validateUrls;
 
     @Autowired
     public OpenAiCompatibleAdapter(ObjectMapper objectMapper,
-                                   @Value("${labelhub.llm.gateway.timeout-ms:30000}") long timeoutMs) {
-        this(objectMapper, Duration.ofMillis(timeoutMs));
+                                   @Value("${labelhub.llm.gateway.timeout-ms:30000}") long timeoutMs,
+                                   @Value("${labelhub.llm.gateway.vision-timeout-ms:60000}") long visionTimeoutMs) {
+        this(objectMapper, Duration.ofMillis(timeoutMs), Duration.ofMillis(visionTimeoutMs), true);
     }
 
     OpenAiCompatibleAdapter(ObjectMapper objectMapper, Duration timeout) {
+        this(objectMapper, timeout, timeout, false);
+    }
+
+    OpenAiCompatibleAdapter(ObjectMapper objectMapper, Duration timeout, Duration visionTimeout) {
+        this(objectMapper, timeout, visionTimeout, false);
+    }
+
+    OpenAiCompatibleAdapter(ObjectMapper objectMapper, Duration timeout, Duration visionTimeout, boolean validateUrls) {
         this.objectMapper = objectMapper;
         this.timeout = timeout;
+        this.visionTimeout = visionTimeout;
+        this.validateUrls = validateUrls;
         this.httpClient = HttpClient.newBuilder()
-                .connectTimeout(timeout)
+                .connectTimeout(timeout.compareTo(visionTimeout) >= 0 ? timeout : visionTimeout)
                 .build();
     }
 
@@ -80,12 +100,18 @@ public class OpenAiCompatibleAdapter {
     private HttpRequest buildRequest(LlmProviderRuntimeConfig config, List<LlmMessage> messages,
                                      Integer maxTokens, List<ToolDefinition> tools)
             throws JsonProcessingException {
+        validateBaseUrl(config.baseUrl());
         HttpRequest.Builder builder = HttpRequest.newBuilder()
                 .uri(URI.create(config.baseUrl() + CHAT_COMPLETIONS_PATH))
-                .timeout(timeout)
+                .timeout(containsImagePart(messages) ? visionTimeout : timeout)
                 .header("Content-Type", "application/json");
         if (config.customHeaders() != null) {
-            config.customHeaders().forEach(builder::header);
+            config.customHeaders().forEach((key, value) -> {
+                if (!BLOCKED_HEADER_KEYS.contains(key.toLowerCase(Locale.ROOT))
+                        && value != null && !value.contains("\r") && !value.contains("\n")) {
+                    builder.header(key, value);
+                }
+            });
         }
         if (config.apiKey() != null && !config.apiKey().isBlank()) {
             builder.setHeader("Authorization", "Bearer " + config.apiKey());
@@ -118,7 +144,9 @@ public class OpenAiCompatibleAdapter {
     private Map<String, Object> serializeMessage(LlmMessage msg) {
         Map<String, Object> map = new LinkedHashMap<>();
         map.put("role", msg.role());
-        if (msg.content() != null) {
+        if (msg.contentParts() != null && !msg.contentParts().isEmpty()) {
+            map.put("content", msg.contentParts().stream().map(this::serializeContentPart).toList());
+        } else if (msg.content() != null) {
             map.put("content", msg.content());
         }
         if (msg.toolCalls() != null && !msg.toolCalls().isEmpty()) {
@@ -137,6 +165,36 @@ public class OpenAiCompatibleAdapter {
             map.put("name", msg.name());
         }
         return map;
+    }
+
+    private Map<String, Object> serializeContentPart(LlmMessage.ContentPart part) {
+        Map<String, Object> map = new LinkedHashMap<>();
+        if (part instanceof LlmMessage.TextPart textPart) {
+            map.put("type", "text");
+            map.put("text", textPart.text());
+            return map;
+        }
+        if (part instanceof LlmMessage.ImageUrlPart imageUrlPart) {
+            map.put("type", "image_url");
+            Map<String, Object> imageUrl = new LinkedHashMap<>();
+            imageUrl.put("url", imageUrlPart.url());
+            if (imageUrlPart.detail() != null && !imageUrlPart.detail().isBlank()) {
+                imageUrl.put("detail", imageUrlPart.detail());
+            }
+            map.put("image_url", imageUrl);
+            return map;
+        }
+        throw new IllegalArgumentException("Unsupported content part: " + part);
+    }
+
+    private boolean containsImagePart(List<LlmMessage> messages) {
+        if (messages == null) {
+            return false;
+        }
+        return messages.stream()
+                .filter(message -> message.contentParts() != null)
+                .flatMap(message -> message.contentParts().stream())
+                .anyMatch(LlmMessage.ImageUrlPart.class::isInstance);
     }
 
     private OpenAiCompatibleResponse failed(Instant startedAt, String message, String apiKey, boolean timedOut) {
@@ -164,5 +222,29 @@ public class OpenAiCompatibleAdapter {
             return sanitized.substring(0, MAX_RESPONSE_MESSAGE_LENGTH);
         }
         return sanitized;
+    }
+
+    private void validateBaseUrl(String baseUrl) {
+        if (!validateUrls) {
+            return;
+        }
+        if (baseUrl == null || baseUrl.isBlank()) {
+            throw new IllegalArgumentException("LLM baseUrl must not be empty");
+        }
+        URI uri = URI.create(baseUrl);
+        String host = uri.getHost();
+        if (host == null) {
+            throw new IllegalArgumentException("LLM baseUrl must have a valid host");
+        }
+        try {
+            InetAddress addr = InetAddress.getByName(host);
+            if (addr.isLoopbackAddress() || addr.isSiteLocalAddress()
+                    || addr.isLinkLocalAddress() || addr.isAnyLocalAddress()) {
+                throw new IllegalArgumentException(
+                        "LLM baseUrl must not resolve to a private/loopback address");
+            }
+        } catch (UnknownHostException e) {
+            throw new IllegalArgumentException("LLM baseUrl host cannot be resolved: " + host);
+        }
     }
 }

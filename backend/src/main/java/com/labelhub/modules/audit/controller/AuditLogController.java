@@ -3,6 +3,8 @@ package com.labelhub.modules.audit.controller;
 import com.labelhub.common.api.ApiResponse;
 import com.labelhub.modules.audit.dto.AuditLogResponse;
 import com.labelhub.modules.audit.service.AuditLogService;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -20,6 +22,7 @@ import java.util.List;
 @RestController
 @RequestMapping("/api/v1/audit-logs")
 @PreAuthorize("hasAnyRole('ADMIN','OWNER','REVIEWER')")
+@Tag(name = "审计", description = "业务对象审计日志查询")
 public class AuditLogController {
 
     private final AuditLogService auditLogService;
@@ -36,6 +39,7 @@ public class AuditLogController {
      * @return 排序后的审计时间线
      */
     @GetMapping
+    @Operation(summary = "审计日志列表", description = "按业务类型和业务 ID 查询审计时间线。")
     public ApiResponse<List<AuditLogResponse>> listByBiz(@RequestParam String bizType,
                                                          @RequestParam Long bizId) {
         return ApiResponse.ok(auditLogService.listByBiz(bizType, bizId));

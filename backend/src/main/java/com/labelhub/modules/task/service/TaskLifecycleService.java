@@ -5,9 +5,13 @@ import com.labelhub.common.audit.AuditAppender;
 import com.labelhub.common.audit.AuditCommand;
 import com.labelhub.common.exception.BusinessException;
 import com.labelhub.common.web.TraceIdProvider;
+import com.labelhub.modules.dataset.dto.DatasetImportJobResponse;
+import com.labelhub.modules.dataset.dto.DatasetImportRequest;
+import com.labelhub.modules.dataset.service.DatasetImportService;
 import com.labelhub.modules.task.domain.Task;
 import com.labelhub.modules.task.domain.TaskStatus;
 import com.labelhub.modules.task.domain.TaskTag;
+import com.labelhub.modules.task.dto.CreateTaskResponse;
 import com.labelhub.modules.task.dto.CreateTaskRequest;
 import com.labelhub.modules.task.dto.OwnerTaskSummaryResponse;
 import com.labelhub.modules.task.dto.TaskDetailResponse;
@@ -39,17 +43,20 @@ public class TaskLifecycleService {
     private final TaskPublishDependencyChecker publishDependencyChecker;
     private final AuditAppender auditAppender;
     private final TraceIdProvider traceIdProvider;
+    private final DatasetImportService datasetImportService;
 
     public TaskLifecycleService(TaskMapper taskMapper,
                                 TaskTagMapper taskTagMapper,
                                 TaskPublishDependencyChecker publishDependencyChecker,
                                 AuditAppender auditAppender,
-                                TraceIdProvider traceIdProvider) {
+                                TraceIdProvider traceIdProvider,
+                                DatasetImportService datasetImportService) {
         this.taskMapper = taskMapper;
         this.taskTagMapper = taskTagMapper;
         this.publishDependencyChecker = publishDependencyChecker;
         this.auditAppender = auditAppender;
         this.traceIdProvider = traceIdProvider;
+        this.datasetImportService = datasetImportService;
     }
 
     public List<OwnerTaskSummaryResponse> listOwnerTasks(Long ownerId) {
@@ -98,6 +105,19 @@ public class TaskLifecycleService {
         replaceTags(task.getId(), request.tags());
         appendAudit(task, ownerId, "TASK_CREATED", null, snapshot(task));
         return new TaskLifecycleResponse(task.getId(), task.getStatus());
+    }
+
+    @Transactional
+    public CreateTaskResponse createWithDataset(Long ownerId, CreateTaskRequest request) {
+        TaskLifecycleResponse task = create(ownerId, request);
+        DatasetImportJobResponse importJob = null;
+        if (request.datasetFileId() != null) {
+            importJob = datasetImportService.createAppendImport(
+                    task.taskId(),
+                    new DatasetImportRequest(request.datasetFileId())
+            );
+        }
+        return new CreateTaskResponse(task.taskId(), task.status(), importJob);
     }
 
     @Transactional

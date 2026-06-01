@@ -14,7 +14,12 @@ public record LlmProviderResponse(
         Integer platformRateLimitPerMinute,
         Integer taskRateLimitPerMinute,
         Integer userRateLimitPerMinute,
+        Boolean supportVision,
+        Boolean supportMultiImage,
+        Integer maxImageCount,
+        String visionModel,
         Boolean apiKeyConfigured,
+        Long ownerId,
         Long createdBy,
         LocalDateTime createdAt,
         LocalDateTime updatedAt

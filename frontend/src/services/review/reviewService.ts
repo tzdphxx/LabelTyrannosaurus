@@ -5,19 +5,27 @@ import {
   mockReviewDetails,
   mockReviewQueueItems,
 } from '../../mocks'
+import { request } from '../http'
 import type { LabelerTaskSummary, LabelingQuestion, LabelingSubmission } from '../../types/labeling'
 import type {
+  AiReviewLogQuery,
+  AiReviewResultPageResponse,
+  AiReviewResultResponse,
   AiReviewResult,
   AiReviewProcessingResult,
   BatchManualReviewResult,
+  BatchReviewResponse,
   ManualReviewActionPayload,
   ManualReviewRecord,
   ReviewAnswerSnapshot,
   ReviewAuditEvent,
+  ReviewActionResponse,
   ReviewDetail,
   ReviewQueueItem,
   ReviewQueueQuery,
+  ReviewerSubmissionListItem,
   ReviewOutcomeSyncPayload,
+  SubmissionVersion,
   SubmissionReviewStatus,
 } from '../../types/review'
 
@@ -29,6 +37,113 @@ const reviewAuditEvents: ReviewAuditEvent[] = mockReviewAuditEvents.map(cloneAud
 const reviewQueueItems: ReviewQueueItem[] = mockReviewQueueItems.map(cloneQueueItem)
 const reviewDetails: ReviewDetail[] = mockReviewDetails.map(cloneReviewDetail)
 let reviewOutcomeSyncHandler: ReviewOutcomeSyncHandler | null = null
+
+const AI_DECISION_LABELS: Record<string, string> = {
+  PASS: 'AI已建议通过',
+  REJECT: 'AI已建议打回',
+  MANUAL_REVIEW: '转人工',
+}
+
+function normalizeAiDecision(decision?: string): ReviewQueueItem['aiDecision'] {
+  if (decision === 'PASS') {
+    return 'pass'
+  }
+
+  if (decision === 'REJECT') {
+    return 'reject'
+  }
+
+  return 'manual_review'
+}
+
+function mapSubmissionStatusToReviewStatus(status?: string): SubmissionReviewStatus {
+  if (status === 'APPROVED') {
+    return 'manual_approved'
+  }
+
+  if (status === 'REJECTED') {
+    return 'manual_rejected'
+  }
+
+  if (status === 'AI_REJECTED') {
+    return 'ai_rejected'
+  }
+
+  return 'manual_pending'
+}
+
+function mapSubmissionStatusToManualStatus(status?: string): ReviewQueueItem['manualReviewStatus'] {
+  if (status === 'APPROVED') {
+    return 'approved'
+  }
+
+  if (status === 'REJECTED') {
+    return 'rejected'
+  }
+
+  return 'pending'
+}
+
+function mapReviewerSubmissionToQueueItem(item: ReviewerSubmissionListItem): ReviewQueueItem {
+  const aiLabel = AI_DECISION_LABELS[item.aiDecision] ?? item.aiDecision ?? '转人工'
+
+  return {
+    id: String(item.submissionId),
+    submissionId: String(item.submissionId),
+    taskId: String(item.taskId),
+    taskTitle: `任务 ${item.taskId}`,
+    labelerId: String(item.labelerId),
+    labelerName: `标注员 ${item.labelerId}`,
+    submittedAt: '-',
+    aiDecision: normalizeAiDecision(item.aiDecision),
+    aiRiskLevel: item.conflictStatus && item.conflictStatus !== 'NONE' ? 'high' : 'medium',
+    aiSummary: aiLabel,
+    aiReasons: [
+      `AI 结论：${item.aiDecision || '-'}`,
+      `AI 审核状态：${item.aiReviewStatus || '-'}`,
+      `冲突状态：${item.conflictStatus || '-'}`,
+    ],
+    manualReviewStatus: mapSubmissionStatusToManualStatus(item.submissionStatus),
+    submissionReviewStatus: mapSubmissionStatusToReviewStatus(item.submissionStatus),
+  }
+}
+
+function mapReviewerSubmissionToDetail(item: ReviewerSubmissionListItem): ReviewDetail {
+  const queueItem = mapReviewerSubmissionToQueueItem(item)
+  const aiLabel = AI_DECISION_LABELS[item.aiDecision] ?? item.aiDecision ?? '转人工'
+
+  return {
+    ...queueItem,
+    rawSubmission: item,
+    aiReview: {
+      id: `ai-review-${item.submissionId}`,
+      submissionId: String(item.submissionId),
+      status: item.aiReviewStatus === 'FAILED' ? 'failed' : 'completed',
+      decision: queueItem.aiDecision,
+      riskLevel: queueItem.aiRiskLevel,
+      summary: aiLabel,
+      reasons: queueItem.aiReasons,
+      recommendedAction: item.aiDecision === 'REJECT' ? '建议打回' : item.aiDecision === 'PASS' ? '建议通过' : '转人工审核',
+    },
+    answers: [],
+    manualReviewRecords: [],
+    auditTimeline: [],
+  }
+}
+
+function matchesRealQueueQuery(item: ReviewQueueItem, query: ReviewQueueQuery) {
+  const keyword = query.keyword.trim().toLowerCase()
+  const matchesKeyword =
+    keyword.length === 0 ||
+    item.taskTitle.toLowerCase().includes(keyword) ||
+    item.labelerName.toLowerCase().includes(keyword) ||
+    item.aiSummary.toLowerCase().includes(keyword) ||
+    item.aiReasons.some((reason) => reason.toLowerCase().includes(keyword))
+  const matchesRiskLevel = query.riskLevel === 'all' || item.aiRiskLevel === query.riskLevel
+  const matchesManualStatus = query.manualStatus === 'all' || item.manualReviewStatus === query.manualStatus
+
+  return matchesKeyword && matchesRiskLevel && matchesManualStatus
+}
 
 function getNowLabel() {
   return new Intl.DateTimeFormat('zh-CN', {
@@ -91,20 +206,6 @@ function cloneReviewDetail(detail: ReviewDetail): ReviewDetail {
   }
 }
 
-function matchesQueueQuery(item: ReviewQueueItem, query: ReviewQueueQuery) {
-  const keyword = query.keyword.trim().toLowerCase()
-  const matchesKeyword =
-    keyword.length === 0 ||
-    item.taskTitle.toLowerCase().includes(keyword) ||
-    item.labelerName.toLowerCase().includes(keyword) ||
-    item.aiSummary.toLowerCase().includes(keyword) ||
-    item.aiReasons.some((reason) => reason.toLowerCase().includes(keyword))
-  const matchesRiskLevel = query.riskLevel === 'all' || item.aiRiskLevel === query.riskLevel
-  const matchesManualStatus = query.manualStatus === 'all' || item.manualReviewStatus === query.manualStatus
-
-  return matchesKeyword && matchesRiskLevel && matchesManualStatus
-}
-
 function getSubmissionReviewStatus(decision: AiReviewResult['decision']): SubmissionReviewStatus {
   if (decision === 'pass') {
     return 'ai_passed'
@@ -115,10 +216,6 @@ function getSubmissionReviewStatus(decision: AiReviewResult['decision']): Submis
   }
 
   return 'manual_pending'
-}
-
-function getManualSubmissionReviewStatus(decision: ManualReviewActionPayload['decision']): SubmissionReviewStatus {
-  return decision === 'approved' ? 'manual_approved' : 'manual_rejected'
 }
 
 function decideAiReview(submission: LabelingSubmission): Pick<
@@ -199,30 +296,38 @@ function upsertDetail(detail: ReviewDetail) {
   }
 }
 
-function isManualReviewActionable(detail: ReviewDetail) {
-  return detail.aiDecision === 'manual_review' && detail.manualReviewStatus !== 'approved' && detail.manualReviewStatus !== 'rejected'
-}
-
 export const reviewService = {
   registerReviewOutcomeSync(handler: ReviewOutcomeSyncHandler) {
     reviewOutcomeSyncHandler = handler
   },
 
   async listManualReviewQueue(query: ReviewQueueQuery): Promise<ReviewQueueItem[]> {
-    return reviewQueueItems
-      .filter((item) => item.aiDecision === 'manual_review')
-      .filter((item) => matchesQueueQuery(item, query))
-      .map(cloneQueueItem)
+    const items = await request.get<ReviewerSubmissionListItem[]>('/v1/reviewer/submissions', {
+      params: {
+        submissionStatus: 'PENDING_FINAL',
+        page: 1,
+        size: 20,
+      },
+    })
+
+    return items.map(mapReviewerSubmissionToQueueItem).filter((item) => matchesRealQueueQuery(item, query))
   },
 
   async listReviewHistory(): Promise<ReviewQueueItem[]> {
-    return reviewDetails.map(cloneQueueItem)
+    const items = await request.get<ReviewerSubmissionListItem[]>('/v1/reviewer/submissions', {
+      params: {
+        page: 1,
+        size: 100,
+      },
+    })
+
+    return items.map(mapReviewerSubmissionToQueueItem)
   },
 
   async getReviewDetail(reviewId: string): Promise<ReviewDetail | null> {
-    const detail = reviewDetails.find((item) => item.id === reviewId || item.submissionId === reviewId)
+    const detail = await request.get<ReviewerSubmissionListItem>(`/v1/reviewer/submissions/${reviewId}`)
 
-    return detail ? cloneReviewDetail(detail) : null
+    return detail ? mapReviewerSubmissionToDetail(detail) : null
   },
 
   async getAiReviewResult(submissionId: string): Promise<AiReviewResult | null> {
@@ -231,110 +336,98 @@ export const reviewService = {
     return result ? cloneAiReviewResult(result) : null
   },
 
+  async listAllAiReviewLogs(query: AiReviewLogQuery): Promise<AiReviewResultPageResponse> {
+    return request.get<AiReviewResultPageResponse>('/v1/tasks/ai-review-logs', {
+      params: query,
+    })
+  },
+
+  async listTaskAiReviewLogs(taskId: string, query: AiReviewLogQuery): Promise<AiReviewResultPageResponse> {
+    return request.get<AiReviewResultPageResponse>(`/v1/tasks/${taskId}/ai-review-logs`, {
+      params: query,
+    })
+  },
+
+  async getSubmissionAiReview(submissionId: string): Promise<AiReviewResultResponse> {
+    return request.get<AiReviewResultResponse>(`/v1/submissions/${submissionId}/ai-review`)
+  },
+
+  async retrySubmissionAiReview(submissionId: string): Promise<AiReviewResultResponse> {
+    return request.post<AiReviewResultResponse>(`/v1/submissions/${submissionId}/ai-review/retry`)
+  },
+
   async listManualReviewRecords(submissionId: string): Promise<ManualReviewRecord[]> {
     return manualReviewRecords
       .filter((record) => record.submissionId === submissionId)
       .map(cloneManualReviewRecord)
   },
 
+  async listSubmissionVersions(submissionId: string): Promise<SubmissionVersion[]> {
+    return request.get<SubmissionVersion[]>(`/v1/submissions/${submissionId}/versions`)
+  },
+
   async submitManualReviewAction(reviewId: string, payload: ManualReviewActionPayload): Promise<ReviewDetail | null> {
-    const detailIndex = reviewDetails.findIndex((item) => item.id === reviewId || item.submissionId === reviewId)
+    const response =
+      payload.decision === 'approved'
+        ? await request.post<ReviewActionResponse, { reviewComment?: string; reviewLevel: number }>(
+            `/v1/reviewer/submissions/${reviewId}/approve`,
+            {
+              reviewComment: payload.comment,
+              reviewLevel: 1,
+            },
+          )
+        : await request.post<ReviewActionResponse, { reason: string; reviewLevel: number }>(
+            `/v1/reviewer/submissions/${reviewId}/reject`,
+            {
+              reason: payload.reason ?? payload.comment ?? '',
+              reviewLevel: 1,
+            },
+          )
 
-    if (detailIndex < 0) {
-      return null
-    }
-
-    const detail = reviewDetails[detailIndex]
-
-    if (!isManualReviewActionable(detail)) {
-      return null
-    }
-
-    const now = getNowLabel()
-    const manualReviewStatus = payload.decision === 'approved' ? 'approved' : 'rejected'
-    const submissionReviewStatus = getManualSubmissionReviewStatus(payload.decision)
-    const record: ManualReviewRecord = {
-      id: `manual-review-${detail.submissionId}-${Date.now()}`,
-      submissionId: detail.submissionId,
-      reviewerId: payload.reviewerId,
-      reviewerName: payload.reviewerName,
-      decision: payload.decision,
-      reason: payload.reason,
-      comment: payload.comment,
-      reviewedAt: now,
-    }
-    const auditEvent: ReviewAuditEvent = {
-      id: `audit-${detail.submissionId}-manual-${Date.now()}`,
-      submissionId: detail.submissionId,
-      actorType: 'reviewer',
-      actorName: payload.reviewerName,
-      action: payload.decision,
-      description: payload.decision === 'approved' ? '人工复核通过。' : `人工复核打回：${payload.reason ?? payload.comment ?? ''}`,
-      occurredAt: now,
-    }
-    const updatedDetail: ReviewDetail = {
-      ...detail,
-      manualReviewStatus,
-      submissionReviewStatus,
-      manualReviewRecords: [record, ...detail.manualReviewRecords],
-      auditTimeline: [auditEvent, ...detail.auditTimeline],
-    }
-    const queueIndex = reviewQueueItems.findIndex((item) => item.id === detail.id)
-
-    manualReviewRecords.unshift(record)
-    reviewAuditEvents.unshift(auditEvent)
-    reviewDetails[detailIndex] = updatedDetail
-
-    if (queueIndex >= 0) {
-      reviewQueueItems[queueIndex] = {
-        ...reviewQueueItems[queueIndex],
-        manualReviewStatus,
-        submissionReviewStatus,
-      }
-    }
+    const current = await this.getReviewDetail(String(response.submissionId))
 
     reviewOutcomeSyncHandler?.({
-      submissionId: detail.submissionId,
+      submissionId: String(response.submissionId),
       status: payload.decision === 'approved' ? 'approved' : 'rejected',
-      reviewedAt: now,
+      reviewedAt: getNowLabel(),
       reviewSource: 'manual',
-      reviewStatus: submissionReviewStatus,
+      reviewStatus: payload.decision === 'approved' ? 'manual_approved' : 'manual_rejected',
       rejectReason: payload.decision === 'rejected' ? payload.reason ?? payload.comment : undefined,
       reviewComment: payload.comment ?? payload.reason,
     })
 
-    return cloneReviewDetail(updatedDetail)
+    return current
   },
 
   async submitBatchManualReviewAction(reviewIds: string[], payload: ManualReviewActionPayload): Promise<BatchManualReviewResult> {
-    const result: BatchManualReviewResult = {
-      success: [],
-      failed: [],
+    const response =
+      payload.decision === 'approved'
+        ? await request.post<BatchReviewResponse, { submissionIds: number[] }>(
+            '/v1/reviewer/submissions/batch/approve',
+            {
+              submissionIds: reviewIds.map(Number),
+            },
+          )
+        : await request.post<BatchReviewResponse, { submissionIds: number[]; reason: string }>(
+            '/v1/reviewer/submissions/batch/reject',
+            {
+              submissionIds: reviewIds.map(Number),
+              reason: payload.reason ?? payload.comment ?? '',
+            },
+          )
+    const failedIds = new Set((response.failures ?? []).map((item) => String(item.submissionId ?? item.reviewId)))
+    const successfulIds = reviewIds.filter((reviewId) => !failedIds.has(reviewId)).slice(0, response.successCount)
+    const success = (
+      await Promise.all(successfulIds.map((reviewId) => this.getReviewDetail(reviewId).catch(() => null)))
+    ).filter((detail): detail is ReviewDetail => Boolean(detail))
+
+    return {
+      success,
+      failed: (response.failures ?? []).map((failure) => ({
+        reviewId: String(failure.submissionId ?? failure.reviewId ?? ''),
+        reason: failure.reason,
+      })),
     }
-
-    for (const reviewId of reviewIds) {
-      const detail = reviewDetails.find((item) => item.id === reviewId || item.submissionId === reviewId)
-
-      if (!detail) {
-        result.failed.push({ reviewId, reason: '人工复核记录不存在' })
-        continue
-      }
-
-      if (!isManualReviewActionable(detail)) {
-        result.failed.push({ reviewId, reason: '该记录当前不可人工复核' })
-        continue
-      }
-
-      const updatedDetail = await this.submitManualReviewAction(reviewId, payload)
-
-      if (updatedDetail) {
-        result.success.push(updatedDetail)
-      } else {
-        result.failed.push({ reviewId, reason: '人工复核提交失败' })
-      }
-    }
-
-    return result
   },
 
   async processSubmissionWithAi(

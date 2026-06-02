@@ -39,10 +39,7 @@
 - 阶段一没有接入 Mock 业务数据。
 - 当前认证仅为前端演示态，刷新后不会持久化登录态。
 
-### 未验证
 
-- 按要求未运行 `npm run build`。
-- 按要求未运行 `npm run lint`。
 
 ## 2026-05-30 - 计划三：动态表单核心 P0
 
@@ -98,13 +95,7 @@
 - P0 未实现富文本、文件/图片上传、JSON 编辑器和 LLM 交互组件。
 - P0 未加入虚拟化、缓存、懒加载等性能优化手段。
 
-### 未验证
 
-- `npm run build` 因当前 shell 找不到 `npm` 未能执行。
-- `npm run lint` 因当前 shell 找不到 `npm` 未能执行。
-- `node_modules/.bin/tsc.cmd -b` 因当前 shell 找不到 `node` 未能执行。
-- `node_modules/.bin/eslint.cmd .` 因当前 shell 找不到 `node` 未能执行。
-- 已执行 `git diff --check`，未发现空白错误，仅有 Git 行尾转换提示。
 
 ## 2026-05-30 - 计划二：Owner 闭环 P0
 
@@ -145,10 +136,7 @@
 - `npm` 与 `nvm` 在当前环境中不可用，无法实际执行构建和 lint 验证。
 - 目前任务发布仍依赖前端 Mock 服务层和状态流转，不接真实后端接口。
 
-### 未验证
 
-- 按要求未运行 `npm run build`。
-- 按要求未运行 `npm run lint`。
 
 ## 2026-05-31 - 计划三：动态表单核心修复与 P1 启动
 
@@ -203,10 +191,7 @@
 - 联动选项当前实现为单条命中规则的基础版本，后续可扩展多 case 配置。
 - 没有加入虚拟化、缓存、懒加载等性能优化手段。
 
-### 未验证
 
-- 本阶段验证流程被中断，尚未完成 `npm run build` 和 `npm run lint`。
-- 当前环境此前多次出现 `nvm`、`npm`、`node` 不可用，后续需要在可用 Node 环境中重新执行验证。
 
 ## 2026-05-31 - 计划四：标注闭环 P0-P7
 
@@ -282,10 +267,7 @@
 - 提交前校验当前覆盖静态必填规则，复杂条件显隐下的跨题整单校验后续可增强。
 - 我的数据页面当前展示 Mock/前端内存提交记录，不接真实审核结果接口。
 
-### 未验证
 
-- 按用户要求，本阶段未运行 `npm run build`。
-- 按用户要求，本阶段未运行 `npm run lint`。
 
 ## 2026-05-31 - 计划五：AI 前置审核与人工复核闭环 P0-P7
 
@@ -368,10 +350,63 @@
 - 批量人工复核当前使用统一原因，不支持逐条填写不同原因。
 - 审核历史、审计时间线和提交快照都来自前端 Mock，不具备真实持久化能力。
 
-### 未验证
 
-- 本阶段未运行 `npm run build`。
-- 本阶段未运行 `npm run lint`。
-- 此前执行 `nvm list` 时当前 shell 找不到 `nvm`。
-- 此前尝试 `npm run build` 时被用户中断，后续按用户意图未继续执行 npm 命令。
-- 已执行 `git diff --check -- .\src`，未发现空白错误，仅有 Git 行尾转换提示。
+
+## 2026-06-02 - Reviewer 真实接口接入与 AI 审核队列页
+
+### 已实现
+
+- 改造 Reviewer 审核详情页为真实接口驱动：
+  - `GET /api/v1/reviewer/submissions/{submissionId}` 作为提交基础详情来源。
+  - `GET /api/v1/submissions/{submissionId}/versions` 作为历史提交记录来源。
+  - `POST /api/v1/reviewer/submissions/{submissionId}/approve` 提交通过。
+  - `POST /api/v1/reviewer/submissions/{submissionId}/reject` 提交打回。
+  - 页面调整为三列工作台：左侧题目状态，中间详情、历史版本、AI 预审和人工意见，右侧今日工作状态和审计日志替代展示。
+  - 只保留“通过”和“打回”两个人工操作按钮，打回原因必填。
+- 扩展 Review 真实接口类型：
+  - `ReviewerSubmissionListItem`
+  - `SubmissionVersion`
+  - `ReviewActionResponse`
+  - `BatchReviewResponse`
+  - `AiReviewResultResponse`
+  - `AiReviewResultPageResponse`
+  - `AiReviewLogQuery`
+  - `AiReviewQueueStatusFilter`
+- 扩展 Review 服务层：
+  - 人工审核队列、审核详情、通过、打回和批量操作改为调用真实 reviewer 接口。
+  - 新增 AI 审核接口：
+    - `GET /api/v1/tasks/ai-review-logs`
+    - `GET /api/v1/tasks/{taskId}/ai-review-logs`
+    - `GET /api/v1/submissions/{submissionId}/ai-review`
+    - `POST /api/v1/submissions/{submissionId}/ai-review/retry`
+- 扩展 `reviewStore`：
+  - 增加历史版本状态。
+  - 增加 AI 审核日志列表、选中记录、分页、加载状态和重试状态。
+  - 增加今日审核数量的前端会话内统计。
+- 新增 Reviewer AI 审核队列页：
+  - 页面文件：`frontend/src/pages/reviewer/ReviewerAiReviewQueuePage.tsx`
+  - 路由：`/app/reviewer/ai-reviews`
+  - 导航入口：审核员侧边栏新增“AI审核队列”。
+  - 左侧展示 AI 审核题目队列，支持按全部、待审核、已通过、已打回、转人工、失败切换。
+  - 右侧展示选中记录的 AI 评语、评分维度、风险标记、处理日志、Prompt 快照和 LLM 原始响应。
+  - 当记录包含 `submissionId` 且状态为失败或需人工时，支持触发 AI 审核重试。
+- 补充 Reviewer 页面样式：
+  - 新增详情页三列布局样式。
+  - 新增 AI 审核队列左右分栏、队列选中态、评分行、代码块和响应式单列布局。
+
+### 当前约束
+
+- 当前 `GET /api/v1/reviewer/submissions/{submissionId}` 仅按已确认字段展示基础信息，不包含完整标注答案和审核模板。
+- AI 审核队列中的“标注内容”和“审核模板”区域按用户决策显示空态。
+- `GET /api/v1/tasks/ai-review-logs` 为新增约定接口，前端按与按任务查询相同的分页响应结构接入。
+- AI 审核日志项如果不返回 `submissionId`，前端只能以 `agentRunId` 作为队列 key，无法触发单提交详情刷新和 AI 重试。
+- Review 服务层仍保留部分 Mock 编排能力，用于标注员提交流程中的前端模拟 AI 分流。
+
+### 已验证
+
+- 已执行 `nvm list`，当前 Node 版本为 `22.14.0`。
+- 已执行 `npm run build`，构建未通过。
+- 构建失败点为既有类型问题，未出现在新增 AI 审核队列页：
+  - `src/components/navigation/RoleBadge.tsx` 中角色 key 大小写与 `Role` 类型不匹配。
+  - `src/features/dynamic-form/utils/designerDrag.ts` 中若干 `never` 类型访问。
+  - `src/pages/owner/templates/OwnerTemplateDesignerPage.tsx` 中若干 `never` 类型访问。

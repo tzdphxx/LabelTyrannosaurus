@@ -1,4 +1,4 @@
-﻿package com.labelhub.modules.review.web;
+package com.labelhub.modules.review.web;
 
 import com.labelhub.common.api.ApiResponse;
 import com.labelhub.common.security.CurrentUserContext;
@@ -9,7 +9,6 @@ import com.labelhub.modules.review.dto.ConflictResolveResponse;
 import com.labelhub.modules.review.service.ConflictResolveService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
-import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import jakarta.validation.Valid;
 import java.util.List;
@@ -34,7 +33,7 @@ public class ConflictController {
 
     @GetMapping
     @Operation(summary = "冲突组列表", description = "查询待解决冲突组。")
-    @ApiResponses({@ApiResponse(responseCode = "200"), @ApiResponse(responseCode = "400", description = "请求参数校验失败"), @ApiResponse(responseCode = "401", description = "未认证"), @ApiResponse(responseCode = "403", description = "权限不足")})
+    @ApiResponses({@io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200"), @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "请求参数校验失败"), @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "未认证"), @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "权限不足")})
     public ApiResponse<List<ConflictGroupResponse>> listOpenGroups(
             @RequestParam(defaultValue = "100") int limit) {
         CurrentUserContext.requireRole(RoleCode.REVIEWER);
@@ -44,7 +43,7 @@ public class ConflictController {
 
     @GetMapping("/{groupId}")
     @Operation(summary = "冲突组详情", description = "查询冲突组详情。")
-    @ApiResponses({@ApiResponse(responseCode = "200"), @ApiResponse(responseCode = "400", description = "请求参数校验失败"), @ApiResponse(responseCode = "401", description = "未认证"), @ApiResponse(responseCode = "403", description = "权限不足")})
+    @ApiResponses({@io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200"), @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "请求参数校验失败"), @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "未认证"), @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "权限不足")})
     public ApiResponse<ConflictGroupResponse> getGroup(@PathVariable Long groupId) {
         CurrentUserContext.requireRole(RoleCode.REVIEWER);
         return ApiResponse.ok(conflictResolveService.getGroup(groupId));
@@ -52,7 +51,7 @@ public class ConflictController {
 
     @PostMapping("/{groupId}/resolve")
     @Operation(summary = "解决冲突组", description = "选择最终提交并完成冲突仲裁。")
-    @ApiResponses({@ApiResponse(responseCode = "200"), @ApiResponse(responseCode = "400", description = "请求参数校验失败"), @ApiResponse(responseCode = "401", description = "未认证"), @ApiResponse(responseCode = "403", description = "权限不足")})
+    @ApiResponses({@io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200"), @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "请求参数校验失败"), @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "未认证"), @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "权限不足")})
     public ApiResponse<ConflictResolveResponse> resolve(@PathVariable Long groupId,
                                                          @Valid @RequestBody ConflictResolveRequest request) {
         CurrentUserContext.requireRole(RoleCode.REVIEWER);

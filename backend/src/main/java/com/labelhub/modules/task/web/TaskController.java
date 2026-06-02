@@ -1,4 +1,4 @@
-﻿package com.labelhub.modules.task.web;
+package com.labelhub.modules.task.web;
 
 import com.labelhub.common.api.ApiResponse;
 import com.labelhub.common.security.CurrentUserContext;
@@ -18,7 +18,6 @@ import com.labelhub.modules.task.service.TaskManagementService;
 import com.labelhub.modules.task.service.TaskReviewerService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
-import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import jakarta.validation.Valid;
 import java.util.List;
@@ -51,7 +50,7 @@ public class TaskController {
 
     @PostMapping
     @Operation(summary = "创建任务", description = "创建草稿任务，归属当前 OWNER 用户。")
-    @ApiResponses({@ApiResponse(responseCode = "200"), @ApiResponse(responseCode = "400", description = "请求参数校验失败"), @ApiResponse(responseCode = "401", description = "未认证"), @ApiResponse(responseCode = "403", description = "权限不足")})
+    @ApiResponses({@io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200"), @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "请求参数校验失败"), @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "未认证"), @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "权限不足")})
     public ApiResponse<CreateTaskResponse> create(@Valid @RequestBody CreateTaskRequest request) {
         return ApiResponse.ok(taskLifecycleService.createWithDataset(
                 CurrentUserContext.getUserId(), request));
@@ -59,7 +58,7 @@ public class TaskController {
 
     @GetMapping("/{taskId}")
     @Operation(summary = "任务详情", description = "查询当前用户拥有的任务详情。")
-    @ApiResponses({@ApiResponse(responseCode = "200"), @ApiResponse(responseCode = "400", description = "请求参数校验失败"), @ApiResponse(responseCode = "401", description = "未认证"), @ApiResponse(responseCode = "403", description = "权限不足")})
+    @ApiResponses({@io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200"), @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "请求参数校验失败"), @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "未认证"), @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "权限不足")})
     public ApiResponse<TaskDetailResponse> detail(@PathVariable Long taskId) {
         return ApiResponse.ok(taskLifecycleService.getOwnedTask(
                 CurrentUserContext.getUserId(), taskId));
@@ -67,7 +66,7 @@ public class TaskController {
 
     @PutMapping("/{taskId}")
     @Operation(summary = "编辑草稿任务", description = "仅允许编辑 DRAFT 状态任务。")
-    @ApiResponses({@ApiResponse(responseCode = "200"), @ApiResponse(responseCode = "400", description = "请求参数校验失败"), @ApiResponse(responseCode = "401", description = "未认证"), @ApiResponse(responseCode = "403", description = "权限不足")})
+    @ApiResponses({@io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200"), @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "请求参数校验失败"), @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "未认证"), @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "权限不足")})
     public ApiResponse<TaskLifecycleResponse> updateDraft(
             @PathVariable Long taskId,
             @Valid @RequestBody UpdateTaskRequest request) {
@@ -77,7 +76,7 @@ public class TaskController {
 
     @DeleteMapping("/{taskId}")
     @Operation(summary = "删除草稿任务", description = "仅允许删除 DRAFT 状态任务，已发布任务不可删除。")
-    @ApiResponses({@ApiResponse(responseCode = "200"), @ApiResponse(responseCode = "400", description = "请求参数校验失败"), @ApiResponse(responseCode = "401", description = "未认证"), @ApiResponse(responseCode = "403", description = "权限不足")})
+    @ApiResponses({@io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200"), @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "请求参数校验失败"), @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "未认证"), @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "权限不足")})
     public ApiResponse<Void> deleteDraft(@PathVariable Long taskId) {
         taskManagementService.deleteDraft(CurrentUserContext.getUserId(), taskId);
         return ApiResponse.ok(null);
@@ -85,7 +84,7 @@ public class TaskController {
 
     @GetMapping("/{taskId}/statistics")
     @Operation(summary = "任务统计", description = "查询任务的提交统计数据，包含总题目数、已领取、已提交、通过、驳回、待审核数量和通过率。")
-    @ApiResponses({@ApiResponse(responseCode = "200"), @ApiResponse(responseCode = "400", description = "请求参数校验失败"), @ApiResponse(responseCode = "401", description = "未认证"), @ApiResponse(responseCode = "403", description = "权限不足")})
+    @ApiResponses({@io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200"), @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "请求参数校验失败"), @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "未认证"), @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "权限不足")})
     public ApiResponse<TaskStatisticsResponse> statistics(@PathVariable Long taskId) {
         return ApiResponse.ok(taskManagementService.getStatistics(
                 CurrentUserContext.getUserId(), taskId));
@@ -93,7 +92,7 @@ public class TaskController {
 
     @GetMapping("/{taskId}/labelers")
     @Operation(summary = "任务标注员列表", description = "查询任务下参与的标注员列表及其进度统计。")
-    @ApiResponses({@ApiResponse(responseCode = "200"), @ApiResponse(responseCode = "400", description = "请求参数校验失败"), @ApiResponse(responseCode = "401", description = "未认证"), @ApiResponse(responseCode = "403", description = "权限不足")})
+    @ApiResponses({@io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200"), @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "请求参数校验失败"), @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "未认证"), @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "权限不足")})
     public ApiResponse<java.util.List<TaskLabelerResponse>> labelers(@PathVariable Long taskId) {
         return ApiResponse.ok(taskManagementService.getLabelers(
                 CurrentUserContext.getUserId(), taskId));
@@ -101,7 +100,7 @@ public class TaskController {
 
     @PostMapping("/{taskId}/reviewers")
     @Operation(summary = "预分配审核员", description = "Owner 将审核员预分配到任务级别，替换已有分配。")
-    @ApiResponses({@ApiResponse(responseCode = "200"), @ApiResponse(responseCode = "400", description = "请求参数校验失败"), @ApiResponse(responseCode = "401", description = "未认证"), @ApiResponse(responseCode = "403", description = "权限不足")})
+    @ApiResponses({@io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200"), @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "请求参数校验失败"), @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "未认证"), @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "权限不足")})
     public ApiResponse<Void> assignReviewers(@PathVariable Long taskId,
                                              @Valid @RequestBody AssignTaskReviewersRequest request) {
         taskReviewerService.assignReviewers(
@@ -111,7 +110,7 @@ public class TaskController {
 
     @GetMapping("/{taskId}/reviewers")
     @Operation(summary = "查看任务审核员", description = "查询任务预分配的审核员列表。")
-    @ApiResponses({@ApiResponse(responseCode = "200"), @ApiResponse(responseCode = "400", description = "请求参数校验失败"), @ApiResponse(responseCode = "401", description = "未认证"), @ApiResponse(responseCode = "403", description = "权限不足")})
+    @ApiResponses({@io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200"), @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "请求参数校验失败"), @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "未认证"), @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "权限不足")})
     public ApiResponse<java.util.List<TaskReviewerResponse>> reviewers(@PathVariable Long taskId) {
         return ApiResponse.ok(taskReviewerService.getReviewers(
                 CurrentUserContext.getUserId(), taskId));
@@ -119,7 +118,7 @@ public class TaskController {
 
     @PostMapping("/{taskId}/publish")
     @Operation(summary = "发布任务")
-    @ApiResponses({@ApiResponse(responseCode = "200"), @ApiResponse(responseCode = "400", description = "请求参数校验失败"), @ApiResponse(responseCode = "401", description = "未认证"), @ApiResponse(responseCode = "403", description = "权限不足")})
+    @ApiResponses({@io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200"), @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "请求参数校验失败"), @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "未认证"), @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "权限不足")})
     public ApiResponse<TaskLifecycleResponse> publish(@PathVariable Long taskId) {
         return ApiResponse.ok(taskLifecycleService.publish(
                 CurrentUserContext.getUserId(), taskId));
@@ -127,7 +126,7 @@ public class TaskController {
 
     @PostMapping("/{taskId}/pause")
     @Operation(summary = "暂停任务")
-    @ApiResponses({@ApiResponse(responseCode = "200"), @ApiResponse(responseCode = "400", description = "请求参数校验失败"), @ApiResponse(responseCode = "401", description = "未认证"), @ApiResponse(responseCode = "403", description = "权限不足")})
+    @ApiResponses({@io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200"), @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "请求参数校验失败"), @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "未认证"), @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "权限不足")})
     public ApiResponse<TaskLifecycleResponse> pause(@PathVariable Long taskId) {
         return ApiResponse.ok(taskLifecycleService.pause(
                 CurrentUserContext.getUserId(), taskId));
@@ -135,7 +134,7 @@ public class TaskController {
 
     @PostMapping("/{taskId}/resume")
     @Operation(summary = "恢复任务")
-    @ApiResponses({@ApiResponse(responseCode = "200"), @ApiResponse(responseCode = "400", description = "请求参数校验失败"), @ApiResponse(responseCode = "401", description = "未认证"), @ApiResponse(responseCode = "403", description = "权限不足")})
+    @ApiResponses({@io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200"), @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "请求参数校验失败"), @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "未认证"), @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "权限不足")})
     public ApiResponse<TaskLifecycleResponse> resume(@PathVariable Long taskId) {
         return ApiResponse.ok(taskLifecycleService.resume(
                 CurrentUserContext.getUserId(), taskId));
@@ -143,7 +142,7 @@ public class TaskController {
 
     @PostMapping("/{taskId}/end")
     @Operation(summary = "结束任务")
-    @ApiResponses({@ApiResponse(responseCode = "200"), @ApiResponse(responseCode = "400", description = "请求参数校验失败"), @ApiResponse(responseCode = "401", description = "未认证"), @ApiResponse(responseCode = "403", description = "权限不足")})
+    @ApiResponses({@io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200"), @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "请求参数校验失败"), @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "未认证"), @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "权限不足")})
     public ApiResponse<TaskLifecycleResponse> end(@PathVariable Long taskId) {
         return ApiResponse.ok(taskLifecycleService.end(
                 CurrentUserContext.getUserId(), taskId));
@@ -166,8 +165,8 @@ class OwnerTaskController {
 
     @GetMapping
     @Operation(summary = "我的任务列表（分页）",
-    @ApiResponses({@ApiResponse(responseCode = "200"), @ApiResponse(responseCode = "400", description = "请求参数校验失败"), @ApiResponse(responseCode = "401", description = "未认证"), @ApiResponse(responseCode = "403", description = "权限不足")})
             description = "分页查询当前 OWNER 用户创建的任务，支持按状态和关键词筛选。")
+    @ApiResponses({@io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200"), @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "请求参数校验失败"), @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "未认证"), @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "权限不足")})
     public ApiResponse<OwnerTaskPageResponse> listOwnerTasks(
             @RequestParam(required = false) String status,
             @RequestParam(required = false) String keyword,

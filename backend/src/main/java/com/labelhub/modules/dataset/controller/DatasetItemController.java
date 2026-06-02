@@ -1,4 +1,4 @@
-﻿package com.labelhub.modules.dataset.controller;
+package com.labelhub.modules.dataset.controller;
 
 import com.labelhub.common.api.ApiResponse;
 import com.labelhub.modules.dataset.dto.BatchAppendItemsRequest;
@@ -10,7 +10,6 @@ import com.labelhub.modules.dataset.dto.DatasetItemQuery;
 import com.labelhub.modules.dataset.service.DatasetItemService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
-import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import jakarta.validation.Valid;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -46,7 +45,7 @@ public class DatasetItemController {
      */
     @GetMapping
     @Operation(summary = "数据项列表", description = "分页查询任务下未删除的数据项。")
-    @ApiResponses({@ApiResponse(responseCode = "200"), @ApiResponse(responseCode = "400", description = "请求参数校验失败"), @ApiResponse(responseCode = "401", description = "未认证"), @ApiResponse(responseCode = "403", description = "权限不足")})
+    @ApiResponses({@io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200"), @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "请求参数校验失败"), @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "未认证"), @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "权限不足")})
     public ApiResponse<DatasetItemPageResponse> listItems(@PathVariable Long taskId,
                                                           @RequestParam(required = false) Integer page,
                                                           @RequestParam(required = false) Integer pageSize,
@@ -60,7 +59,7 @@ public class DatasetItemController {
      */
     @PostMapping("/batch-append")
     @Operation(summary = "批量追加数据项", description = "向任务数据集追加多个数据项。")
-    @ApiResponses({@ApiResponse(responseCode = "200"), @ApiResponse(responseCode = "400", description = "请求参数校验失败"), @ApiResponse(responseCode = "401", description = "未认证"), @ApiResponse(responseCode = "403", description = "权限不足")})
+    @ApiResponses({@io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200"), @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "请求参数校验失败"), @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "未认证"), @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "权限不足")})
     public ApiResponse<List<BatchItemResult>> batchAppend(@PathVariable Long taskId,
                                                           @Valid @RequestBody BatchAppendItemsRequest request) {
         return ApiResponse.ok(datasetItemService.batchAppend(taskId, request));
@@ -71,7 +70,7 @@ public class DatasetItemController {
      */
     @PostMapping("/batch-update")
     @Operation(summary = "批量更新数据项", description = "批量更新任务数据项内容。")
-    @ApiResponses({@ApiResponse(responseCode = "200"), @ApiResponse(responseCode = "400", description = "请求参数校验失败"), @ApiResponse(responseCode = "401", description = "未认证"), @ApiResponse(responseCode = "403", description = "权限不足")})
+    @ApiResponses({@io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200"), @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "请求参数校验失败"), @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "未认证"), @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "权限不足")})
     public ApiResponse<List<BatchItemResult>> batchUpdate(@PathVariable Long taskId,
                                                           @Valid @RequestBody BatchUpdateItemsRequest request) {
         return ApiResponse.ok(datasetItemService.batchUpdate(taskId, request));
@@ -82,7 +81,7 @@ public class DatasetItemController {
      */
     @PostMapping("/batch-delete")
     @Operation(summary = "批量删除数据项", description = "批量软删除任务数据项。")
-    @ApiResponses({@ApiResponse(responseCode = "200"), @ApiResponse(responseCode = "400", description = "请求参数校验失败"), @ApiResponse(responseCode = "401", description = "未认证"), @ApiResponse(responseCode = "403", description = "权限不足")})
+    @ApiResponses({@io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200"), @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "请求参数校验失败"), @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "未认证"), @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "权限不足")})
     public ApiResponse<List<BatchItemResult>> batchDelete(@PathVariable Long taskId,
                                                           @Valid @RequestBody BatchDeleteItemsRequest request) {
         return ApiResponse.ok(datasetItemService.batchDelete(taskId, request));

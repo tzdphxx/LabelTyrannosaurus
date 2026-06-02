@@ -1,4 +1,4 @@
-﻿package com.labelhub.modules.reward.controller;
+package com.labelhub.modules.reward.controller;
 
 import com.labelhub.common.api.ApiResponse;
 import com.labelhub.modules.reward.dto.RewardRuleRequest;
@@ -6,7 +6,6 @@ import com.labelhub.modules.reward.dto.RewardRuleResponse;
 import com.labelhub.modules.reward.service.RewardRuleService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
-import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import jakarta.validation.Valid;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -37,7 +36,7 @@ public class RewardRuleController {
      */
     @PostMapping
     @Operation(summary = "保存奖励规则", description = "保存任务奖励规则的新版本。")
-    @ApiResponses({@ApiResponse(responseCode = "200"), @ApiResponse(responseCode = "400", description = "请求参数校验失败"), @ApiResponse(responseCode = "401", description = "未认证"), @ApiResponse(responseCode = "403", description = "权限不足")})
+    @ApiResponses({@io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200"), @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "请求参数校验失败"), @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "未认证"), @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "权限不足")})
     public ApiResponse<RewardRuleResponse> saveRule(@PathVariable Long taskId,
                                                     @Valid @RequestBody RewardRuleRequest request) {
         return ApiResponse.ok(rewardRuleService.saveRule(taskId, request));
@@ -48,7 +47,7 @@ public class RewardRuleController {
      */
     @GetMapping
     @Operation(summary = "最新奖励规则", description = "查询任务最新奖励规则。")
-    @ApiResponses({@ApiResponse(responseCode = "200"), @ApiResponse(responseCode = "400", description = "请求参数校验失败"), @ApiResponse(responseCode = "401", description = "未认证"), @ApiResponse(responseCode = "403", description = "权限不足")})
+    @ApiResponses({@io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200"), @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "请求参数校验失败"), @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "未认证"), @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "权限不足")})
     public ApiResponse<RewardRuleResponse> getLatestRule(@PathVariable Long taskId) {
         return ApiResponse.ok(rewardRuleService.getLatestRule(taskId));
     }

@@ -1,4 +1,4 @@
-﻿package com.labelhub.modules.admin.controller;
+package com.labelhub.modules.admin.controller;
 
 import com.labelhub.common.api.ApiResponse;
 import com.labelhub.modules.admin.dto.AdminUserResponse;
@@ -7,7 +7,6 @@ import com.labelhub.modules.admin.dto.UpdateUserRolesRequest;
 import com.labelhub.modules.admin.service.AdminUserService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
-import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import jakarta.validation.Valid;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -51,7 +50,7 @@ public class AdminUserController {
      */
     @GetMapping
     @Operation(summary = "用户列表", description = "查询后台用户列表，默认排除系统用户。")
-    @ApiResponses({@ApiResponse(responseCode = "200"), @ApiResponse(responseCode = "400", description = "请求参数校验失败"), @ApiResponse(responseCode = "401", description = "未认证"), @ApiResponse(responseCode = "403", description = "权限不足")})
+    @ApiResponses({@io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200"), @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "请求参数校验失败"), @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "未认证"), @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "权限不足")})
     public ApiResponse<List<AdminUserResponse>> listUsers(@RequestParam(defaultValue = "false") boolean includeSystem) {
         return ApiResponse.ok(adminUserService.listUsers(includeSystem));
     }
@@ -66,7 +65,7 @@ public class AdminUserController {
      */
     @PostMapping("/{userId}/enable")
     @Operation(summary = "启用用户", description = "启用账号并递增 tokenVersion。")
-    @ApiResponses({@ApiResponse(responseCode = "200"), @ApiResponse(responseCode = "400", description = "请求参数校验失败"), @ApiResponse(responseCode = "401", description = "未认证"), @ApiResponse(responseCode = "403", description = "权限不足")})
+    @ApiResponses({@io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200"), @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "请求参数校验失败"), @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "未认证"), @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "权限不足")})
     public ApiResponse<Void> enableUser(@PathVariable Long userId) {
         adminUserService.enableUser(userId);
         return ApiResponse.ok(null);
@@ -82,7 +81,7 @@ public class AdminUserController {
      */
     @PostMapping("/{userId}/disable")
     @Operation(summary = "禁用用户", description = "禁用账号并递增 tokenVersion，使已有令牌失效。")
-    @ApiResponses({@ApiResponse(responseCode = "200"), @ApiResponse(responseCode = "400", description = "请求参数校验失败"), @ApiResponse(responseCode = "401", description = "未认证"), @ApiResponse(responseCode = "403", description = "权限不足")})
+    @ApiResponses({@io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200"), @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "请求参数校验失败"), @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "未认证"), @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "权限不足")})
     public ApiResponse<Void> disableUser(@PathVariable Long userId) {
         adminUserService.disableUser(userId);
         return ApiResponse.ok(null);
@@ -95,7 +94,7 @@ public class AdminUserController {
 
     @PutMapping("/{userId}/roles")
     @Operation(summary = "更新用户角色", description = "替换用户的单一角色并递增 tokenVersion，使已有令牌失效。")
-    @ApiResponses({@ApiResponse(responseCode = "200"), @ApiResponse(responseCode = "400", description = "请求参数校验失败"), @ApiResponse(responseCode = "401", description = "未认证"), @ApiResponse(responseCode = "403", description = "权限不足")})
+    @ApiResponses({@io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200"), @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "请求参数校验失败"), @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "未认证"), @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "权限不足")})
     public ApiResponse<Void> updateRole(@PathVariable Long userId,
                                         @Valid @RequestBody UpdateUserRolesRequest request) {
         adminUserService.changeRole(userId, request.role());

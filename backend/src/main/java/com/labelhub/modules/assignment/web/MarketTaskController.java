@@ -1,4 +1,4 @@
-﻿package com.labelhub.modules.assignment.web;
+package com.labelhub.modules.assignment.web;
 
 import com.labelhub.common.api.ApiResponse;
 import com.labelhub.common.security.CurrentUserContext;
@@ -8,7 +8,6 @@ import com.labelhub.modules.assignment.service.TaskMarketService;
 import com.labelhub.modules.task.domain.TaskStatus;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
-import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import java.util.List;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -29,7 +28,7 @@ public class MarketTaskController {
 
     @GetMapping
     @Operation(summary = "任务市场列表", description = "查询当前标注员可领取的已发布任务。")
-    @ApiResponses({@ApiResponse(responseCode = "200"), @ApiResponse(responseCode = "400", description = "请求参数校验失败"), @ApiResponse(responseCode = "401", description = "未认证"), @ApiResponse(responseCode = "403", description = "权限不足")})
+    @ApiResponses({@io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200"), @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "请求参数校验失败"), @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "未认证"), @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "权限不足")})
     public ApiResponse<List<MarketTaskResponse>> listMarketTasks(@RequestParam(required = false) String keyword,
                                                                  @RequestParam(required = false) String tag,
                                                                  @RequestParam(required = false) TaskStatus status) {

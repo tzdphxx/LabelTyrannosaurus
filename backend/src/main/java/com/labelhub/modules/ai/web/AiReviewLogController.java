@@ -1,4 +1,4 @@
-﻿package com.labelhub.modules.ai.web;
+package com.labelhub.modules.ai.web;
 
 import com.labelhub.common.api.ApiResponse;
 import com.labelhub.common.security.CurrentUserContext;
@@ -8,7 +8,6 @@ import com.labelhub.modules.ai.service.AiReviewLogQueryService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
-import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import java.time.LocalDateTime;
 import org.springframework.format.annotation.DateTimeFormat;
@@ -33,8 +32,8 @@ public class AiReviewLogController {
 
     @GetMapping
     @Operation(summary = "AI 审核日志列表",
-    @ApiResponses({@ApiResponse(responseCode = "200"), @ApiResponse(responseCode = "400", description = "请求参数校验失败"), @ApiResponse(responseCode = "401", description = "未认证"), @ApiResponse(responseCode = "403", description = "权限不足")})
             description = "分页查询指定任务下的所有 AI 审核结果，支持按状态、决策、时间范围筛选。")
+    @ApiResponses({@io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200"), @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "请求参数校验失败"), @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "未认证"), @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "权限不足")})
     public ApiResponse<AiReviewResultPageResponse> list(
             @Parameter(description = "任务 ID") @PathVariable Long taskId,
             @RequestParam(required = false) Integer page,

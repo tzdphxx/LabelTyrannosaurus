@@ -1,4 +1,4 @@
-﻿package com.labelhub.modules.export.controller;
+package com.labelhub.modules.export.controller;
 
 import com.labelhub.common.api.ApiResponse;
 import com.labelhub.modules.export.dto.CreateExportRequest;
@@ -7,7 +7,6 @@ import com.labelhub.modules.export.dto.ExportJobResponse;
 import com.labelhub.modules.export.service.ExportJobService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
-import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
@@ -42,7 +41,7 @@ public class ExportController {
      */
     @PostMapping
     @Operation(summary = "创建导出任务", description = "按任务创建异步导出任务。")
-    @ApiResponses({@ApiResponse(responseCode = "200"), @ApiResponse(responseCode = "400", description = "请求参数校验失败"), @ApiResponse(responseCode = "401", description = "未认证"), @ApiResponse(responseCode = "403", description = "权限不足")})
+    @ApiResponses({@io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200"), @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "请求参数校验失败"), @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "未认证"), @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "权限不足")})
     public ApiResponse<ExportJobResponse> create(@PathVariable Long taskId,
                                                  @Valid @RequestBody CreateExportRequest request,
                                                  HttpServletRequest httpServletRequest) {
@@ -54,7 +53,7 @@ public class ExportController {
      */
     @GetMapping
     @Operation(summary = "导出任务列表", description = "分页查询任务导出历史。")
-    @ApiResponses({@ApiResponse(responseCode = "200"), @ApiResponse(responseCode = "400", description = "请求参数校验失败"), @ApiResponse(responseCode = "401", description = "未认证"), @ApiResponse(responseCode = "403", description = "权限不足")})
+    @ApiResponses({@io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200"), @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "请求参数校验失败"), @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "未认证"), @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "权限不足")})
     public ApiResponse<ExportJobPageResponse> list(@PathVariable Long taskId,
                                                    @RequestParam(required = false) Integer page,
                                                    @RequestParam(required = false) Integer pageSize) {
@@ -66,7 +65,7 @@ public class ExportController {
      */
     @GetMapping("/{exportJobId}")
     @Operation(summary = "导出任务详情", description = "查询导出任务状态和下载信息。")
-    @ApiResponses({@ApiResponse(responseCode = "200"), @ApiResponse(responseCode = "400", description = "请求参数校验失败"), @ApiResponse(responseCode = "401", description = "未认证"), @ApiResponse(responseCode = "403", description = "权限不足")})
+    @ApiResponses({@io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200"), @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "请求参数校验失败"), @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "未认证"), @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "权限不足")})
     public ApiResponse<ExportJobResponse> detail(@PathVariable Long taskId, @PathVariable Long exportJobId) {
         return ApiResponse.ok(exportJobService.getExportJob(taskId, exportJobId));
     }

@@ -1,4 +1,4 @@
-﻿package com.labelhub.modules.submission.web;
+package com.labelhub.modules.submission.web;
 
 import com.labelhub.common.api.ApiResponse;
 import com.labelhub.common.api.PageResponse;
@@ -12,7 +12,6 @@ import com.labelhub.modules.submission.service.LabelerSubmissionQueryService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
-import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -33,7 +32,7 @@ public class LabelerSubmissionController {
 
     @GetMapping
     @Operation(summary = "我的提交列表", description = "标注员查看自己的提交记录，支持按任务、提交状态、领取状态筛选，分页返回。")
-    @ApiResponses({@ApiResponse(responseCode = "200"), @ApiResponse(responseCode = "400", description = "请求参数校验失败"), @ApiResponse(responseCode = "401", description = "未认证"), @ApiResponse(responseCode = "403", description = "权限不足")})
+    @ApiResponses({@io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200"), @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "请求参数校验失败"), @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "未认证"), @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "权限不足")})
     public ApiResponse<PageResponse<LabelerSubmissionListItem>> list(
             @Parameter(description = "按任务 ID 筛选") @RequestParam(required = false) Long taskId,
             @Parameter(description = "按提交状态筛选：AI_REVIEWING / PENDING_FINAL / APPROVED / REJECTED") @RequestParam(required = false) SubmissionStatus submissionStatus,
@@ -47,7 +46,7 @@ public class LabelerSubmissionController {
 
     @GetMapping("/{submissionId}")
     @Operation(summary = "提交详情", description = "查看单条提交的详细信息，包含答案内容、AI 审核结果、审核状态等。")
-    @ApiResponses({@ApiResponse(responseCode = "200"), @ApiResponse(responseCode = "400", description = "请求参数校验失败"), @ApiResponse(responseCode = "401", description = "未认证"), @ApiResponse(responseCode = "403", description = "权限不足")})
+    @ApiResponses({@io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200"), @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "请求参数校验失败"), @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "未认证"), @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "权限不足")})
     public ApiResponse<LabelerSubmissionDetailResponse> getDetail(
             @Parameter(description = "提交 ID") @PathVariable Long submissionId) {
         CurrentUserContext.requireRole(RoleCode.LABELER);

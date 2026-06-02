@@ -2653,7 +2653,9 @@ POST /api/v1/tasks/1/dataset/import    请求: { fileId: 99 }
      changeNote: "初始版本"
    }
    响应: { templateId: 10, currentVersionNo: 1, currentVersion: { versionId: 20 } }
-   说明: 创建模板，Schema 定义标注界面的字段结构
+   说明: 创建模板。Schema 中可定义两类组件：
+         - 普通表单组件（Select、Textarea 等）：标注员填写的字段
+         - LlmTrigger 组件：标注员点击后 AI 自动生成目标字段的建议值
 
 5. PUT /api/v1/tasks/1
    请求: { ..., publishedTemplateVersionId: 20 }
@@ -2731,31 +2733,50 @@ POST /api/v1/templates/10/fork
     请求: { answerJson: "{\"label\":\"猫\"}", clientVersion: 0 }
     响应: { draftVersion: 1 }
     说明: 保存草稿（可多次调用，每次 clientVersion 递增）
-```
 
-（可选）触发 AI 预标注辅助：
-```text
-15a. POST /api/v1/assignments/100/pre-annotations/run
+    ── 标注过程中可触发 LlmTrigger（字段级 AI 辅助）──
+    前端根据模板 schema 中 type=LlmTrigger 的组件，渲染为可点击按钮。
+
+15. POST /api/v1/llm/triggers/run
+    请求: {
+      taskId: 1,
+      templateVersionId: 20,
+      componentId: "assist-summary",
+      datasetItemId: 70,
+      assignmentId: 100,
+      currentAnswerJson: { "summary": "当前草稿内容" },
+      previewMode: false
+    }
+    响应: { triggerRunId: 500, agentRunId: 600, componentId: "assist-summary",
+            status: "RUNNING", targetFields: ["summary"] }
+    说明: 标注员点击按钮触发，系统异步调用 LLM 生成字段建议
+
+16. GET /api/v1/llm/triggers/runs/500  ← 轮询
+    响应: { status: "SUCCESS", suggestionJson: { "summary": "AI生成的摘要..." },
+            displayText: "...", targetFields: ["summary"] }
+    说明: 前端展示 AI 建议，标注员自行决定是否采纳写入草稿
+
+    ──（可选）AI 预标注辅助（整题级别，区别于 LlmTrigger 字段级）──
+
+17a. POST /api/v1/assignments/100/pre-annotations/run
      响应: { preAnnotationId: 200, status: "RUNNING" }
 
-15b. GET /api/v1/assignments/100/pre-annotations/latest  ← 轮询结果
+17b. GET /api/v1/assignments/100/pre-annotations/latest  ← 轮询结果
      响应: { status: "SUCCESS", suggestedAnswerJson: "{\"label\":\"猫\"}", overallConfidence: 0.92 }
-     说明: 标注员参考建议后手动确认采纳
-```
 
 ---
 
 ### D.5 提交 → AI 预审
 
 ```text
-16. POST /api/v1/assignments/100/submit
+18. POST /api/v1/assignments/100/submit
     请求: { answerJson: "{\"label\":\"猫\"}", clientVersion: 1 }
     响应: { submissionId: 300, status: "AI_REVIEWING", versionNo: 1 }
     说明: 提交最终答案，系统自动触发 AI 预审（异步执行）
 
     ↓ 系统后台异步执行 AI 预审
 
-17. GET /api/v1/submissions/300/ai-review  ← 轮询 AI 审核结果
+19. GET /api/v1/submissions/300/ai-review  ← 轮询 AI 审核结果
     响应: {
       aiReviewStatus: "SUCCESS",
       decision: "PASS",
@@ -2782,20 +2803,20 @@ POST /api/v1/templates/10/fork
 ### D.6 人工审核
 
 ```text
-18. GET /api/v1/reviewer/submissions?submissionStatus=PENDING_FINAL&page=1&size=20
+20. GET /api/v1/reviewer/submissions?submissionStatus=PENDING_FINAL&page=1&size=20
     响应: [{ submissionId: 300, aiDecision: "PASS", aiReviewStatus: "SUCCESS", ... }]
-    说明: 审核员查看待审提交列表
+    说明: 审核员查看待审提交列表（列表直接显示 AI 决策和状态）
 
-19. GET /api/v1/reviewer/submissions/300
+21. GET /api/v1/reviewer/submissions/300
     响应: { 完整提交详情：答案内容、AI 各维度评分、历史审核记录、冲突信息 }
     说明: 查看单条提交的审核详情页
 
-20a. 通过：
+22a. 通过：
      POST /api/v1/reviewer/submissions/300/approve
      请求: { reviewComment: "标注准确", reviewLevel: 1 }
      效果: submission → APPROVED，触发 SubmissionApproved 事件 → 奖励自动结算
 
-20b. 驳回：
+22b. 驳回：
      POST /api/v1/reviewer/submissions/300/reject
      请求: { reason: "标签选择错误，应为'狗'", reviewLevel: 1 }
      效果: submission → REJECTED，assignment → RETURNED
@@ -2815,15 +2836,15 @@ POST /api/v1/reviewer/submissions/batch/assign
 说明: 将提交分配给指定审核员
 ```
 
-**冲突仲裁**（多个标注员对同一题目提交了不同答案时触发）：
+**冲突仲裁**（strategy=ASSIGNED 或多人标注时触发）：
 ```text
-21. GET /api/v1/reviewer/conflict-groups
+23. GET /api/v1/reviewer/conflict-groups
     响应: [{ groupId: 500, datasetItemId: 70, status: "CONFLICTED", submissions: [...] }]
 
-22. GET /api/v1/reviewer/conflict-groups/500
+24. GET /api/v1/reviewer/conflict-groups/500
     响应: { 冲突组详情：包含各标注员的答案对比 }
 
-23. POST /api/v1/reviewer/conflict-groups/500/resolve
+25. POST /api/v1/reviewer/conflict-groups/500/resolve
     请求: { goldenSubmissionId: 300, resolveComment: "该标注员答案更准确" }
     效果: 选定金标，触发 GoldenSelected 事件 → 金标奖励结算
 ```
@@ -2833,15 +2854,15 @@ POST /api/v1/reviewer/submissions/batch/assign
 ### D.7 导出
 
 ```text
-24. POST /api/v1/tasks/1/exports
+26. POST /api/v1/tasks/1/exports
     请求: { exportFormat: "JSONL", includeAiReview: true, includeReviewComment: true }
     响应: { exportJobId: 600, status: "PENDING" }
-    说明: 创建异步导出任务（导出 APPROVED 且 isGolden=true 的金标数据）
+    说明: 创建异步导出任务
 
-25. GET /api/v1/tasks/1/exports/600  ← 轮询导出状态
+27. GET /api/v1/tasks/1/exports/600  ← 轮询导出状态
     响应: { status: "SUCCESS", downloadUrl: "https://minio.../export.jsonl?signature=..." }
 
-26. GET /api/v1/files/{fileId}/signed-url  ← 或通过文件 ID 获取下载地址
+28. GET /api/v1/files/{fileId}/signed-url  ← 或通过文件 ID 获取下载地址
     响应: { signedUrl: "https://...", expiresAt: "2026-06-01T16:30:00" }
 ```
 
@@ -2869,7 +2890,8 @@ POST /api/v1/reviewer/submissions/batch/assign
 ┌──────────────────────────────────┴───────────────────────────────────────────┐
 │ Labeler 标注阶段                                                              │
 │                                                                              │
-│  ⑨ browse market  →  ⑩ claim  →  ⑪ save draft + submit                      │
+│  ⑨ market → ⑩ claim → ⑪ draft → ⑫ LlmTrigger（字段级 AI 辅助）              │
+│  → ⑬ submit                                                                  │
 └──────────────────────────────────┬───────────────────────────────────────────┘
                                    ↓ 提交触发
 ┌──────────────────────────────────┴───────────────────────────────────────────┐
@@ -2910,25 +2932,107 @@ POST /api/v1/reviewer/submissions/batch/assign
 | 发布任务 | Owner | taskId（需已配置模板+AI+奖励） | status=PUBLISHED |
 | 领取题目 | Labeler | taskId | assignmentId |
 | 保存草稿 | Labeler | assignmentId | draftVersion |
+| LlmTrigger 触发 | Labeler | assignmentId + componentId | AI 字段建议 |
 | 提交答案 | Labeler | assignmentId | submissionId |
 | AI 预审 | System | submissionId（自动触发） | aiDecision, averageScore |
 | 人工审核 | Reviewer | submissionId | APPROVED / REJECTED |
 | 冲突仲裁 | Reviewer | groupId, goldenSubmissionId | RESOLVED |
 | 导出 | Owner | taskId | exportJobId, downloadUrl |
 
-### D.10 已补齐入口与联调注意事项
+### D.10 LlmTrigger 详解
 
-当前主流程接口链路完整可跑通，原先的两个工作台入口缺口已补齐：
+#### 是什么
 
-1. **标注员"回到工作台"**：使用 `GET /api/v1/labeler/assignments` 查询当前标注员的 assignment 列表，可按 `taskId` 和 `status` 筛选；使用 `POST /api/v1/labeler/assignments/{assignmentId}/cancel` 放弃已领取但尚未进入终态的 assignment。`GET /api/v1/labeler/submissions` 继续用于查看已经产生 submission 的提交记录。
+嵌入在**标注模板 Schema** 里的字段级 AI 辅助组件。Owner 搭模板时定义，Labeler 标注时点击按钮触发——系统把当前题目数据 + 预设的 prompt 发给 LLM，返回建议填入目标字段。
 
-2. **审核员"开始工作"**：使用 `GET /api/v1/reviewer/tasks` 作为任务导航入口，使用 `GET /api/v1/reviewer/dashboard` 渲染审核员工作台概览，使用 `POST /api/v1/reviewer/submissions/claim` 主动领取待审提交；领取后通过 `GET /api/v1/reviewer/submissions?assignedReviewerId=<当前审核员ID>` 查看自己的待审列表。
+#### 模板中如何定义
 
-联调时需注意：
+```json
+{
+  "components": [
+    { "id": "label", "type": "Select", "options": ["猫", "狗"] },
+    {
+      "id": "assist-summary",
+      "type": "LlmTrigger",
+      "providerId": 50,
+      "modelName": "qwen-plus",
+      "promptTemplate": "根据以下内容生成一段简洁摘要：{{itemJson}}",
+      "targetFields": ["summary"]
+    }
+  ]
+}
+```
 
-- 普通注册只允许 `LABELER` 和 `OWNER`；`REVIEWER` 需由管理员创建或调整角色。
-- 每个普通用户只能拥有一个角色；用户无角色或多角色时登录/刷新会返回 `400102`。
-- 大模型供应商管理使用 `/api/v1/admin/llm-providers`（ADMIN 权限）；OWNER 通过 `GET /api/v1/llm-providers` 查看启用模型选项。
+| 字段 | 类型 | 必填 | 说明 |
+|------|------|:--:|------|
+| `type` | String | 是 | 必须为 `"LlmTrigger"` |
+| `providerId` | Long | 是 | Admin 启用的模型 ID |
+| `modelName` | String | 是 | 调用的模型名 |
+| `promptTemplate` | String | 是 | 发给 LLM 的 prompt，支持 `{{itemJson}}` 等变量 |
+| `targetFields` | List | 是 | AI 输出建议要填入的目标字段名列表 |
+
+#### 两种使用场景
+
+| 场景 | `previewMode` | 权限 | 用途 |
+|------|:--:|------|------|
+| **Owner 预览** | `true` | OWNER（任务所有者） | 搭模板时验证 prompt 效果，不创建 submission |
+| **Labeler 作答** | `false` | LABELER（assignment 持有者） | 标注时点击触发，获取字段级 AI 建议 |
+
+#### 预览模式怎么用
+
+```text
+POST /api/v1/llm/triggers/run
+{
+  "taskId": 1,
+  "templateVersionId": 20,         // 当前编辑的模板版本
+  "componentId": "assist-summary", // 要测试的 LlmTrigger 组件 id
+  "datasetItemId": 70,            // 选一条已导入的题目当测试数据
+  "previewMode": true             // ★ 预览模式
+}
+```
+
+- 不需要 `assignmentId`
+- 不会创建 submission 或 ai_review_result
+- Owner 在 Designer 里实时看 LLM 返回效果，调 prompt
+
+#### 与 AI 审核、预标注的区别
+
+| | LlmTrigger | 预标注 (Pre-Annotation) | AI 审核 |
+|---|:--:|:--:|:--:|
+| 触发 | **手动点击** | 手动触发 | 提交后**自动** |
+| 粒度 | 模板中**某个字段** | 整道题 | 整个 submission |
+| 用途 | 字段级 AI 辅助建议 | 整题预填 | 评分 + 决策 |
+| 配置位置 | 模板 schema 组件 | assignment 级 API | ai-review-configs |
+| 结果影响 | 前端展示，标注员自行决定 | 前端展示，标注员自行决定 | 写入 ai_review_result |
+
+#### 数据流
+
+```text
+Owner 搭模板                      Labeler 标注                    后端
+─────────────                   ────────────                    ────
+定义 LlmTrigger 组件             点击触发
+{                                 ↓
+  type: "LlmTrigger",            POST /api/v1/llm/triggers/run
+  providerId: 50,                → 校验权限、Provider、模板
+  modelName: "qwen-plus",        → 构建 inputSnapshot
+  promptTemplate: "...",         → 进入异步队列
+  targetFields: ["summary"]      ↓
+}                               Worker 消费
+                                  → LlmGateway 调用 LLM
+                                  → 写入 llm_trigger_runs
+                                ↓
+                                前端轮询 GET .../runs/{id}
+                                  → 拿到 suggestionJson
+                                  → 展示 AI 建议，标注员决定是否采纳
+```
+
+### D.11 联调注意事项
+
+- 普通注册只允许 `LABELER` 和 `OWNER`；`REVIEWER` 需由管理员创建或调整角色
+- 每个普通用户只能拥有一个角色；用户无角色或多角色时登录/刷新会返回 `400102`
+- 大模型供应商管理：`/api/v1/admin/llm-providers`（ADMIN）；OWNER 通过 `GET /api/v1/llm-providers` 查看
+- LlmTrigger 依赖 Admin 启用 Provider，预览模式仅 Owner 可用
+- 所有 LLM 调用（AI 审核、LlmTrigger、预标注）均通过异步队列执行，前端需轮询结果
 
 ---
 

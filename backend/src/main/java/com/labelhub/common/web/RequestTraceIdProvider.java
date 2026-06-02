@@ -16,11 +16,15 @@ public class RequestTraceIdProvider implements TraceIdProvider {
 
     @Override
     public String currentTraceId() {
-        HttpServletRequest request = requestProvider.getIfAvailable();
-        if (request == null) {
+        try {
+            HttpServletRequest request = requestProvider.getIfAvailable();
+            if (request == null) {
+                return UUID.randomUUID().toString();
+            }
+            String traceId = request.getHeader("X-Trace-Id");
+            return traceId == null || traceId.isBlank() ? UUID.randomUUID().toString() : traceId;
+        } catch (IllegalStateException ex) {
             return UUID.randomUUID().toString();
         }
-        String traceId = request.getHeader("X-Trace-Id");
-        return traceId == null || traceId.isBlank() ? UUID.randomUUID().toString() : traceId;
     }
 }

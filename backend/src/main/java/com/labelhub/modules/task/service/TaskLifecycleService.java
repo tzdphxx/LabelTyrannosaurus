@@ -222,9 +222,9 @@ public class TaskLifecycleService {
         if (!publishDependencyChecker.datasetReady(task.getId())) {
             throw missingPublishRequirement("Task dataset is required");
         }
-        if (!publishDependencyChecker.templateVersionExists(task.getPublishedTemplateVersionId())) {
-            throw missingPublishRequirement("Task template version is required");
-        }
+//        if (!publishDependencyChecker.templateVersionExists(task.getPublishedTemplateVersionId())) {
+//            throw missingPublishRequirement("Task template version is required");
+//        }
         if (!publishDependencyChecker.aiReviewConfigExists(task.getId(), task.getAiReviewConfigId())) {
             throw missingPublishRequirement("Task AI review config is required");
         }

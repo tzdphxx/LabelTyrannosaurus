@@ -2607,9 +2607,11 @@ Owner 完整工作流：
 
 ## 附录 D：主流程接口调用链
 
-以下为平台核心业务流程（建任务 → 搭模板 → 发布 → Labeler 作答 → 提交 → AI 预审 → 人工审核 → 导出）中各环节实际调用的接口和使用顺序。每个阶段的接口串行依赖——前一步的返回值（taskId、assignmentId、submissionId 等）是下一步的输入参数。
+以下为平台核心业务流程中各环节实际调用的接口和使用顺序。
 
-### D.1 Owner 建任务
+> **前置条件**：Admin 已通过 `POST /api/v1/admin/llm-providers` 创建并启用了至少一个模型。这是首次使用时一次性配好的，后续 Owner 直接选用即可。
+
+### D.1 Owner 建任务（含数据集导入 + 奖励配置）
 
 ```text
 1. POST /api/v1/files/upload
@@ -2626,17 +2628,18 @@ Owner 完整工作流：
      strategy: "FCFS",
      rewardPerApproval: 10.00,
      penaltyPerRejection: 5.00,
+     reviewLevelCount: 2,
      datasetFileId: 99
    }
-   响应: { taskId: 1, status: "DRAFT", description: "对图片进行分类", tags: [], datasetImportJob: { jobId: 10, status: "PENDING" } }
-   说明: 创建草稿任务，传 datasetFileId 自动创建导入任务。每条数据只允许一个标注员领取，不再需要 overlapCount
+   响应: { taskId: 1, status: "DRAFT", datasetImportJob: { jobId: 10, status: "PENDING" } }
+   说明: 创建任务时一并配置奖励规则；传 datasetFileId 自动触发导入
 
 3. GET /api/v1/tasks/1/dataset/import-jobs/10
-   响应: { status: "SUCCESS", totalCount: 500, successCount: 498, failedCount: 2 }
-   说明: 轮询导入进度，直到 status 为 SUCCESS 或 FAILED
+   响应: { status: "SUCCESS", totalCount: 500, successCount: 500, failedCount: 0 }
+   说明: 轮询导入进度
 ```
 
-如果不在创建时传 datasetFileId，也可以单独导入：
+如需单独导入数据集：
 ```text
 POST /api/v1/tasks/1/dataset/import    请求: { fileId: 99 }
 ```
@@ -2649,18 +2652,17 @@ POST /api/v1/tasks/1/dataset/import    请求: { fileId: 99 }
 4. POST /api/v1/tasks/1/templates
    请求: {
      name: "图像分类模板",
-     schemaJson: "{\"components\":[{\"field\":\"label\",\"type\":\"Select\",\"options\":[\"猫\",\"狗\"]}]}",
+     schemaJson: "{\"components\":[{\"id\":\"label\",\"type\":\"Select\",\"options\":[\"猫\",\"狗\"]}]}",
      changeNote: "初始版本"
    }
    响应: { templateId: 10, currentVersionNo: 1, currentVersion: { versionId: 20 } }
-   说明: 创建模板，Schema 定义标注界面的字段结构
 
 5. PUT /api/v1/tasks/1
-   请求: { ..., publishedTemplateVersionId: 20 }
+   请求: { publishedTemplateVersionId: 20 }
    说明: 将模板版本绑定到任务
 ```
 
-如果需要迭代模板：
+模板迭代：
 ```text
 POST /api/v1/templates/10/fork
 请求: { baseVersionId: 20, schemaJson: "<新Schema>", changeNote: "v2 增加置信度字段" }
@@ -2668,46 +2670,27 @@ POST /api/v1/templates/10/fork
 
 ---
 
-### D.3 配置 AI 审核 + 奖励 → 发布
+### D.3 配置 AI 审核 → 发布
 
 ```text
-6. POST /api/v1/admin/llm-providers
-   请求: {
-     providerCode: "qwen",
-     providerName: "通义千问",
-     baseUrl: "https://dashscope.aliyuncs.com/compatible-mode/v1",
-     apiKey: "sk-xxx",
-     defaultModel: "qwen-max"
-   }
-   响应: { id: 50 }
-   说明: ADMIN 配置大模型供应商（首次使用时创建，后续复用）
-   权限: ADMIN
-
-7. POST /api/v1/admin/llm-providers/50/test
-   请求: {}
-   响应: { success: true, latencyMs: 320, message: "连接成功" }
-   说明: 验证供应商连通性
-   权限: ADMIN
-
-8. GET /api/v1/llm-providers
+6. GET /api/v1/llm-providers
    响应: [{ id: 50, providerCode: "qwen", providerName: "通义千问", defaultModel: "qwen-max", ... }]
-   说明: OWNER 浏览 Admin 启用的模型列表，获取可选的 providerId
+   说明: OWNER 浏览 Admin 已启用的模型列表（仅含选择必要字段，无 API Key 等敏感信息）
 
-9. POST /api/v1/tasks/1/ai-review-configs
+7. POST /api/v1/tasks/1/ai-review-configs
    请求: {
      providerId: 50,
      promptTemplate: "请评估以下标注答案的质量...",
      scoringDimensions: ["准确性", "完整性", "一致性"],
      passThreshold: 80.00,
-     manualReviewThreshold: 60.00,
-     maxRetry: 3
+     manualReviewThreshold: 60.00
    }
    响应: { configId: 40 }
-   说明: OWNER 配置 AI 审核规则（modelName 从 Provider 自动派生）
+   说明: modelName 自动从 Provider 的 defaultModel 派生，outputSchema 由 Admin 在 Provider 层面管理
 
-10. POST /api/v1/tasks/1/publish
-    响应: { taskId: 1, status: "PUBLISHED", description: "...", tags: [] }
-    说明: 发布任务（系统自动校验：数据集✓ 模板✓ AI配置✓ 截止时间✓ 配额✓）
+8. POST /api/v1/tasks/1/publish
+   响应: { taskId: 1, status: "PUBLISHED" }
+   说明: 发布任务（系统校验：数据集✓ 模板✓ AI配置✓ 截止时间✓ 配额✓ 奖励✓）
 ```
 
 ---
@@ -2715,32 +2698,31 @@ POST /api/v1/templates/10/fork
 ### D.4 Labeler 领取 + 作答
 
 ```text
-11. GET /api/v1/market/tasks
+ 9. GET /api/v1/market/tasks
     响应: [{ taskId: 1, title: "图像分类标注", remainingQuota: 97, ... }]
-    说明: 标注员浏览任务市场
+    说明: 浏览任务市场
 
-12. POST /api/v1/tasks/1/assignments/claim
-    响应: { assignmentId: 100, datasetItemId: 70, templateVersionId: 20, status: "CLAIMED" }
-    说明: 领取一个题目（Redis 锁保证并发安全）
+10. POST /api/v1/tasks/1/assignments/claim
+    响应: { assignmentId: 100, datasetItemId: 70, templateVersionId: 20 }
+    说明: 领取一个题目
 
-13. GET /api/v1/assignments/100
-    响应: { itemJson: "{...}", schemaJson: "{...}", draftAnswerJson: null, status: "CLAIMED" }
-    说明: 进入工作台，获取题目数据和模板结构
+11. GET /api/v1/assignments/100
+    响应: { itemJson, schemaJson, draftAnswerJson, status }
+    说明: 进入工作台，获取题目和模板
 
-14. PUT /api/v1/assignments/100/draft
+12. PUT /api/v1/assignments/100/draft
     请求: { answerJson: "{\"label\":\"猫\"}", clientVersion: 0 }
     响应: { draftVersion: 1 }
-    说明: 保存草稿（可多次调用，每次 clientVersion 递增）
+    说明: 保存草稿（可多次调用）
 ```
 
 （可选）触发 AI 预标注辅助：
 ```text
-15a. POST /api/v1/assignments/100/pre-annotations/run
+13a. POST /api/v1/assignments/100/pre-annotations/run
      响应: { preAnnotationId: 200, status: "RUNNING" }
 
-15b. GET /api/v1/assignments/100/pre-annotations/latest  ← 轮询结果
+13b. GET /api/v1/assignments/100/pre-annotations/latest
      响应: { status: "SUCCESS", suggestedAnswerJson: "{\"label\":\"猫\"}", overallConfidence: 0.92 }
-     说明: 标注员参考建议后手动确认采纳
 ```
 
 ---
@@ -2748,84 +2730,74 @@ POST /api/v1/templates/10/fork
 ### D.5 提交 → AI 预审
 
 ```text
-16. POST /api/v1/assignments/100/submit
+14. POST /api/v1/assignments/100/submit
     请求: { answerJson: "{\"label\":\"猫\"}", clientVersion: 1 }
-    响应: { submissionId: 300, status: "AI_REVIEWING", versionNo: 1 }
-    说明: 提交最终答案，系统自动触发 AI 预审（异步执行）
+    响应: { submissionId: 300, versionNo: 1 }
+    说明: 提交后系统自动触发 AI 预审（异步队列执行）
 
-    ↓ 系统后台异步执行 AI 预审
+    ↓ 后台异步执行
 
-17. GET /api/v1/submissions/300/ai-review  ← 轮询 AI 审核结果
+15. GET /api/v1/submissions/300/ai-review
     响应: {
-      aiReviewStatus: "SUCCESS",
+      status: "SUCCESS",
       decision: "PASS",
-      averageScore: 85.5,
-      dimensionScores: { "准确性": 90, "完整性": 82, "一致性": 84.5 },
-      riskFlags: [],
+      averageScore: "85.50",
+      dimensionScores: { "准确性": 90, "完整性": 82 },
       suggestion: "标注质量良好"
     }
-    说明: AI 审核完成后 submission 状态自动变为 PENDING_FINAL
+    说明: 轮询 AI 审核结果（REVIEWER / OWNER / ADMIN 可查看）
 ```
-
-**AI 结论与后续流转**：
 
 | AI decision | 含义 | 后续 |
 |------|------|------|
-| PASS | AI 认为质量合格 | 进入人工终审队列 |
-| REJECT | AI 认为质量不合格 | 进入人工终审队列（由人工最终决定） |
-| MANUAL_REVIEW | AI 不确定 | 进入人工终审队列 |
-
-> 注意：MVP 阶段 AI 结论仅作为参考，不直接决定最终结果。所有提交最终都需要人工终审。
+| PASS | AI 认为合格 | 进入人工终审 |
+| REJECT | AI 认为不合格 | 进入人工终审（由人工最终决定） |
+| MANUAL_REVIEW | AI 不确定 | 进入人工终审 |
 
 ---
 
 ### D.6 人工审核
 
+审查员可从**列表**和**详情**两个层级看到 AI 审查结果：
+
 ```text
-18. GET /api/v1/reviewer/submissions?submissionStatus=PENDING_FINAL&page=1&size=20
+16. GET /api/v1/reviewer/submissions?submissionStatus=PENDING_FINAL&page=1&size=20
     响应: [{ submissionId: 300, aiDecision: "PASS", aiReviewStatus: "SUCCESS", ... }]
-    说明: 审核员查看待审提交列表
+    说明: 列表页直接显示 AI 决策和状态
 
-19. GET /api/v1/reviewer/submissions/300
-    响应: { 完整提交详情：答案内容、AI 各维度评分、历史审核记录、冲突信息 }
-    说明: 查看单条提交的审核详情页
+17. GET /api/v1/reviewer/submissions/300
+    响应: {
+      答案内容、题目原文,
+      aiReviewResult: { status, decision, averageScore, suggestion, riskFlags, promptMode, degraded }
+      历史审核记录、版本历史
+    }
+    说明: 详情页内嵌 AI 审核摘要（评分、建议、风险标记）
 
-20a. 通过：
+18a. 通过:
      POST /api/v1/reviewer/submissions/300/approve
      请求: { reviewComment: "标注准确", reviewLevel: 1 }
-     效果: submission → APPROVED，触发 SubmissionApproved 事件 → 奖励自动结算
+     效果: submission → APPROVED → 奖励结算
 
-20b. 驳回：
+18b. 驳回:
      POST /api/v1/reviewer/submissions/300/reject
-     请求: { reason: "标签选择错误，应为'狗'", reviewLevel: 1 }
+     请求: { reason: "标签错误，应为'狗'", reviewLevel: 1 }
      效果: submission → REJECTED，assignment → RETURNED
-     后续: Labeler 可修改后再次调用 POST /assignments/100/submit（生成 versionNo=2）
+     后续: Labeler 修改后重新 submit（versionNo+1）
+
+（可选）审查员查看 AI 完整维度评分:
+     GET /api/v1/submissions/300/ai-review
+     响应: { dimensionScores: {...}, confidence, errorCode, errorMessage, ... }
+
+（可选）手动重试 AI 审核:
+     POST /api/v1/submissions/300/ai-review/retry
+     权限: REVIEWER
 ```
 
 **批量操作**：
 ```text
-POST /api/v1/reviewer/submissions/batch/approve
-请求: { submissionIds: [300, 301, 302] }
-
-POST /api/v1/reviewer/submissions/batch/reject
-请求: { submissionIds: [303, 304], reason: "标注不完整" }
-
-POST /api/v1/reviewer/submissions/batch/assign
-请求: { submissionIds: [305, 306, 307], reviewerId: 5 }
-说明: 将提交分配给指定审核员
-```
-
-**冲突仲裁**（多个标注员对同一题目提交了不同答案时触发）：
-```text
-21. GET /api/v1/reviewer/conflict-groups
-    响应: [{ groupId: 500, datasetItemId: 70, status: "CONFLICTED", submissions: [...] }]
-
-22. GET /api/v1/reviewer/conflict-groups/500
-    响应: { 冲突组详情：包含各标注员的答案对比 }
-
-23. POST /api/v1/reviewer/conflict-groups/500/resolve
-    请求: { goldenSubmissionId: 300, resolveComment: "该标注员答案更准确" }
-    效果: 选定金标，触发 GoldenSelected 事件 → 金标奖励结算
+POST /api/v1/reviewer/submissions/batch/approve    请求: { submissionIds: [300, 301] }
+POST /api/v1/reviewer/submissions/batch/reject     请求: { submissionIds: [303, 304], reason: "..." }
+POST /api/v1/reviewer/submissions/batch/assign     请求: { submissionIds: [305], reviewerId: 5 }
 ```
 
 ---
@@ -2833,16 +2805,12 @@ POST /api/v1/reviewer/submissions/batch/assign
 ### D.7 导出
 
 ```text
-24. POST /api/v1/tasks/1/exports
-    请求: { exportFormat: "JSONL", includeAiReview: true, includeReviewComment: true }
+19. POST /api/v1/tasks/1/exports
+    请求: { exportFormat: "JSONL", includeAiReview: true }
     响应: { exportJobId: 600, status: "PENDING" }
-    说明: 创建异步导出任务（导出 APPROVED 且 isGolden=true 的金标数据）
 
-25. GET /api/v1/tasks/1/exports/600  ← 轮询导出状态
-    响应: { status: "SUCCESS", downloadUrl: "https://minio.../export.jsonl?signature=..." }
-
-26. GET /api/v1/files/{fileId}/signed-url  ← 或通过文件 ID 获取下载地址
-    响应: { signedUrl: "https://...", expiresAt: "2026-06-01T16:30:00" }
+20. GET /api/v1/tasks/1/exports/600
+    响应: { status: "SUCCESS", downloadUrl: "https://..." }
 ```
 
 ---
@@ -2851,85 +2819,61 @@ POST /api/v1/reviewer/submissions/batch/assign
 
 ```text
 ┌──────────────────────────────────────────────────────────────────────────────┐
-│ Admin 前置配置（首次使用时一次性配好，后续复用）                                  │
-│                                                                              │
-│  POST /api/v1/admin/llm-providers  →  创建模型（含加密 API Key、outputSchema） │
-│  POST /api/v1/admin/llm-providers/{id}/enable  →  启用以供 Owner 选用          │
+│ Admin 前置（一次性）                                                           │
+│  POST /api/v1/admin/llm-providers → 创建模型（API Key + outputSchema）         │
+│  POST /api/v1/admin/llm-providers/{id}/enable → 启用                          │
 └──────────────────────────────────┬───────────────────────────────────────────┘
-                                   ↓ 模型就绪
+                                   ↓
 ┌──────────────────────────────────┴───────────────────────────────────────────┐
-│ Owner 配置阶段                                                                │
+│ Owner 建任务                                        ① upload → ② create     │
+│ （含数据集导入 + 奖励配置）                              → ③ import            │
+│                                                       → ④ template           │
+│ Owner 搭模板                                           → ⑤ bind template      │
 │                                                                              │
-│  ① upload file  →  ② create task  →  ③ import dataset  →  ④ create template │
-│  → ⑤ GET /api/v1/llm-providers（浏览 Admin 启用的模型）                         │
-│  → ⑥ POST /api/v1/tasks/{id}/ai-review-configs（选模型、写prompt、设阈值）     │
-│  → ⑦ config reward  →  ⑧ publish                                           │
+│ Owner 配 AI + 发布                                   ⑥ GET llm-providers     │
+│                                                      ⑦ POST ai-review-configs│
+│                                                      ⑧ publish               │
 └──────────────────────────────────┬───────────────────────────────────────────┘
                                    ↓ 任务上线
 ┌──────────────────────────────────┴───────────────────────────────────────────┐
-│ Labeler 标注阶段                                                              │
-│                                                                              │
-│  ⑨ browse market  →  ⑩ claim  →  ⑪ save draft + submit                      │
+│ Labeler 标注                          ⑨ market → ⑩ claim → ⑪ draft → submit │
 └──────────────────────────────────┬───────────────────────────────────────────┘
-                                   ↓ 提交触发
+                                   ↓
 ┌──────────────────────────────────┴───────────────────────────────────────────┐
-│ AI 预审阶段（系统自动，异步）                                                    │
-│                                                                              │
-│  AI review → decision: PASS / REJECT / MANUAL_REVIEW                         │
-│  → submission 状态变为 PENDING_FINAL                                          │
+│ AI 预审（自动）                       ⑭ review → PASS / REJECT / MANUAL        │
 └──────────────────────────────────┬───────────────────────────────────────────┘
-                                   ↓ 进入审核队列
-┌──────────────────────────────────┴──────────────────────────────────┐
-│ Reviewer 人工审核阶段                                                 │
-│                                                                     │
-│  list pending → view detail (含 AI 评分参考)                         │
-│  → approve / reject / batch操作                                      │
-│  → [如有冲突] conflict-groups → resolve (选金标)                      │
-│                                                                     │
-│  驳回 → Labeler RETURNED → 修改 → 重新 submit (versionNo+1)         │
-└──────────────────────────────────┬──────────────────────────────────┘
-                                   ↓ 审核通过
-┌──────────────────────────────────┴──────────────────────────────────┐
-│ 导出阶段                                                             │
-│                                                                     │
-│  create export job → poll status → download file                    │
-└─────────────────────────────────────────────────────────────────────┘
+                                   ↓
+┌──────────────────────────────────┴───────────────────────────────────────────┐
+│ Reviewer 审核                         ⑯ list（AI 决策可见）                     │
+│                                       ⑰ detail（AI 评分/建议内嵌）              │
+│                                       ⑱ approve / reject / batch               │
+└──────────────────────────────────┬───────────────────────────────────────────┘
+                                   ↓
+┌──────────────────────────────────┴───────────────────────────────────────────┐
+│ 导出                                  ⑲ export → ⑳ download                   │
+└──────────────────────────────────────────────────────────────────────────────┘
 ```
 
-### D.9 各阶段接口依赖关系
+### D.9 接口依赖关系
 
-| 阶段 | 角色 | 输入依赖 | 产出 |
-|------|------|------|------|
-| 上传文件 | Owner | 无 | fileId |
-| 创建任务 | Owner | fileId（可选） | taskId, jobId |
-| 创建模板 | Owner | taskId | templateId, versionId |
-| 配置模型（Provider） | **Admin** | 无 | providerId |
-| 浏览可用模型 | Owner | 无 | providerId 列表 |
-| 配置 AI 审核 | Owner | taskId, providerId | configId |
-| 配置奖励 | Owner | taskId | ruleId |
-| 发布任务 | Owner | taskId（需已配置模板+AI+奖励） | status=PUBLISHED |
-| 领取题目 | Labeler | taskId | assignmentId |
-| 保存草稿 | Labeler | assignmentId | draftVersion |
-| 提交答案 | Labeler | assignmentId | submissionId |
-| AI 预审 | System | submissionId（自动触发） | aiDecision, averageScore |
-| 人工审核 | Reviewer | submissionId | APPROVED / REJECTED |
-| 冲突仲裁 | Reviewer | groupId, goldenSubmissionId | RESOLVED |
-| 导出 | Owner | taskId | exportJobId, downloadUrl |
-
-### D.10 已补齐入口与联调注意事项
-
-当前主流程接口链路完整可跑通，原先的两个工作台入口缺口已补齐：
-
-1. **标注员"回到工作台"**：使用 `GET /api/v1/labeler/assignments` 查询当前标注员的 assignment 列表，可按 `taskId` 和 `status` 筛选；使用 `POST /api/v1/labeler/assignments/{assignmentId}/cancel` 放弃已领取但尚未进入终态的 assignment。`GET /api/v1/labeler/submissions` 继续用于查看已经产生 submission 的提交记录。
-
-2. **审核员"开始工作"**：使用 `GET /api/v1/reviewer/tasks` 作为任务导航入口，使用 `GET /api/v1/reviewer/dashboard` 渲染审核员工作台概览，使用 `POST /api/v1/reviewer/submissions/claim` 主动领取待审提交；领取后通过 `GET /api/v1/reviewer/submissions?assignedReviewerId=<当前审核员ID>` 查看自己的待审列表。
-
-联调时需注意：
-
-- 普通注册只允许 `LABELER` 和 `OWNER`；`REVIEWER` 需由管理员创建或调整角色。
-- 每个普通用户只能拥有一个角色；用户无角色或多角色时登录/刷新会返回 `400102`。
-- 大模型供应商管理使用 `/api/v1/admin/llm-providers`（ADMIN 权限）；OWNER 通过 `GET /api/v1/llm-providers` 查看启用模型选项。
-
----
-
-> 文档结束。如有接口变更请同步更新本文件。
+| 步骤 | 角色 | 接口 | 输入 | 产出 |
+|------|------|------|------|------|
+| ① | Owner | `POST /api/v1/files/upload` | 文件 | fileId |
+| ② | Owner | `POST /api/v1/tasks` | fileId + 奖励字段 | taskId |
+| ③ | Owner | `GET .../import-jobs/{jobId}` | jobId | 导入结果 |
+| ④ | Owner | `POST /api/v1/tasks/{id}/templates` | taskId | templateVersionId |
+| ⑤ | Owner | `PUT /api/v1/tasks/{id}` | templateVersionId | — |
+| — | **Admin** | `POST /api/v1/admin/llm-providers` | API Key + outputSchema | providerId |
+| ⑥ | Owner | `GET /api/v1/llm-providers` | — | 可用模型列表 |
+| ⑦ | Owner | `POST .../ai-review-configs` | providerId + prompt + 阈值 | configId |
+| ⑧ | Owner | `POST /api/v1/tasks/{id}/publish` | — | PUBLISHED |
+| ⑨ | Labeler | `GET /api/v1/market/tasks` | — | 任务列表 |
+| ⑩ | Labeler | `POST .../assignments/claim` | taskId | assignmentId |
+| ⑪ | Labeler | `PUT .../assignments/{id}/draft` | answerJson | draftVersion |
+| ⑭ | Labeler | `POST .../assignments/{id}/submit` | answerJson | submissionId |
+| ⑭ | System | AI 预审（自动） | submissionId | aiDecision, scores |
+| ⑯ | Reviewer | `GET /api/v1/reviewer/submissions` | filters | 待审列表 + AI 摘要 |
+| ⑰ | Reviewer | `GET /api/v1/reviewer/submissions/{id}` | submissionId | 详情 + AI 评分 |
+| ⑱ | Reviewer | `POST .../approve` / `.../reject` | reviewComment | APPROVED / REJECTED |
+| ⑲ | Owner | `POST /api/v1/tasks/{id}/exports` | taskId | exportJobId |
+| ⑳ | Owner | `GET .../exports/{jobId}` | jobId | downloadUrl |

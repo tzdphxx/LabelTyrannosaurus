@@ -415,3 +415,65 @@
   - `RoleBadge.tsx` role key 类型不匹配。
   - `designerDrag.ts` 与 `OwnerTemplateDesignerPage.tsx` 中已有 `never` 类型收窄问题。
 - 已执行 `npm run lint`，失败于既有 lint / React hooks 规则问题；新增 `CanvasFieldPreview` 未产生 lint 报错。
+## 2026-06-02 - Owner 真实接口接入启动
+
+### 已实现
+
+- 接入 OWNER 模板库真实创建流程：
+  - 新增 BE-B 模板创建/响应 DTO。
+  - `ownerTemplateService` 支持 `VITE_SERVICE_MODE=real` 时调用 `POST /v1/owner/templates`。
+  - 创建模板请求补齐 `schemaJson` 和 `changeNote`。
+  - 前端创建弹窗继续使用 `description` 输入，并映射为后端 `changeNote`。
+  - `schemaJson` 使用当前 Designer 可识别的 `DynamicFormSchema` 空 schema。
+  - 模板列表/详情 real 模式读取 `GET /v1/owner/templates`，并映射 `currentVersion.versionId` 为 `currentVersionId`。
+- 对接 OWNER 任务管理真实接口骨架：
+  - 新增任务分页、创建、编辑、详情、生命周期、统计 DTO。
+  - `ownerTaskService` 支持 mock/real 双模式。
+  - real 模式任务列表调用分页版 `GET /v1/owner/tasks`。
+  - real 模式创建任务调用 `POST /v1/tasks`。
+  - real 模式编辑草稿调用 `PUT /v1/tasks/{taskId}`。
+  - real 模式详情调用 `GET /v1/tasks/{taskId}`。
+  - real 模式发布、暂停、恢复、结束分别调用 `/publish`、`/pause`、`/resume`、`/end`。
+  - real 模式删除草稿调用 `DELETE /v1/tasks/{taskId}`。
+  - real 模式任务进度改为调用 `GET /v1/tasks/{taskId}/statistics`。
+- 调整任务字段模型：
+  - `id` 映射 `taskId`。
+  - `instruction` 映射 `instructionRichText`。
+  - `deadline` 映射 `deadlineAt`。
+  - `templateId` 调整为 `publishedTemplateVersionId`，使用模板当前版本 ID。
+  - 新增 `quota`、`claimedCount`、`reviewLevelCount`。
+  - AI 审核配置调整为 `prompt`、`model`、`rating`。
+  - `reward` 使用奖励单价字符串。
+  - `strategy` 固定为 `先到先得`、`配额分发`、`指派`。
+  - 状态在服务层处理 `DRAFT/PUBLISHED/PAUSED/ENDED` 与前端小写状态映射。
+- 调整 Owner 任务页面：
+  - 任务列表支持分页。
+  - 草稿任务增加删除入口。
+  - 创建/编辑页补充任务配额、审核级别数、AI 审核配置字段。
+  - 模板选择改为提交模板当前版本 ID。
+  - 发布前保留前端基础校验。
+- 接入真实文件上传接口：
+  - 新增 `FileUploadResponse`。
+  - `ownerImportService.uploadDatasetFile(file)` real 模式调用 `POST /v1/files/upload`。
+  - 使用 `FormData`，字段名为 `file`。
+  - 上传成功后将 `fileId` 写入草稿 `datasetFileId`。
+  - 创建任务时 `datasetFileId` 会随 `POST /v1/tasks` 提交。
+  - 创建页上传成功后展示文件名、大小、类型和文件 ID。
+  - mock 模式继续保留当前 mock 导入预览。
+
+### 当前约束
+
+- 数据集上传接口只返回文件元数据，不返回字段映射、样本预览或异常行；real 模式下暂不展示真实预览。
+- `GET /v1/tasks/{taskId}` 文档未返回 `datasetFileId`，刷新已保存草稿后前端无法从详情恢复上传文件元数据。
+- 任务详情接口未返回模板名称，当前 real 映射只能展示模板版本 ID 或占位名称。
+- `src/app/navigation.tsx` 存在非本次任务产生的未提交改动，未处理也未回退。
+
+### 已验证
+
+- 已执行针对本次任务相关文件的 `npx eslint`，通过。
+- 已执行 `git diff --check`，未发现空白错误，仅有 Git 行尾转换提示。
+- 已执行 `npm run build`，仍失败于既有问题：
+  - `src/app/navigation.tsx` 未使用导入和角色 key 不匹配。
+  - `src/components/navigation/RoleBadge.tsx` 角色 key 不匹配。
+  - dynamic-form Designer 相关 `never` 推断错误。
+  - 本次新增的模板、任务和上传接口改动未再产生新的 TypeScript 错误。

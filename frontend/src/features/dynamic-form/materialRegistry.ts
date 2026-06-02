@@ -96,18 +96,22 @@ export const dynamicMaterialRegistry: Record<DynamicFieldType, MaterialDefinitio
     description: '用于结构化标注结果或 schema 调试。',
     acceptsChildren: false,
     defaultProps: {
-      placeholder: '{\n  \"key\": \"value\"\n}',
+      placeholder: '{\n  "key": "value"\n}',
     },
   },
   llmPrompt: {
     type: 'llmPrompt',
-    title: 'LLM 交互占位',
+    title: 'LLM 交互',
     group: 'smart',
-    description: '预留 AI 建议、提示词和回复展示区域。',
+    description: '字段级模型调用，输出可作为标注参考或一键填充。',
     acceptsChildren: false,
     defaultProps: {
-      prompt: '请根据当前样本给出辅助建议。',
-      text: 'P1 仅提供交互占位，不调用真实模型。',
+      providerId: '',
+      modelName: 'gpt-4o',
+      promptTemplate: '请根据当前题目材料和已填写答案，为目标字段生成结构化建议。',
+      targetFields: [],
+      prompt: '请根据当前题目材料和已填写答案，为目标字段生成结构化建议。',
+      text: '点击运行后展示模型建议。',
     },
   },
   group: {

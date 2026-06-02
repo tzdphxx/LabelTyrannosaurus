@@ -39,12 +39,15 @@ export function OwnerTasksPage() {
   const [messageApi, contextHolder] = message.useMessage()
   const tasks = useOwnerTaskStore((state) => state.tasks)
   const filters = useOwnerTaskStore((state) => state.filters)
+  const total = useOwnerTaskStore((state) => state.total)
   const error = useOwnerTaskStore((state) => state.error)
   const isListLoading = useOwnerTaskStore((state) => state.isListLoading)
   const isStatusSubmitting = useOwnerTaskStore((state) => state.isStatusSubmitting)
+  const isDeleting = useOwnerTaskStore((state) => state.isDeleting)
   const setFilters = useOwnerTaskStore((state) => state.setFilters)
   const loadTasks = useOwnerTaskStore((state) => state.loadTasks)
   const updateTaskStatus = useOwnerTaskStore((state) => state.updateTaskStatus)
+  const deleteTask = useOwnerTaskStore((state) => state.deleteTask)
 
   useEffect(() => {
     void loadTasks()
@@ -53,6 +56,25 @@ export function OwnerTasksPage() {
   const reloadWithFilter = (changes: Parameters<typeof setFilters>[0]) => {
     setFilters(changes)
     void loadTasks()
+  }
+
+  const confirmDeleteTask = (task: OwnerTask) => {
+    Modal.confirm({
+      title: '删除草稿任务',
+      content: `确认要删除「${task.title}」吗？删除后不可恢复。`,
+      okText: '删除',
+      okButtonProps: { danger: true },
+      cancelText: '取消',
+      onOk: async () => {
+        const deleted = await deleteTask(task.id)
+
+        if (deleted) {
+          messageApi.success('草稿任务已删除')
+        } else {
+          messageApi.error('删除失败')
+        }
+      },
+    })
   }
 
   const confirmStatusChange = (task: OwnerTask, status: OwnerTaskStatus, label: string) => {
@@ -167,7 +189,7 @@ export function OwnerTasksPage() {
             },
             {
               title: '操作',
-              width: 220,
+              width: 260,
               render: (_, task) => (
                 <Space wrap>
                   <Button size="small" type="link" onClick={() => navigate(`/app/owner/tasks/${task.id}/edit`)}>
@@ -176,6 +198,11 @@ export function OwnerTasksPage() {
                   {task.status === 'draft' ? (
                     <Button size="small" type="link" onClick={() => navigate(`/app/owner/tasks/${task.id}/edit`)}>
                       发布
+                    </Button>
+                  ) : null}
+                  {task.status === 'draft' ? (
+                    <Button danger loading={isDeleting} size="small" type="link" onClick={() => confirmDeleteTask(task)}>
+                      删除
                     </Button>
                   ) : null}
                   {task.status === 'published' ? (
@@ -215,7 +242,13 @@ export function OwnerTasksPage() {
           ]}
           dataSource={tasks}
           loading={isListLoading}
-          pagination={false}
+          pagination={{
+            current: filters.page,
+            pageSize: filters.pageSize,
+            showSizeChanger: true,
+            total,
+            onChange: (page, pageSize) => reloadWithFilter({ page, pageSize }),
+          }}
           rowKey="id"
         />
       </Card>

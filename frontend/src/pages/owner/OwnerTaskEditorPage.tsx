@@ -37,21 +37,24 @@ export function OwnerTaskEditorPage() {
   const draft = useOwnerDraftStore((state) => state.draft)
   const draftId = useOwnerDraftStore((state) => state.draftId)
   const importPreview = useOwnerDraftStore((state) => state.importPreview)
+  const uploadedDatasetFile = useOwnerDraftStore((state) => state.uploadedDatasetFile)
   const currentStep = useOwnerDraftStore((state) => state.currentStep)
   const hasUnsavedChanges = useOwnerDraftStore((state) => state.hasUnsavedChanges)
   const isSaving = useOwnerDraftStore((state) => state.isSaving)
   const isLoadingDraft = useOwnerDraftStore((state) => state.isLoading)
+  const isUploadingDataset = useOwnerDraftStore((state) => state.isUploadingDataset)
   const validationResult = useOwnerDraftStore((state) => state.validationResult)
   const draftError = useOwnerDraftStore((state) => state.error)
   const resetDraft = useOwnerDraftStore((state) => state.resetDraft)
   const loadFromTask = useOwnerDraftStore((state) => state.loadFromTask)
   const updateDraft = useOwnerDraftStore((state) => state.updateDraft)
   const setStep = useOwnerDraftStore((state) => state.setStep)
-  const loadImportPreview = useOwnerDraftStore((state) => state.loadImportPreview)
+  const uploadDatasetFile = useOwnerDraftStore((state) => state.uploadDatasetFile)
   const saveDraft = useOwnerDraftStore((state) => state.saveDraft)
   const validatePublish = useOwnerDraftStore((state) => state.validatePublish)
   const publishDraft = useOwnerDraftStore((state) => state.publishDraft)
   const currentTaskProgress = useOwnerTaskStore((state) => state.currentTaskProgress)
+  const currentTaskDetail = useOwnerTaskStore((state) => state.currentTaskDetail)
   const loadTaskDetail = useOwnerTaskStore((state) => state.loadTaskDetail)
   const loadTasks = useOwnerTaskStore((state) => state.loadTasks)
 
@@ -71,9 +74,10 @@ export function OwnerTaskEditorPage() {
 
   const templateOptions = templates.map((template) => ({
     label: `${template.name} ${template.version}`,
-    value: template.id,
+    value: template.currentVersionId,
     disabled: template.status !== 'ready',
   }))
+  const isReadonlyTask = Boolean(taskId && currentTaskDetail?.task.status !== 'draft')
 
   const sampleColumns = useMemo(() => {
     if (!importPreview) {
@@ -88,7 +92,35 @@ export function OwnerTaskEditorPage() {
     }))
   }, [importPreview])
 
+  const formatFileSize = (fileSize: number) => {
+    if (fileSize < 1024) {
+      return `${fileSize} B`
+    }
+
+    if (fileSize < 1024 * 1024) {
+      return `${(fileSize / 1024).toFixed(1)} KB`
+    }
+
+    return `${(fileSize / 1024 / 1024).toFixed(1)} MB`
+  }
+
+  const uploadDataset = async (file: File) => {
+    const uploadedFile = await uploadDatasetFile(file)
+
+    if (!uploadedFile) {
+      messageApi.error('数据集文件上传失败')
+      return
+    }
+
+    messageApi.success('数据集文件已上传')
+  }
+
   const saveCurrentDraft = async () => {
+    if (isReadonlyTask) {
+      messageApi.warning('只有草稿任务可以编辑')
+      return
+    }
+
     const task = await saveDraft()
 
     if (!task) {
@@ -139,10 +171,10 @@ export function OwnerTaskEditorPage() {
           extra={
             <>
               {hasUnsavedChanges ? <Tag color="warning">有未保存变更</Tag> : <Tag color="success">已同步</Tag>}
-              <Button icon={<SaveOutlined />} loading={isSaving} onClick={() => void saveCurrentDraft()}>
+              <Button disabled={isReadonlyTask} icon={<SaveOutlined />} loading={isSaving} onClick={() => void saveCurrentDraft()}>
                 保存草稿
               </Button>
-              <Button icon={<SendOutlined />} type="primary" onClick={() => void publishCurrentDraft()}>
+              <Button disabled={isReadonlyTask} icon={<SendOutlined />} type="primary" onClick={() => void publishCurrentDraft()}>
                 发布任务
               </Button>
             </>
@@ -177,7 +209,11 @@ export function OwnerTaskEditorPage() {
               </label>
               <label className="owner-field">
                 <span>截止时间</span>
-                <Input placeholder="YYYY-MM-DD" value={draft.deadline} onChange={(event) => updateDraft({ deadline: event.target.value })} />
+                <Input placeholder="YYYY-MM-DDTHH:mm:ss" value={draft.deadline} onChange={(event) => updateDraft({ deadline: event.target.value })} />
+              </label>
+              <label className="owner-field">
+                <span>任务配额</span>
+                <InputNumber min={1} precision={0} value={draft.quota} onChange={(quota) => updateDraft({ quota: quota ?? 1 })} />
               </label>
               <label className="owner-field owner-field--wide">
                 <span>任务描述</span>
@@ -204,10 +240,14 @@ export function OwnerTaskEditorPage() {
                 <Select
                   allowClear
                   options={templateOptions}
-                  placeholder="选择可发布模板"
-                  value={draft.templateId}
-                  onChange={(templateId) => updateDraft({ templateId: templateId ?? null })}
+                  placeholder="选择模板当前版本"
+                  value={draft.publishedTemplateVersionId}
+                  onChange={(publishedTemplateVersionId) => updateDraft({ publishedTemplateVersionId: publishedTemplateVersionId ?? null })}
                 />
+              </label>
+              <label className="owner-field">
+                <span>审核级别数</span>
+                <InputNumber min={1} precision={0} value={draft.reviewLevelCount} onChange={(reviewLevelCount) => updateDraft({ reviewLevelCount: reviewLevelCount ?? 1 })} />
               </label>
               <label className="owner-field">
                 <span>奖励单价</span>
@@ -234,17 +274,33 @@ export function OwnerTaskEditorPage() {
                   onChange={(distributionStrategy) => updateDraft({ distributionStrategy })}
                 />
               </label>
+              <label className="owner-field owner-field--wide">
+                <span>AI 审核 Prompt</span>
+                <Input.TextArea
+                  autoSize={{ minRows: 2, maxRows: 4 }}
+                  value={draft.aiReview.prompt}
+                  onChange={(event) => updateDraft({ aiReview: { prompt: event.target.value } })}
+                />
+              </label>
+              <label className="owner-field">
+                <span>AI 模型</span>
+                <Input value={draft.aiReview.model} onChange={(event) => updateDraft({ aiReview: { model: event.target.value } })} />
+              </label>
+              <label className="owner-field">
+                <span>评分维度</span>
+                <Input value={draft.aiReview.rating} onChange={(event) => updateDraft({ aiReview: { rating: event.target.value } })} />
+              </label>
             </div>
           </Card>
 
           <Card className="owner-form-card" title="数据集导入与预览">
             <Upload.Dragger
               accept=".json,.jsonl,.xlsx"
-              beforeUpload={() => {
-                void loadImportPreview()
-                messageApi.info('已使用 Mock 数据生成导入预览')
+              beforeUpload={(file) => {
+                void uploadDataset(file)
                 return false
               }}
+              disabled={isUploadingDataset}
               maxCount={1}
               showUploadList={false}
             >
@@ -252,8 +308,17 @@ export function OwnerTaskEditorPage() {
                 <InboxOutlined />
               </p>
               <p className="ant-upload-text">选择 JSON / JSONL / Excel 文件</p>
-              <p className="ant-upload-hint">P0 阶段不会解析真实文件，选择后展示 Mock 导入结果。</p>
+              <p className="ant-upload-hint">选择后会上传文件并记录数据集文件 ID。</p>
             </Upload.Dragger>
+
+            {uploadedDatasetFile ? (
+              <Alert
+                message="数据集文件已上传"
+                description={`文件：${uploadedDatasetFile.fileName}；大小：${formatFileSize(uploadedDatasetFile.fileSize)}；类型：${uploadedDatasetFile.contentType || '-'}；文件 ID：${uploadedDatasetFile.fileId}`}
+                showIcon
+                type="success"
+              />
+            ) : null}
 
             {importPreview ? (
               <div className="owner-import-preview">

@@ -7,19 +7,24 @@ interface OwnerTaskStore {
   currentTaskDetail: OwnerTaskDetail | null
   currentTaskProgress: TaskProgress | null
   filters: TaskListQuery
+  total: number
   isListLoading: boolean
   isDetailLoading: boolean
   isProgressLoading: boolean
   isStatusSubmitting: boolean
+  isDeleting: boolean
   error: string | null
   setFilters: (filters: Partial<TaskListQuery>) => void
   loadTasks: () => Promise<void>
   loadTaskDetail: (taskId: string) => Promise<void>
   updateTaskStatus: (taskId: string, status: OwnerTaskStatus) => Promise<OwnerTask | null>
+  deleteTask: (taskId: string) => Promise<boolean>
 }
 
 const initialFilters: TaskListQuery = {
   keyword: '',
+  page: 1,
+  pageSize: 20,
   status: 'all',
 }
 
@@ -28,16 +33,19 @@ export const useOwnerTaskStore = create<OwnerTaskStore>((set, get) => ({
   currentTaskDetail: null,
   currentTaskProgress: null,
   filters: initialFilters,
+  total: 0,
   isListLoading: false,
   isDetailLoading: false,
   isProgressLoading: false,
   isStatusSubmitting: false,
+  isDeleting: false,
   error: null,
   setFilters: (filters) => {
     set((state) => ({
       filters: {
         ...state.filters,
         ...filters,
+        page: Object.hasOwn(filters, 'keyword') || Object.hasOwn(filters, 'status') ? 1 : (filters.page ?? state.filters.page),
       },
     }))
   },
@@ -45,8 +53,16 @@ export const useOwnerTaskStore = create<OwnerTaskStore>((set, get) => ({
     set({ isListLoading: true, error: null })
 
     try {
-      const tasks = await ownerTaskService.listTasks(get().filters)
-      set({ tasks })
+      const taskPage = await ownerTaskService.listTasks(get().filters)
+      set({
+        filters: {
+          ...get().filters,
+          page: taskPage.page,
+          pageSize: taskPage.pageSize,
+        },
+        tasks: taskPage.items,
+        total: taskPage.total,
+      })
     } catch {
       set({ error: '任务列表加载失败' })
     } finally {
@@ -89,6 +105,25 @@ export const useOwnerTaskStore = create<OwnerTaskStore>((set, get) => ({
       return null
     } finally {
       set({ isStatusSubmitting: false })
+    }
+  },
+  deleteTask: async (taskId) => {
+    set({ isDeleting: true, error: null })
+
+    try {
+      const deleted = await ownerTaskService.deleteTask(taskId)
+
+      if (deleted) {
+        await get().loadTasks()
+      }
+
+      return deleted
+    } catch {
+      set({ error: '任务删除失败' })
+
+      return false
+    } finally {
+      set({ isDeleting: false })
     }
   },
 }))

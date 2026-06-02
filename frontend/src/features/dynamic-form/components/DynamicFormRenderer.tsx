@@ -3,8 +3,10 @@ import { createSchemaField, FormProvider } from '@formily/react'
 import { Checkbox, FormItem, FormLayout, Input, Radio, Select } from '@formily/antd-v5'
 import { Alert, Button, Card, Space, Tabs, Typography, message } from 'antd'
 import type { ReactNode } from 'react'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
+import { llmService } from '../../../services/llm'
 import type { DynamicFormSchema, DynamicFormSubmitResult } from '../../../types/dynamicForm'
+import type { LlmTriggerContext } from '../../../types/llm'
 import { schemaToFormilySchema } from '../utils/formilySchema'
 import { FileUploadField, JsonEditorField, LlmPromptBlock, RichTextEditor } from './rendererFields'
 import styles from './DynamicFormRenderer.module.css'
@@ -14,6 +16,7 @@ interface DynamicFormRendererProps {
   initialValues?: Record<string, unknown>
   readOnly?: boolean
   submitText?: string
+  llmContext?: LlmTriggerContext
   onValuesChange?: (values: Record<string, unknown>) => void
   onSubmit?: (result: DynamicFormSubmitResult) => void
 }
@@ -85,16 +88,12 @@ export function DynamicFormRenderer({
   initialValues,
   readOnly = false,
   submitText = '提交预览',
+  llmContext,
   onSubmit,
   onValuesChange,
 }: DynamicFormRendererProps) {
   const [messageApi, contextHolder] = message.useMessage()
   const [submitting, setSubmitting] = useState(false)
-  const onValuesChangeRef = useRef(onValuesChange)
-
-  useEffect(() => {
-    onValuesChangeRef.current = onValuesChange
-  }, [onValuesChange])
 
   const form = useMemo(
     () =>
@@ -103,13 +102,34 @@ export function DynamicFormRenderer({
         pattern: readOnly ? 'readPretty' : 'editable',
         effects() {
           onFormValuesChange((formInstance) => {
-            onValuesChangeRef.current?.({ ...formInstance.values })
+            const values = { ...formInstance.values }
+            onValuesChange?.(values)
           })
         },
       }),
-    [initialValues, readOnly, schema.id, schema.version],
+    [initialValues, onValuesChange, readOnly],
   )
-  const formilySchema = useMemo(() => schemaToFormilySchema(schema), [schema])
+
+  const applyLlmValues = useCallback((values: Record<string, unknown>) => {
+    const nextValues = {
+      ...form.values,
+      ...values,
+    }
+
+    form.setValues(nextValues)
+    onValuesChange?.(nextValues)
+  }, [form, onValuesChange])
+
+  const formilySchema = useMemo(
+    () =>
+      schemaToFormilySchema(schema, {
+        getCurrentValues: () => ({ ...form.values }),
+        llmContext,
+        onApplyLlmValues: applyLlmValues,
+        onRunLlmTrigger: llmService.runTrigger,
+      }),
+    [applyLlmValues, form, llmContext, schema],
+  )
 
   async function submitForm() {
     setSubmitting(true)

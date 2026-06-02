@@ -30,9 +30,15 @@ export function LabelerWorkbenchPage() {
   const saveDraft = useLabelingStore((state) => state.saveDraft)
   const submitTaskDrafts = useLabelingStore((state) => state.submitTaskDrafts)
   const setCurrentQuestion = useLabelingStore((state) => state.setCurrentQuestion)
-  const [formInitialValues, setFormInitialValues] = useState<Record<string, unknown>>({})
-  const [latestValues, setLatestValues] = useState<Record<string, unknown>>({})
-  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false)
+  const valuesKey = `${currentQuestion?.id ?? ''}:${currentDraft?.id ?? ''}:${currentDraft?.updatedAt ?? ''}`
+  const baseValues = currentDraft?.values ?? currentQuestion?.previousValues ?? {}
+  const [valueSnapshot, setValueSnapshot] = useState<{ key: string; values: Record<string, unknown>; dirty: boolean }>(() => ({
+    key: valuesKey,
+    values: baseValues,
+    dirty: false,
+  }))
+  const latestValues = valueSnapshot.key === valuesKey ? valueSnapshot.values : baseValues
+  const hasUnsavedChanges = valueSnapshot.key === valuesKey ? valueSnapshot.dirty : false
 
   useEffect(() => {
     if (taskId) {
@@ -47,13 +53,6 @@ export function LabelerWorkbenchPage() {
   }, [currentQuestion, currentUser, loadDraft, taskId])
 
   useEffect(() => {
-    const values = currentDraft?.values ?? currentQuestion?.previousValues ?? {}
-    setFormInitialValues(values)
-    setLatestValues(values)
-    setHasUnsavedChanges(false)
-  }, [currentDraft?.id, currentQuestion?.id])
-
-  useEffect(() => {
     if (!taskId || !currentQuestion || !currentUser || !hasUnsavedChanges) {
       return
     }
@@ -66,13 +65,13 @@ export function LabelerWorkbenchPage() {
         values: latestValues,
       }).then((draft) => {
         if (draft) {
-          setHasUnsavedChanges(false)
+          setValueSnapshot((snapshot) => (snapshot.key === valuesKey ? { ...snapshot, dirty: false } : snapshot))
         }
       })
     }, 1200)
 
     return () => window.clearTimeout(timer)
-  }, [currentQuestion, currentUser, hasUnsavedChanges, latestValues, saveDraft, taskId])
+  }, [currentQuestion, currentUser, hasUnsavedChanges, latestValues, saveDraft, taskId, valuesKey])
 
   const handleSaveDraft = async () => {
     if (!taskId || !currentQuestion || !currentUser) {
@@ -88,7 +87,7 @@ export function LabelerWorkbenchPage() {
     })
 
     if (draft) {
-      setHasUnsavedChanges(false)
+      setValueSnapshot((snapshot) => (snapshot.key === valuesKey ? { ...snapshot, dirty: false } : snapshot))
       messageApi.success('草稿已保存')
     } else {
       messageApi.error('草稿保存失败')
@@ -96,8 +95,7 @@ export function LabelerWorkbenchPage() {
   }
 
   const handleValuesChange = (values: Record<string, unknown>) => {
-    setLatestValues(values)
-    setHasUnsavedChanges(true)
+    setValueSnapshot({ key: valuesKey, values, dirty: true })
   }
 
   const submitCurrentTask = async () => {
@@ -113,7 +111,7 @@ export function LabelerWorkbenchPage() {
         userId: currentUser.id,
         values: latestValues,
       })
-      setHasUnsavedChanges(false)
+      setValueSnapshot((snapshot) => (snapshot.key === valuesKey ? { ...snapshot, dirty: false } : snapshot))
     }
 
     const result = await submitTaskDrafts(taskId, currentUser.id)
@@ -219,10 +217,17 @@ export function LabelerWorkbenchPage() {
                 ))}
               </Descriptions>
               <DynamicFormRenderer
-                initialValues={formInitialValues}
+                initialValues={latestValues}
+                llmContext={{
+                  taskId: currentTask?.id,
+                  templateVersionId: currentQuestion.templateVersionId ?? currentTask?.templateVersionId ?? currentTask?.templateId,
+                  datasetItemId: currentQuestion.datasetItemId ?? currentQuestion.id,
+                  assignmentId: currentTask?.assignmentId,
+                  previewMode: false,
+                }}
                 schema={currentQuestion.schema}
                 submitText="校验当前题"
-                onSubmit={(result) => setLatestValues(result.values)}
+                onSubmit={(result) => setValueSnapshot({ key: valuesKey, values: result.values, dirty: true })}
                 onValuesChange={handleValuesChange}
               />
             </Space>

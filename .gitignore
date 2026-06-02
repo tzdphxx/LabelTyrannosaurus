@@ -88,3 +88,8 @@ claude-cache/
 .claude.json
 .claude.local.json
 CLAUDE.local.md
+
+
+frontend-labelerApi/
+frontend-ownerApi/
+frontend-reviewerApi/

@@ -13,5 +13,6 @@ export {
   storeAuthTokens,
 } from './http'
 export type { ApiResponseEnvelope, RequestConfig, ServiceMode } from './http'
+export { llmService } from './llm'
 export { ownerDashboardService, ownerImportService, ownerTaskService, ownerTemplateService } from './owner'
 export { reviewService } from './review'

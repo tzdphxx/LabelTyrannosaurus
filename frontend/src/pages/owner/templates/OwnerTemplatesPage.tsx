@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { useNavigate } from 'react-router'
 import { ContentShell } from '../../../components/page/ContentShell'
 import { PageHeader } from '../../../components/page/PageHeader'
-import { ownerTemplateService } from '../../../services'
+import { ApiError, ownerTemplateService } from '../../../services'
 import type { TemplateSummary } from '../../../types/template'
 
 const templateStatusMeta = {
@@ -18,7 +18,7 @@ export function OwnerTemplatesPage() {
   const [form] = Form.useForm<{ name: string; description: string }>()
   const [messageApi, contextHolder] = message.useMessage()
   const [templates, setTemplates] = useState<TemplateSummary[]>([])
-  const [isLoading, setIsLoading] = useState(false)
+  const [isLoading, setIsLoading] = useState(true)
   const [isCreateOpen, setIsCreateOpen] = useState(false)
   const [isCreating, setIsCreating] = useState(false)
 
@@ -31,8 +31,25 @@ export function OwnerTemplatesPage() {
   }, [])
 
   useEffect(() => {
-    loadTemplates()
-  }, [loadTemplates])
+    let ignore = false
+
+    void ownerTemplateService
+      .listTemplates()
+      .then((templates) => {
+        if (!ignore) {
+          setTemplates(templates)
+        }
+      })
+      .finally(() => {
+        if (!ignore) {
+          setIsLoading(false)
+        }
+      })
+
+    return () => {
+      ignore = true
+    }
+  }, [])
 
   async function createTemplate() {
     const values = await form.validateFields()
@@ -46,8 +63,12 @@ export function OwnerTemplatesPage() {
       form.resetFields()
       loadTemplates()
       navigate(`/app/owner/templates/${template.id}/designer`)
-    } catch {
-      messageApi.error('模板创建失败')
+    } catch (error) {
+      if (error instanceof ApiError && error.code === 409301) {
+        messageApi.error('schema 校验失败')
+      } else {
+        messageApi.error('模板创建失败')
+      }
     } finally {
       setIsCreating(false)
     }
@@ -144,11 +165,11 @@ export function OwnerTemplatesPage() {
             <Input placeholder="例如：商品质检标注模板" />
           </Form.Item>
           <Form.Item
-            label="模板描述"
+            label="变更说明"
             name="description"
-            rules={[{ required: true, message: '请输入模板描述' }]}
+            rules={[{ required: true, message: '请输入变更说明' }]}
           >
-            <Input.TextArea autoSize={{ minRows: 3, maxRows: 5 }} placeholder="说明模板适用的数据和标注目标" />
+            <Input.TextArea autoSize={{ minRows: 3, maxRows: 5 }} placeholder="例如：初始版本" />
           </Form.Item>
         </Form>
       </Modal>

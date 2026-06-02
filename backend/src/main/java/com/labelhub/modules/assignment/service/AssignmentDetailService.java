@@ -12,6 +12,7 @@ import com.labelhub.modules.review.domain.ReviewRecord;
 import com.labelhub.modules.review.mapper.ReviewRecordMapper;
 import com.labelhub.modules.submission.domain.Submission;
 import com.labelhub.modules.submission.mapper.SubmissionMapper;
+import com.labelhub.modules.reward.service.RewardSummaryService;
 import com.labelhub.modules.template.domain.TemplateVersion;
 import com.labelhub.modules.template.mapper.TemplateVersionMapper;
 import org.springframework.stereotype.Service;
@@ -27,17 +28,20 @@ public class AssignmentDetailService {
     private final DatasetItemMapper datasetItemMapper;
     private final TemplateVersionMapper templateVersionMapper;
     private final ReviewRecordMapper reviewRecordMapper;
+    private final RewardSummaryService rewardSummaryService;
 
     public AssignmentDetailService(AssignmentMapper assignmentMapper,
                                    SubmissionMapper submissionMapper,
                                    DatasetItemMapper datasetItemMapper,
                                    TemplateVersionMapper templateVersionMapper,
-                                   ReviewRecordMapper reviewRecordMapper) {
+                                   ReviewRecordMapper reviewRecordMapper,
+                                   RewardSummaryService rewardSummaryService) {
         this.assignmentMapper = assignmentMapper;
         this.submissionMapper = submissionMapper;
         this.datasetItemMapper = datasetItemMapper;
         this.templateVersionMapper = templateVersionMapper;
         this.reviewRecordMapper = reviewRecordMapper;
+        this.rewardSummaryService = rewardSummaryService;
     }
 
     public AssignmentDetailResponse getDetail(Long assignmentId, Long labelerId) {
@@ -81,7 +85,7 @@ public class AssignmentDetailService {
                 latest != null ? latest.getStatus() : null,
                 returnedReason,
                 assignment.getReturnedAt(),
-                null, // rewardSummary — can be added later via Task lookup
+                rewardSummaryService.findRewardSummary(assignment.getTaskId()),
                 assignment.getClaimedAt(),
                 assignment.getUpdatedAt()
         );

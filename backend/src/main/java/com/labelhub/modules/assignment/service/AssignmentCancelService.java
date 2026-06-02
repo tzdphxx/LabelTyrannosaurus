@@ -5,6 +5,8 @@ import com.labelhub.common.audit.AuditCommand;
 import com.labelhub.common.exception.BusinessException;
 import com.labelhub.modules.assignment.domain.Assignment;
 import com.labelhub.modules.assignment.mapper.AssignmentMapper;
+import com.labelhub.modules.dataset.domain.DatasetItem;
+import com.labelhub.modules.dataset.domain.DatasetItemStatus;
 import com.labelhub.modules.dataset.mapper.DatasetItemMapper;
 import com.labelhub.modules.task.domain.Task;
 import com.labelhub.modules.task.mapper.TaskMapper;
@@ -53,6 +55,12 @@ public class AssignmentCancelService {
                         "Assignment cannot be cancelled in current status");
             }
             datasetItemMapper.decreaseAssignedCount(assignment.getDatasetItemId());
+            DatasetItem item = datasetItemMapper.selectById(assignment.getDatasetItemId());
+            if (item != null && item.getAssignedCount() != null && item.getAssignedCount() <= 0) {
+                item.setAssignedCount(0);
+                item.setStatus(DatasetItemStatus.AVAILABLE);
+                datasetItemMapper.updateById(item);
+            }
         });
 
         auditAppender.append(new AuditCommand(

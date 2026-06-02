@@ -243,6 +243,38 @@ public class DatasetItemService {
         }
     }
 
+    public DatasetItemResponse appendSingle(Long taskId, DatasetItemAppendRequest request) {
+        TaskEntity task = requireOwnedTask(taskId);
+        CurrentUser actor = CurrentUserContext.requireCurrentUser();
+        BatchItemResult result = appendOne(task, actor.userId(), request, new HashSet<>());
+        if (!result.success()) {
+            throw new BusinessException(result.errorCode(), result.errorMessage());
+        }
+        DatasetItemEntity entity = datasetItemMapper.selectById(result.itemId());
+        return toResponse(entity);
+    }
+
+    public DatasetItemResponse updateSingle(Long taskId, Long itemId, DatasetItemUpdateRequest request) {
+        TaskEntity task = requireOwnedTask(taskId);
+        CurrentUser actor = CurrentUserContext.requireCurrentUser();
+        BatchItemResult result = updateOne(task, actor.userId(),
+                new DatasetItemUpdateRequest(itemId, request.itemJson(), request.metadataJson()));
+        if (!result.success()) {
+            throw new BusinessException(result.errorCode(), result.errorMessage());
+        }
+        DatasetItemEntity entity = datasetItemMapper.selectById(itemId);
+        return toResponse(entity);
+    }
+
+    public void deleteSingle(Long taskId, Long itemId) {
+        TaskEntity task = requireOwnedTask(taskId);
+        CurrentUser actor = CurrentUserContext.requireCurrentUser();
+        BatchItemResult result = deleteOne(task, actor.userId(), itemId);
+        if (!result.success()) {
+            throw new BusinessException(result.errorCode(), result.errorMessage());
+        }
+    }
+
     private DatasetItemResponse toResponse(DatasetItemEntity entity) {
         return new DatasetItemResponse(
                 entity.getId(),

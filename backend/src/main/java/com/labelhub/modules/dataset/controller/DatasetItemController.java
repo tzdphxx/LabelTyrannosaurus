@@ -5,17 +5,23 @@ import com.labelhub.modules.dataset.dto.BatchAppendItemsRequest;
 import com.labelhub.modules.dataset.dto.BatchDeleteItemsRequest;
 import com.labelhub.modules.dataset.dto.BatchItemResult;
 import com.labelhub.modules.dataset.dto.BatchUpdateItemsRequest;
+import com.labelhub.modules.dataset.dto.DatasetItemAppendRequest;
 import com.labelhub.modules.dataset.dto.DatasetItemPageResponse;
 import com.labelhub.modules.dataset.dto.DatasetItemQuery;
+import com.labelhub.modules.dataset.dto.DatasetItemResponse;
+import com.labelhub.modules.dataset.dto.DatasetItemUpdateRequest;
 import com.labelhub.modules.dataset.service.DatasetItemService;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import jakarta.validation.Valid;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -85,6 +91,35 @@ public class DatasetItemController {
     public ApiResponse<List<BatchItemResult>> batchDelete(@PathVariable Long taskId,
                                                           @Valid @RequestBody BatchDeleteItemsRequest request) {
         return ApiResponse.ok(datasetItemService.batchDelete(taskId, request));
+    }
+
+    @PostMapping("/add")
+    @Operation(summary = "新增单条题目", description = "向任务数据集添加单条题目。仅 DRAFT 状态任务可用。")
+    @ApiResponses({@io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200"), @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "请求参数校验失败"), @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "未认证"), @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "权限不足")})
+    public ApiResponse<DatasetItemResponse> createItem(
+            @Parameter(description = "任务 ID") @PathVariable Long taskId,
+            @Valid @RequestBody DatasetItemAppendRequest request) {
+        return ApiResponse.ok(datasetItemService.appendSingle(taskId, request));
+    }
+
+    @PutMapping("/{itemId}")
+    @Operation(summary = "编辑单条题目", description = "编辑单条题目内容。仅 DRAFT 状态任务可用。")
+    @ApiResponses({@io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200"), @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "请求参数校验失败"), @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "未认证"), @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "权限不足")})
+    public ApiResponse<DatasetItemResponse> updateItem(
+            @Parameter(description = "任务 ID") @PathVariable Long taskId,
+            @Parameter(description = "题目 ID") @PathVariable Long itemId,
+            @Valid @RequestBody DatasetItemUpdateRequest request) {
+        return ApiResponse.ok(datasetItemService.updateSingle(taskId, itemId, request));
+    }
+
+    @DeleteMapping("/{itemId}")
+    @Operation(summary = "删除单条题目", description = "软删除单条题目。仅 DRAFT 状态任务可用。")
+    @ApiResponses({@io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200"), @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "请求参数校验失败"), @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "未认证"), @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "权限不足")})
+    public ApiResponse<Void> deleteItem(
+            @Parameter(description = "任务 ID") @PathVariable Long taskId,
+            @Parameter(description = "题目 ID") @PathVariable Long itemId) {
+        datasetItemService.deleteSingle(taskId, itemId);
+        return ApiResponse.ok(null);
     }
 
 }

@@ -334,7 +334,7 @@ Authorization: Bearer <accessToken>
 
 ### 3.2 POST /api/v1/tasks
 
-**作用**：创建草稿任务。任务归属当前 OWNER 用户。可同时指定 datasetFileId 来触发数据集导入。奖励规则和分发策略在创建时内嵌配置，无需额外调用。
+**作用**：创建草稿任务。任务归属当前 OWNER 用户。可同时指定 datasetFileId 来触发数据集导入。奖励规则和分发策略在创建时内嵌配置，无需额外调用。**一条题目只能被一个标注员领取。**
 
 **权限**：OWNER
 
@@ -628,7 +628,7 @@ Authorization: Bearer <accessToken>
 | pageSize | Integer | 每页条数 |
 | total | Long | 总记录数 |
 
-每个数据项包含：itemId、taskId、externalId、itemJson、assignedCount、submittedCount、approvedCount
+每个数据项包含：itemId、taskId、externalId、itemJson、status（AVAILABLE/FULL）、assignedCount、submittedCount、approvedCount
 
 ---
 
@@ -897,6 +897,8 @@ Authorization: Bearer <accessToken>
 | deadlineAt | LocalDateTime | 截止时间 |
 | availableCount | Integer | 当前用户可领取数 |
 | currentUserClaimedCount | Integer | 当前用户已领取数 |
+| strategy | String | 分发策略：FCFS / ASSIGNED / QUOTA_CLAIM |
+| taskStatus | String | 当前标注员对此任务的状态：CAN_CLAIM / CLAIMED_SOME / UNAVAILABLE |
 | rewardSummary | RewardSummaryResponse | 奖励摘要（rewardPerApproval、penaltyPerRejection、bonusThreshold、bonusPoints） |
 
 ---
@@ -936,6 +938,45 @@ Authorization: Bearer <accessToken>
 
 ---
 
+### 🆕 6.2.1 POST /api/v1/tasks/{taskId}/assignments/batch-claim
+
+**作用**：批量领取多条可标注的数据项。FCFS 策略循环领取直到 count 或库存或配额满。ASSIGNED 策略不可用。
+
+**权限**：LABELER
+
+**请求体** `BatchClaimRequest`：
+
+| 字段 | 类型 | 必填 | 约束 | 说明 |
+|------|------|------|------|------|
+| count | int | 是 | 1~50 | 领取数量 |
+
+**响应体** `BatchClaimResponse`：
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| assignments | List | 成功领取的 assignment 列表 |
+| claimedCount | int | 实际领取数量 |
+| failedCount | int | 失败数量 |
+
+---
+
+### 🆕 6.2.2 POST /api/v1/tasks/{taskId}/assignments/assign
+
+**作用**：Owner 将指定题目指派给指定标注员。仅 ASSIGNED 策略可用。
+
+**权限**：OWNER
+
+**请求体** `AssignRequest`：
+
+| 字段 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| labelerId | Long | 是 | 目标标注员 ID |
+| datasetItemIds | List&lt;Long&gt; | 是 | 题目 ID 列表 |
+
+**响应体**：`List<AssignmentClaimResponse>`
+
+---
+
 ### 6.3 GET /api/v1/assignments/{assignmentId}
 
 **作用**：查询标注员已领取的 assignment 详情，包含题目数据、模板信息、当前草稿和提交状态。用于标注工作台页面渲染。
@@ -955,12 +996,14 @@ Authorization: Bearer <accessToken>
 | assignmentId | Long | 领取记录 ID |
 | taskId | Long | 任务 ID |
 | datasetItemId | Long | 数据项 ID |
+| datasetItemStatus | String | 题目状态：AVAILABLE / FULL |
 | itemJson | String | 题目内容 JSON |
 | templateVersionId | Long | 模板版本 ID |
 | schemaJson | String | 模板 Schema JSON |
 | status | String | 当前状态 |
 | draftAnswerJson | String | 草稿答案 JSON |
 | draftVersion | Integer | 草稿版本号 |
+| rewardSummary | RewardSummaryResponse | 奖励摘要（rewardPerApproval 等） |
 
 ---
 

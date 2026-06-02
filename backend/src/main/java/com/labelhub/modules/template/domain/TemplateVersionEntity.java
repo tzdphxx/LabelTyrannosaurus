@@ -43,14 +43,6 @@ public class TemplateVersionEntity {
         this.templateId = templateId;
     }
 
-    public Long getOwnerId() {
-        return ownerId;
-    }
-
-    public void setOwnerId(Long ownerId) {
-        this.ownerId = ownerId;
-    }
-
     public Long getTaskId() {
         return taskId;
     }

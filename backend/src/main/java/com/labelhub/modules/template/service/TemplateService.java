@@ -64,12 +64,13 @@ public class TemplateService {
 
         TemplateEntity template = new TemplateEntity();
         template.setTaskId(task.getId());
+        template.setOwnerId(task.getOwnerId());
         template.setName(request.name());
         template.setCurrentVersionNo(1);
         template.setCreatedBy(actor.userId());
         templateMapper.insert(template);
 
-        TemplateVersionEntity version = newVersion(template.getId(), task.getId(), 1, schemaJson,
+        TemplateVersionEntity version = newVersion(template.getId(), task.getId(), task.getOwnerId(), 1, schemaJson,
                 request.changeNote(), actor.userId());
         templateVersionMapper.insert(version);
         return toResponse(template, version);
@@ -91,14 +92,14 @@ public class TemplateService {
     @Transactional
     public TemplateResponse forkTemplate(Long templateId, ForkTemplateRequest request) {
         TemplateEntity template = requireTemplate(templateId);
-        requireOwnedTask(template.getTaskId());
+        TaskEntity task = requireOwnedTask(template.getTaskId());
         CurrentUser actor = CurrentUserContext.requireCurrentUser();
         TemplateVersionEntity baseVersion = resolveBaseVersion(template, request.baseVersionId());
         String schemaJson = request.schemaJson() == null ? baseVersion.getSchemaJson() : writeJson(request.schemaJson());
         schemaValidator.validateSchema(schemaJson);
 
         int nextVersionNo = template.getCurrentVersionNo() + 1;
-        TemplateVersionEntity newVersion = newVersion(template.getId(), template.getTaskId(), nextVersionNo,
+        TemplateVersionEntity newVersion = newVersion(template.getId(), template.getTaskId(), task.getOwnerId(), nextVersionNo,
                 schemaJson, request.changeNote(), actor.userId());
         templateVersionMapper.insert(newVersion);
         templateMapper.updateCurrentVersionNo(template.getId(), nextVersionNo);
@@ -147,6 +148,7 @@ public class TemplateService {
 
     private TemplateVersionEntity newVersion(Long templateId,
                                              Long taskId,
+                                             Long ownerId,
                                              Integer versionNo,
                                              String schemaJson,
                                              String changeNote,
@@ -154,6 +156,7 @@ public class TemplateService {
         TemplateVersionEntity version = new TemplateVersionEntity();
         version.setTemplateId(templateId);
         version.setTaskId(taskId);
+        version.setOwnerId(ownerId);
         version.setVersionNo(versionNo);
         version.setSchemaJson(schemaJson);
         version.setPublishedSnapshot(false);

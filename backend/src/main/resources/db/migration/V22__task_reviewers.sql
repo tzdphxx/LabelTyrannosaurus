@@ -1,4 +1,4 @@
--- Task-level reviewer preassignment
+-- Task-level reviewer preassignment.
 CREATE TABLE IF NOT EXISTS task_reviewers (
     id BIGINT AUTO_INCREMENT PRIMARY KEY,
     task_id BIGINT NOT NULL,

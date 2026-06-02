@@ -1,6 +1,6 @@
 # LabelHub 数据标注平台 — 接口文档
 
-> 基于当前后端实现生成，版本日期：2026-06-01
+> 基于当前后端实现生成，版本日期：2026-06-02
 
 ## 目录
 
@@ -314,16 +314,27 @@ Authorization: Bearer <accessToken>
 |------|------|------|
 | taskId | Long | 任务 ID |
 | title | String | 任务标题 |
+| description | String | 任务描述 |
 | status | String | 任务状态：DRAFT / PUBLISHED / PAUSED / ENDED |
+| tags | List&lt;String&gt; | 标签列表 |
 | quota | Integer | 任务配额 |
 | claimedCount | Integer | 已领取数量 |
+| deadlineAt | LocalDateTime | 截止时间 |
+| strategy | String | 分发策略：FCFS / ASSIGNED / QUOTA_CLAIM |
+| rewardPerApproval | BigDecimal | 每条通过奖励积分 |
+| penaltyPerRejection | BigDecimal | 每条驳回扣分 |
+| bonusThreshold | Integer | 额外奖励的通过数阈值 |
+| bonusPoints | BigDecimal | 达标后额外奖励积分 |
+| publishedAt | LocalDateTime | 发布时间 |
+| endedAt | LocalDateTime | 结束时间 |
 | createdAt | LocalDateTime | 创建时间 |
+| updatedAt | LocalDateTime | 更新时间 |
 
 ---
 
 ### 3.2 POST /api/v1/tasks
 
-**作用**：创建草稿任务。任务归属当前 OWNER 用户。可同时指定 datasetFileId 来触发数据集导入。
+**作用**：创建草稿任务。任务归属当前 OWNER 用户。可同时指定 datasetFileId 来触发数据集导入。奖励规则和分发策略在创建时内嵌配置，无需额外调用。
 
 **权限**：OWNER
 
@@ -337,10 +348,14 @@ Authorization: Bearer <accessToken>
 | tags | List&lt;String&gt; | 否 | 每个标签最大 64 字符 | 任务标签 |
 | quota | Integer | 是 | ≥ 1 | 任务配额（可领取总数） |
 | deadlineAt | LocalDateTime | 是 | 必须为未来时间 | 截止时间 |
-| overlapCount | Integer | 是 | ≥ 1 | 每条数据需要的标注份数 |
 | publishedTemplateVersionId | Long | 否 | - | 关联的模板版本 ID |
 | aiReviewConfigId | Long | 否 | - | 关联的 AI 审核配置 ID |
 | reviewLevelCount | Integer | 否 | ≥ 1，默认 1 | 审核级别数（1=单级，2=初审+终审，3=初审+复审+终审） |
+| strategy | String | 否 | 默认 FCFS | 分发策略：FCFS（先到先得）/ ASSIGNED（指派）/ QUOTA_CLAIM（配额抢单） |
+| rewardPerApproval | BigDecimal | 否 | ≥ 0 | 每条通过奖励积分 |
+| penaltyPerRejection | BigDecimal | 否 | ≥ 0 | 每条驳回扣分 |
+| bonusThreshold | Integer | 否 | ≥ 0 | 额外奖励的通过数阈值（null=不启用） |
+| bonusPoints | BigDecimal | 否 | ≥ 0 | 达标后额外奖励积分 |
 | datasetFileId | Long | 否 | - | 已上传的数据集文件 ID |
 
 **响应体** `CreateTaskResponse`：
@@ -349,6 +364,8 @@ Authorization: Bearer <accessToken>
 |------|------|------|
 | taskId | Long | 新建任务 ID |
 | status | String | 任务状态，固定为 DRAFT |
+| description | String | 任务描述 |
+| tags | List&lt;String&gt; | 标签列表 |
 | datasetImportJob | Object | 数据集导入任务信息（无 datasetFileId 时为 null） |
 
 ---
@@ -378,12 +395,15 @@ Authorization: Bearer <accessToken>
 | tags | List&lt;String&gt; | 标签列表 |
 | quota | Integer | 配额 |
 | claimedCount | Integer | 已领取数量 |
-| overlapCount | Integer | 重叠标注数 |
 | deadlineAt | LocalDateTime | 截止时间 |
 | publishedTemplateVersionId | Long | 模板版本 ID |
 | aiReviewConfigId | Long | AI 审核配置 ID |
 | reviewLevelCount | Integer | 审核级别数（1=单级，2=初审+终审，3=初审+复审+终审） |
-| rewardVisible | Boolean | 奖励是否对标注员可见 |
+| strategy | String | 分发策略：FCFS / ASSIGNED / QUOTA_CLAIM |
+| rewardPerApproval | BigDecimal | 每条通过奖励积分 |
+| penaltyPerRejection | BigDecimal | 每条驳回扣分 |
+| bonusThreshold | Integer | 额外奖励的通过数阈值 |
+| bonusPoints | BigDecimal | 达标后额外奖励积分 |
 | publishedAt | LocalDateTime | 发布时间 |
 | endedAt | LocalDateTime | 结束时间 |
 | createdAt | LocalDateTime | 创建时间 |
@@ -405,6 +425,8 @@ Authorization: Bearer <accessToken>
 |------|------|------|
 | taskId | Long | 任务 ID |
 | status | String | 当前状态 |
+| description | String | 任务描述 |
+| tags | List&lt;String&gt; | 标签列表 |
 
 **错误码**：400101（任务状态不允许编辑）
 
@@ -412,7 +434,7 @@ Authorization: Bearer <accessToken>
 
 ### 3.5 POST /api/v1/tasks/{taskId}/publish
 
-**作用**：发布任务。发布前自动校验：数据集是否存在、模板版本是否存在、奖励规则是否配置、截止时间是否合理、配额和重叠数是否合法。校验通过后任务状态变为 PUBLISHED。
+**作用**：发布任务。发布前自动校验：数据集是否存在、模板版本是否存在、AI 审核配置是否存在、截止时间是否合理、配额是否合法。校验通过后任务状态变为 PUBLISHED。
 
 **权限**：OWNER
 
@@ -489,7 +511,7 @@ Authorization: Bearer <accessToken>
 
 | 字段 | 类型 | 说明 |
 |------|------|------|
-| items | List&lt;OwnerTaskSummaryResponse&gt; | 当前页任务列表 |
+| items | List&lt;OwnerTaskSummaryResponse&gt; | 当前页任务列表（字段同 3.1 响应体） |
 | page | int | 当前页码 |
 | pageSize | int | 每页条数 |
 | total | long | 总记录数 |
@@ -871,18 +893,22 @@ Authorization: Bearer <accessToken>
 |------|------|------|
 | taskId | Long | 任务 ID |
 | title | String | 任务标题 |
-| description | String | 任务描述 |
 | tags | List&lt;String&gt; | 标签列表 |
-| quota | Integer | 总配额 |
-| remainingQuota | Integer | 剩余可领取数 |
 | deadlineAt | LocalDateTime | 截止时间 |
-| rewardVisible | Boolean | 奖励是否可见 |
+| availableCount | Integer | 当前用户可领取数 |
+| currentUserClaimedCount | Integer | 当前用户已领取数 |
+| rewardSummary | RewardSummaryResponse | 奖励摘要（rewardPerApproval、penaltyPerRejection、bonusThreshold、bonusPoints） |
 
 ---
 
 ### 6.2 POST /api/v1/tasks/{taskId}/assignments/claim
 
 **作用**：标注员领取一个可标注的数据项。系统通过 Redis 分布式锁保证并发安全，同一标注员对同一数据项不可重复领取。领取后创建 assignment 记录，状态为 CLAIMED。
+
+**领取行为受任务 strategy 字段控制**：
+- `FCFS`（先到先得）：标注员可主动 claim，每个数据项仅允许一个标注员领取
+- `ASSIGNED`（指派）：标注员不可主动 claim，需由 Owner 指派后才能标注
+- `QUOTA_CLAIM`（配额抢单）：标注员可主动 claim，但受 bonusThreshold 限制每人领取数量上限
 
 **权限**：LABELER
 
@@ -899,12 +925,14 @@ Authorization: Bearer <accessToken>
 | 字段 | 类型 | 说明 |
 |------|------|------|
 | assignmentId | Long | 领取记录 ID |
-| taskId | Long | 任务 ID |
 | datasetItemId | Long | 数据项 ID |
 | templateVersionId | Long | 模板版本 ID |
-| status | String | 领取状态：CLAIMED |
+| schemaJson | String | 模板 Schema JSON |
+| itemJson | String | 题目内容 JSON |
+| draftAnswerJson | String | 初始草稿 JSON |
+| draftVersion | Integer | 草稿版本号 |
 
-**错误码**：409201（领取冲突，无可用题目或并发竞争失败）
+**错误码**：409201（领取冲突，无可用题目或并发竞争失败）；403001（任务使用 ASSIGNED 策略不可主动领取 / QUOTA_CLAIM 已达领取上限）
 
 ---
 
@@ -1445,7 +1473,7 @@ Authorization: Bearer <accessToken>
 
 ### 10.1 GET /api/v1/reviewer/conflict-groups
 
-**作用**：查询待解决的冲突组列表。当同一数据项有多个标注员提交了不同答案（overlapCount > 1），系统自动检测冲突并生成冲突组，等待审核员仲裁选择金标答案。
+**作用**：查询待解决的冲突组列表。当同一数据项有多个标注员提交了不同答案，系统自动检测冲突并生成冲突组，等待审核员仲裁选择金标答案。
 
 **权限**：REVIEWER
 
@@ -1519,7 +1547,6 @@ Authorization: Bearer <accessToken>
 | scoringDimensions | List&lt;String&gt; | 是 | 非空列表，每项最大 64 字符 | 评分维度列表 |
 | passThreshold | BigDecimal | 是 | 0.00~100.00 | 通过阈值（平均分 ≥ 此值则 PASS） |
 | manualReviewThreshold | BigDecimal | 是 | 0.00~100.00 | 人工复核阈值（分数在此与通过阈值之间转人工） |
-| outputSchema | Map | 是 | 非空 | LLM 输出结构化 Schema |
 | maxRetry | Integer | 否 | 0~10 | 最大重试次数 |
 | aiFlowPolicy | String | 否 | - | AI 流程策略 |
 | allowAiDirectApprove | Boolean | 否 | - | 是否允许 AI 直接通过 |
@@ -1655,11 +1682,41 @@ Authorization: Bearer <accessToken>
 
 ## 12. 大模型供应商配置
 
-### 12.1 GET /api/v1/llm-providers
+> **权限边界**：ADMIN 统一创建和维护加密 API Key 的平台模型；OWNER 只能从 Admin 启用的模型列表中选择。
 
-**作用**：查询当前 OWNER 名下的大模型供应商配置列表。Provider 按 ownerId 隔离，不同 OWNER 互相不可见。响应中不包含 apiKey 明文，敏感 header 值脱敏为 `******`。
+---
+
+### 12.1 GET /api/v1/llm-providers（OWNER 只读）
+
+**作用**：查询 Admin 已启用的模型选项列表。仅返回选择和展示必要字段，不包含 API Key、baseUrl、限流等敏感/管理信息。
 
 **权限**：OWNER
+
+**请求参数**：无
+
+**响应体** `List<OwnerModelOptionResponse>`：
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| id | Long | 供应商 ID（即 Owner 选择模型时的 providerId） |
+| providerCode | String | 供应商编码 |
+| providerName | String | 供应商名称 |
+| defaultModel | String | 默认模型名称（即实际调用的模型名） |
+| supportVision | Boolean | 是否支持视觉识别 |
+| supportMultiImage | Boolean | 是否支持多图识别 |
+| maxImageCount | Integer | 最大图片数量 |
+| visionModel | String | 视觉模型名称 |
+| structuredOutputMode | String | 结构化输出模式（NONE / JSON_OBJECT / JSON_SCHEMA） |
+
+> **安全**：OWNER 响应永不含 apiKey / encryptedApiKey / baseUrl / customHeaders / 限流值。
+
+---
+
+### 12.2 GET /api/v1/admin/llm-providers（ADMIN 管理列表）
+
+**作用**：查询所有大模型供应商配置列表（含管理字段）。ADMIN 可查看完整信息，customHeaders 中敏感值脱敏为 `******`。
+
+**权限**：ADMIN
 
 **请求参数**：无
 
@@ -1677,12 +1734,15 @@ Authorization: Bearer <accessToken>
 | platformRateLimitPerMinute | Integer | 平台级限流 |
 | taskRateLimitPerMinute | Integer | 任务级限流 |
 | userRateLimitPerMinute | Integer | 用户级限流 |
-| apiKeyConfigured | Boolean | 是否已配置 API Key |
 | supportVision | Boolean | 是否支持视觉 |
 | supportMultiImage | Boolean | 是否支持多图 |
 | maxImageCount | Integer | 最大图片数 |
 | visionModel | String | 视觉模型名称 |
-| ownerId | Long | 所属 OWNER ID |
+| structuredOutputMode | String | 结构化输出模式 |
+| outputSchema | String | JSON Schema 输出结构定义（Admin 管理） |
+| apiKeyConfigured | Boolean | 是否已配置 API Key |
+| ownerId | Long | 所属 OWNER ID（可能为空） |
+| createdBy | Long | 创建者用户 ID |
 | createdAt | LocalDateTime | 创建时间 |
 | updatedAt | LocalDateTime | 更新时间 |
 
@@ -1690,11 +1750,11 @@ Authorization: Bearer <accessToken>
 
 ---
 
-### 12.2 POST /api/v1/llm-providers
+### 12.3 POST /api/v1/admin/llm-providers（ADMIN 创建）
 
-**作用**：创建 OpenAI 兼容的大模型供应商配置。API Key 使用 AES 加密后存储，加密密钥由环境变量 `LABELHUB_LLM_KEY_ENCRYPTION_SECRET` 提供。
+**作用**：ADMIN 创建 OpenAI 兼容的大模型供应商配置。API Key 使用 AES-GCM 加密后存储，加密密钥由环境变量 `LABELHUB_LLM_KEY_ENCRYPTION_SECRET` 提供。每条记录即一个 Admin 创建的可选模型。
 
-**权限**：OWNER
+**权限**：ADMIN
 
 **请求体** `CreateLlmProviderRequest`：
 
@@ -1713,6 +1773,8 @@ Authorization: Bearer <accessToken>
 | supportMultiImage | Boolean | 否 | 默认 false | 是否支持多图输入 |
 | maxImageCount | Integer | 否 | ≥ 0，默认 10 | 最大图片数量 |
 | visionModel | String | 否 | 最大 100 字符 | 视觉专用模型名 |
+| structuredOutputMode | String | 否 | 最大 20 字符 | 结构化输出模式（NONE/JSON_OBJECT/JSON_SCHEMA） |
+| outputSchema | String | 否 | 最大 10000 字符 | JSON Schema 输出结构（Admin 统一管理，JSON_SCHEMA 模式时使用） |
 
 **响应体**：同 `LlmProviderResponse`
 
@@ -1720,11 +1782,11 @@ Authorization: Bearer <accessToken>
 
 ---
 
-### 12.3 PUT /api/v1/llm-providers/{providerId}
+### 12.4 PUT /api/v1/admin/llm-providers/{providerId}（ADMIN 更新）
 
 **作用**：更新供应商元数据、限流配置和模型能力字段。可选轮换 API Key：如果请求中 apiKey 为空则保留原密钥，提供新值则替换。
 
-**权限**：OWNER（供应商必须属于当前 OWNER）
+**权限**：ADMIN
 
 **请求体** `UpdateLlmProviderRequest`：字段同 CreateLlmProviderRequest，其中 apiKey 为可选
 
@@ -1734,11 +1796,11 @@ Authorization: Bearer <accessToken>
 
 ---
 
-### 12.4 POST /api/v1/llm-providers/{providerId}/enable
+### 12.5 POST /api/v1/admin/llm-providers/{providerId}/enable（ADMIN 启用）
 
-**作用**：启用供应商，使其可被 AI 审核配置和触发器选用。
+**作用**：启用供应商，使其可被 OWNER 在 AI 审核配置中选用。
 
-**权限**：OWNER
+**权限**：ADMIN
 
 **状态变更**：enabled=false → enabled=true
 
@@ -1746,11 +1808,11 @@ Authorization: Bearer <accessToken>
 
 ---
 
-### 12.5 POST /api/v1/llm-providers/{providerId}/disable
+### 12.6 POST /api/v1/admin/llm-providers/{providerId}/disable（ADMIN 禁用）
 
 **作用**：禁用供应商。禁用后不可被新的 AI 审核配置或触发器选用，已运行中的任务不受影响。
 
-**权限**：OWNER
+**权限**：ADMIN
 
 **状态变更**：enabled=true → enabled=false
 
@@ -1758,11 +1820,11 @@ Authorization: Bearer <accessToken>
 
 ---
 
-### 12.6 POST /api/v1/llm-providers/{providerId}/test
+### 12.7 POST /api/v1/admin/llm-providers/{providerId}/test（ADMIN 测试）
 
 **作用**：对供应商进行在线连通性测试。发送 OpenAI 兼容的 chat/completions 请求，验证地址和密钥有效性。
 
-**权限**：OWNER
+**权限**：ADMIN
 
 **请求体** `TestLlmProviderRequest`：
 
@@ -1783,6 +1845,16 @@ Authorization: Bearer <accessToken>
 **错误码**：400301（Header 名无效）；500303（Header JSON 格式错误）
 
 ---
+
+### 模型选择流程
+
+```text
+1. ADMIN 通过 /api/v1/admin/llm-providers 创建并启用模型（含加密 API Key）
+2. OWNER 通过 GET /api/v1/llm-providers 浏览 Admin 启用的模型选项
+3. OWNER 在任务 AI 审核配置中选择 providerId，配置 prompt 和评分规则
+4. modelName 由后端从所选 Provider 的 defaultModel 自动派生
+5. 运行时 LlmGateway 按 providerId 解密内存中的 API Key，OWNER 无感知
+```
 
 ## 13. LLM 触发器
 
@@ -1962,53 +2034,11 @@ Authorization: Bearer <accessToken>
 
 ## 16. 奖励与贡献
 
-### 16.1 POST /api/v1/tasks/{taskId}/reward-rule
-
-**作用**：保存任务奖励规则的新版本。规则以版本追加保存，历史流水不因本次配置变更重算。用于 Owner 配置任务的标注奖励方案。
-
-**权限**：ADMIN 或 OWNER
-
-**路径参数**：
-
-| 参数 | 类型 | 说明 |
-|------|------|------|
-| taskId | Long | 任务 ID |
-
-**请求体** `RewardRuleRequest`：
-
-| 字段 | 类型 | 必填 | 约束 | 说明 |
-|------|------|------|------|------|
-| rewardMode | String | 否 | - | 奖励模式（如 PER_ITEM） |
-| unitReward | BigDecimal | 是 | ≥ 0.00 | 单条奖励金额 |
-| rewardCurrency | String | 否 | - | 奖励货币/积分类型 |
-| rewardVisible | Boolean | 否 | - | 奖励是否对标注员可见 |
-
-**响应体** `RewardRuleResponse`：
-
-| 字段 | 类型 | 说明 |
-|------|------|------|
-| ruleId | Long | 规则 ID |
-| taskId | Long | 任务 ID |
-| effectiveVersion | Integer | 生效版本号 |
-| rewardMode | String | 奖励模式 |
-| unitReward | BigDecimal | 单条奖励 |
-| rewardCurrency | String | 货币类型 |
-| rewardVisible | Boolean | 是否可见 |
-| effectiveAt | LocalDateTime | 生效时间 |
+> **奖励规则已嵌入 Task**：奖励规则不再通过独立 API 管理，而是作为 CreateTask / UpdateTask 的内嵌字段（rewardPerApproval、penaltyPerRejection、bonusThreshold、bonusPoints）。创建任务时一并配置，与任务一对一绑定。查询任务详情（3.3 / 3.10）时直接返回。
 
 ---
 
-### 16.2 GET /api/v1/tasks/{taskId}/reward-rule
-
-**作用**：查询任务最新奖励规则，用于 Owner 配置页回显。
-
-**权限**：ADMIN 或 OWNER
-
-**响应体**：同 `RewardRuleResponse`
-
----
-
-### 16.3 GET /api/v1/labeler/contribution/overview
+### 16.1 GET /api/v1/labeler/contribution/overview
 
 **作用**：查询当前标注员贡献总览。待审核提交不进入通过率分母。所有查询基于 JWT 用户，不接受前端传入 labelerId。
 
@@ -2028,7 +2058,7 @@ Authorization: Bearer <accessToken>
 
 ---
 
-### 16.4 GET /api/v1/labeler/contribution/trend
+### 16.2 GET /api/v1/labeler/contribution/trend
 
 **作用**：查询最近 N 天贡献趋势。缺失日期由服务层补零，保证前端图表连续。
 
@@ -2051,7 +2081,7 @@ Authorization: Bearer <accessToken>
 
 ---
 
-### 16.5 GET /api/v1/labeler/contribution/tasks
+### 16.3 GET /api/v1/labeler/contribution/tasks
 
 **作用**：按任务聚合查询当前标注员贡献统计。
 
@@ -2076,7 +2106,7 @@ Authorization: Bearer <accessToken>
 
 ---
 
-### 16.6 GET /api/v1/labeler/rewards/ledger
+### 16.4 GET /api/v1/labeler/rewards/ledger
 
 **作用**：查询当前标注员奖励流水，包含正向奖励和冲正（撤销）记录。
 
@@ -2503,7 +2533,7 @@ Authorization: Bearer <accessToken>
 
 Owner 完整工作流：
   [✅] 创建任务 → [✅] 导入数据集 → [✅] 配置模板
-  → [✅] 配置 AI 审核 → [✅] 配置奖励规则 → [✅] 发布任务
+  → [✅] 配置 AI 审核 → [✅] 配置奖励（内嵌于创建任务） → [✅] 发布任务
   → [✅] 暂停/恢复/结束任务
   → [✅] 删除草稿任务
   → [✅] 搜索/筛选自己的任务
@@ -2530,13 +2560,16 @@ Owner 完整工作流：
 2. POST /api/v1/tasks
    请求: {
      title: "图像分类标注",
+     description: "对图片进行分类",
      quota: 100,
      deadlineAt: "2026-07-01T23:59:59",
-     overlapCount: 3,
+     strategy: "FCFS",
+     rewardPerApproval: 10.00,
+     penaltyPerRejection: 5.00,
      datasetFileId: 99
    }
-   响应: { taskId: 1, status: "DRAFT", datasetImportJob: { jobId: 10, status: "PENDING" } }
-   说明: 创建草稿任务，传 datasetFileId 自动创建导入任务
+   响应: { taskId: 1, status: "DRAFT", description: "对图片进行分类", tags: [], datasetImportJob: { jobId: 10, status: "PENDING" } }
+   说明: 创建草稿任务，传 datasetFileId 自动创建导入任务。每条数据只允许一个标注员领取，不再需要 overlapCount
 
 3. GET /api/v1/tasks/1/dataset/import-jobs/10
    响应: { status: "SUCCESS", totalCount: 500, successCount: 498, failedCount: 2 }
@@ -2578,7 +2611,7 @@ POST /api/v1/templates/10/fork
 ### D.3 配置 AI 审核 + 奖励 → 发布
 
 ```text
-6. POST /api/v1/llm-providers
+6. POST /api/v1/admin/llm-providers
    请求: {
      providerCode: "qwen",
      providerName: "通义千问",
@@ -2587,34 +2620,34 @@ POST /api/v1/templates/10/fork
      defaultModel: "qwen-max"
    }
    响应: { id: 50 }
-   说明: 配置大模型供应商（首次使用时创建，后续复用）
+   说明: ADMIN 配置大模型供应商（首次使用时创建，后续复用）
+   权限: ADMIN
 
-7. POST /api/v1/llm-providers/50/test
+7. POST /api/v1/admin/llm-providers/50/test
    请求: {}
    响应: { success: true, latencyMs: 320, message: "连接成功" }
    说明: 验证供应商连通性
+   权限: ADMIN
 
-8. POST /api/v1/tasks/1/ai-review-configs
+8. GET /api/v1/llm-providers
+   响应: [{ id: 50, providerCode: "qwen", providerName: "通义千问", defaultModel: "qwen-max", ... }]
+   说明: OWNER 浏览 Admin 启用的模型列表，获取可选的 providerId
+
+9. POST /api/v1/tasks/1/ai-review-configs
    请求: {
      providerId: 50,
-     modelName: "qwen-max",
      promptTemplate: "请评估以下标注答案的质量...",
      scoringDimensions: ["准确性", "完整性", "一致性"],
      passThreshold: 80.00,
      manualReviewThreshold: 60.00,
-     outputSchema: { type: "object", properties: { ... } },
      maxRetry: 3
    }
    响应: { configId: 40 }
-   说明: 配置 AI 审核规则
-
-9. POST /api/v1/tasks/1/reward-rule
-   请求: { rewardMode: "PER_ITEM", unitReward: 2.00, rewardCurrency: "积分", rewardVisible: true }
-   说明: 配置奖励规则
+   说明: OWNER 配置 AI 审核规则（modelName 从 Provider 自动派生）
 
 10. POST /api/v1/tasks/1/publish
-    响应: { taskId: 1, status: "PUBLISHED" }
-    说明: 发布任务（系统自动校验：数据集✓ 模板✓ 奖励✓ AI配置✓ 截止时间✓）
+    响应: { taskId: 1, status: "PUBLISHED", description: "...", tags: [] }
+    说明: 发布任务（系统自动校验：数据集✓ 模板✓ AI配置✓ 截止时间✓ 配额✓）
 ```
 
 ---
@@ -2722,7 +2755,7 @@ POST /api/v1/reviewer/submissions/batch/assign
 说明: 将提交分配给指定审核员
 ```
 
-**冲突仲裁**（overlapCount > 1 时，同一题目多人标注结果不一致）：
+**冲突仲裁**（多个标注员对同一题目提交了不同答案时触发）：
 ```text
 21. GET /api/v1/reviewer/conflict-groups
     响应: [{ groupId: 500, datasetItemId: 70, status: "CONFLICTED", submissions: [...] }]
@@ -2757,27 +2790,34 @@ POST /api/v1/reviewer/submissions/batch/assign
 ### D.8 流程总览图
 
 ```text
-┌─────────────────────────────────────────────────────────────────────┐
-│ Owner 配置阶段                                                       │
-│                                                                     │
-│  upload file → create task → import dataset → create template       │
-│  → bind template → config LLM provider → config AI review           │
-│  → config reward → publish                                          │
-└──────────────────────────────────┬──────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ Admin 前置配置（首次使用时一次性配好，后续复用）                                  │
+│                                                                              │
+│  POST /api/v1/admin/llm-providers  →  创建模型（含加密 API Key、outputSchema） │
+│  POST /api/v1/admin/llm-providers/{id}/enable  →  启用以供 Owner 选用          │
+└──────────────────────────────────┬───────────────────────────────────────────┘
+                                   ↓ 模型就绪
+┌──────────────────────────────────┴───────────────────────────────────────────┐
+│ Owner 配置阶段                                                                │
+│                                                                              │
+│  ① upload file  →  ② create task  →  ③ import dataset  →  ④ create template │
+│  → ⑤ GET /api/v1/llm-providers（浏览 Admin 启用的模型）                         │
+│  → ⑥ POST /api/v1/tasks/{id}/ai-review-configs（选模型、写prompt、设阈值）     │
+│  → ⑦ config reward  →  ⑧ publish                                           │
+└──────────────────────────────────┬───────────────────────────────────────────┘
                                    ↓ 任务上线
-┌──────────────────────────────────┴──────────────────────────────────┐
-│ Labeler 标注阶段                                                     │
-│                                                                     │
-│  browse market → claim → view assignment                            │
-│  → save draft (N次) → [optional: pre-annotation] → submit           │
-└──────────────────────────────────┬──────────────────────────────────┘
+┌──────────────────────────────────┴───────────────────────────────────────────┐
+│ Labeler 标注阶段                                                              │
+│                                                                              │
+│  ⑨ browse market  →  ⑩ claim  →  ⑪ save draft + submit                      │
+└──────────────────────────────────┬───────────────────────────────────────────┘
                                    ↓ 提交触发
-┌──────────────────────────────────┴──────────────────────────────────┐
-│ AI 预审阶段（系统自动，异步）                                          │
-│                                                                     │
-│  AI review → decision: PASS / REJECT / MANUAL_REVIEW                │
-│  → submission 状态变为 PENDING_FINAL                                 │
-└──────────────────────────────────┬──────────────────────────────────┘
+┌──────────────────────────────────┴───────────────────────────────────────────┐
+│ AI 预审阶段（系统自动，异步）                                                    │
+│                                                                              │
+│  AI review → decision: PASS / REJECT / MANUAL_REVIEW                         │
+│  → submission 状态变为 PENDING_FINAL                                          │
+└──────────────────────────────────┬───────────────────────────────────────────┘
                                    ↓ 进入审核队列
 ┌──────────────────────────────────┴──────────────────────────────────┐
 │ Reviewer 人工审核阶段                                                 │
@@ -2798,22 +2838,23 @@ POST /api/v1/reviewer/submissions/batch/assign
 
 ### D.9 各阶段接口依赖关系
 
-| 阶段 | 输入依赖 | 产出 |
-|------|------|------|
-| 上传文件 | 无 | fileId |
-| 创建任务 | fileId（可选） | taskId, jobId |
-| 创建模板 | taskId | templateId, versionId |
-| 配置供应商 | 无 | providerId |
-| 配置 AI 审核 | taskId, providerId | configId |
-| 配置奖励 | taskId | ruleId |
-| 发布任务 | taskId（需已配置模板+AI+奖励） | status=PUBLISHED |
-| 领取题目 | taskId | assignmentId, datasetItemId |
-| 保存草稿 | assignmentId | draftVersion |
-| 提交答案 | assignmentId | submissionId |
-| AI 预审 | submissionId（系统自动） | aiDecision, averageScore |
-| 人工审核 | submissionId | APPROVED / REJECTED |
-| 冲突仲裁 | groupId, goldenSubmissionId | RESOLVED |
-| 导出 | taskId | exportJobId, downloadUrl |
+| 阶段 | 角色 | 输入依赖 | 产出 |
+|------|------|------|------|
+| 上传文件 | Owner | 无 | fileId |
+| 创建任务 | Owner | fileId（可选） | taskId, jobId |
+| 创建模板 | Owner | taskId | templateId, versionId |
+| 配置模型（Provider） | **Admin** | 无 | providerId |
+| 浏览可用模型 | Owner | 无 | providerId 列表 |
+| 配置 AI 审核 | Owner | taskId, providerId | configId |
+| 配置奖励 | Owner | taskId | ruleId |
+| 发布任务 | Owner | taskId（需已配置模板+AI+奖励） | status=PUBLISHED |
+| 领取题目 | Labeler | taskId | assignmentId |
+| 保存草稿 | Labeler | assignmentId | draftVersion |
+| 提交答案 | Labeler | assignmentId | submissionId |
+| AI 预审 | System | submissionId（自动触发） | aiDecision, averageScore |
+| 人工审核 | Reviewer | submissionId | APPROVED / REJECTED |
+| 冲突仲裁 | Reviewer | groupId, goldenSubmissionId | RESOLVED |
+| 导出 | Owner | taskId | exportJobId, downloadUrl |
 
 ### D.10 已补齐入口与联调注意事项
 
@@ -2827,7 +2868,7 @@ POST /api/v1/reviewer/submissions/batch/assign
 
 - 普通注册只允许 `LABELER` 和 `OWNER`；`REVIEWER` 需由管理员创建或调整角色。
 - 每个普通用户只能拥有一个角色；用户无角色或多角色时登录/刷新会返回 `400102`。
-- 大模型供应商配置使用 canonical 路径 `/api/v1/llm-providers`，权限为 `OWNER`，不再使用旧的 `/api/v1/admin/llm-providers`。
+- 大模型供应商管理使用 `/api/v1/admin/llm-providers`（ADMIN 权限）；OWNER 通过 `GET /api/v1/llm-providers` 查看启用模型选项。
 
 ---
 

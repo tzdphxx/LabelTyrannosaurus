@@ -29,6 +29,12 @@ export interface OwnerTemplateCreateRequest {
   changeNote: string
 }
 
+export interface OwnerTemplateForkRequest {
+  baseVersionId?: number
+  schemaJson?: DynamicFormSchema
+  changeNote?: string
+}
+
 export interface OwnerTemplateVersionResponse {
   versionId: number
   templateId: number

@@ -20,6 +20,8 @@ export interface LabelerTaskSummary {
   tags: string[]
   status: LabelerTaskStatus
   templateId: string
+  templateVersionId?: number | string | null
+  assignmentId?: number | string | null
   templateName: string
   deadline: string
   rewardText: string
@@ -44,6 +46,8 @@ export interface LabelerTaskListQuery {
 export interface LabelingQuestion {
   id: string
   taskId: string
+  templateVersionId?: number | string | null
+  datasetItemId?: number | string | null
   title: string
   description: string
   source: Record<string, string>

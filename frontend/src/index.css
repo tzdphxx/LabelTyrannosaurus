@@ -904,6 +904,65 @@ select {
 .dynamic-renderer__llm.ant-card {
   margin-bottom: 12px;
   border-radius: 8px;
+  border-color: #b8d7d1;
+  background:
+    linear-gradient(180deg, rgba(241, 250, 248, 0.78), rgba(255, 255, 255, 0.96)),
+    #ffffff;
+  box-shadow: 0 10px 24px rgba(23, 75, 76, 0.08);
+}
+
+.dynamic-renderer__llm .ant-card-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.dynamic-renderer__llm-head {
+  width: 100%;
+}
+
+.dynamic-renderer__llm-title {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  color: #174b4c;
+}
+
+.dynamic-renderer__llm-prompt.ant-typography {
+  margin: 0;
+  color: #52616f;
+  line-height: 1.7;
+}
+
+.dynamic-renderer__llm-result {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid #d9e1e8;
+  border-radius: 8px;
+  background: #fbfcfd;
+}
+
+.dynamic-renderer__llm-result .ant-typography {
+  margin: 0;
+}
+
+.dynamic-renderer__llm-result pre {
+  max-height: 180px;
+  margin: 0;
+  overflow: auto;
+  color: #17323c;
+  font-family:
+    "Cascadia Code",
+    Consolas,
+    monospace;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.dynamic-renderer__llm-actions {
+  flex-wrap: wrap;
 }
 
 .designer-schema-panel {

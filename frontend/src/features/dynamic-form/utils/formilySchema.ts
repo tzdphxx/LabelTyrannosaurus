@@ -7,6 +7,14 @@ import type {
   DynamicValidationRule,
   DynamicVisibleRule,
 } from '../../../types/dynamicForm'
+import type { LlmTriggerContext, LlmTriggerRunRequest, LlmTriggerRunResponse } from '../../../types/llm'
+
+interface SchemaRuntimeOptions {
+  getCurrentValues?: () => Record<string, unknown>
+  llmContext?: LlmTriggerContext
+  onApplyLlmValues?: (values: Record<string, unknown>) => void
+  onRunLlmTrigger?: (payload: LlmTriggerRunRequest) => Promise<LlmTriggerRunResponse>
+}
 
 function getComponentName(node: DynamicSchemaNode) {
   switch (node.type) {
@@ -185,7 +193,7 @@ function toLinkedOptionsReaction(linkage?: DynamicLinkageRule, fallbackOptions?:
   }
 }
 
-function toNodeSchema(node: DynamicSchemaNode): ISchema {
+function toNodeSchema(node: DynamicSchemaNode, runtimeOptions: SchemaRuntimeOptions): ISchema {
   const schema: ISchema = {
     type: getSchemaType(node),
     title: node.title,
@@ -193,6 +201,11 @@ function toNodeSchema(node: DynamicSchemaNode): ISchema {
     'x-component': getComponentName(node),
     'x-component-props': {
       ...node.props,
+      componentId: node.id,
+      getCurrentValues: runtimeOptions.getCurrentValues,
+      llmContext: runtimeOptions.llmContext,
+      onApplyValues: runtimeOptions.onApplyLlmValues,
+      onRunLlmTrigger: runtimeOptions.onRunLlmTrigger,
       title: node.title,
     },
   }
@@ -217,15 +230,15 @@ function toNodeSchema(node: DynamicSchemaNode): ISchema {
   }
 
   if (node.children?.length) {
-    schema.properties = Object.fromEntries(node.children.map((child) => [child.key, toNodeSchema(child)]))
+    schema.properties = Object.fromEntries(node.children.map((child) => [child.key, toNodeSchema(child, runtimeOptions)]))
   }
 
   return schema
 }
 
-export function schemaToFormilySchema(schema: DynamicFormSchema): ISchema {
+export function schemaToFormilySchema(schema: DynamicFormSchema, runtimeOptions: SchemaRuntimeOptions = {}): ISchema {
   return {
     type: 'object',
-    properties: Object.fromEntries(schema.nodes.map((node) => [node.key, toNodeSchema(node)])),
+    properties: Object.fromEntries(schema.nodes.map((node) => [node.key, toNodeSchema(node, runtimeOptions)])),
   }
 }

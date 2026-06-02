@@ -1,6 +1,7 @@
 import { mockTemplates } from '../../mocks'
 import type { DynamicFormSchema } from '../../types/dynamicForm'
 import type {
+  OwnerTemplateForkRequest,
   OwnerTemplateCreateRequest,
   OwnerTemplateResponse,
   OwnerTemplateVersionState,
@@ -9,6 +10,7 @@ import type {
   TemplateStatus,
   TemplateSummary,
 } from '../../types/template'
+import { fromBackendTemplateSchema, toBackendTemplateSchema } from '../../features/dynamic-form/utils/backendSchema'
 import { getSchemaNodeKeys } from '../../features/dynamic-form/utils/schemaTree'
 import { isRealServiceMode, request } from '../http'
 
@@ -41,7 +43,7 @@ function isDynamicFormSchema(value: unknown): value is DynamicFormSchema {
 
 function normalizeSchema(schemaJson: unknown, templateId: string, name: string): DynamicFormSchema {
   if (isDynamicFormSchema(schemaJson)) {
-    return schemaJson
+    return fromBackendTemplateSchema(schemaJson)
   }
 
   return createEmptySchema(templateId, name)
@@ -132,7 +134,7 @@ export const ownerTemplateService = {
     if (isRealServiceMode()) {
       const payload: OwnerTemplateCreateRequest = {
         name: input.name,
-        schemaJson: schema,
+        schemaJson: toBackendTemplateSchema(schema),
         changeNote: input.description,
       }
       const template = await request.post<OwnerTemplateResponse, OwnerTemplateCreateRequest>('/v1/owner/templates', payload)
@@ -158,6 +160,23 @@ export const ownerTemplateService = {
   },
 
   async saveTemplateSchema(templateId: string, schema: DynamicFormSchema): Promise<DynamicFormSchema> {
+    if (isRealServiceMode()) {
+      const template = await getRealOwnerTemplateDetail(templateId)
+
+      if (!template) {
+        throw new Error('Template not found')
+      }
+
+      const payload: OwnerTemplateForkRequest = {
+        baseVersionId: Number(template.currentVersionId),
+        schemaJson: toBackendTemplateSchema(schema),
+        changeNote: '更新模板 schema',
+      }
+      const nextTemplate = await request.post<OwnerTemplateResponse, OwnerTemplateForkRequest>(`/v1/templates/${templateId}/fork`, payload)
+
+      return mapOwnerTemplate(nextTemplate).schema
+    }
+
     const template = mockTemplates.find((item) => item.id === templateId)
 
     if (!template) {

@@ -15,6 +15,7 @@ import com.labelhub.modules.ai.domain.LlmProvider;
 import com.labelhub.modules.ai.dto.CreateLlmProviderRequest;
 import com.labelhub.modules.ai.dto.LlmProviderResponse;
 import com.labelhub.modules.ai.dto.LlmProviderTestResponse;
+import com.labelhub.modules.ai.dto.OwnerModelOptionResponse;
 import com.labelhub.modules.ai.dto.TestLlmProviderRequest;
 import com.labelhub.modules.ai.dto.UpdateLlmProviderRequest;
 import com.labelhub.modules.ai.mapper.LlmProviderMapper;
@@ -127,15 +128,50 @@ class LlmProviderServiceTest {
     }
 
     @Test
-    void listsProvidersWithoutLeakingApiKeys() {
+    void listForAdminReturnsAllProvidersWithoutLeakingApiKeys() {
         LlmProvider provider = persistedProvider();
         when(llmProviderMapper.selectList(any(Wrapper.class))).thenReturn(List.of(provider));
 
-        List<LlmProviderResponse> providers = service.list(ACTOR_ID);
+        List<LlmProviderResponse> providers = service.listForAdmin();
 
         assertThat(providers).hasSize(1);
         assertThat(providers.get(0).apiKeyConfigured()).isTrue();
         assertThat(providers.get(0).customHeaders()).containsEntry("Authorization", "******");
+    }
+
+    @Test
+    void listEnabledForOwnerReturnsOnlyEnabledProviders() {
+        LlmProvider enabled = persistedProvider();
+        LlmProvider disabled = persistedProvider();
+        disabled.setId(PROVIDER_ID + 1);
+        disabled.setEnabled(false);
+        when(llmProviderMapper.selectList(any(Wrapper.class))).thenReturn(List.of(enabled));
+
+        List<OwnerModelOptionResponse> options = service.listEnabledForOwner();
+
+        assertThat(options).hasSize(1);
+        assertThat(options.get(0).id()).isEqualTo(PROVIDER_ID);
+        assertThat(options.get(0).defaultModel()).isEqualTo("qwen-turbo");
+    }
+
+    @Test
+    void ownerModelOptionExcludesSensitiveAndManagementFields() {
+        LlmProvider provider = persistedProvider();
+        when(llmProviderMapper.selectList(any(Wrapper.class))).thenReturn(List.of(provider));
+
+        List<OwnerModelOptionResponse> options = service.listEnabledForOwner();
+
+        OwnerModelOptionResponse option = options.get(0);
+        assertThat(option.id()).isEqualTo(PROVIDER_ID);
+        assertThat(option.providerCode()).isEqualTo("dashscope");
+        assertThat(option.providerName()).isEqualTo("DashScope");
+        assertThat(option.defaultModel()).isEqualTo("qwen-turbo");
+        assertThat(option.supportVision()).isNull();
+        assertThat(option.maxImageCount()).isNull();
+        // Verify key fields are populated and no sensitive data leaks
+        assertThat(option.id()).isNotNull();
+        assertThat(option.providerCode()).isNotNull();
+        assertThat(option.defaultModel()).isNotNull();
     }
 
     @Test
@@ -163,6 +199,26 @@ class LlmProviderServiceTest {
         assertThatThrownBy(() -> service.disable(ACTOR_ID, PROVIDER_ID))
                 .isInstanceOfSatisfying(BusinessException.class,
                         ex -> assertThat(ex.getCode()).isEqualTo(404301));
+    }
+
+    @Test
+    void findEnabledByIdReturnsEmptyForDisabledProvider() {
+        LlmProvider provider = persistedProvider();
+        provider.setEnabled(false);
+        when(llmProviderMapper.selectById(PROVIDER_ID)).thenReturn(provider);
+
+        assertThat(service.findEnabledById(PROVIDER_ID)).isEmpty();
+    }
+
+    @Test
+    void findEnabledByIdReturnsProviderWhenEnabled() {
+        LlmProvider provider = persistedProvider();
+        when(llmProviderMapper.selectById(PROVIDER_ID)).thenReturn(provider);
+
+        Optional<LlmProvider> result = service.findEnabledById(PROVIDER_ID);
+
+        assertThat(result).isPresent();
+        assertThat(result.get().getEnabled()).isTrue();
     }
 
     private CreateLlmProviderRequest createRequest() {
@@ -210,7 +266,6 @@ class LlmProviderServiceTest {
         provider.setPlatformRateLimitPerMinute(60);
         provider.setTaskRateLimitPerMinute(30);
         provider.setUserRateLimitPerMinute(10);
-        provider.setOwnerId(ACTOR_ID);
         provider.setCreatedBy(ACTOR_ID);
         return provider;
     }

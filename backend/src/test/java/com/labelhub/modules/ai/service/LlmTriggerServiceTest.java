@@ -108,7 +108,7 @@ class LlmTriggerServiceTest {
         when(taskMapper.selectById(TASK_ID)).thenReturn(task());
         when(templateVersionMapper.selectById(TEMPLATE_VERSION_ID)).thenReturn(templateVersion());
         when(datasetItemMapper.selectById(DATASET_ITEM_ID)).thenReturn(datasetItem());
-        when(llmProviderService.findEnabledOwnedById(OWNER_ID, PROVIDER_ID)).thenReturn(Optional.of(provider()));
+        when(llmProviderService.findEnabledById(PROVIDER_ID)).thenReturn(Optional.of(provider()));
         when(agentRunService.create(eq("LLM_TRIGGER"), isNull(), eq(PROVIDER_ID), eq("qwen-plus"),
                 eq("component:assist-summary"), any(), isNull())).thenReturn(agentRun());
         when(traceIdProvider.currentTraceId()).thenReturn("trace-1");
@@ -191,11 +191,11 @@ class LlmTriggerServiceTest {
     }
 
     @Test
-    void rejectsProviderNotOwnedByTaskOwner() {
+    void rejectsDisabledProvider() {
         when(taskMapper.selectById(TASK_ID)).thenReturn(task());
         when(templateVersionMapper.selectById(TEMPLATE_VERSION_ID)).thenReturn(templateVersion());
         when(datasetItemMapper.selectById(DATASET_ITEM_ID)).thenReturn(datasetItem());
-        when(llmProviderService.findEnabledOwnedById(OWNER_ID, PROVIDER_ID)).thenReturn(Optional.empty());
+        when(llmProviderService.findEnabledById(PROVIDER_ID)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> service.run(owner(), request(true, null)))
                 .isInstanceOfSatisfying(BusinessException.class,

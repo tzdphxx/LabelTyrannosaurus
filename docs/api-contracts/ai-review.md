@@ -9,13 +9,12 @@ Permission: OWNER.
 
 Request fields:
 ```Plaintext
-providerId
-modelName
+providerId (required) — Admin-enabled provider ID to use as the model
+modelName (optional) — if provided, must match the provider's defaultModel; otherwise derived from provider
 promptTemplate
 scoringDimensions[]
 passThreshold
 manualReviewThreshold
-outputSchema
 ```
 
 Response fields:
@@ -28,7 +27,6 @@ promptTemplate
 scoringDimensions[]
 passThreshold
 manualReviewThreshold
-outputSchema
 promptVersion
 ```
 
@@ -36,11 +34,15 @@ Rules:
 ```Plaintext
 Only the task owner can save AI review config.
 Only DRAFT tasks can be configured.
-Provider must exist and be enabled.
-promptTemplate, scoringDimensions, and outputSchema are required.
+Provider must exist and be enabled (Admin-managed, not owner-owned).
+modelName is derived from the selected provider's defaultModel.
+  If the request includes modelName, it must equal the provider's defaultModel (400402 otherwise).
+promptTemplate and scoringDimensions are required.
+outputSchema is managed by Admin at the Provider level (structuredOutputMode + outputSchemaJson).
 Thresholds must be between 0.00 and 100.00.
 manualReviewThreshold must not be greater than passThreshold.
 Saving config backfills tasks.aiReviewConfigId for publish validation.
+Owner no longer creates or manages API Keys — those are Admin-only.
 ```
 
 ## PUT /api/v1/tasks/{taskId}/ai-review-configs/{configId}
@@ -141,6 +143,7 @@ Every call creates an agentRun.
 Calls pass through the LlmTriggerRateLimiter port; the default adapter is no-op until BE-B RateLimitService is wired.
 Rate limited calls return status=RATE_LIMITED and do not call LlmGateway.
 Successful calls complete the agentRun; failed model calls mark the agentRun FAILED.
+Provider must be an Admin-enabled provider (no longer requires task owner to own the provider).
 ```
 
 ## GET /api/v1/submissions/{submissionId}/ai-review
@@ -166,4 +169,16 @@ Status rules:
 When AI fails with fallback, aiReview.status=MANUAL_REQUIRED.
 submission.status remains PENDING_FINAL.
 AI never sets submission status to APPROVED.
+```
+
+## Model Selection Flow
+
+```Plaintext
+1. ADMIN creates LLM providers with encrypted API keys via /api/v1/admin/llm-providers.
+2. ADMIN enables the providers that should be available for task AI configuration.
+3. OWNER browses enabled models via GET /api/v1/llm-providers (limited fields, no secrets).
+4. OWNER selects a providerId and configures AI review rules via /api/v1/tasks/{taskId}/ai-review-configs.
+5. Backend derives modelName from provider.defaultModel; request modelName is validated against it.
+6. At runtime, LlmGateway decrypts the API key in-memory using the provider ID.
+7. Owner never sees or manages API keys.
 ```

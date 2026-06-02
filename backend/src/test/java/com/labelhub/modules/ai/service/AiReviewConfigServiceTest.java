@@ -89,7 +89,7 @@ class AiReviewConfigServiceTest {
     void createsConfigForDraftTaskAndBackfillsTaskReference() {
         Task task = draftTask();
         when(taskMapper.selectById(TASK_ID)).thenReturn(task);
-        when(llmProviderService.findEnabledOwnedById(OWNER_ID, PROVIDER_ID)).thenReturn(Optional.of(provider()));
+        when(llmProviderService.findEnabledById(PROVIDER_ID)).thenReturn(Optional.of(provider()));
         when(aiReviewConfigMapper.selectOne(any(Wrapper.class))).thenReturn(null);
         when(traceIdProvider.currentTraceId()).thenReturn("trace-1");
         when(aiReviewConfigMapper.insert(any(AiReviewConfig.class))).thenAnswer(invocation -> {
@@ -115,9 +115,84 @@ class AiReviewConfigServiceTest {
     }
 
     @Test
+    void derivesModelNameFromProviderDefaultModel() {
+        Task task = draftTask();
+        when(taskMapper.selectById(TASK_ID)).thenReturn(task);
+        when(llmProviderService.findEnabledById(PROVIDER_ID)).thenReturn(Optional.of(provider()));
+        when(aiReviewConfigMapper.selectOne(any(Wrapper.class))).thenReturn(null);
+        when(traceIdProvider.currentTraceId()).thenReturn("trace-1");
+        when(aiReviewConfigMapper.insert(any(AiReviewConfig.class))).thenAnswer(invocation -> {
+            AiReviewConfig config = invocation.getArgument(0);
+            config.setId(CONFIG_ID);
+            return 1;
+        });
+
+        AiReviewConfigResponse response = service.save(OWNER_ID, TASK_ID, request());
+
+        assertThat(response.modelName()).isEqualTo("qwen-plus");
+    }
+
+    @Test
+    void rejectsModelNameMismatchWithProviderDefaultModel() {
+        AiReviewConfigRequest invalid = new AiReviewConfigRequest(
+                PROVIDER_ID,
+                "gpt-4o",  // <-- does NOT match provider.defaultModel "qwen-plus"
+                "Review {{answer}}",
+                List.of("accuracy"),
+                new BigDecimal("85.00"),
+                new BigDecimal("60.00"),
+                3,
+                null, null, null, null, null, null
+        );
+        when(taskMapper.selectById(TASK_ID)).thenReturn(draftTask());
+        when(llmProviderService.findEnabledById(PROVIDER_ID)).thenReturn(Optional.of(provider()));
+
+        assertThatThrownBy(() -> service.save(OWNER_ID, TASK_ID, invalid))
+                .isInstanceOfSatisfying(BusinessException.class,
+                        ex -> assertThat(ex.getCode()).isEqualTo(400402));
+    }
+
+    @Test
+    void acceptsRequestWithoutModelNameAndDerivesFromProvider() {
+        AiReviewConfigRequest noModelName = new AiReviewConfigRequest(
+                PROVIDER_ID,
+                null,  // <-- modelName omitted
+                "Review {{answer}}",
+                List.of("accuracy"),
+                new BigDecimal("85.00"),
+                new BigDecimal("60.00"),
+                3,
+                null, null, null, null, null, null
+        );
+        when(taskMapper.selectById(TASK_ID)).thenReturn(draftTask());
+        when(llmProviderService.findEnabledById(PROVIDER_ID)).thenReturn(Optional.of(provider()));
+        when(aiReviewConfigMapper.selectOne(any(Wrapper.class))).thenReturn(null);
+        when(traceIdProvider.currentTraceId()).thenReturn("trace-1");
+        when(aiReviewConfigMapper.insert(any(AiReviewConfig.class))).thenAnswer(invocation -> {
+            AiReviewConfig config = invocation.getArgument(0);
+            config.setId(CONFIG_ID);
+            return 1;
+        });
+
+        AiReviewConfigResponse response = service.save(OWNER_ID, TASK_ID, noModelName);
+
+        assertThat(response.modelName()).isEqualTo("qwen-plus");
+    }
+
+    @Test
     void rejectsDisabledProvider() {
         when(taskMapper.selectById(TASK_ID)).thenReturn(draftTask());
-        when(llmProviderService.findEnabledOwnedById(OWNER_ID, PROVIDER_ID)).thenReturn(Optional.empty());
+        when(llmProviderService.findEnabledById(PROVIDER_ID)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.save(OWNER_ID, TASK_ID, request()))
+                .isInstanceOfSatisfying(BusinessException.class,
+                        ex -> assertThat(ex.getCode()).isEqualTo(400401));
+    }
+
+    @Test
+    void rejectsDisabledOrMissingProvider() {
+        when(taskMapper.selectById(TASK_ID)).thenReturn(draftTask());
+        when(llmProviderService.findEnabledById(PROVIDER_ID)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> service.save(OWNER_ID, TASK_ID, request()))
                 .isInstanceOfSatisfying(BusinessException.class,
@@ -133,12 +208,11 @@ class AiReviewConfigServiceTest {
                 List.of("accuracy"),
                 new BigDecimal("60.00"),
                 new BigDecimal("80.00"),
-                Map.of("type", "object"),
                 3,
                 null, null, null, null, null, null
         );
         when(taskMapper.selectById(TASK_ID)).thenReturn(draftTask());
-        when(llmProviderService.findEnabledOwnedById(OWNER_ID, PROVIDER_ID)).thenReturn(Optional.of(provider()));
+        when(llmProviderService.findEnabledById(PROVIDER_ID)).thenReturn(Optional.of(provider()));
 
         assertThatThrownBy(() -> service.save(OWNER_ID, TASK_ID, invalid))
                 .isInstanceOfSatisfying(BusinessException.class,
@@ -157,22 +231,12 @@ class AiReviewConfigServiceTest {
     }
 
     @Test
-    void rejectsProviderOwnedByAnotherOwner() {
-        when(taskMapper.selectById(TASK_ID)).thenReturn(draftTask());
-        when(llmProviderService.findEnabledOwnedById(OWNER_ID, PROVIDER_ID)).thenReturn(Optional.empty());
-
-        assertThatThrownBy(() -> service.save(OWNER_ID, TASK_ID, request()))
-                .isInstanceOfSatisfying(BusinessException.class,
-                        ex -> assertThat(ex.getCode()).isEqualTo(400401));
-    }
-
-    @Test
     void updatesConfigAndIncrementsPromptVersion() {
         AiReviewConfig existing = config();
         existing.setPromptVersion("v3");
         when(taskMapper.selectById(TASK_ID)).thenReturn(draftTask());
         when(aiReviewConfigMapper.selectById(CONFIG_ID)).thenReturn(existing);
-        when(llmProviderService.findEnabledOwnedById(OWNER_ID, PROVIDER_ID)).thenReturn(Optional.of(provider()));
+        when(llmProviderService.findEnabledById(PROVIDER_ID)).thenReturn(Optional.of(provider()));
         when(aiReviewConfigMapper.updateById(any(AiReviewConfig.class))).thenReturn(1);
 
         AiReviewConfigResponse response = service.update(OWNER_ID, TASK_ID, CONFIG_ID, request());
@@ -244,7 +308,6 @@ class AiReviewConfigServiceTest {
                 List.of("accuracy", "safety"),
                 new BigDecimal("85.00"),
                 new BigDecimal("60.00"),
-                Map.of("type", "object", "required", List.of("decision")),
                 3,
                 null, null, null, null, null, null
         );
@@ -283,7 +346,6 @@ class AiReviewConfigServiceTest {
         config.setScoringDimensionsJson("[\"accuracy\",\"safety\"]");
         config.setPassThreshold(new BigDecimal("85.00"));
         config.setManualReviewThreshold(new BigDecimal("60.00"));
-        config.setOutputSchemaJson("{\"type\":\"object\"}");
         config.setPromptVersion("v2");
         config.setCreatedBy(OWNER_ID);
         return config;

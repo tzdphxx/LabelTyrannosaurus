@@ -30,7 +30,7 @@
 | 2 | LLM Trigger（字段级辅助） | ✅ 完整，已异步化 | 4.2 物料 | `LlmTriggerService` + `llm_trigger_runs` |
 | 3 | Pre-Annotation（题目级预填） | ✅ 完整，已异步化 | 额外加分 | `PreAnnotationService` |
 | 4 | SupervisorAgent（工具调用） | ✅ 完整 | 额外加分 | `SupervisorAgent` (182行) |
-| 5 | LLM Provider 管理 | ✅ 已迁移 OWNER 私有隔离 | 基础设施 | `LlmProviderService` |
+| 5 | LLM Provider 管理 | ✅ Admin 统一管理加密 API Key | 基础设施 | `LlmProviderService` + `AdminLlmProviderController` |
 | 6 | LLM Gateway 基础设施 | ✅ 完整 | 基础设施 | `DefaultLlmGateway` (137行) |
 
 ---
@@ -293,12 +293,13 @@ Owner 需要完成三项 AI 相关配置才能发布任务：
 
 | 操作 | 方法 | 路径 | 说明 |
 |------|------|------|------|
-| 查看 Provider 列表 | GET | `/api/v1/llm-providers` | OWNER 只能查看自己的 Provider |
-| 创建 Provider | POST | `/api/v1/llm-providers` | 写入 `owner_id`，OWNER 私有 |
-| 编辑 Provider | PUT | `/api/v1/llm-providers/{id}` | 仅 Provider Owner 可操作 |
-| 启用 Provider | POST | `/api/v1/llm-providers/{id}/enable` | 仅 Provider Owner 可操作 |
-| 停用 Provider | POST | `/api/v1/llm-providers/{id}/disable` | 仅 Provider Owner 可操作 |
-| 测试连通性 | POST | `/api/v1/llm-providers/{id}/test` | 仅 Provider Owner 可操作 |
+| OWNER 查看模型选项 | GET | `/api/v1/llm-providers` | OWNER 只读，仅返回 Admin 启用的模型（精简字段） |
+| ADMIN 查看 Provider 列表 | GET | `/api/v1/admin/llm-providers` | ADMIN 查看全部 Provider（含管理字段） |
+| ADMIN 创建 Provider | POST | `/api/v1/admin/llm-providers` | ADMIN 创建含加密 API Key 的平台模型 |
+| ADMIN 编辑 Provider | PUT | `/api/v1/admin/llm-providers/{id}` | 仅 ADMIN 可操作 |
+| ADMIN 启用 Provider | POST | `/api/v1/admin/llm-providers/{id}/enable` | 仅 ADMIN 可操作 |
+| ADMIN 停用 Provider | POST | `/api/v1/admin/llm-providers/{id}/disable` | 仅 ADMIN 可操作 |
+| ADMIN 测试连通性 | POST | `/api/v1/admin/llm-providers/{id}/test` | 仅 ADMIN 可操作 |
 
 **创建 Provider 时需要的字段**：
 
@@ -770,8 +771,8 @@ public interface LlmGateway {
 
 | 差异项 | 现状 | 课题期望 | 调整方案 |
 |--------|------|----------|----------|
-| LLM Provider 权限 | 已迁移到 OWNER 管理 | Owner 配置审核标准（隐含 Provider 管理） | 已通过 `/api/v1/llm-providers` 和 `owner_id` 隔离实现 |
-| Provider 隔离 | OWNER 私有 | 每个 Owner 独立管理自己的 Provider | 已在 Provider 管理、AI 审核配置和 LlmTrigger 调用处校验 |
+| LLM Provider 权限 | Admin 统一管理加密 API Key | Owner 只选择 Admin 启用的模型 | `/api/v1/admin/llm-providers`（ADMIN）+ `/api/v1/llm-providers`（OWNER）|
+| Provider 隔离 | Admin 管理 / Owner 选模型 | Admin 创建/启停，Owner 选择 | Admin 写接口校验 ADMIN 角色；Owner 只读返回精简字段 |
 | AI 审核队列 | 主链路为 Redis Stream 业务队列 | 课题建议异步任务队列 | 已接入主 dispatcher；Redis 消息只保存业务 ID，不保存 Prompt、答案或 API Key |
 | 视频多模态 | 消费关键帧、转写文本和人工说明 | 多模态数据进入 AI 审核链路 | BE-A 不生成关键帧或 ASR，只负责消费 BE-B/FE 提供的媒体上下文并记录降级信息 |
 

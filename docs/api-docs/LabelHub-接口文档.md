@@ -1455,6 +1455,30 @@ Authorization: Bearer <accessToken>
 
 ---
 
+### 9.12 GET /api/v1/reviewer/ai-review-status
+
+**作用**：获取当前审查员所有负责提交的 AI 预审状态（轻量接口，专注 AI 审核信息）。
+
+**权限**：REVIEWER
+
+**响应体** `List<ReviewerAiReviewStatusItem>`：
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| submissionId | Long | 提交 ID |
+| taskId | Long | 任务 ID |
+| taskTitle | String | 任务标题 |
+| submissionStatus | SubmissionStatus | 提交状态 |
+| aiReviewStatus | AiReviewStatus | AI 审核状态（PENDING / SUCCESS / FAILED 等） |
+| aiDecision | String | AI 决策（PASS / REJECT / MANUAL_REVIEW） |
+| averageScore | String | AI 平均评分 |
+| assignedToMe | Boolean | 是否直接分配给当前审查员 |
+| submittedAt | LocalDateTime | 提交时间 |
+
+**查询范围**：`submissionStatus IN ('PENDING_FINAL', 'AI_REVIEWING')` 且（`assigned_reviewer_id = 当前用户` 或 `review_tasks` 中有分配给当前用户的待审记录）。
+
+---
+
 ## 10. 冲突仲裁
 
 ### 10.1 GET /api/v1/reviewer/conflict-groups
@@ -1527,13 +1551,12 @@ Authorization: Bearer <accessToken>
 
 | 字段 | 类型 | 必填 | 约束 | 说明 |
 |------|------|------|------|------|
-| providerId | Long | 是 | 非空 | LLM 供应商 ID |
-| modelName | String | 是 | 非空，最大 128 字符 | 模型名称 |
+| providerId | Long | 是 | 非空 | Admin 启用的模型 ID |
+| modelName | String | 否 | 最大 128 字符 | 模型名（可选，如提供则必须等于 Provider defaultModel，否则 400402） |
 | promptTemplate | String | 是 | 非空，最大 10000 字符 | Prompt 模板 |
 | scoringDimensions | List&lt;String&gt; | 是 | 非空列表，每项最大 64 字符 | 评分维度列表 |
-| passThreshold | BigDecimal | 是 | 0.00~100.00 | 通过阈值（平均分 ≥ 此值则 PASS） |
-| manualReviewThreshold | BigDecimal | 是 | 0.00~100.00 | 人工复核阈值（分数在此与通过阈值之间转人工） |
-| outputSchema | Map | 是 | 非空 | LLM 输出结构化 Schema |
+| passThreshold | BigDecimal | 是 | 0.00~100.00 | 通过阈值 |
+| manualReviewThreshold | BigDecimal | 是 | 0.00~100.00 | 人工复核阈值 |
 | maxRetry | Integer | 否 | 0~10 | 最大重试次数 |
 | aiFlowPolicy | String | 否 | - | AI 流程策略 |
 | allowAiDirectApprove | Boolean | 否 | - | 是否允许 AI 直接通过 |
@@ -1669,13 +1692,35 @@ Authorization: Bearer <accessToken>
 
 ## 12. 大模型供应商配置
 
-### 12.1 GET /api/v1/llm-providers
+> **权限边界**：ADMIN 统一创建和维护加密 API Key 的平台模型；OWNER 只从 Admin 启用的模型列表中选择。
 
-**作用**：查询当前 OWNER 名下的大模型供应商配置列表。Provider 按 ownerId 隔离，不同 OWNER 互相不可见。响应中不包含 apiKey 明文，敏感 header 值脱敏为 `******`。
+### 12.1 GET /api/v1/llm-providers（OWNER 只读）
+
+**作用**：查询 Admin 已启用的模型选项列表。仅返回选择和展示必要字段。
 
 **权限**：OWNER
 
-**请求参数**：无
+**响应体** `List<OwnerModelOptionResponse>`：
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| id | Long | 供应商 ID（即 Owner 选择模型时的 providerId） |
+| providerCode | String | 供应商编码 |
+| providerName | String | 供应商名称 |
+| defaultModel | String | 默认模型名称（实际调用的模型名） |
+| supportVision | Boolean | 是否支持视觉识别 |
+| supportMultiImage | Boolean | 是否支持多图识别 |
+| maxImageCount | Integer | 最大图片数量 |
+| visionModel | String | 视觉模型名称 |
+| structuredOutputMode | String | 结构化输出模式 |
+
+> **安全**：OWNER 响应永不含 API Key、baseUrl、customHeaders、限流值。
+
+---
+
+### 12.2 GET /api/v1/admin/llm-providers（ADMIN 管理列表）
+
+**权限**：ADMIN。返回全部 Provider，含管理字段。
 
 **响应体** `List<LlmProviderResponse>`：
 
@@ -1691,110 +1736,86 @@ Authorization: Bearer <accessToken>
 | platformRateLimitPerMinute | Integer | 平台级限流 |
 | taskRateLimitPerMinute | Integer | 任务级限流 |
 | userRateLimitPerMinute | Integer | 用户级限流 |
-| apiKeyConfigured | Boolean | 是否已配置 API Key |
 | supportVision | Boolean | 是否支持视觉 |
 | supportMultiImage | Boolean | 是否支持多图 |
 | maxImageCount | Integer | 最大图片数 |
 | visionModel | String | 视觉模型名称 |
-| ownerId | Long | 所属 OWNER ID |
+| structuredOutputMode | String | 结构化输出模式 |
+| outputSchema | String | JSON Schema 输出结构（Admin 管理） |
+| apiKeyConfigured | Boolean | 是否已配置 API Key |
+| createdBy | Long | 创建者 |
 | createdAt | LocalDateTime | 创建时间 |
 | updatedAt | LocalDateTime | 更新时间 |
 
-> **安全**：响应中永远不包含 apiKey / encryptedApiKey 字段。
-
 ---
 
-### 12.2 POST /api/v1/llm-providers
+### 12.3 POST /api/v1/admin/llm-providers（ADMIN 创建）
 
-**作用**：创建 OpenAI 兼容的大模型供应商配置。API Key 使用 AES 加密后存储，加密密钥由环境变量 `LABELHUB_LLM_KEY_ENCRYPTION_SECRET` 提供。
-
-**权限**：OWNER
+**权限**：ADMIN。API Key 使用 AES-GCM 加密存储。
 
 **请求体** `CreateLlmProviderRequest`：
 
 | 字段 | 类型 | 必填 | 约束 | 说明 |
-|------|------|------|------|------|
-| providerCode | String | 是 | 非空，最大 64 字符 | 供应商唯一编码（如 openai、qwen） |
+|------|------|:--:|------|------|
+| providerCode | String | 是 | 非空，最大 64 字符 | 供应商唯一编码 |
 | providerName | String | 是 | 非空，最大 100 字符 | 供应商显示名称 |
 | baseUrl | String | 是 | 非空，最大 500 字符 | API 基础地址 |
-| apiKey | String | 是 | 非空，最大 4096 字符 | API 密钥（存储时加密） |
-| defaultModel | String | 是 | 非空，最大 128 字符 | 默认使用的模型 |
-| customHeaders | Map&lt;String,String&gt; | 否 | - | 自定义请求头 |
-| platformRateLimitPerMinute | Integer | 否 | ≥ 0 | 平台级每分钟调用上限 |
-| taskRateLimitPerMinute | Integer | 否 | ≥ 0 | 单任务每分钟上限 |
-| userRateLimitPerMinute | Integer | 否 | ≥ 0 | 单用户每分钟上限 |
-| supportVision | Boolean | 否 | 默认 false | 是否支持视觉能力 |
-| supportMultiImage | Boolean | 否 | 默认 false | 是否支持多图输入 |
-| maxImageCount | Integer | 否 | ≥ 0，默认 10 | 最大图片数量 |
-| visionModel | String | 否 | 最大 100 字符 | 视觉专用模型名 |
+| apiKey | String | 是 | 非空，最大 4096 字符 | API 密钥（加密存储） |
+| defaultModel | String | 是 | 非空，最大 128 字符 | 默认模型 |
+| customHeaders | Map | 否 | - | 自定义请求头 |
+| platformRateLimitPerMinute | Integer | 否 | ≥ 0 | 平台级限流 |
+| taskRateLimitPerMinute | Integer | 否 | ≥ 0 | 任务级限流 |
+| userRateLimitPerMinute | Integer | 否 | ≥ 0 | 用户级限流 |
+| supportVision | Boolean | 否 | 默认 false | 是否支持视觉 |
+| supportMultiImage | Boolean | 否 | 默认 false | 是否支持多图 |
+| maxImageCount | Integer | 否 | ≥ 0，默认 10 | 最大图片数 |
+| visionModel | String | 否 | 最大 100 字符 | 视觉模型名 |
+| structuredOutputMode | String | 否 | 最大 20 字符 | NONE / JSON_OBJECT / JSON_SCHEMA |
+| outputSchema | String | 否 | 最大 10000 字符 | JSON Schema 输出结构 |
 
 **响应体**：同 `LlmProviderResponse`
 
-**错误码**：500301（加密密钥未配置）；500302（加密/解密失败）
+**错误码**：500301（密钥未配置）；500302（加密/解密失败）
 
 ---
 
-### 12.3 PUT /api/v1/llm-providers/{providerId}
+### 12.4 PUT /api/v1/admin/llm-providers/{providerId}（ADMIN 更新）
 
-**作用**：更新供应商元数据、限流配置和模型能力字段。可选轮换 API Key：如果请求中 apiKey 为空则保留原密钥，提供新值则替换。
+**权限**：ADMIN。apiKey 可选：不传保留原密钥，传新值则替换。
 
-**权限**：OWNER（供应商必须属于当前 OWNER）
-
-**请求体** `UpdateLlmProviderRequest`：字段同 CreateLlmProviderRequest，其中 apiKey 为可选
-
-**响应体**：同 `LlmProviderResponse`
+**请求体** `UpdateLlmProviderRequest`：字段同 CreateLlmProviderRequest，apiKey 可选。
 
 **错误码**：404301（供应商不存在）
 
 ---
 
-### 12.4 POST /api/v1/llm-providers/{providerId}/enable
+### 12.5 POST /api/v1/admin/llm-providers/{providerId}/enable（ADMIN 启用）
 
-**作用**：启用供应商，使其可被 AI 审核配置和触发器选用。
-
-**权限**：OWNER
-
-**状态变更**：enabled=false → enabled=true
-
-**响应体**：`LlmProviderResponse`
+**权限**：ADMIN。启用后 OWNER 可在 AI 审核配置中选用。
 
 ---
 
-### 12.5 POST /api/v1/llm-providers/{providerId}/disable
+### 12.6 POST /api/v1/admin/llm-providers/{providerId}/disable（ADMIN 禁用）
 
-**作用**：禁用供应商。禁用后不可被新的 AI 审核配置或触发器选用，已运行中的任务不受影响。
-
-**权限**：OWNER
-
-**状态变更**：enabled=true → enabled=false
-
-**响应体**：`LlmProviderResponse`
+**权限**：ADMIN。禁用后不可被新配置选用，已运行任务不受影响。
 
 ---
 
-### 12.6 POST /api/v1/llm-providers/{providerId}/test
+### 12.7 POST /api/v1/admin/llm-providers/{providerId}/test（ADMIN 测试）
 
-**作用**：对供应商进行在线连通性测试。发送 OpenAI 兼容的 chat/completions 请求，验证地址和密钥有效性。
-
-**权限**：OWNER
+**权限**：ADMIN。发送 OpenAI 兼容请求验证连通性。
 
 **请求体** `TestLlmProviderRequest`：
 
 | 字段 | 类型 | 必填 | 说明 |
-|------|------|------|------|
-| apiKey | String | 否 | 临时测试密钥（不传则用已存储的） |
-| modelName | String | 否 | 测试的模型名 |
+|------|------|:--:|------|
+| apiKey | String | 否 | 临时密钥（不传用已存储的） |
+| modelName | String | 否 | 测试模型名 |
 | customHeaders | Map | 否 | 临时自定义头 |
 
-**响应体** `LlmProviderTestResponse`：
+**响应体** `LlmProviderTestResponse`：success / latencyMs / message
 
-| 字段 | 类型 | 说明 |
-|------|------|------|
-| success | Boolean | 测试是否成功 |
-| latencyMs | Long | 请求耗时毫秒 |
-| message | String | 结果描述或错误信息 |
-
-**错误码**：400301（Header 名无效）；500303（Header JSON 格式错误）
+**错误码**：400301（Header 无效）；500303（Header JSON 格式错误）
 
 ---
 
@@ -1886,9 +1907,9 @@ LlmTrigger 是前端在标注作答过程中直接调用的 AI 辅助能力。�
 
 ---
 
-### 13.3 GET /api/v1/tasks/{taskId}/llm-trigger-runs
+### 13.4 GET /api/v1/tasks/{taskId}/llm-trigger-runs
 
-**作用**：分页查询指定任务下的所有 LLM 触发器运行记录，支持按状态、组件 ID、时间范围筛选。用于管理员和任务 Owner 查看 LLM 调用日志。
+**作用**：分页查询指定任务下的所有 LlmTrigger 运行记录，支持按状态、组件 ID、时间范围筛选。用于管理员和任务 Owner 查看 LLM 调用日志。
 
 **权限**：ADMIN / OWNER（仅自己的任务） / REVIEWER
 

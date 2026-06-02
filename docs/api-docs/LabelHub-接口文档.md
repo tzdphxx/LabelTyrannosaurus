@@ -2756,9 +2756,14 @@ POST /api/v1/templates/10/fork
 ### D.6 人工审核
 
 ```text
-18. GET /api/v1/reviewer/submissions?submissionStatus=PENDING_FINAL&page=1&size=20
-    响应: [{ submissionId: 300, aiDecision: "PASS", aiReviewStatus: "SUCCESS", ... }]
-    说明: 审核员查看待审提交列表
+18a. GET /api/v1/reviewer/ai-review-status
+     响应: [{ submissionId: 300, taskTitle: "图像分类标注", aiReviewStatus: "SUCCESS",
+              aiDecision: "PASS", averageScore: "85.50", assignedToMe: true, ... }]
+     说明: 审查员查看自己所有负责提交的 AI 预审状态（专用轻量接口）
+
+18b. GET /api/v1/reviewer/submissions?submissionStatus=PENDING_FINAL&page=1&size=20
+     响应: [{ submissionId: 300, aiDecision: "PASS", aiReviewStatus: "SUCCESS", ... }]
+     说明: 审核员查看待审提交列表（含更多筛选维度）
 
 19. GET /api/v1/reviewer/submissions/300
     响应: { 完整提交详情：答案内容、AI 各维度评分、历史审核记录、冲突信息 }

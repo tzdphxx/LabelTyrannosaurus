@@ -1,10 +1,13 @@
 package com.labelhub.common.web;
 
+import jakarta.servlet.http.HttpServletRequest;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.mock.web.MockHttpServletRequest;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 class RequestTraceIdProviderTest {
 
@@ -25,26 +28,35 @@ class RequestTraceIdProviderTest {
         assertThat(provider.currentTraceId()).isNotBlank();
     }
 
-    private static ObjectProvider<jakarta.servlet.http.HttpServletRequest> providerFor(
-            jakarta.servlet.http.HttpServletRequest request) {
+    @Test
+    void currentTraceIdGeneratesFallbackWhenRequestProxyHasNoBoundRequest() {
+        HttpServletRequest request = mock(HttpServletRequest.class);
+        when(request.getHeader("X-Trace-Id"))
+                .thenThrow(new IllegalStateException("No thread-bound request found"));
+        RequestTraceIdProvider provider = new RequestTraceIdProvider(providerFor(request));
+
+        assertThat(provider.currentTraceId()).isNotBlank();
+    }
+
+    private static ObjectProvider<HttpServletRequest> providerFor(HttpServletRequest request) {
         return new ObjectProvider<>() {
             @Override
-            public jakarta.servlet.http.HttpServletRequest getObject(Object... args) {
+            public HttpServletRequest getObject(Object... args) {
                 return request;
             }
 
             @Override
-            public jakarta.servlet.http.HttpServletRequest getIfAvailable() {
+            public HttpServletRequest getIfAvailable() {
                 return request;
             }
 
             @Override
-            public jakarta.servlet.http.HttpServletRequest getIfUnique() {
+            public HttpServletRequest getIfUnique() {
                 return request;
             }
 
             @Override
-            public jakarta.servlet.http.HttpServletRequest getObject() {
+            public HttpServletRequest getObject() {
                 return request;
             }
         };

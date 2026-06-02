@@ -7,10 +7,10 @@ import static org.assertj.core.api.Assertions.assertThat;
 class AiDecisionTest {
 
     @Test
-    void aiReviewDecisionUsesPassReturnAndManualReview() {
+    void aiReviewDecisionUsesPassRejectAndManualReview() {
         assertThat(AiDecision.values())
                 .extracting(Enum::name)
-                .containsExactly("PASS", "RETURN", "MANUAL_REVIEW");
-        assertThat(AiDecision.valueOf("RETURN")).isEqualTo(AiDecision.RETURN);
+                .containsExactly("PASS", "REJECT", "MANUAL_REVIEW");
+        assertThat(AiDecision.valueOf("REJECT")).isEqualTo(AiDecision.REJECT);
     }
 }

@@ -41,4 +41,48 @@ public interface TaskMapper extends BaseMapper<Task> {
                                           @Param("tag") String tag,
                                           @Param("status") String status,
                                           @Param("now") LocalDateTime now);
+
+    @Select("""
+            <script>
+            SELECT t.*
+            FROM tasks t
+            WHERE t.owner_id = #{ownerId}
+              <if test="status != null">
+                AND t.status = #{status}
+              </if>
+              <if test="keyword != null">
+                AND (
+                  t.title LIKE CONCAT('%', #{keyword}, '%')
+                  OR t.description LIKE CONCAT('%', #{keyword}, '%')
+                )
+              </if>
+            ORDER BY t.updated_at DESC, t.id DESC
+            LIMIT #{limit} OFFSET #{offset}
+            </script>
+            """)
+    List<Task> selectOwnerTasksPage(@Param("ownerId") Long ownerId,
+                                    @Param("status") String status,
+                                    @Param("keyword") String keyword,
+                                    @Param("limit") int limit,
+                                    @Param("offset") int offset);
+
+    @Select("""
+            <script>
+            SELECT COUNT(1)
+            FROM tasks t
+            WHERE t.owner_id = #{ownerId}
+              <if test="status != null">
+                AND t.status = #{status}
+              </if>
+              <if test="keyword != null">
+                AND (
+                  t.title LIKE CONCAT('%', #{keyword}, '%')
+                  OR t.description LIKE CONCAT('%', #{keyword}, '%')
+                )
+              </if>
+            </script>
+            """)
+    long countOwnerTasks(@Param("ownerId") Long ownerId,
+                         @Param("status") String status,
+                         @Param("keyword") String keyword);
 }

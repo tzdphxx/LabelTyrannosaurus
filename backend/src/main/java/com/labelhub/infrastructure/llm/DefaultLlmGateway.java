@@ -47,7 +47,8 @@ public class DefaultLlmGateway implements LlmGateway {
                     PROVIDER_UNAVAILABLE, "LLM provider is unavailable");
         }
         LlmProviderRuntimeConfig config = selectRuntimeModel(runtimeConfig.get(), request.messages());
-        OpenAiCompatibleResponse adapterResponse = adapter.chat(config, request.messages());
+        ResponseFormat responseFormat = resolveResponseFormat(config, request.responseFormat());
+        OpenAiCompatibleResponse adapterResponse = adapter.chat(config, request.messages(), null, null, responseFormat);
         if (adapterResponse.timedOut()) {
             return failure(LlmGatewayStatus.TIMEOUT, adapterResponse.rawResponse(), null, adapterResponse.latencyMs(),
                     TIMEOUT, adapterResponse.errorMessage());
@@ -84,6 +85,30 @@ public class DefaultLlmGateway implements LlmGateway {
                 .anyMatch(LlmMessage.ImageUrlPart.class::isInstance);
     }
 
+    /**
+     * The provider's configured {@code structuredOutputMode} is the gate:
+     * <ul>
+     *   <li>NONE — never send response_format, regardless of what the caller requested</li>
+     *   <li>JSON_OBJECT — always send json_object</li>
+     *   <li>JSON_SCHEMA — send the caller's schema if supplied, otherwise fall back to json_object</li>
+     * </ul>
+     */
+    private ResponseFormat resolveResponseFormat(LlmProviderRuntimeConfig config, ResponseFormat requested) {
+        String mode = config.capability() == null ? "NONE" : config.capability().structuredOutputMode();
+        if (mode == null || "NONE".equals(mode)) {
+            return ResponseFormat.none();
+        }
+        if ("JSON_SCHEMA".equals(mode)) {
+            if (requested != null && requested.mode() == ResponseFormat.Mode.JSON_SCHEMA
+                    && requested.jsonSchema() != null) {
+                return requested;
+            }
+            return ResponseFormat.jsonObject();
+        }
+        // JSON_OBJECT
+        return ResponseFormat.jsonObject();
+    }
+
     private LlmGatewayResponse extractStructuredJson(OpenAiCompatibleResponse adapterResponse) {
         String contentText = extractContentText(adapterResponse.rawResponse());
         if (contentText == null) {
@@ -107,6 +132,14 @@ public class DefaultLlmGateway implements LlmGateway {
             if (content.isMissingNode() || content.isNull()) {
                 return null;
             }
+            if (content.isArray()) {
+                for (JsonNode part : content) {
+                    if ("text".equals(part.path("type").asText()) && part.has("text")) {
+                        return part.get("text").asText();
+                    }
+                }
+                return null;
+            }
             return content.asText();
         } catch (JsonProcessingException ex) {
             return null;
@@ -119,8 +152,11 @@ public class DefaultLlmGateway implements LlmGateway {
             return trimmed;
         }
         int firstLineEnd = trimmed.indexOf('\n');
-        int lastFenceStart = trimmed.lastIndexOf("```");
-        if (firstLineEnd < 0 || lastFenceStart <= firstLineEnd) {
+        if (firstLineEnd < 0) {
+            return trimmed;
+        }
+        int lastFenceStart = trimmed.lastIndexOf("\n```");
+        if (lastFenceStart <= firstLineEnd) {
             return trimmed;
         }
         return trimmed.substring(firstLineEnd + 1, lastFenceStart).trim();

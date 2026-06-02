@@ -21,8 +21,10 @@ import com.labelhub.modules.dataset.dto.DatasetItemStatus;
 import com.labelhub.modules.dataset.dto.DatasetItemUpdateRequest;
 import com.labelhub.modules.dataset.repository.DatasetItemChangeLogMapper;
 import com.labelhub.modules.dataset.repository.DatasetItemRepositoryMapper;
+import com.labelhub.modules.media.service.MediaProcessingService;
 import com.labelhub.modules.task.domain.TaskEntity;
 import com.labelhub.modules.task.repository.TaskRepositoryMapper;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -45,15 +47,26 @@ public class DatasetItemService {
     private final DatasetItemRepositoryMapper datasetItemMapper;
     private final DatasetItemChangeLogMapper changeLogMapper;
     private final ObjectMapper objectMapper;
+    private final MediaProcessingService mediaProcessingService;
+
+    @Autowired
+    public DatasetItemService(TaskRepositoryMapper taskMapper,
+                              DatasetItemRepositoryMapper datasetItemMapper,
+                              DatasetItemChangeLogMapper changeLogMapper,
+                              ObjectMapper objectMapper,
+                              MediaProcessingService mediaProcessingService) {
+        this.taskMapper = taskMapper;
+        this.datasetItemMapper = datasetItemMapper;
+        this.changeLogMapper = changeLogMapper;
+        this.objectMapper = objectMapper;
+        this.mediaProcessingService = mediaProcessingService;
+    }
 
     public DatasetItemService(TaskRepositoryMapper taskMapper,
                               DatasetItemRepositoryMapper datasetItemMapper,
                               DatasetItemChangeLogMapper changeLogMapper,
                               ObjectMapper objectMapper) {
-        this.taskMapper = taskMapper;
-        this.datasetItemMapper = datasetItemMapper;
-        this.changeLogMapper = changeLogMapper;
-        this.objectMapper = objectMapper;
+        this(taskMapper, datasetItemMapper, changeLogMapper, objectMapper, null);
     }
 
     /**
@@ -140,6 +153,7 @@ public class DatasetItemService {
             entity.setApprovedCount(0);
             entity.setDeleted(false);
             datasetItemMapper.insert(entity);
+            refreshMediaContext(task.getId(), entity.getId(), entity.getItemJson(), actorId);
             appendChangeLog(task.getId(), entity.getId(), "BATCH_APPEND", null, entity.getItemJson(), actorId);
             return BatchItemResult.success(entity.getId(), externalId);
         } catch (RuntimeException ex) {
@@ -162,6 +176,7 @@ public class DatasetItemService {
                 return BatchItemResult.failure(entity.getId(), entity.getExternalId(), 400101,
                         "Claimed or submitted item cannot be changed");
             }
+            refreshMediaContext(task.getId(), entity.getId(), itemJson, actorId);
             appendChangeLog(task.getId(), entity.getId(), "BATCH_UPDATE", beforeJson, itemJson, actorId);
             return BatchItemResult.success(entity.getId(), entity.getExternalId());
         } catch (RuntimeException ex) {
@@ -221,6 +236,12 @@ public class DatasetItemService {
         changeLog.setAfterJson(afterJson);
         changeLog.setActorId(actorId);
         changeLogMapper.insert(changeLog);
+    }
+
+    private void refreshMediaContext(Long taskId, Long itemId, String itemJson, Long actorId) {
+        if (mediaProcessingService != null) {
+            mediaProcessingService.refreshContext(taskId, itemId, itemJson, actorId);
+        }
     }
 
     private DatasetItemResponse toResponse(DatasetItemEntity entity) {

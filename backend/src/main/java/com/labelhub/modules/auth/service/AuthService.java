@@ -12,6 +12,8 @@ import com.labelhub.modules.auth.dto.LoginRequest;
 import com.labelhub.modules.auth.dto.RegisterRequest;
 import com.labelhub.modules.auth.dto.TokenResponse;
 import com.labelhub.modules.auth.dto.UserProfileResponse;
+import com.labelhub.modules.auth.dto.ChangePasswordRequest;
+import com.labelhub.modules.auth.dto.UpdateProfileRequest;
 import com.labelhub.modules.auth.repository.UserMapper;
 import com.labelhub.modules.auth.repository.UserRoleMapper;
 import lombok.extern.slf4j.Slf4j;
@@ -31,7 +33,7 @@ import java.util.Set;
 @Slf4j
 public class AuthService {
 
-    private static final Set<RoleCode> REGISTERABLE_ROLES = Set.of(RoleCode.LABELER, RoleCode.OWNER, RoleCode.REVIEWER);
+    private static final Set<RoleCode> REGISTERABLE_ROLES = Set.of(RoleCode.LABELER, RoleCode.OWNER);
 
     private final UserMapper userMapper;
     private final UserRoleMapper userRoleMapper;
@@ -51,8 +53,8 @@ public class AuthService {
     /**
      * 注册普通用户并签发令牌。
      *
-     * <p>注册用户固定为 {@code USER} 类型，默认可登录、可用，并授予 {@code LABELER}
-     * 角色。用户名和邮箱任一重复都会返回参数非法错误。</p>
+     * <p>注册用户固定为 {@code USER} 类型，默认可登录、可用，并授予公开注册允许的
+     * {@code LABELER} 或 {@code OWNER} 角色。用户名和邮箱任一重复都会返回参数非法错误。</p>
      */
     @Transactional
     public TokenResponse register(RegisterRequest request) {
@@ -61,7 +63,6 @@ public class AuthService {
         if (userMapper.selectByUsername(request.username()) != null || userMapper.selectByEmail(request.email()) != null) {
             throw new BusinessException(400102, "Username or email already exists");
         }
-        RoleCode selectedRole = RoleCode.valueOf(request.role().toUpperCase());
         UserEntity user = new UserEntity();
         user.setUsername(request.username());
         user.setEmail(request.email());
@@ -155,5 +156,38 @@ public class AuthService {
                 && Boolean.TRUE.equals(user.getEnabled())
                 && Boolean.TRUE.equals(user.getLoginEnabled())
                 && user.getPasswordHash() != null;
+    }
+
+    @Transactional
+    public void changePassword(Long userId, ChangePasswordRequest request) {
+        UserEntity user = userMapper.selectById(userId);
+        if (user == null) {
+            throw new BusinessException(401001, "User not found");
+        }
+        if (!passwordEncoder.matches(request.oldPassword(), user.getPasswordHash())) {
+            throw new BusinessException(401001, "Old password is incorrect");
+        }
+        user.setPasswordHash(passwordEncoder.encode(request.newPassword()));
+        userMapper.updateById(user);
+        userMapper.incrementTokenVersion(userId);
+    }
+
+    @Transactional
+    public void updateProfile(Long userId, UpdateProfileRequest request) {
+        UserEntity user = userMapper.selectById(userId);
+        if (user == null) {
+            throw new BusinessException(401001, "User not found");
+        }
+        if (request.email() != null && !request.email().isBlank()) {
+            UserEntity existing = userMapper.selectByEmail(request.email());
+            if (existing != null && !existing.getId().equals(userId)) {
+                throw new BusinessException(400102, "Email already in use");
+            }
+            user.setEmail(request.email());
+        }
+        if (request.displayName() != null) {
+            user.setDisplayName(request.displayName());
+        }
+        userMapper.updateById(user);
     }
 }

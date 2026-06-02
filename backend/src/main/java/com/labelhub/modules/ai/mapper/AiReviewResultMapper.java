@@ -49,6 +49,52 @@ public interface AiReviewResultMapper extends BaseMapper<AiReviewResult> {
             """)
     List<AiReviewResult> selectPendingRetries();
 
+    @Select("""
+            <script>
+            SELECT r.*
+            FROM ai_review_results r
+            INNER JOIN submissions s ON s.id = r.submission_id
+            WHERE s.task_id = #{query.taskId}
+            <if test="query.status != null and query.status != ''">
+              AND r.status = #{query.status}
+            </if>
+            <if test="query.decision != null and query.decision != ''">
+              AND r.decision = #{query.decision}
+            </if>
+            <if test="query.startTime != null">
+              AND r.created_at &gt;= #{query.startTime}
+            </if>
+            <if test="query.endTime != null">
+              AND r.created_at &lt;= #{query.endTime}
+            </if>
+            ORDER BY r.created_at DESC
+            LIMIT #{query.normalizedPageSize} OFFSET #{query.offset}
+            </script>
+            """)
+    List<AiReviewResult> selectPageByTaskId(@Param("query") com.labelhub.modules.ai.dto.AiReviewResultQuery query);
+
+    @Select("""
+            <script>
+            SELECT COUNT(*)
+            FROM ai_review_results r
+            INNER JOIN submissions s ON s.id = r.submission_id
+            WHERE s.task_id = #{query.taskId}
+            <if test="query.status != null and query.status != ''">
+              AND r.status = #{query.status}
+            </if>
+            <if test="query.decision != null and query.decision != ''">
+              AND r.decision = #{query.decision}
+            </if>
+            <if test="query.startTime != null">
+              AND r.created_at &gt;= #{query.startTime}
+            </if>
+            <if test="query.endTime != null">
+              AND r.created_at &lt;= #{query.endTime}
+            </if>
+            </script>
+            """)
+    long countByTaskId(@Param("query") com.labelhub.modules.ai.dto.AiReviewResultQuery query);
+
     @Update("""
             UPDATE ai_review_results
             SET status = #{status},
@@ -82,6 +128,11 @@ public interface AiReviewResultMapper extends BaseMapper<AiReviewResult> {
                 risk_flags = #{riskFlags},
                 suggestion = #{suggestion},
                 raw_response = #{rawResponse},
+                confidence = #{confidence},
+                flow_action = #{flowAction},
+                prompt_mode = #{promptMode},
+                degraded = #{degraded},
+                limitations = #{limitations},
                 error_code = NULL,
                 error_message = NULL,
                 next_retry_at = NULL,
@@ -96,5 +147,10 @@ public interface AiReviewResultMapper extends BaseMapper<AiReviewResult> {
                          @Param("dimensionScores") String dimensionScores,
                          @Param("riskFlags") String riskFlags,
                          @Param("suggestion") String suggestion,
-                         @Param("rawResponse") String rawResponse);
+                         @Param("rawResponse") String rawResponse,
+                         @Param("confidence") BigDecimal confidence,
+                         @Param("flowAction") String flowAction,
+                         @Param("promptMode") String promptMode,
+                         @Param("degraded") Boolean degraded,
+                         @Param("limitations") String limitations);
 }

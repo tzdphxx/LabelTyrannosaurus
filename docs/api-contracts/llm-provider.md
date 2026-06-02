@@ -2,10 +2,9 @@
 
 Owner: BE-A
 
-## GET /api/v1/admin/llm-providers
+## GET /api/v1/llm-providers
 
-Description: Lists configured model providers and masks all sensitive credentials for management UI display.
-Permission: ADMIN, enforced by BE-B Auth later.
+Permission: OWNER. Providers are isolated by the current owner's `userId`.
 
 Response fields:
 
@@ -21,7 +20,7 @@ platformRateLimitPerMinute
 taskRateLimitPerMinute
 userRateLimitPerMinute
 apiKeyConfigured
-createdBy
+ownerId
 createdAt
 updatedAt
 ```
@@ -35,10 +34,9 @@ encryptedApiKey
 
 Sensitive custom header values such as Authorization, Cookie, token, secret, api-key are masked as `******`.
 
-## POST /api/v1/admin/llm-providers
+## POST /api/v1/llm-providers
 
-Description: Creates an OpenAI-compatible provider configuration and stores its API key encrypted.
-Permission: ADMIN, enforced by BE-B Auth later.
+Permission: OWNER.
 
 Request fields:
 
@@ -61,13 +59,12 @@ Rules:
 ```text
 apiKey is encrypted with LABELHUB_LLM_KEY_ENCRYPTION_SECRET before storage.
 apiKey is never returned.
-createdBy is recorded from X-User-Id until BE-B Auth supplies unified context.
+ownerId is recorded from the authenticated OWNER context.
 ```
 
-## PUT /api/v1/admin/llm-providers/{id}
+## PUT /api/v1/llm-providers/{id}
 
-Description: Updates provider metadata, rate limits, model capability fields, and optionally rotates the API key.
-Permission: ADMIN, enforced by BE-B Auth later.
+Permission: OWNER. The provider must belong to the current owner.
 
 Request fields:
 
@@ -90,7 +87,7 @@ If apiKey is omitted or blank, the existing encrypted API key is kept.
 If apiKey is provided, it replaces the previous key after encryption.
 ```
 
-## POST /api/v1/admin/llm-providers/{id}/enable
+## POST /api/v1/llm-providers/{id}/enable
 
 Description: Enables a provider so it can be selected and used by AI review and trigger flows.
 
@@ -100,7 +97,7 @@ Status impact:
 enabled=false -> enabled=true
 ```
 
-## POST /api/v1/admin/llm-providers/{id}/disable
+## POST /api/v1/llm-providers/{id}/disable
 
 Description: Disables a provider to prevent new AI review configuration or model execution from using it.
 
@@ -111,7 +108,7 @@ enabled=true -> enabled=false
 Disabled providers must not be selectable by AI review config or new AI review scheduling.
 ```
 
-## POST /api/v1/admin/llm-providers/{id}/test
+## POST /api/v1/llm-providers/{id}/test
 
 Description: Performs a live compatibility check against the provider using supplied or stored credentials.
 

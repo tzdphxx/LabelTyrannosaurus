@@ -42,6 +42,12 @@ public class DefaultMediaPromptContextBuilder implements MediaPromptContextBuild
 
         PromptMode mode = PromptMode.TEXT_ONLY;
         boolean degraded = false;
+        limitations.addAll(stringList(item.get("media_context_limitations")));
+        String processingStatus = text(item.get("media_processing_status"));
+        if (!processingStatus.isBlank() && !"READY".equalsIgnoreCase(processingStatus)) {
+            limitations.add("MEDIA_PROCESSING_" + processingStatus.toUpperCase(Locale.ROOT));
+            degraded = true;
+        }
 
         switch (mediaType) {
             case "image" -> {
@@ -170,6 +176,8 @@ public class DefaultMediaPromptContextBuilder implements MediaPromptContextBuild
         Map<String, Object> summary = new LinkedHashMap<>();
         summary.put("mode", promptMode.name());
         summary.put("mediaType", mediaType);
+        summary.put("processingStatus", text(item.get("media_processing_status")).isBlank()
+                ? "UNKNOWN" : text(item.get("media_processing_status")));
         summary.put("usedMedia", !imageUrls.isEmpty());
         summary.put("usedKeyFrames", promptMode == PromptMode.VIDEO_KEYFRAMES && !imageUrls.isEmpty());
         summary.put("usedTranscript", !text(item.get("video_transcript")).isBlank());

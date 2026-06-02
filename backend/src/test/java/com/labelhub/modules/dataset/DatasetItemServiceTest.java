@@ -18,6 +18,7 @@ import com.labelhub.modules.dataset.repository.DatasetItemChangeLogMapper;
 import com.labelhub.modules.dataset.repository.DatasetItemRepositoryMapper;
 import com.labelhub.modules.dataset.service.DatasetItemService;
 import com.labelhub.modules.dataset.service.DatasetSnapshotService;
+import com.labelhub.modules.media.service.MediaProcessingService;
 import com.labelhub.modules.task.domain.TaskEntity;
 import com.labelhub.modules.task.domain.TaskStatus;
 import com.labelhub.modules.task.repository.TaskRepositoryMapper;
@@ -32,6 +33,7 @@ import java.util.Set;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -42,12 +44,14 @@ class DatasetItemServiceTest {
     private final TaskRepositoryMapper taskMapper = mock(TaskRepositoryMapper.class);
     private final DatasetItemRepositoryMapper datasetItemMapper = mock(DatasetItemRepositoryMapper.class);
     private final DatasetItemChangeLogMapper changeLogMapper = mock(DatasetItemChangeLogMapper.class);
+    private final MediaProcessingService mediaProcessingService = mock(MediaProcessingService.class);
     private final ObjectMapper objectMapper = new ObjectMapper();
     private final DatasetItemService itemService = new DatasetItemService(
             taskMapper,
             datasetItemMapper,
             changeLogMapper,
-            objectMapper
+            objectMapper,
+            mediaProcessingService
     );
     private final DatasetSnapshotService snapshotService = new DatasetSnapshotService(
             taskMapper,
@@ -133,6 +137,27 @@ class DatasetItemServiceTest {
         assertThat(results.get(1).errorCode()).isEqualTo(400102);
         verify(datasetItemMapper).insert(any(DatasetItemEntity.class));
         verify(changeLogMapper).insert(any(DatasetItemChangeLogEntity.class));
+    }
+
+    @Test
+    void batchAppendRefreshesMediaContextForNewItem() {
+        CurrentUserContext.set(new CurrentUser(10L, "owner", "owner@example.com", Set.of(RoleCode.OWNER), 1));
+        stubTask(10L, TaskStatus.DRAFT, 2);
+        when(datasetItemMapper.selectActiveByTaskIdAndExternalId(1L, "img1")).thenReturn(null);
+        when(datasetItemMapper.insert(any(DatasetItemEntity.class))).thenAnswer(invocation -> {
+            DatasetItemEntity entity = invocation.getArgument(0);
+            entity.setId(200L);
+            return 1;
+        });
+
+        itemService.batchAppend(1L, new BatchAppendItemsRequest(List.of(
+                new DatasetItemAppendRequest("img1",
+                        Map.of("media_type", "image", "media_file_id", 99), Map.of())
+        )));
+
+        ArgumentCaptor<String> itemJsonCaptor = ArgumentCaptor.forClass(String.class);
+        verify(mediaProcessingService).refreshContext(eq(1L), eq(200L), itemJsonCaptor.capture(), eq(10L));
+        assertThat(itemJsonCaptor.getValue()).contains("\"media_type\":\"image\"", "\"media_file_id\":99");
     }
 
     @Test

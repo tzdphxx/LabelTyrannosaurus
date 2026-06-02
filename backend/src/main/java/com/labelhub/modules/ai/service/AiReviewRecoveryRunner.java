@@ -5,6 +5,7 @@ import com.labelhub.common.audit.AuditAppender;
 import com.labelhub.common.audit.AuditCommand;
 import com.labelhub.modules.agent.domain.SystemActorContext;
 import com.labelhub.modules.agent.service.SystemAgentProvider;
+import com.labelhub.modules.ai.domain.AiFlowAction;
 import com.labelhub.modules.ai.domain.AiReviewResult;
 import com.labelhub.modules.ai.domain.AiReviewStatus;
 import com.labelhub.modules.ai.mapper.AiReviewResultMapper;
@@ -88,12 +89,38 @@ public class AiReviewRecoveryRunner implements ApplicationRunner {
     }
 
     private void moveToFinalStatus(Submission submission, AiReviewResult result) {
-        if (result.getStatus() == AiReviewStatus.MANUAL_REQUIRED
-                || result.getStatus() == AiReviewStatus.SUCCESS) {
-            submission.setStatus(SubmissionStatus.PENDING_FINAL);
-            submissionMapper.updateById(submission);
-            appendRecoveryAudit(submission.getId(), "MOVED_TO_PENDING_FINAL");
+        if (result.getStatus() == AiReviewStatus.MANUAL_REQUIRED) {
+            updateRecoveredStatus(submission, SubmissionStatus.PENDING_FINAL, "MOVED_TO_PENDING_FINAL");
+            return;
         }
+        if (result.getStatus() != AiReviewStatus.SUCCESS) {
+            return;
+        }
+        AiFlowAction action = parseFlowAction(result.getFlowAction());
+        if (action == AiFlowAction.AI_DIRECT_APPROVE) {
+            updateRecoveredStatus(submission, SubmissionStatus.APPROVED, "MOVED_TO_APPROVED");
+        } else if (action == AiFlowAction.AI_DIRECT_REJECT) {
+            updateRecoveredStatus(submission, SubmissionStatus.REJECTED, "MOVED_TO_REJECTED");
+        } else {
+            updateRecoveredStatus(submission, SubmissionStatus.PENDING_FINAL, "MOVED_TO_PENDING_FINAL");
+        }
+    }
+
+    private AiFlowAction parseFlowAction(String flowAction) {
+        if (flowAction == null || flowAction.isBlank()) {
+            return AiFlowAction.AI_ASSIGN_MANUAL_REVIEW;
+        }
+        try {
+            return AiFlowAction.valueOf(flowAction);
+        } catch (IllegalArgumentException ex) {
+            return AiFlowAction.AI_ASSIGN_MANUAL_REVIEW;
+        }
+    }
+
+    private void updateRecoveredStatus(Submission submission, SubmissionStatus status, String action) {
+        submission.setStatus(status);
+        submissionMapper.updateById(submission);
+        appendRecoveryAudit(submission.getId(), action);
     }
 
     private void appendRecoveryAudit(Long submissionId, String action) {

@@ -152,4 +152,21 @@ class MediaPromptContextBuilderTest {
         assertThat(result.mediaUnderstanding()).containsEntry("usedMedia", true);
         assertThat(result.mediaUnderstanding()).containsEntry("mode", "IMAGE_SINGLE");
     }
+
+    @Test
+    void mediaUnderstandingIncludesProcessingStatusAndContextLimitations() {
+        MediaPromptResult result = builder.build(new MediaPromptInput(
+                "{\"media_type\":\"video\",\"media_processing_status\":\"PARTIAL\",\"media_context_limitations\":[\"TRANSCRIPT_UNAVAILABLE\"],\"key_frame_urls\":[\"https://e.com/1.jpg\"]}",
+                "{}",
+                "Review video",
+                new ProviderCapability(true, true, 5, null),
+                true,
+                "auto",
+                5
+        ));
+
+        assertThat(result.degraded()).isTrue();
+        assertThat(result.limitations()).contains("TRANSCRIPT_UNAVAILABLE", "TRANSCRIPT_MISSING");
+        assertThat(result.mediaUnderstanding()).containsEntry("processingStatus", "PARTIAL");
+    }
 }

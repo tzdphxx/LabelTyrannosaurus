@@ -91,7 +91,7 @@ public class AiReviewConfigService {
     @Transactional
     public AiReviewConfigResponse save(Long ownerId, Long taskId, AiReviewConfigRequest request) {
         Task task = loadOwnedDraftTask(ownerId, taskId);
-        LlmProvider provider = requireEnabledProvider(request.providerId());
+        LlmProvider provider = requireEnabledProvider(ownerId, request.providerId());
         validateRequest(request, provider);
         AiReviewConfig existing = findByTaskId(taskId);
         if (existing != null) {
@@ -114,7 +114,7 @@ public class AiReviewConfigService {
     public AiReviewConfigResponse update(Long ownerId, Long taskId, Long configId, AiReviewConfigRequest request) {
         Task task = loadOwnedDraftTask(ownerId, taskId);
         AiReviewConfig config = loadTaskConfig(taskId, configId);
-        LlmProvider provider = requireEnabledProvider(request.providerId());
+        LlmProvider provider = requireEnabledProvider(ownerId, request.providerId());
         validateRequest(request, provider);
         return updateExisting(ownerId, task, config, request, "AI_REVIEW_CONFIG_UPDATED");
     }
@@ -237,8 +237,8 @@ public class AiReviewConfigService {
         }
     }
 
-    private LlmProvider requireEnabledProvider(Long providerId) {
-        return llmProviderService.findEnabledById(providerId)
+    private LlmProvider requireEnabledProvider(Long ownerId, Long providerId) {
+        return llmProviderService.findEnabledOwnedById(ownerId, providerId)
                 .orElseThrow(() -> new BusinessException(AI_REVIEW_PROVIDER_DISABLED,
                         "Enabled LLM provider is required"));
     }

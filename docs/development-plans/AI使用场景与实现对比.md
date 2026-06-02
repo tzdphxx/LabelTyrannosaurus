@@ -26,11 +26,11 @@
 
 | # | 场景 | 实现状态 | 课题对应 | 核心类 |
 |---|------|----------|----------|--------|
-| 1 | AI 自动预审 | ✅ 完整 | 4.4 核心难点 | `AiAutoReviewService` (762行) |
-| 2 | LLM Trigger（字段级辅助） | ✅ 完整 | 4.2 物料 | `LlmTriggerService` (380行) |
-| 3 | Pre-Annotation（题目级预填） | ✅ 完整 | 额外加分 | `PreAnnotationService` (571行) |
+| 1 | AI 自动预审 | ✅ 主体完成 | 4.4 核心难点 | `AiAutoReviewService` |
+| 2 | LLM Trigger（字段级辅助） | ✅ 完整，已异步化 | 4.2 物料 | `LlmTriggerService` + `llm_trigger_runs` |
+| 3 | Pre-Annotation（题目级预填） | ✅ 完整，已异步化 | 额外加分 | `PreAnnotationService` |
 | 4 | SupervisorAgent（工具调用） | ✅ 完整 | 额外加分 | `SupervisorAgent` (182行) |
-| 5 | LLM Provider 管理 | ✅ 完整 | 基础设施 | `LlmProviderService` |
+| 5 | LLM Provider 管理 | ✅ 已迁移 OWNER 私有隔离 | 基础设施 | `LlmProviderService` |
 | 6 | LLM Gateway 基础设施 | ✅ 完整 | 基础设施 | `DefaultLlmGateway` (137行) |
 
 ---
@@ -116,13 +116,13 @@ Labeler 提交 → AiReviewDispatcher.enqueue()
 | 可配置评测标准 | ✅ 完整的 AiReviewConfig，支持维度/阈值/策略 | 超出要求 |
 | 按维度打分 | ✅ dimensionScores 字段 | 满足 |
 | 输出通过/打回/人工复核 | ✅ 三种 decision + 五种 aiFlowPolicy | 超出要求 |
-| 异步任务队列 | ✅ SyncDispatcher + AsyncDispatcher 双模式 | 满足 |
+| 异步任务队列 | ✅ AI Review、Pre-Annotation、LlmTrigger 均已接入 Redis Stream 业务队列；Provider 连通性测试保留同步 | 满足课题工程化要求 |
 | Function Calling / 结构化输出 | ✅ outputSchema + JSON 提取 + SupervisorAgent 工具调用 | 超出要求 |
 | 失败重试 | ✅ 指数退避 + 限流延迟 + 最大次数 | 满足 |
 | 幂等性 | ✅ hash 去重 | 满足 |
 | 审核工作台查看 AI 评语 | ✅ AiReviewResult 入库，含 Prompt + rawResponse | 满足 |
 
-**结论**：完全满足课题要求，且在多模态、策略灵活性、SupervisorAgent 方面超出。
+**结论**：主体满足课题要求，并在多模态、策略灵活性、SupervisorAgent 方面做了增强。AI 直接通过 / 直接打回属于增强策略，默认仍建议以人工复核为安全基线。
 
 ---
 
@@ -145,7 +145,9 @@ Labeler 在标注工作台点击触发按钮
   → LlmTriggerService.run()
     → 从模板 schema 递归查找 componentId 对应的 LlmTrigger 组件
     → 校验访问权限（Labeler 拥有 assignment / Owner 预览模式）
-    → 检查限流
+    → 创建 llm_trigger_runs 与 AgentRun
+    → 写入 Redis Stream，接口立即返回 RUNNING
+    → LlmTaskWorker 消费后检查限流
     → 构造 Prompt（item 数据 + 当前答案 + 组件模板）
     → 调用 LlmGateway.review()
     → 返回结构化结果（targetFields 值映射）
@@ -187,7 +189,7 @@ Labeler 在标注工作台点击触发按钮
 | 输出可预填 | ✅ Labeler 确认后预填到目标字段 | 满足 |
 | 不自动提交 | ✅ 需要 Labeler 手动确认 | 满足 |
 
-**结论**：完全满足课题要求。
+**结论**：满足课题要求，并已改为 Redis Stream 异步执行。前端通过 `GET /api/v1/llm/triggers/runs/{triggerRunId}` 查询结果。
 
 ---
 
@@ -206,8 +208,9 @@ Labeler 点击「AI 预填」按钮
   → PreAnnotationService.run()
     → 加载 assignment + task
     → 加载 AiReviewConfig（复用 AI 审核配置）
-    → 构造预标注 Prompt
-    → 调用 LlmGateway.review()
+    → 创建 PreAnnotation 与 AgentRun
+    → 写入 Redis Stream，接口立即返回 RUNNING
+    → Worker 构造预标注 Prompt 并调用 LlmGateway.review()
     → 校验输出结构（须含 suggestedAnswerJson、fieldSuggestions 等）
     → 过滤字段（移除 ShowItem 等不可提交字段）
     → 应用降级惩罚（如 Provider 不支持图片）
@@ -286,16 +289,16 @@ Owner 需要完成三项 AI 相关配置才能发布任务：
 
 #### 步骤 1：管理 LLM Provider
 
-**现有接口**（⚠️ 需迁移到 OWNER 权限）：
+**现有接口**（✅ 已迁移到 OWNER 权限）：
 
 | 操作 | 方法 | 路径 | 说明 |
 |------|------|------|------|
-| 查看 Provider 列表 | GET | `/api/v1/admin/llm-providers` | 需改为 `/api/v1/llm-providers` |
-| 创建 Provider | POST | `/api/v1/admin/llm-providers` | 需改为 OWNER 权限 + owner_id 隔离 |
-| 编辑 Provider | PUT | `/api/v1/admin/llm-providers/{id}` | 同上 |
-| 启用 Provider | POST | `/api/v1/admin/llm-providers/{id}/enable` | 同上 |
-| 停用 Provider | POST | `/api/v1/admin/llm-providers/{id}/disable` | 同上 |
-| 测试连通性 | POST | `/api/v1/admin/llm-providers/{id}/test` | 同上 |
+| 查看 Provider 列表 | GET | `/api/v1/llm-providers` | OWNER 只能查看自己的 Provider |
+| 创建 Provider | POST | `/api/v1/llm-providers` | 写入 `owner_id`，OWNER 私有 |
+| 编辑 Provider | PUT | `/api/v1/llm-providers/{id}` | 仅 Provider Owner 可操作 |
+| 启用 Provider | POST | `/api/v1/llm-providers/{id}/enable` | 仅 Provider Owner 可操作 |
+| 停用 Provider | POST | `/api/v1/llm-providers/{id}/disable` | 仅 Provider Owner 可操作 |
+| 测试连通性 | POST | `/api/v1/llm-providers/{id}/test` | 仅 Provider Owner 可操作 |
 
 **创建 Provider 时需要的字段**：
 
@@ -561,8 +564,9 @@ GET /api/v1/assignments/{assignmentId}/pre-annotations/latest
                               ↓
 ┌─────────────────────────────────────────────────────────────────┐
 │ AiReviewDispatcher 调度                                          │
-│   → SyncDispatcher：直接调用（开发/测试用）                         │
-│   → AsyncDispatcher：提交到 AsyncJobService 异步执行               │
+│   → 当前主链路：写入 Redis Stream 业务队列                           │
+│   → LlmTaskWorker 按 taskType 分发到 AI Review / 预标注 / LlmTrigger │
+│   → Provider 连通性测试保留同步，用于配置页即时反馈                  │
 └─────────────────────────────────────────────────────────────────┘
                               ↓
 ┌─────────────────────────────────────────────────────────────────┐
@@ -588,9 +592,9 @@ GET /api/v1/assignments/{assignmentId}/pre-annotations/latest
 │     → 可重试 → 指数退避调度重试（新 AgentRun）                      │
 │     → 不可重试/超次数 → MANUAL_REQUIRED                           │
 │   → AiFlowDecisionService 决策：                                 │
-│     → AI_DIRECT_APPROVE → submission 直接 APPROVED               │
-│     → AI_DIRECT_REJECT → submission 直接 REJECTED                │
-│     → MANUAL_REVIEW → submission 进入 PENDING_FINAL              │
+│     → AI_DIRECT_APPROVE → 单人任务可直接 APPROVED + isGolden       │
+│     → AI_DIRECT_REJECT → submission 直接 REJECTED 并退回修改       │
+│     → AI_ASSIGN_MANUAL_REVIEW → submission 进入 PENDING_FINAL     │
 │   → 写审计日志（actorType = SYSTEM_AGENT）                        │
 └─────────────────────────────────────────────────────────────────┘
                               ↓
@@ -737,14 +741,14 @@ public interface LlmGateway {
 
 ## 五、课题切合度总结
 
-### 5.1 完全满足的要求
+### 5.1 已满足或主体满足的要求
 
 | 课题要求 | 对应实现 | 评价 |
 |----------|----------|------|
 | 可配置评测标准 | AiReviewConfig 15+ 配置字段 | 远超最低要求 |
 | 按维度打分 | dimensionScores | 完整 |
 | 通过/打回/人工复核三结论 | decision 字段 + aiFlowPolicy 5 种策略 | 远超最低要求 |
-| 异步任务队列 | AsyncAiReviewDispatcher | 完整 |
+| 异步任务队列 | `LlmTaskQueueService` + Redis Stream + `LlmTaskWorker`，覆盖 AI Review、预标注和 LlmTrigger | 完整 |
 | Function Calling / 结构化输出 | outputSchema + SupervisorAgent 工具调用 | 远超最低要求 |
 | 失败重试 + 幂等性 | 指数退避 + hash 去重 | 完整 |
 | 审核工作台可查看 AI 评语 | AiReviewResult 含 Prompt + rawResponse | 完整 |
@@ -758,16 +762,18 @@ public interface LlmGateway {
 |----------|----------|----------|
 | Pre-Annotation 预标注 | 题目级整体预填，提升标注效率 | 「除了字段级辅助，我们还实现了题目级预标注，一键生成全部字段建议」 |
 | SupervisorAgent 工具调用 | 多步推理，可调用外部工具 | 「审核 Agent 支持 Tool Use，可在审核过程中查询额外信息后再给出结论」 |
-| 多模态支持 | 图片/视频输入 + 优雅降级 | 「支持多模态标注数据的 AI 审核，Provider 不支持视觉时自动降级」 |
+| 多模态支持 | 图片输入 + 视频关键帧/转写/说明消费 + 优雅降级 | 「支持多模态标注数据的 AI 审核；视频场景基于 BE-B/FE 提供的关键帧、转写或人工说明进入 AI 链路」 |
 | AI 流转策略 | 5 种 Policy 灵活配置 | 「Owner 可灵活配置 AI 的决策权限，从纯建议到自动审批均可」 |
 | 置信度 + 风险标记 | confidence + riskFlags 细粒度控制 | 「AI 输出带置信度和风险标记，低置信度自动转人工」 |
 
-### 5.3 与课题存在差异需调整的点
+### 5.3 与课题存在差异或后续可增强的点
 
 | 差异项 | 现状 | 课题期望 | 调整方案 |
 |--------|------|----------|----------|
-| LLM Provider 权限 | ADMIN 管理 | Owner 配置审核标准（隐含 Provider 管理） | 迁移到 OWNER，加 `owner_id` 实现私有隔离 |
-| Provider 隔离 | 全局共享 | 每个 Owner 独立管理自己的 Provider | `llm_providers` 表加 `owner_id` 字段 |
+| LLM Provider 权限 | 已迁移到 OWNER 管理 | Owner 配置审核标准（隐含 Provider 管理） | 已通过 `/api/v1/llm-providers` 和 `owner_id` 隔离实现 |
+| Provider 隔离 | OWNER 私有 | 每个 Owner 独立管理自己的 Provider | 已在 Provider 管理、AI 审核配置和 LlmTrigger 调用处校验 |
+| AI 审核队列 | 主链路为 Redis Stream 业务队列 | 课题建议异步任务队列 | 已接入主 dispatcher；Redis 消息只保存业务 ID，不保存 Prompt、答案或 API Key |
+| 视频多模态 | 消费关键帧、转写文本和人工说明 | 多模态数据进入 AI 审核链路 | BE-A 不生成关键帧或 ASR，只负责消费 BE-B/FE 提供的媒体上下文并记录降级信息 |
 
 ---
 

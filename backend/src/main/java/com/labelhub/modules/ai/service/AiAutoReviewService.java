@@ -24,9 +24,13 @@ import com.labelhub.modules.ai.domain.AiFlowAction;
 import com.labelhub.modules.ai.dto.AiReviewResultResponse;
 import com.labelhub.modules.ai.mapper.AiReviewConfigMapper;
 import com.labelhub.modules.ai.mapper.AiReviewResultMapper;
+import com.labelhub.modules.assignment.domain.AssignmentStatus;
 import com.labelhub.modules.assignment.domain.Assignment;
+import com.labelhub.modules.dataset.service.DatasetClaimService;
+import com.labelhub.modules.review.domain.ReviewFlowStatus;
 import com.labelhub.modules.dataset.domain.DatasetItem;
 import com.labelhub.modules.dataset.mapper.DatasetItemMapper;
+import com.labelhub.modules.media.service.MediaContextResolver;
 import com.labelhub.modules.submission.domain.Submission;
 import com.labelhub.modules.submission.domain.SubmissionStatus;
 import com.labelhub.modules.submission.mapper.SubmissionMapper;
@@ -84,9 +88,15 @@ public class AiAutoReviewService {
     @Autowired
     private com.labelhub.modules.review.mapper.ReviewRecordMapper reviewRecordMapper;
     @Autowired(required = false)
+    private DatasetClaimService datasetClaimService;
+    @Autowired(required = false)
     private MediaPromptContextBuilder mediaPromptContextBuilder;
     @Autowired(required = false)
     private LlmProviderService llmProviderService;
+    @Autowired(required = false)
+    private MediaContextResolver mediaContextResolver;
+    @Autowired
+    private com.labelhub.infrastructure.redis.RedisLockService redisLockService;
 
     @Autowired
     public AiAutoReviewService(SubmissionMapper submissionMapper,
@@ -141,10 +151,33 @@ public class AiAutoReviewService {
         this.retryScheduler = retryScheduler;
         this.supervisorAgent = supervisorAgent;
         this.transactionTemplate = transactionTemplate;
-        this.retryScheduler.setRetryCallback(this::retryReview);
     }
 
     public AiReviewResultResponse reviewSubmission(Long submissionId) {
+        return reviewSubmission(submissionId, null);
+    }
+
+    public AiReviewResultResponse executeQueuedReview(Long submissionId, Long agentRunId) {
+        return reviewSubmission(submissionId, agentRunId);
+    }
+
+    private AiReviewResultResponse reviewSubmission(Long submissionId, Long queuedAgentRunId) {
+        String lockKey = com.labelhub.infrastructure.redis.RedisKeyBuilder.aiReviewLock(submissionId);
+        if (!redisLockService.tryLock(lockKey, 0, 120_000)) {
+            AiReviewResult existing = aiReviewResultMapper.selectBySubmissionId(submissionId);
+            if (existing != null) {
+                return toResponse(existing);
+            }
+            throw new BusinessException(409101, "AI review already in progress");
+        }
+        try {
+            return doReviewSubmission(submissionId, queuedAgentRunId);
+        } finally {
+            redisLockService.unlock(lockKey);
+        }
+    }
+
+    private AiReviewResultResponse doReviewSubmission(Long submissionId, Long queuedAgentRunId) {
         // 事务 1: 幂等检查 + 准备数据 + 创建 AgentRun
         ReviewPrepareResult prepared = transactionTemplate.execute(status -> {
             AiReviewResult existing = aiReviewResultMapper.selectBySubmissionId(submissionId);
@@ -156,8 +189,10 @@ public class AiAutoReviewService {
             AiReviewConfig config = loadConfig(task);
             DatasetItem datasetItem = datasetItemMapper.selectById(submission.getDatasetItemId());
             MediaPromptResult prompt = buildPrompt(submission, datasetItem, config);
-            AgentRun agentRun = agentRunService.create(AGENT_TYPE, submissionId, config.getProviderId(),
-                    config.getModelName(), config.getPromptVersion(), prompt.promptSnapshot());
+            AgentRun agentRun = queuedAgentRunId == null
+                    ? agentRunService.create(AGENT_TYPE, submissionId, config.getProviderId(),
+                    config.getModelName(), config.getPromptVersion(), prompt.promptSnapshot())
+                    : existingAgentRun(queuedAgentRunId);
             agentRunService.start(agentRun.getId());
             return ReviewPrepareResult.ready(submission, config, agentRun, prompt);
         });
@@ -178,7 +213,7 @@ public class AiAutoReviewService {
         }
 
         // 事务 2: 保存结果 + flowAction + 状态流转
-        return transactionTemplate.execute(status -> {
+        AiReviewResultResponse response = transactionTemplate.execute(status -> {
             AiReviewResult result;
             if (outcome.success()) {
                 result = outcome.result();
@@ -189,13 +224,16 @@ public class AiAutoReviewService {
             }
             if (result.getStatus() == AiReviewStatus.SUCCESS && flowDecisionService != null) {
                 AiFlowAction flowAction = flowDecisionService.decide(result, prepared.config());
-                result.setFlowAction(flowAction.name());
+                result.setFlowAction(normalizeFlowAction(prepared.submission(), flowAction).name());
             }
             aiReviewResultMapper.insert(result);
             applyFlowAction(prepared.submission(), result, prepared.config());
             appendAudit(result);
             return toResponse(result);
         });
+
+        publishPostTransactionEvents(prepared.submission());
+        return response;
     }
 
     public void retryReview(Long submissionId) {
@@ -229,7 +267,7 @@ public class AiAutoReviewService {
 
                 if (flowDecisionService != null) {
                     AiFlowAction flowAction = flowDecisionService.decide(successResult, config);
-                    successResult.setFlowAction(flowAction.name());
+                    successResult.setFlowAction(normalizeFlowAction(submission, flowAction).name());
                 }
 
                 aiReviewResultMapper.updateForSuccess(submissionId,
@@ -240,7 +278,12 @@ public class AiAutoReviewService {
                         successResult.getDimensionScores(),
                         successResult.getRiskFlags(),
                         successResult.getSuggestion(),
-                        successResult.getRawResponse());
+                        successResult.getRawResponse(),
+                        successResult.getConfidence(),
+                        successResult.getFlowAction(),
+                        successResult.getPromptMode(),
+                        successResult.getDegraded(),
+                        successResult.getLimitations());
                 applyFlowAction(submission, successResult, config);
                 appendAuditForRetrySuccess(submissionId, agentRun.getId());
             });
@@ -269,7 +312,8 @@ public class AiAutoReviewService {
                 config.getModelName(),
                 java.util.stream.Stream.concat(
                         java.util.stream.Stream.of(new LlmMessage("system", "You are LabelHub AI reviewer. Return valid JSON only.")),
-                        prompt.messages().stream()).toList()
+                        prompt.messages().stream()).toList(),
+                com.labelhub.infrastructure.llm.ResponseFormat.jsonSchema(AiReviewSchema.NAME, AiReviewSchema.SCHEMA)
         ));
         if (response.status() != LlmGatewayStatus.SUCCESS) {
             agentRunService.fail(agentRun.getId(), AgentRunStatus.FAILED, response.errorMessage());
@@ -338,7 +382,7 @@ public class AiAutoReviewService {
                 + "You have access to tools to help you review the submission. "
                 + "Use the tools to gather information, then make a final decision. "
                 + "When you have enough information, respond with a JSON object containing: "
-                + "decision (PASS/FAIL/UNCERTAIN), averageScore, dimensionScores, riskFlags, suggestion. "
+                + "decision (PASS/REJECT/UNCERTAIN), averageScore, dimensionScores, riskFlags, suggestion. "
                 + "Scoring dimensions: " + config.getScoringDimensionsJson() + ". "
                 + "Pass threshold: " + config.getPassThreshold() + ". "
                 + "Manual review threshold: " + config.getManualReviewThreshold() + ".";
@@ -513,8 +557,12 @@ public class AiAutoReviewService {
         }
         MediaPromptContextBuilder builder = mediaPromptContextBuilder != null
                 ? mediaPromptContextBuilder : new DefaultMediaPromptContextBuilder();
+        String itemJson = datasetItem == null ? null : datasetItem.getItemJson();
+        if (mediaContextResolver != null && datasetItem != null) {
+            itemJson = mediaContextResolver.resolveItemJson(datasetItem.getId(), itemJson);
+        }
         return builder.build(new MediaPromptInput(
-                datasetItem == null ? null : datasetItem.getItemJson(),
+                itemJson,
                 submission.getAnswerJson(),
                 buildPromptSnapshot(submission, datasetItem, config),
                 capability,
@@ -527,6 +575,17 @@ public class AiAutoReviewService {
     private void moveSubmissionToPendingFinal(Submission submission) {
         submission.setStatus(SubmissionStatus.PENDING_FINAL);
         submissionMapper.updateById(submission);
+    }
+
+    private AiFlowAction normalizeFlowAction(Submission submission, AiFlowAction action) {
+        if (action != AiFlowAction.AI_DIRECT_APPROVE) {
+            return action;
+        }
+        Task task = taskMapper.selectById(submission.getTaskId());
+        if (task != null && task.getOverlapCount() != null && task.getOverlapCount() > 1) {
+            return AiFlowAction.AI_ASSIGN_MANUAL_REVIEW;
+        }
+        return action;
     }
 
     private void applyFlowAction(Submission submission, AiReviewResult result, AiReviewConfig config) {
@@ -542,32 +601,57 @@ public class AiAutoReviewService {
         }
     }
 
+    private void publishPostTransactionEvents(Submission submission) {
+        if (submission.getStatus() == SubmissionStatus.APPROVED) {
+            eventPublisher.publishApproved(submission.getId(), null);
+        }
+    }
+
     private void directApprove(Submission submission) {
+        if (submission.getStatus() != SubmissionStatus.AI_REVIEWING
+                && submission.getStatus() != SubmissionStatus.PENDING_FINAL) {
+            return;
+        }
         submission.setStatus(SubmissionStatus.APPROVED);
+        submission.setReviewFlowStatus(ReviewFlowStatus.FINAL_APPROVED.name());
+        submission.setIsGolden(true);
         submissionMapper.updateById(submission);
         Assignment assignment = assignmentMapper.selectById(submission.getAssignmentId());
         if (assignment != null) {
-            assignment.setStatus(com.labelhub.modules.assignment.domain.AssignmentStatus.APPROVED);
+            assignment.setStatus(AssignmentStatus.APPROVED);
+            assignment.setApprovedAt(LocalDateTime.now());
             assignmentMapper.updateById(assignment);
         }
-        eventPublisher.publishApproved(submission.getId(), null);
+        if (datasetClaimService != null) {
+            datasetClaimService.increaseApprovedCount(submission.getDatasetItemId());
+        }
     }
 
     private void directReject(Submission submission, AiReviewResult result) {
+        if (submission.getStatus() != SubmissionStatus.AI_REVIEWING
+                && submission.getStatus() != SubmissionStatus.PENDING_FINAL) {
+            return;
+        }
         submission.setStatus(SubmissionStatus.REJECTED);
+        submission.setReviewFlowStatus(ReviewFlowStatus.REJECTED.name());
         submissionMapper.updateById(submission);
         Assignment assignment = assignmentMapper.selectById(submission.getAssignmentId());
         if (assignment != null) {
-            assignment.setStatus(com.labelhub.modules.assignment.domain.AssignmentStatus.RETURNED);
+            assignment.setStatus(AssignmentStatus.RETURNED);
+            assignment.setReturnedAt(LocalDateTime.now());
             assignmentMapper.updateById(assignment);
+        }
+        if (eventPublisher != null) {
+            eventPublisher.publishRejected(submission.getId(), null, "AI direct reject");
         }
         if (reviewRecordMapper != null) {
             com.labelhub.modules.review.domain.ReviewRecord record = new com.labelhub.modules.review.domain.ReviewRecord();
             record.setSubmissionId(submission.getId());
             record.setReviewerId(null);
-            record.setAction(com.labelhub.modules.review.domain.ReviewAction.AI_REJECT);
+            record.setAction(com.labelhub.modules.review.domain.ReviewAction.AI_DIRECT_REJECT);
             record.setReviewLevel(0);
             record.setReason(result.getSuggestion());
+            record.setCreatedAt(LocalDateTime.now());
             reviewRecordMapper.insert(record);
         }
     }
@@ -634,6 +718,12 @@ public class AiAutoReviewService {
                 result.getCreatedAt(),
                 result.getUpdatedAt()
         );
+    }
+
+    private AgentRun existingAgentRun(Long agentRunId) {
+        AgentRun run = new AgentRun();
+        run.setId(agentRunId);
+        return run;
     }
 
     private Object parseJsonValue(String json) {

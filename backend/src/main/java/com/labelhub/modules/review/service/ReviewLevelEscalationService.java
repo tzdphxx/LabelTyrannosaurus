@@ -6,6 +6,8 @@ import com.labelhub.modules.review.domain.ReviewTaskStatus;
 import com.labelhub.modules.review.mapper.ReviewTaskMapper;
 import com.labelhub.modules.submission.domain.Submission;
 import com.labelhub.modules.submission.mapper.SubmissionMapper;
+import com.labelhub.modules.task.domain.Task;
+import com.labelhub.modules.task.mapper.TaskMapper;
 import java.time.LocalDateTime;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
@@ -16,18 +18,25 @@ public class ReviewLevelEscalationService {
 
     private final ReviewTaskMapper reviewTaskMapper;
     private final SubmissionMapper submissionMapper;
+    private final TaskMapper taskMapper;
     private final int defaultMaxLevel;
 
     public ReviewLevelEscalationService(
             ReviewTaskMapper reviewTaskMapper,
             SubmissionMapper submissionMapper,
+            TaskMapper taskMapper,
             @Value("${labelhub.review.default-max-level:1}") int defaultMaxLevel) {
         this.reviewTaskMapper = reviewTaskMapper;
         this.submissionMapper = submissionMapper;
+        this.taskMapper = taskMapper;
         this.defaultMaxLevel = defaultMaxLevel;
     }
 
-    public int getMaxReviewLevel() {
+    public int getMaxReviewLevel(Long taskId) {
+        Task task = taskMapper.selectById(taskId);
+        if (task != null && task.getReviewLevelCount() != null) {
+            return task.getReviewLevelCount();
+        }
         return defaultMaxLevel;
     }
 

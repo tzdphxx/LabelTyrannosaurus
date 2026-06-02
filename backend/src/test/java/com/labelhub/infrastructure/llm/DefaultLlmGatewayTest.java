@@ -2,6 +2,7 @@ package com.labelhub.infrastructure.llm;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -41,7 +42,7 @@ class DefaultLlmGatewayTest {
     void reviewsThroughEnabledProviderAndExtractsFencedJson() {
         when(llmProviderService.findEnabledRuntimeConfig(PROVIDER_ID, "qwen-max"))
                 .thenReturn(Optional.of(config("qwen-max")));
-        when(adapter.chat(any(), any())).thenReturn(OpenAiCompatibleResponse.success(200,
+        when(adapter.chat(any(), any(), any(), any(), any())).thenReturn(OpenAiCompatibleResponse.success(200,
                 "{\"choices\":[{\"message\":{\"content\":\"```json\\n{\\\"decision\\\":\\\"PASS\\\",\\\"score\\\":96}\\n```\"}}]}",
                 18L));
 
@@ -54,7 +55,7 @@ class DefaultLlmGatewayTest {
         assertThat(response.rawResponse()).contains("\"choices\"");
         assertThat(response.latencyMs()).isEqualTo(18L);
         ArgumentCaptor<List<LlmMessage>> messagesCaptor = ArgumentCaptor.forClass(List.class);
-        verify(adapter).chat(any(), messagesCaptor.capture());
+        verify(adapter).chat(any(), messagesCaptor.capture(), any(), any(), any());
         assertThat(messagesCaptor.getValue()).extracting(LlmMessage::content).contains("answer");
     }
 
@@ -66,14 +67,14 @@ class DefaultLlmGatewayTest {
 
         assertThat(response.status()).isEqualTo(LlmGatewayStatus.PROVIDER_UNAVAILABLE);
         assertThat(response.errorCode()).isEqualTo("PROVIDER_UNAVAILABLE");
-        verify(adapter, never()).chat(any(), any());
+        verify(adapter, never()).chat(any(), any(), any(), any(), any());
     }
 
     @Test
     void mapsProviderErrorAndKeepsRawResponse() {
         when(llmProviderService.findEnabledRuntimeConfig(PROVIDER_ID, null))
                 .thenReturn(Optional.of(config("qwen-plus")));
-        when(adapter.chat(any(), any())).thenReturn(OpenAiCompatibleResponse.failure(500,
+        when(adapter.chat(any(), any(), any(), any(), any())).thenReturn(OpenAiCompatibleResponse.failure(500,
                 "{\"error\":\"bad\"}", 9L, "Provider call failed with status 500", false));
 
         LlmGatewayResponse response = gateway.review(request(PROVIDER_ID, null, "answer"));
@@ -87,7 +88,7 @@ class DefaultLlmGatewayTest {
     void mapsNonJsonModelContentToInvalidJsonAndPreservesContent() {
         when(llmProviderService.findEnabledRuntimeConfig(PROVIDER_ID, null))
                 .thenReturn(Optional.of(config("qwen-plus")));
-        when(adapter.chat(any(), any())).thenReturn(OpenAiCompatibleResponse.success(200,
+        when(adapter.chat(any(), any(), any(), any(), any())).thenReturn(OpenAiCompatibleResponse.success(200,
                 "{\"choices\":[{\"message\":{\"content\":\"plain review text\"}}]}",
                 11L));
 
@@ -103,14 +104,14 @@ class DefaultLlmGatewayTest {
     void differentProvidersUseSameGatewayPath() {
         when(llmProviderService.findEnabledRuntimeConfig(10L, null)).thenReturn(Optional.of(config("qwen-plus")));
         when(llmProviderService.findEnabledRuntimeConfig(20L, null)).thenReturn(Optional.of(config("gpt-4o-mini")));
-        when(adapter.chat(any(), any())).thenReturn(OpenAiCompatibleResponse.success(200,
+        when(adapter.chat(any(), any(), any(), any(), any())).thenReturn(OpenAiCompatibleResponse.success(200,
                 "{\"choices\":[{\"message\":{\"content\":\"{\\\"decision\\\":\\\"PASS\\\"}\"}}]}",
                 5L));
 
         assertThat(gateway.review(request(10L, null, "a")).status()).isEqualTo(LlmGatewayStatus.SUCCESS);
         assertThat(gateway.review(request(20L, null, "b")).status()).isEqualTo(LlmGatewayStatus.SUCCESS);
-        verify(adapter).chat(config("qwen-plus"), List.of(new LlmMessage("user", "a")));
-        verify(adapter).chat(config("gpt-4o-mini"), List.of(new LlmMessage("user", "b")));
+        verify(adapter).chat(eq(config("qwen-plus")), eq(List.of(new LlmMessage("user", "a"))), any(), any(), any());
+        verify(adapter).chat(eq(config("gpt-4o-mini")), eq(List.of(new LlmMessage("user", "b"))), any(), any(), any());
     }
 
     @Test
@@ -123,7 +124,7 @@ class DefaultLlmGatewayTest {
                         Map.of(),
                         new ProviderCapability(true, true, 10, "qwen-vl-plus")
                 )));
-        when(adapter.chat(any(), any())).thenReturn(OpenAiCompatibleResponse.success(200,
+        when(adapter.chat(any(), any(), any(), any(), any())).thenReturn(OpenAiCompatibleResponse.success(200,
                 "{\"choices\":[{\"message\":{\"content\":\"{\\\"decision\\\":\\\"PASS\\\"}\"}}]}",
                 5L));
 
@@ -136,7 +137,7 @@ class DefaultLlmGatewayTest {
 
         ArgumentCaptor<LlmProviderRuntimeConfig> configCaptor =
                 ArgumentCaptor.forClass(LlmProviderRuntimeConfig.class);
-        verify(adapter).chat(configCaptor.capture(), any());
+        verify(adapter).chat(configCaptor.capture(), any(), any(), any(), any());
         assertThat(configCaptor.getValue().modelName()).isEqualTo("qwen-vl-plus");
     }
 

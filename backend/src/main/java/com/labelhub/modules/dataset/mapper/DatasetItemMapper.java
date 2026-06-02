@@ -72,6 +72,15 @@ public interface DatasetItemMapper extends BaseMapper<DatasetItem> {
             """)
     int increaseApprovedCount(@Param("datasetItemId") Long datasetItemId);
 
+    @Update("""
+            UPDATE dataset_items
+            SET assigned_count = assigned_count - 1
+            WHERE id = #{datasetItemId}
+              AND deleted = 0
+              AND assigned_count > 0
+            """)
+    int decreaseAssignedCount(@Param("datasetItemId") Long datasetItemId);
+
     @Select("""
             SELECT COUNT(1)
             FROM dataset_items

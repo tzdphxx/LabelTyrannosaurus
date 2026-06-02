@@ -20,6 +20,7 @@ public class TemplateVersionEntity {
     private Long templateId;
     private Long ownerId;
     private Long taskId;
+    private Long ownerId;
     private Integer versionNo;
     private String schemaJson;
     private Boolean publishedSnapshot;
@@ -57,6 +58,14 @@ public class TemplateVersionEntity {
 
     public void setTaskId(Long taskId) {
         this.taskId = taskId;
+    }
+
+    public Long getOwnerId() {
+        return ownerId;
+    }
+
+    public void setOwnerId(Long ownerId) {
+        this.ownerId = ownerId;
     }
 
     public Integer getVersionNo() {

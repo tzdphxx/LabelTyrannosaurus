@@ -1,0 +1,81 @@
+CREATE TABLE `media_assets` (
+  `id` bigint NOT NULL AUTO_INCREMENT,
+  `dataset_item_id` bigint NOT NULL,
+  `task_id` bigint NOT NULL,
+  `source_file_id` bigint DEFAULT NULL,
+  `media_type` varchar(24) NOT NULL,
+  `content_type` varchar(128) DEFAULT NULL,
+  `file_size` bigint DEFAULT NULL,
+  `checksum` varchar(128) DEFAULT NULL,
+  `status` varchar(24) NOT NULL DEFAULT 'PENDING',
+  `metadata_json` json DEFAULT NULL,
+  `limitations_json` json DEFAULT NULL,
+  `created_at` datetime(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  `updated_at` datetime(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+  PRIMARY KEY (`id`),
+  KEY `idx_media_assets_item` (`dataset_item_id`,`status`),
+  KEY `idx_media_assets_task` (`task_id`,`media_type`),
+  KEY `fk_media_assets_file` (`source_file_id`),
+  CONSTRAINT `fk_media_assets_item` FOREIGN KEY (`dataset_item_id`) REFERENCES `dataset_items` (`id`),
+  CONSTRAINT `fk_media_assets_task` FOREIGN KEY (`task_id`) REFERENCES `tasks` (`id`),
+  CONSTRAINT `fk_media_assets_file` FOREIGN KEY (`source_file_id`) REFERENCES `object_files` (`id`),
+  CONSTRAINT `chk_media_assets_status` CHECK (`status` in ('PENDING','RUNNING','READY','PARTIAL','FAILED'))
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+CREATE TABLE `media_derivatives` (
+  `id` bigint NOT NULL AUTO_INCREMENT,
+  `asset_id` bigint NOT NULL,
+  `derivative_type` varchar(32) NOT NULL,
+  `sequence_no` int NOT NULL DEFAULT 0,
+  `source_file_id` bigint DEFAULT NULL,
+  `url` varchar(1000) DEFAULT NULL,
+  `text_json` json DEFAULT NULL,
+  `metadata_json` json DEFAULT NULL,
+  `created_at` datetime(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  PRIMARY KEY (`id`),
+  KEY `idx_media_derivatives_asset` (`asset_id`,`derivative_type`,`sequence_no`),
+  KEY `fk_media_derivatives_file` (`source_file_id`),
+  CONSTRAINT `fk_media_derivatives_asset` FOREIGN KEY (`asset_id`) REFERENCES `media_assets` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `fk_media_derivatives_file` FOREIGN KEY (`source_file_id`) REFERENCES `object_files` (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+CREATE TABLE `dataset_item_media_contexts` (
+  `id` bigint NOT NULL AUTO_INCREMENT,
+  `dataset_item_id` bigint NOT NULL,
+  `task_id` bigint NOT NULL,
+  `media_type` varchar(24) NOT NULL,
+  `processing_status` varchar(24) NOT NULL DEFAULT 'PENDING',
+  `context_json` json DEFAULT NULL,
+  `limitations_json` json DEFAULT NULL,
+  `created_at` datetime(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  `updated_at` datetime(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_media_context_item` (`dataset_item_id`),
+  KEY `idx_media_context_task` (`task_id`,`processing_status`),
+  CONSTRAINT `fk_media_context_item` FOREIGN KEY (`dataset_item_id`) REFERENCES `dataset_items` (`id`),
+  CONSTRAINT `fk_media_context_task` FOREIGN KEY (`task_id`) REFERENCES `tasks` (`id`),
+  CONSTRAINT `chk_media_context_status` CHECK (`processing_status` in ('PENDING','RUNNING','READY','PARTIAL','FAILED'))
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+CREATE TABLE `media_processing_jobs` (
+  `id` bigint NOT NULL AUTO_INCREMENT,
+  `dataset_item_id` bigint NOT NULL,
+  `task_id` bigint NOT NULL,
+  `status` varchar(24) NOT NULL DEFAULT 'PENDING',
+  `total_assets` int NOT NULL DEFAULT 0,
+  `processed_assets` int NOT NULL DEFAULT 0,
+  `error_message` text,
+  `created_by` bigint DEFAULT NULL,
+  `started_at` datetime(3) DEFAULT NULL,
+  `finished_at` datetime(3) DEFAULT NULL,
+  `created_at` datetime(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  `updated_at` datetime(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+  PRIMARY KEY (`id`),
+  KEY `idx_media_jobs_item` (`dataset_item_id`,`created_at`),
+  KEY `idx_media_jobs_task_status` (`task_id`,`status`),
+  KEY `fk_media_jobs_created_by` (`created_by`),
+  CONSTRAINT `fk_media_jobs_item` FOREIGN KEY (`dataset_item_id`) REFERENCES `dataset_items` (`id`),
+  CONSTRAINT `fk_media_jobs_task` FOREIGN KEY (`task_id`) REFERENCES `tasks` (`id`),
+  CONSTRAINT `fk_media_jobs_created_by` FOREIGN KEY (`created_by`) REFERENCES `users` (`id`),
+  CONSTRAINT `chk_media_jobs_status` CHECK (`status` in ('PENDING','RUNNING','READY','PARTIAL','FAILED'))
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;

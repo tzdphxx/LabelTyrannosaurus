@@ -3,6 +3,7 @@ package com.labelhub.modules.submission.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -10,6 +11,7 @@ import static org.mockito.Mockito.when;
 import com.labelhub.common.audit.AuditAppender;
 import com.labelhub.common.audit.AuditCommand;
 import com.labelhub.common.exception.BusinessException;
+import com.labelhub.common.web.TraceIdProvider;
 import com.labelhub.modules.agent.domain.AgentRun;
 import com.labelhub.modules.agent.domain.AgentRunStatus;
 import com.labelhub.modules.agent.mapper.AgentRunMapper;
@@ -75,6 +77,9 @@ class SubmissionSubmitServiceTest {
     @Mock
     private DatasetClaimService datasetClaimService;
 
+    @Mock
+    private TraceIdProvider traceIdProvider;
+
     private SubmissionSubmitService submissionSubmitService;
 
     @BeforeEach
@@ -87,8 +92,11 @@ class SubmissionSubmitServiceTest {
                 answerSchemaValidator,
                 auditAppender,
                 aiReviewDispatcher,
-                datasetClaimService
+                datasetClaimService,
+                new com.fasterxml.jackson.databind.ObjectMapper(),
+                traceIdProvider
         );
+        lenient().when(traceIdProvider.currentTraceId()).thenReturn("trace-submit");
     }
 
     @Test
@@ -133,7 +141,9 @@ class SubmissionSubmitServiceTest {
         assertThat(agentRunCaptor.getValue().getStatus()).isEqualTo(AgentRunStatus.PENDING);
         assertThat(agentRunCaptor.getValue().getAgentType()).isEqualTo("AI_REVIEW");
         assertThat(agentRunCaptor.getValue().getSubmissionId()).isEqualTo(SUBMISSION_ID);
-        verify(auditAppender).append(any(AuditCommand.class));
+        ArgumentCaptor<AuditCommand> auditCaptor = ArgumentCaptor.forClass(AuditCommand.class);
+        verify(auditAppender).append(auditCaptor.capture());
+        assertThat(auditCaptor.getValue().traceId()).isEqualTo("trace-submit");
         verify(aiReviewDispatcher).enqueue(SUBMISSION_ID);
     }
 

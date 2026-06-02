@@ -18,6 +18,7 @@ import com.labelhub.infrastructure.llm.LlmGateway;
 import com.labelhub.infrastructure.llm.LlmGatewayRequest;
 import com.labelhub.infrastructure.llm.LlmGatewayResponse;
 import com.labelhub.infrastructure.llm.LlmGatewayStatus;
+import com.labelhub.infrastructure.llmtask.LlmTaskQueueService;
 import com.labelhub.infrastructure.redis.RedisLockService;
 import com.labelhub.modules.agent.domain.AgentRun;
 import com.labelhub.modules.agent.domain.AgentRunStatus;
@@ -80,6 +81,7 @@ class PreAnnotationServiceTest {
     @Mock private AuditAppender auditAppender;
     @Mock private TraceIdProvider traceIdProvider;
     @Mock private RedisLockService redisLockService;
+    @Mock private LlmTaskQueueService llmTaskQueueService;
 
     private PreAnnotationService service;
 
@@ -88,43 +90,26 @@ class PreAnnotationServiceTest {
         service = new PreAnnotationService(
                 assignmentMapper, taskMapper, datasetItemMapper, templateVersionMapper, aiReviewConfigMapper,
                 llmProviderService, llmGateway, agentRunService, preAnnotationMapper, submissionMapper,
-                auditAppender, traceIdProvider, new DefaultMediaPromptContextBuilder(), redisLockService);
-        lenient().when(redisLockService.withLock(any(), anyLong(), anyLong(),
-                org.mockito.ArgumentMatchers.<Supplier<PreAnnotationResponse>>any()))
-                .thenAnswer(invocation -> invocation.<Supplier<PreAnnotationResponse>>getArgument(3).get());
+                auditAppender, traceIdProvider, new DefaultMediaPromptContextBuilder(), redisLockService,
+                llmTaskQueueService);
+        lenient().when(redisLockService.withLock(any(), any(Long.class), any(Long.class), any(Supplier.class)))
+                .thenAnswer(invocation -> ((Supplier<?>) invocation.getArgument(3)).get());
     }
 
     @Test
-    void runStoresSuggestionWithoutMutatingAssignmentOrSubmission() {
+    void runEnqueuesPreAnnotationWithoutMutatingAssignmentOrSubmission() {
         when(assignmentMapper.selectOwnedAssignment(ASSIGNMENT_ID, LABELER_ID)).thenReturn(assignment());
         when(taskMapper.selectById(TASK_ID)).thenReturn(task());
         when(aiReviewConfigMapper.selectById(CONFIG_ID)).thenReturn(config());
         when(datasetItemMapper.selectById(70L)).thenReturn(datasetItem());
-        when(templateVersionMapper.selectById(80L)).thenReturn(templateVersion());
         when(llmProviderService.findEnabledById(PROVIDER_ID)).thenReturn(Optional.of(provider()));
         when(agentRunService.create(eq("PRE_ANNOTATION"), eq(null), eq(PROVIDER_ID), eq("qwen-vl"),
                 eq("v1"), any(), eq(ASSIGNMENT_ID))).thenReturn(agentRun());
-        when(llmGateway.review(any(LlmGatewayRequest.class))).thenReturn(new LlmGatewayResponse(
-                LlmGatewayStatus.SUCCESS,
-                "{\"ok\":true}",
-                "{\"suggestedAnswerJson\":{\"label\":\"cat\"},\"fieldSuggestions\":[{\"field\":\"label\"}],\"riskFlags\":[],\"overallConfidence\":0.86,\"limitations\":[]}",
-                Map.of(
-                        "suggestedAnswerJson", Map.of("label", "cat"),
-                        "fieldSuggestions", List.of(Map.of("field", "label")),
-                        "riskFlags", List.of(),
-                        "overallConfidence", 0.86,
-                        "limitations", List.of()
-                ),
-                100L,
-                null,
-                null
-        ));
 
         PreAnnotationResponse response = service.run(ASSIGNMENT_ID, LABELER_ID, null);
 
-        assertThat(response.status()).isEqualTo(PreAnnotationStatus.SUCCESS);
-        assertThat(response.suggestedAnswerJson()).containsEntry("label", "cat");
-        verify(agentRunService).complete(eq(AGENT_RUN_ID), any());
+        assertThat(response.status()).isEqualTo(PreAnnotationStatus.RUNNING);
+        verify(llmTaskQueueService).enqueue(any());
         verify(preAnnotationMapper).insert(any(PreAnnotation.class));
         verify(assignmentMapper, never()).updateById(any(Assignment.class));
         verify(submissionMapper, never()).insert(any(Submission.class));
@@ -132,8 +117,17 @@ class PreAnnotationServiceTest {
     }
 
     @Test
-    void runPersistsPendingThenRunningThenSuccessAndFiltersIllegalFields() {
-        when(assignmentMapper.selectOwnedAssignment(ASSIGNMENT_ID, LABELER_ID)).thenReturn(assignment());
+    void workerPersistsSuccessAndFiltersIllegalFields() {
+        PreAnnotation record = new PreAnnotation();
+        record.setId(99L);
+        record.setAssignmentId(ASSIGNMENT_ID);
+        record.setTaskId(TASK_ID);
+        record.setDatasetItemId(70L);
+        record.setLabelerId(LABELER_ID);
+        record.setAgentRunId(AGENT_RUN_ID);
+        record.setStatus(PreAnnotationStatus.RUNNING);
+        when(preAnnotationMapper.selectById(99L)).thenReturn(record);
+        when(assignmentMapper.selectById(ASSIGNMENT_ID)).thenReturn(assignment());
         when(taskMapper.selectById(TASK_ID)).thenReturn(task());
         when(aiReviewConfigMapper.selectById(CONFIG_ID)).thenReturn(config());
         when(datasetItemMapper.selectById(70L)).thenReturn(datasetItem());
@@ -141,8 +135,6 @@ class PreAnnotationServiceTest {
         when(llmProviderService.findEnabledById(PROVIDER_ID)).thenReturn(Optional.of(provider()));
         when(llmProviderService.capability(any(LlmProvider.class))).thenReturn(
                 new ProviderCapability(true, true, 10, null));
-        when(agentRunService.create(eq("PRE_ANNOTATION"), eq(null), eq(PROVIDER_ID), eq("qwen-vl"),
-                eq("v1"), any(), eq(ASSIGNMENT_ID))).thenReturn(agentRun());
         when(llmGateway.review(any(LlmGatewayRequest.class))).thenReturn(new LlmGatewayResponse(
                 LlmGatewayStatus.SUCCESS,
                 "{\"ok\":true}",
@@ -159,13 +151,6 @@ class PreAnnotationServiceTest {
                 null
         ));
 
-        List<PreAnnotationStatus> insertStatuses = new ArrayList<>();
-        org.mockito.Mockito.doAnswer(inv -> {
-            PreAnnotation pa = inv.getArgument(0);
-            insertStatuses.add(pa.getStatus());
-            return 1;
-        }).when(preAnnotationMapper).insert(any(PreAnnotation.class));
-
         List<PreAnnotationStatus> updateStatuses = new ArrayList<>();
         org.mockito.Mockito.doAnswer(inv -> {
             PreAnnotation pa = inv.getArgument(0);
@@ -173,19 +158,12 @@ class PreAnnotationServiceTest {
             return 1;
         }).when(preAnnotationMapper).updateById(any(PreAnnotation.class));
 
-        PreAnnotationResponse response = service.run(ASSIGNMENT_ID, LABELER_ID, new PreAnnotationRunRequest(
-                80L,
-                70L,
-                "{\"label\":\"draft\"}",
-                "SUGGEST_ONLY"
-        ));
+        service.executeQueuedPreAnnotation(99L);
 
-        assertThat(insertStatuses).containsExactly(PreAnnotationStatus.PENDING);
-        assertThat(updateStatuses).contains(PreAnnotationStatus.RUNNING, PreAnnotationStatus.SUCCESS);
-        assertThat(response.suggestedAnswerJson()).containsEntry("label", "cat");
-        assertThat(response.suggestedAnswerJson()).doesNotContainKey("showOnly");
-        assertThat(response.ignoredFields()).contains("showOnly");
-        assertThat(response.mediaUnderstanding()).containsEntry("usedMedia", true);
+        assertThat(updateStatuses).contains(PreAnnotationStatus.SUCCESS);
+        assertThat(record.getSuggestedAnswerJson()).contains("cat");
+        assertThat(record.getIgnoredFieldsJson()).contains("showOnly");
+        assertThat(record.getMediaUnderstandingJson()).contains("usedMedia");
     }
 
     @Test

@@ -1,6 +1,7 @@
 package com.labelhub.modules.submission.web;
 
 import com.labelhub.common.api.ApiResponse;
+import com.labelhub.common.api.PageResponse;
 import com.labelhub.common.security.CurrentUserContext;
 import com.labelhub.common.security.RoleCode;
 import com.labelhub.modules.assignment.domain.AssignmentStatus;
@@ -11,7 +12,6 @@ import com.labelhub.modules.submission.service.LabelerSubmissionQueryService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
-import java.util.List;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -31,7 +31,7 @@ public class LabelerSubmissionController {
 
     @GetMapping
     @Operation(summary = "我的提交列表", description = "标注员查看自己的提交记录，支持按任务、提交状态、领取状态筛选，分页返回。")
-    public ApiResponse<List<LabelerSubmissionListItem>> list(
+    public ApiResponse<PageResponse<LabelerSubmissionListItem>> list(
             @Parameter(description = "按任务 ID 筛选") @RequestParam(required = false) Long taskId,
             @Parameter(description = "按提交状态筛选：AI_REVIEWING / PENDING_FINAL / APPROVED / REJECTED") @RequestParam(required = false) SubmissionStatus submissionStatus,
             @Parameter(description = "按领取状态筛选：CLAIMED / SUBMITTED / RETURNED / APPROVED") @RequestParam(required = false) AssignmentStatus assignmentStatus,

@@ -8,7 +8,6 @@ import com.labelhub.common.api.ApiResponse;
 import com.labelhub.common.security.CurrentUser;
 import com.labelhub.common.security.CurrentUserContext;
 import com.labelhub.common.security.RoleCode;
-import com.labelhub.infrastructure.llm.LlmGatewayStatus;
 import com.labelhub.modules.ai.dto.LlmTriggerRunRequest;
 import com.labelhub.modules.ai.dto.LlmTriggerRunResponse;
 import com.labelhub.modules.ai.service.LlmTriggerService;
@@ -39,8 +38,8 @@ class LlmTriggerControllerTest {
         CurrentUserContext.set(currentUser);
         LlmTriggerRunRequest request = new LlmTriggerRunRequest(10L, 20L, "assist", 30L, 40L,
                 Map.of("answer", "draft"), false);
-        LlmTriggerRunResponse serviceResponse = new LlmTriggerRunResponse(60L, "assist",
-                Map.of("suggestion", "ok"), "ok", List.of("answer"), "raw", LlmGatewayStatus.SUCCESS,
+        LlmTriggerRunResponse serviceResponse = new LlmTriggerRunResponse(50L, 60L, "assist",
+                Map.of("suggestion", "ok"), "ok", List.of("answer"), "raw", "SUCCESS",
                 12L, null, null);
         when(llmTriggerService.run(currentUser, request)).thenReturn(serviceResponse);
 

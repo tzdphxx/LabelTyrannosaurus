@@ -19,7 +19,6 @@ import com.labelhub.modules.task.dto.TaskLifecycleResponse;
 import com.labelhub.modules.task.dto.UpdateTaskRequest;
 import com.labelhub.modules.task.mapper.TaskMapper;
 import com.labelhub.modules.task.mapper.TaskTagMapper;
-import com.labelhub.modules.template.service.TemplateVersionService;
 import java.time.LocalDateTime;
 import java.util.LinkedHashSet;
 import java.util.LinkedHashMap;
@@ -45,7 +44,7 @@ public class TaskLifecycleService {
     private final AuditAppender auditAppender;
     private final TraceIdProvider traceIdProvider;
     private final DatasetImportService datasetImportService;
-    private final TemplateVersionService templateVersionService;
+    private final org.springframework.context.ApplicationEventPublisher applicationEventPublisher;
 
     public TaskLifecycleService(TaskMapper taskMapper,
                                 TaskTagMapper taskTagMapper,
@@ -53,14 +52,14 @@ public class TaskLifecycleService {
                                 AuditAppender auditAppender,
                                 TraceIdProvider traceIdProvider,
                                 DatasetImportService datasetImportService,
-                                TemplateVersionService templateVersionService) {
+                                org.springframework.context.ApplicationEventPublisher applicationEventPublisher) {
         this.taskMapper = taskMapper;
         this.taskTagMapper = taskTagMapper;
         this.publishDependencyChecker = publishDependencyChecker;
         this.auditAppender = auditAppender;
         this.traceIdProvider = traceIdProvider;
         this.datasetImportService = datasetImportService;
-        this.templateVersionService = templateVersionService;
+        this.applicationEventPublisher = applicationEventPublisher;
     }
 
     public List<OwnerTaskSummaryResponse> listOwnerTasks(Long ownerId) {
@@ -92,8 +91,6 @@ public class TaskLifecycleService {
 
     @Transactional
     public TaskLifecycleResponse create(Long ownerId, CreateTaskRequest request) {
-        requireSingleOverlap(request.overlapCount());
-        requireOwnerTemplateVersion(ownerId, request.publishedTemplateVersionId());
         Task task = new Task();
         task.setOwnerId(ownerId);
         task.setTitle(request.title());
@@ -106,6 +103,7 @@ public class TaskLifecycleService {
         task.setDeadlineAt(request.deadlineAt());
         task.setPublishedTemplateVersionId(request.publishedTemplateVersionId());
         task.setAiReviewConfigId(request.aiReviewConfigId());
+        task.setReviewLevelCount(request.reviewLevelCount() != null ? request.reviewLevelCount() : 1);
         task.setRewardVisible(true);
         taskMapper.insert(task);
         replaceTags(task.getId(), request.tags());
@@ -132,8 +130,6 @@ public class TaskLifecycleService {
         if (task.getStatus() != TaskStatus.DRAFT) {
             throw new BusinessException(TASK_STATUS_NOT_ALLOWED, "Only draft tasks can be edited");
         }
-        requireSingleOverlap(request.overlapCount());
-        requireOwnerTemplateVersion(ownerId, request.publishedTemplateVersionId());
         Map<String, Object> beforeJson = snapshot(task);
         task.setTitle(request.title());
         task.setDescription(request.description());
@@ -143,6 +139,9 @@ public class TaskLifecycleService {
         task.setDeadlineAt(request.deadlineAt());
         task.setPublishedTemplateVersionId(request.publishedTemplateVersionId());
         task.setAiReviewConfigId(request.aiReviewConfigId());
+        if (request.reviewLevelCount() != null) {
+            task.setReviewLevelCount(request.reviewLevelCount());
+        }
         taskMapper.updateById(task);
         taskTagMapper.delete(new QueryWrapper<TaskTag>().eq("task_id", taskId));
         replaceTags(taskId, request.tags());
@@ -155,7 +154,6 @@ public class TaskLifecycleService {
         Task task = loadOwnedTask(ownerId, taskId);
         requireStatus(task, Set.of(TaskStatus.DRAFT));
         validatePublishRequirements(task);
-        templateVersionService.markPublishedSnapshot(task.getPublishedTemplateVersionId());
         task.setStatus(TaskStatus.PUBLISHED);
         task.setPublishedAt(LocalDateTime.now());
         return updateStatus(task, ownerId, "TASK_PUBLISHED", TaskStatus.DRAFT);
@@ -191,7 +189,18 @@ public class TaskLifecycleService {
         Map<String, Object> beforeJson = Map.of("status", beforeStatus);
         taskMapper.updateById(task);
         appendAudit(task, ownerId, action, beforeJson, Map.of("status", task.getStatus()));
+        publishTaskStatusChanged(task, beforeStatus);
         return new TaskLifecycleResponse(task.getId(), task.getStatus());
+    }
+
+    private void publishTaskStatusChanged(Task task, TaskStatus beforeStatus) {
+        if (applicationEventPublisher != null) {
+            applicationEventPublisher.publishEvent(
+                    new com.labelhub.modules.review.event.TaskStatusChangedEvent(
+                            this, task.getId(), task.getTitle(),
+                            beforeStatus.name(), task.getStatus().name(),
+                            LocalDateTime.now()));
+        }
     }
 
     private void requireStatus(Task task, Set<TaskStatus> allowedStatuses) {
@@ -204,8 +213,8 @@ public class TaskLifecycleService {
         if (task.getQuota() == null || task.getQuota() <= 0) {
             throw missingPublishRequirement("Task quota is required");
         }
-        if (!Integer.valueOf(1).equals(task.getOverlapCount())) {
-            throw missingPublishRequirement("Task overlap count must be 1");
+        if (task.getOverlapCount() == null || task.getOverlapCount() < 1) {
+            throw missingPublishRequirement("Task overlap count is required");
         }
         if (task.getDeadlineAt() == null || !task.getDeadlineAt().isAfter(LocalDateTime.now())) {
             throw missingPublishRequirement("Task deadline must be in the future");
@@ -213,7 +222,7 @@ public class TaskLifecycleService {
         if (!publishDependencyChecker.datasetReady(task.getId())) {
             throw missingPublishRequirement("Task dataset is required");
         }
-        if (!publishDependencyChecker.templateVersionUsableByTask(task.getId(), task.getPublishedTemplateVersionId())) {
+        if (!publishDependencyChecker.templateVersionExists(task.getPublishedTemplateVersionId())) {
             throw missingPublishRequirement("Task template version is required");
         }
         if (!publishDependencyChecker.aiReviewConfigExists(task.getId(), task.getAiReviewConfigId())) {
@@ -226,21 +235,6 @@ public class TaskLifecycleService {
 
     private BusinessException missingPublishRequirement(String message) {
         return new BusinessException(TASK_PUBLISH_REQUIREMENT_MISSING, message);
-    }
-
-    private void requireSingleOverlap(Integer overlapCount) {
-        if (!Integer.valueOf(1).equals(overlapCount)) {
-            throw new BusinessException(TASK_STATUS_NOT_ALLOWED, "Task overlap count must be 1");
-        }
-    }
-
-    private void requireOwnerTemplateVersion(Long ownerId, Long templateVersionId) {
-        if (templateVersionId == null) {
-            return;
-        }
-        if (!publishDependencyChecker.templateVersionOwnedBy(ownerId, templateVersionId)) {
-            throw new BusinessException(403001, "Template version is not owned by current owner");
-        }
     }
 
     private TaskDetailResponse toDetailResponse(Task task) {
@@ -258,6 +252,7 @@ public class TaskLifecycleService {
                 task.getDeadlineAt(),
                 task.getPublishedTemplateVersionId(),
                 task.getAiReviewConfigId(),
+                task.getReviewLevelCount(),
                 task.getRewardVisible(),
                 task.getPublishedAt(),
                 task.getEndedAt(),

@@ -18,6 +18,7 @@ public record LlmProviderResponse(
         Boolean supportMultiImage,
         Integer maxImageCount,
         String visionModel,
+        String structuredOutputMode,
         Boolean apiKeyConfigured,
         Long ownerId,
         Long createdBy,

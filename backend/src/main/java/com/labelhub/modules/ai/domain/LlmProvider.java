@@ -45,6 +45,8 @@ public class LlmProvider {
 
     private String visionModel;
 
+    private String structuredOutputMode;
+
     private Long createdBy;
 
     private LocalDateTime createdAt;

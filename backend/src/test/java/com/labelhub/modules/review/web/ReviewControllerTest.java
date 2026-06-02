@@ -7,6 +7,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.when;
 
 import com.labelhub.common.api.ApiResponse;
+import com.labelhub.common.api.PageResponse;
 import com.labelhub.common.exception.BusinessException;
 import com.labelhub.common.security.CurrentUser;
 import com.labelhub.common.security.CurrentUserContext;
@@ -21,6 +22,7 @@ import com.labelhub.modules.review.dto.ReviewerSubmissionListItem;
 import com.labelhub.modules.review.dto.SubmissionReviewItem;
 import com.labelhub.modules.review.mapper.ReviewerSubmissionListMapper;
 import com.labelhub.modules.review.service.BatchReviewService;
+import com.labelhub.modules.review.service.ReviewClaimService;
 import com.labelhub.modules.review.service.ReviewService;
 import com.labelhub.modules.review.service.ReviewerSubmissionQueryService;
 import com.labelhub.modules.submission.domain.SubmissionStatus;
@@ -40,13 +42,14 @@ class ReviewControllerTest {
     @Mock private BatchReviewService batchReviewService;
     @Mock private ReviewerSubmissionQueryService reviewerQueryService;
     @Mock private ReviewerSubmissionListMapper reviewerListMapper;
+    @Mock private ReviewClaimService reviewClaimService;
 
     private ReviewController controller;
 
     @BeforeEach
     void setUp() {
         controller = new ReviewController(reviewService, batchReviewService,
-                reviewerQueryService, reviewerListMapper);
+                reviewerQueryService, reviewerListMapper, reviewClaimService);
     }
 
     @AfterEach
@@ -59,13 +62,16 @@ class ReviewControllerTest {
         CurrentUserContext.set(new CurrentUser(1L, "reviewer", "test@labelhub.dev", Set.of(RoleCode.REVIEWER), 1));
         ReviewerSubmissionListItem item = new ReviewerSubmissionListItem(
                 100L, 1L, 1L, 1L, SubmissionStatus.PENDING_FINAL, null, null, null, 1, null, null, null);
+        when(reviewerListMapper.countWithFilters(null, null, null, null, null, null, null))
+                .thenReturn(1L);
         when(reviewerListMapper.selectWithFilters(null, null, null, null, null, null, null, 0, 20))
                 .thenReturn(List.of(item));
 
-        ApiResponse<List<ReviewerSubmissionListItem>> response = controller.list(
+        ApiResponse<PageResponse<ReviewerSubmissionListItem>> response = controller.list(
                 null, null, null, null, null, null, null, 1, 20);
 
-        assertThat(response.data()).containsExactly(item);
+        assertThat(response.data().items()).containsExactly(item);
+        assertThat(response.data().total()).isEqualTo(1L);
     }
 
     @Test
@@ -107,6 +113,20 @@ class ReviewControllerTest {
                 .thenReturn(serviceResponse);
 
         ApiResponse<BatchReviewResponse> response = controller.batchApprove(
+                new BatchApproveRequest(List.of(100L), "ok", 1));
+
+        assertThat(response.data().successCount()).isEqualTo(1);
+    }
+
+    @Test
+    void contractBatchApproveAliasDelegatesToBatchService() {
+        CurrentUserContext.set(new CurrentUser(1L, "reviewer", "test@labelhub.dev", Set.of(RoleCode.REVIEWER), 1));
+        BatchReviewResponse serviceResponse = new BatchReviewResponse(
+                1, 1, 0, List.of(BatchReviewItemResult.ok(100L)));
+        when(batchReviewService.batchApprove(eq(1L), any(BatchApproveRequest.class)))
+                .thenReturn(serviceResponse);
+
+        ApiResponse<BatchReviewResponse> response = controller.batchApproveAlias(
                 new BatchApproveRequest(List.of(100L), "ok", 1));
 
         assertThat(response.data().successCount()).isEqualTo(1);

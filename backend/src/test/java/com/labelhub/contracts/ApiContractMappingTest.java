@@ -86,6 +86,7 @@ class ApiContractMappingTest {
                 endpoint("POST", "/api/v1/reviewer/submissions/batch-assign"),
                 endpoint("GET", "/api/v1/reviewer/tasks"),
                 endpoint("GET", "/api/v1/reviewer/dashboard"),
+                endpoint("GET", "/api/v1/reviewer/ai-review-status"),
                 endpoint("GET", "/api/v1/reviewer/conflict-groups"),
                 endpoint("GET", "/api/v1/reviewer/conflict-groups/{groupId}"),
                 endpoint("POST", "/api/v1/reviewer/conflict-groups/{groupId}/resolve"),

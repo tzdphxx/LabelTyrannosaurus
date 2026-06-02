@@ -3,6 +3,7 @@ package com.labelhub.modules.review.web;
 import com.labelhub.common.api.ApiResponse;
 import com.labelhub.common.security.CurrentUserContext;
 import com.labelhub.common.security.RoleCode;
+import com.labelhub.modules.review.dto.ReviewerAiReviewStatusItem;
 import com.labelhub.modules.review.dto.ReviewerDashboardResponse;
 import com.labelhub.modules.review.dto.ReviewerTaskSummary;
 import com.labelhub.modules.review.mapper.ReviewRecordMapper;
@@ -10,6 +11,7 @@ import com.labelhub.modules.review.mapper.ReviewerSubmissionListMapper;
 import com.labelhub.modules.submission.mapper.SubmissionMapper;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import com.labelhub.modules.review.dto.ReviewerAiReviewStatusItem;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.List;
@@ -60,5 +62,14 @@ public class ReviewerWorkspaceController {
                 : BigDecimal.ZERO;
         return ApiResponse.ok(new ReviewerDashboardResponse(
                 pending, todayReviewed, totalApproved, totalRejected, approvalRate));
+    }
+
+    @GetMapping("/ai-review-status")
+    @Operation(summary = "审查员 AI 预审状态列表",
+            description = "获取当前审查员所有负责提交的 AI 预审状态，包含评分、决策和分配情况。")
+    public ApiResponse<List<ReviewerAiReviewStatusItem>> aiReviewStatus() {
+        CurrentUserContext.requireRole(RoleCode.REVIEWER);
+        Long reviewerId = CurrentUserContext.getUserId();
+        return ApiResponse.ok(reviewerListMapper.selectAiReviewStatusForReviewer(reviewerId));
     }
 }

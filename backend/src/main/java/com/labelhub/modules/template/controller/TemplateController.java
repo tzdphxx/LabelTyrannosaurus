@@ -1,4 +1,4 @@
-package com.labelhub.modules.template.controller;
+﻿package com.labelhub.modules.template.controller;
 
 import com.labelhub.common.api.ApiResponse;
 import com.labelhub.modules.template.dto.CreateTemplateRequest;
@@ -9,6 +9,8 @@ import com.labelhub.modules.template.service.TemplateService;
 import com.labelhub.modules.template.service.TemplateVersionService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import jakarta.validation.Valid;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -44,6 +46,7 @@ public class TemplateController {
      */
     @PostMapping("/tasks/{taskId}/templates")
     @Operation(summary = "创建模板", description = "为任务创建模板并生成首个版本。")
+    @ApiResponses({@ApiResponse(responseCode = "200"), @ApiResponse(responseCode = "400", description = "请求参数校验失败"), @ApiResponse(responseCode = "401", description = "未认证"), @ApiResponse(responseCode = "403", description = "权限不足")})
     public ApiResponse<TemplateResponse> createTemplate(@PathVariable Long taskId,
                                                         @Valid @RequestBody CreateTemplateRequest request) {
         return ApiResponse.ok(templateService.createTemplate(taskId, request));
@@ -54,6 +57,7 @@ public class TemplateController {
      */
     @GetMapping("/tasks/{taskId}/templates")
     @Operation(summary = "模板列表", description = "查询任务下的模板列表。")
+    @ApiResponses({@ApiResponse(responseCode = "200"), @ApiResponse(responseCode = "400", description = "请求参数校验失败"), @ApiResponse(responseCode = "401", description = "未认证"), @ApiResponse(responseCode = "403", description = "权限不足")})
     public ApiResponse<List<TemplateResponse>> listTemplates(@PathVariable Long taskId) {
         return ApiResponse.ok(templateService.listTemplates(taskId));
     }
@@ -63,6 +67,7 @@ public class TemplateController {
      */
     @GetMapping("/template-versions/{versionId}")
     @Operation(summary = "模板版本详情", description = "查询指定模板版本详情。")
+    @ApiResponses({@ApiResponse(responseCode = "200"), @ApiResponse(responseCode = "400", description = "请求参数校验失败"), @ApiResponse(responseCode = "401", description = "未认证"), @ApiResponse(responseCode = "403", description = "权限不足")})
     public ApiResponse<TemplateVersionResponse> getVersion(@PathVariable Long versionId) {
         return ApiResponse.ok(templateVersionService.getVersion(versionId));
     }
@@ -72,6 +77,7 @@ public class TemplateController {
      */
     @PostMapping("/templates/{templateId}/fork")
     @Operation(summary = "Fork 模板", description = "基于已有模板创建新版本。")
+    @ApiResponses({@ApiResponse(responseCode = "200"), @ApiResponse(responseCode = "400", description = "请求参数校验失败"), @ApiResponse(responseCode = "401", description = "未认证"), @ApiResponse(responseCode = "403", description = "权限不足")})
     public ApiResponse<TemplateResponse> forkTemplate(@PathVariable Long templateId,
                                                       @RequestBody ForkTemplateRequest request) {
         return ApiResponse.ok(templateService.forkTemplate(templateId, request));

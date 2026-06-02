@@ -1,4 +1,4 @@
-package com.labelhub.modules.notification.web;
+﻿package com.labelhub.modules.notification.web;
 
 import com.labelhub.common.api.ApiResponse;
 import com.labelhub.common.security.CurrentUserContext;
@@ -8,6 +8,8 @@ import com.labelhub.infrastructure.notification.NotificationStore;
 import com.labelhub.infrastructure.notification.SseConnectionManager;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import java.util.List;
 import java.util.Map;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -36,6 +38,7 @@ public class NotificationController {
 
     @GetMapping("/stream")
     @Operation(summary = "SSE 连接", description = "建立 SSE 长连接接收实时通知。")
+    @ApiResponses({@ApiResponse(responseCode = "200"), @ApiResponse(responseCode = "400", description = "请求参数校验失败"), @ApiResponse(responseCode = "401", description = "未认证"), @ApiResponse(responseCode = "403", description = "权限不足")})
     public SseEmitter stream() {
         Long userId = CurrentUserContext.getUserId();
         return sseConnectionManager.createConnection(userId, SSE_TIMEOUT);
@@ -43,6 +46,7 @@ public class NotificationController {
 
     @GetMapping
     @Operation(summary = "历史通知列表")
+    @ApiResponses({@ApiResponse(responseCode = "200"), @ApiResponse(responseCode = "400", description = "请求参数校验失败"), @ApiResponse(responseCode = "401", description = "未认证"), @ApiResponse(responseCode = "403", description = "权限不足")})
     public ApiResponse<List<NotificationEvent>> list(
             @RequestParam(defaultValue = "20") int limit,
             @RequestParam(defaultValue = "0") int offset) {
@@ -52,6 +56,7 @@ public class NotificationController {
 
     @GetMapping("/unread-count")
     @Operation(summary = "未读通知数量")
+    @ApiResponses({@ApiResponse(responseCode = "200"), @ApiResponse(responseCode = "400", description = "请求参数校验失败"), @ApiResponse(responseCode = "401", description = "未认证"), @ApiResponse(responseCode = "403", description = "权限不足")})
     public ApiResponse<Map<String, Long>> unreadCount() {
         Long userId = CurrentUserContext.getUserId();
         return ApiResponse.ok(Map.of("count", notificationStore.countUnread(userId)));
@@ -59,6 +64,7 @@ public class NotificationController {
 
     @PostMapping("/{id}/read")
     @Operation(summary = "标记单条已读")
+    @ApiResponses({@ApiResponse(responseCode = "200"), @ApiResponse(responseCode = "400", description = "请求参数校验失败"), @ApiResponse(responseCode = "401", description = "未认证"), @ApiResponse(responseCode = "403", description = "权限不足")})
     public ApiResponse<Void> markRead(@PathVariable String id) {
         Long userId = CurrentUserContext.getUserId();
         notificationStore.markRead(userId, id);
@@ -67,6 +73,7 @@ public class NotificationController {
 
     @PostMapping("/read-all")
     @Operation(summary = "全部标记已读")
+    @ApiResponses({@ApiResponse(responseCode = "200"), @ApiResponse(responseCode = "400", description = "请求参数校验失败"), @ApiResponse(responseCode = "401", description = "未认证"), @ApiResponse(responseCode = "403", description = "权限不足")})
     public ApiResponse<Void> markAllRead() {
         Long userId = CurrentUserContext.getUserId();
         notificationStore.markAllRead(userId);

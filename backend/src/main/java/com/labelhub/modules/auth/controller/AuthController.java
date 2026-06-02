@@ -1,4 +1,4 @@
-package com.labelhub.modules.auth.controller;
+﻿package com.labelhub.modules.auth.controller;
 
 import com.labelhub.common.api.ApiResponse;
 import com.labelhub.common.security.CurrentUserContext;
@@ -13,6 +13,8 @@ import com.labelhub.modules.auth.service.AuthService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirements;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -50,6 +52,7 @@ public class AuthController {
     @PostMapping("/auth/register")
     @SecurityRequirements
     @Operation(summary = "用户注册", description = "创建普通用户，按 role 参数授予 LABELER 或 OWNER，并返回 accessToken 和 refreshToken。")
+    @ApiResponses({@ApiResponse(responseCode = "200"), @ApiResponse(responseCode = "400", description = "请求参数校验失败"), @ApiResponse(responseCode = "401", description = "未认证"), @ApiResponse(responseCode = "403", description = "权限不足")})
     public ApiResponse<TokenResponse> register(@Valid @RequestBody RegisterRequest request) {
         return ApiResponse.ok(authService.register(request));
     }
@@ -66,6 +69,7 @@ public class AuthController {
     @PostMapping("/auth/login")
     @SecurityRequirements
     @Operation(summary = "用户登录", description = "支持用户名或邮箱登录。仅普通且启用登录的用户可以获取令牌。")
+    @ApiResponses({@ApiResponse(responseCode = "200"), @ApiResponse(responseCode = "400", description = "请求参数校验失败"), @ApiResponse(responseCode = "401", description = "未认证"), @ApiResponse(responseCode = "403", description = "权限不足")})
     public ApiResponse<TokenResponse> login(@Valid @RequestBody LoginRequest request) {
         return ApiResponse.ok(authService.login(request));
     }
@@ -82,6 +86,7 @@ public class AuthController {
     @PostMapping("/auth/refresh")
     @SecurityRequirements
     @Operation(summary = "刷新令牌", description = "使用有效 refreshToken 换取新的 accessToken 和 refreshToken。")
+    @ApiResponses({@ApiResponse(responseCode = "200"), @ApiResponse(responseCode = "400", description = "请求参数校验失败"), @ApiResponse(responseCode = "401", description = "未认证"), @ApiResponse(responseCode = "403", description = "权限不足")})
     public ApiResponse<TokenResponse> refresh(@Valid @RequestBody RefreshRequest request) {
         return ApiResponse.ok(authService.refresh(request.refreshToken()));
     }
@@ -96,12 +101,14 @@ public class AuthController {
      */
     @GetMapping("/users/me")
     @Operation(summary = "当前用户信息", description = "返回当前认证用户的最小资料和角色集合。")
+    @ApiResponses({@ApiResponse(responseCode = "200"), @ApiResponse(responseCode = "400", description = "请求参数校验失败"), @ApiResponse(responseCode = "401", description = "未认证"), @ApiResponse(responseCode = "403", description = "权限不足")})
     public ApiResponse<UserProfileResponse> currentUser() {
         return ApiResponse.ok(authService.currentUser());
     }
 
     @PutMapping("/users/me/password")
     @Operation(summary = "修改密码", description = "校验旧密码后更新为新密码，成功后旧令牌失效需重新登录。")
+    @ApiResponses({@ApiResponse(responseCode = "200"), @ApiResponse(responseCode = "400", description = "请求参数校验失败"), @ApiResponse(responseCode = "401", description = "未认证"), @ApiResponse(responseCode = "403", description = "权限不足")})
     public ApiResponse<Void> changePassword(@Valid @RequestBody ChangePasswordRequest request) {
         authService.changePassword(CurrentUserContext.getUserId(), request);
         return ApiResponse.ok(null);
@@ -109,6 +116,7 @@ public class AuthController {
 
     @PutMapping("/users/me/profile")
     @Operation(summary = "更新个人信息", description = "更新当前用户的显示名称和邮箱。邮箱需全局唯一。")
+    @ApiResponses({@ApiResponse(responseCode = "200"), @ApiResponse(responseCode = "400", description = "请求参数校验失败"), @ApiResponse(responseCode = "401", description = "未认证"), @ApiResponse(responseCode = "403", description = "权限不足")})
     public ApiResponse<Void> updateProfile(@Valid @RequestBody UpdateProfileRequest request) {
         authService.updateProfile(CurrentUserContext.getUserId(), request);
         return ApiResponse.ok(null);

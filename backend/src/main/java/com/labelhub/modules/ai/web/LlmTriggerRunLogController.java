@@ -1,4 +1,4 @@
-package com.labelhub.modules.ai.web;
+﻿package com.labelhub.modules.ai.web;
 
 import com.labelhub.common.api.ApiResponse;
 import com.labelhub.common.security.CurrentUserContext;
@@ -8,6 +8,8 @@ import com.labelhub.modules.ai.service.LlmTriggerRunQueryService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import java.time.LocalDateTime;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -31,6 +33,7 @@ public class LlmTriggerRunLogController {
 
     @GetMapping
     @Operation(summary = "LLM 调用日志列表",
+    @ApiResponses({@ApiResponse(responseCode = "200"), @ApiResponse(responseCode = "400", description = "请求参数校验失败"), @ApiResponse(responseCode = "401", description = "未认证"), @ApiResponse(responseCode = "403", description = "权限不足")})
             description = "分页查询指定任务下的所有 LLM 触发器运行记录，支持按状态、组件、时间范围筛选。")
     public ApiResponse<LlmTriggerRunPageResponse> list(
             @Parameter(description = "任务 ID") @PathVariable Long taskId,

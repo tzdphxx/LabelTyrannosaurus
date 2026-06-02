@@ -1,4 +1,4 @@
-package com.labelhub.modules.review.web;
+﻿package com.labelhub.modules.review.web;
 
 import com.labelhub.common.api.ApiResponse;
 import com.labelhub.common.api.PageResponse;
@@ -24,6 +24,8 @@ import com.labelhub.modules.review.service.ReviewerSubmissionQueryService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import jakarta.validation.Valid;
 import java.util.List;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -59,6 +61,7 @@ public class ReviewController {
 
     @PostMapping("/claim")
     @Operation(summary = "领取待审提交", description = "审核员主动从未分配池中领取待审提交。支持按任务筛选，使用数据库行锁保证并发安全。")
+    @ApiResponses({@ApiResponse(responseCode = "200"), @ApiResponse(responseCode = "400", description = "请求参数校验失败"), @ApiResponse(responseCode = "401", description = "未认证"), @ApiResponse(responseCode = "403", description = "权限不足")})
     public ApiResponse<ReviewClaimResponse> claim(
             @Parameter(description = "领取数量，默认 10，最大 50") @RequestParam(defaultValue = "10") int count,
             @Parameter(description = "按任务 ID 筛选") @RequestParam(required = false) Long taskId) {
@@ -68,6 +71,7 @@ public class ReviewController {
 
     @GetMapping
     @Operation(summary = "待审提交列表", description = "查询审核员可处理的提交列表，支持按任务、提交状态、AI 结论、冲突状态、审核级别和分配审核员筛选。")
+    @ApiResponses({@ApiResponse(responseCode = "200"), @ApiResponse(responseCode = "400", description = "请求参数校验失败"), @ApiResponse(responseCode = "401", description = "未认证"), @ApiResponse(responseCode = "403", description = "权限不足")})
     public ApiResponse<PageResponse<ReviewerSubmissionListItem>> list(
             @Parameter(description = "按任务 ID 筛选") @RequestParam(required = false) Long taskId,
             @Parameter(description = "按提交状态筛选") @RequestParam(required = false) String submissionStatus,
@@ -93,6 +97,7 @@ public class ReviewController {
 
     @GetMapping("/{submissionId}")
     @Operation(summary = "提交审核详情", description = "查询指定提交的审核详情，包含标注答案、AI 评分、审核历史、冲突信息等。")
+    @ApiResponses({@ApiResponse(responseCode = "200"), @ApiResponse(responseCode = "400", description = "请求参数校验失败"), @ApiResponse(responseCode = "401", description = "未认证"), @ApiResponse(responseCode = "403", description = "权限不足")})
     public ApiResponse<ReviewerSubmissionDetailResponse> getDetail(
             @Parameter(description = "提交 ID") @PathVariable Long submissionId) {
         CurrentUserContext.requireRole(RoleCode.REVIEWER);
@@ -101,6 +106,7 @@ public class ReviewController {
 
     @PostMapping("/{submissionId}/approve")
     @Operation(summary = "通过提交", description = "审核通过指定提交。")
+    @ApiResponses({@ApiResponse(responseCode = "200"), @ApiResponse(responseCode = "400", description = "请求参数校验失败"), @ApiResponse(responseCode = "401", description = "未认证"), @ApiResponse(responseCode = "403", description = "权限不足")})
     public ApiResponse<ReviewActionResponse> approve(@PathVariable Long submissionId,
                                                       @Valid @RequestBody ApproveRequest request) {
         CurrentUserContext.requireRole(RoleCode.REVIEWER);
@@ -110,6 +116,7 @@ public class ReviewController {
 
     @PostMapping("/{submissionId}/reject")
     @Operation(summary = "驳回提交", description = "审核驳回指定提交。")
+    @ApiResponses({@ApiResponse(responseCode = "200"), @ApiResponse(responseCode = "400", description = "请求参数校验失败"), @ApiResponse(responseCode = "401", description = "未认证"), @ApiResponse(responseCode = "403", description = "权限不足")})
     public ApiResponse<ReviewActionResponse> reject(@PathVariable Long submissionId,
                                                      @Valid @RequestBody RejectRequest request) {
         CurrentUserContext.requireRole(RoleCode.REVIEWER);
@@ -119,6 +126,7 @@ public class ReviewController {
 
     @PostMapping("/batch/approve")
     @Operation(summary = "批量通过", description = "批量审核通过提交。")
+    @ApiResponses({@ApiResponse(responseCode = "200"), @ApiResponse(responseCode = "400", description = "请求参数校验失败"), @ApiResponse(responseCode = "401", description = "未认证"), @ApiResponse(responseCode = "403", description = "权限不足")})
     public ApiResponse<BatchReviewResponse> batchApprove(@Valid @RequestBody BatchApproveRequest request) {
         CurrentUserContext.requireRole(RoleCode.REVIEWER);
         return ApiResponse.ok(batchReviewService.batchApprove(
@@ -127,12 +135,14 @@ public class ReviewController {
 
     @PostMapping("/batch-approve")
     @Operation(summary = "批量通过", description = "兼容契约路径，批量审核通过提交。")
+    @ApiResponses({@ApiResponse(responseCode = "200"), @ApiResponse(responseCode = "400", description = "请求参数校验失败"), @ApiResponse(responseCode = "401", description = "未认证"), @ApiResponse(responseCode = "403", description = "权限不足")})
     public ApiResponse<BatchReviewResponse> batchApproveAlias(@Valid @RequestBody BatchApproveRequest request) {
         return batchApprove(request);
     }
 
     @PostMapping("/batch/reject")
     @Operation(summary = "批量驳回", description = "批量审核驳回提交。")
+    @ApiResponses({@ApiResponse(responseCode = "200"), @ApiResponse(responseCode = "400", description = "请求参数校验失败"), @ApiResponse(responseCode = "401", description = "未认证"), @ApiResponse(responseCode = "403", description = "权限不足")})
     public ApiResponse<BatchReviewResponse> batchReject(@Valid @RequestBody BatchRejectRequest request) {
         CurrentUserContext.requireRole(RoleCode.REVIEWER);
         return ApiResponse.ok(batchReviewService.batchReject(
@@ -141,12 +151,14 @@ public class ReviewController {
 
     @PostMapping("/batch-reject")
     @Operation(summary = "批量驳回", description = "兼容契约路径，批量审核驳回提交。")
+    @ApiResponses({@ApiResponse(responseCode = "200"), @ApiResponse(responseCode = "400", description = "请求参数校验失败"), @ApiResponse(responseCode = "401", description = "未认证"), @ApiResponse(responseCode = "403", description = "权限不足")})
     public ApiResponse<BatchReviewResponse> batchRejectAlias(@Valid @RequestBody BatchRejectRequest request) {
         return batchReject(request);
     }
 
     @PostMapping("/batch/mark-manual")
     @Operation(summary = "批量转人工", description = "将提交批量标记为需要人工处理。")
+    @ApiResponses({@ApiResponse(responseCode = "200"), @ApiResponse(responseCode = "400", description = "请求参数校验失败"), @ApiResponse(responseCode = "401", description = "未认证"), @ApiResponse(responseCode = "403", description = "权限不足")})
     public ApiResponse<BatchReviewResponse> batchMarkManual(@Valid @RequestBody BatchMarkManualRequest request) {
         CurrentUserContext.requireRole(RoleCode.REVIEWER);
         return ApiResponse.ok(batchReviewService.batchMarkManual(
@@ -155,12 +167,14 @@ public class ReviewController {
 
     @PostMapping("/batch-mark-manual")
     @Operation(summary = "批量转人工", description = "兼容契约路径，将提交批量标记为需要人工处理。")
+    @ApiResponses({@ApiResponse(responseCode = "200"), @ApiResponse(responseCode = "400", description = "请求参数校验失败"), @ApiResponse(responseCode = "401", description = "未认证"), @ApiResponse(responseCode = "403", description = "权限不足")})
     public ApiResponse<BatchReviewResponse> batchMarkManualAlias(@Valid @RequestBody BatchMarkManualRequest request) {
         return batchMarkManual(request);
     }
 
     @PostMapping("/batch/assign")
     @Operation(summary = "批量分配审核", description = "批量分配提交给审核员。")
+    @ApiResponses({@ApiResponse(responseCode = "200"), @ApiResponse(responseCode = "400", description = "请求参数校验失败"), @ApiResponse(responseCode = "401", description = "未认证"), @ApiResponse(responseCode = "403", description = "权限不足")})
     public ApiResponse<BatchReviewResponse> batchAssign(@Valid @RequestBody BatchAssignRequest request) {
         CurrentUserContext.requireRole(RoleCode.REVIEWER);
         return ApiResponse.ok(batchReviewService.batchAssign(
@@ -169,6 +183,7 @@ public class ReviewController {
 
     @PostMapping("/batch-assign")
     @Operation(summary = "批量分配审核", description = "兼容契约路径，批量分配提交给审核员。")
+    @ApiResponses({@ApiResponse(responseCode = "200"), @ApiResponse(responseCode = "400", description = "请求参数校验失败"), @ApiResponse(responseCode = "401", description = "未认证"), @ApiResponse(responseCode = "403", description = "权限不足")})
     public ApiResponse<BatchReviewResponse> batchAssignAlias(@Valid @RequestBody BatchAssignRequest request) {
         return batchAssign(request);
     }

@@ -1,4 +1,4 @@
-package com.labelhub.modules.reward.controller;
+﻿package com.labelhub.modules.reward.controller;
 
 import com.labelhub.common.api.ApiResponse;
 import com.labelhub.modules.reward.dto.ContributionOverviewResponse;
@@ -8,6 +8,8 @@ import com.labelhub.modules.reward.dto.TaskContributionResponse;
 import com.labelhub.modules.reward.service.ContributionStatsService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -36,6 +38,7 @@ public class ContributionController {
      */
     @GetMapping("/contribution/overview")
     @Operation(summary = "贡献概览", description = "查询当前标注员贡献总览。")
+    @ApiResponses({@ApiResponse(responseCode = "200"), @ApiResponse(responseCode = "400", description = "请求参数校验失败"), @ApiResponse(responseCode = "401", description = "未认证"), @ApiResponse(responseCode = "403", description = "权限不足")})
     public ApiResponse<ContributionOverviewResponse> overview() {
         return ApiResponse.ok(contributionStatsService.getOverview());
     }
@@ -45,6 +48,7 @@ public class ContributionController {
      */
     @GetMapping("/contribution/trend")
     @Operation(summary = "贡献趋势", description = "查询最近 N 天贡献趋势。")
+    @ApiResponses({@ApiResponse(responseCode = "200"), @ApiResponse(responseCode = "400", description = "请求参数校验失败"), @ApiResponse(responseCode = "401", description = "未认证"), @ApiResponse(responseCode = "403", description = "权限不足")})
     public ApiResponse<List<DailyContributionPoint>> trend(@RequestParam(required = false) Integer days) {
         return ApiResponse.ok(contributionStatsService.getTrend(days));
     }
@@ -54,6 +58,7 @@ public class ContributionController {
      */
     @GetMapping("/contribution/tasks")
     @Operation(summary = "任务贡献统计", description = "按任务聚合查询当前标注员贡献。")
+    @ApiResponses({@ApiResponse(responseCode = "200"), @ApiResponse(responseCode = "400", description = "请求参数校验失败"), @ApiResponse(responseCode = "401", description = "未认证"), @ApiResponse(responseCode = "403", description = "权限不足")})
     public ApiResponse<List<TaskContributionResponse>> tasks(@RequestParam(required = false) Integer limit,
                                                              @RequestParam(required = false) Integer offset) {
         return ApiResponse.ok(contributionStatsService.getTasks(limit, offset));
@@ -64,6 +69,7 @@ public class ContributionController {
      */
     @GetMapping("/rewards/ledger")
     @Operation(summary = "奖励流水", description = "查询当前标注员奖励和冲正流水。")
+    @ApiResponses({@ApiResponse(responseCode = "200"), @ApiResponse(responseCode = "400", description = "请求参数校验失败"), @ApiResponse(responseCode = "401", description = "未认证"), @ApiResponse(responseCode = "403", description = "权限不足")})
     public ApiResponse<List<RewardLedgerResponse>> ledger(@RequestParam(required = false) Integer limit,
                                                           @RequestParam(required = false) Integer offset) {
         return ApiResponse.ok(contributionStatsService.getLedger(limit, offset));

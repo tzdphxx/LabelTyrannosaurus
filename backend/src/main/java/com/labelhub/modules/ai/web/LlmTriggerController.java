@@ -1,4 +1,4 @@
-package com.labelhub.modules.ai.web;
+﻿package com.labelhub.modules.ai.web;
 
 import com.labelhub.common.api.ApiResponse;
 import com.labelhub.common.security.CurrentUserContext;
@@ -7,6 +7,8 @@ import com.labelhub.modules.ai.dto.LlmTriggerRunResponse;
 import com.labelhub.modules.ai.service.LlmTriggerService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -28,12 +30,14 @@ public class LlmTriggerController {
 
     @PostMapping("/run")
     @Operation(summary = "运行 LLM 触发器", description = "基于当前用户上下文运行模板中的 LLM 触发器。")
+    @ApiResponses({@ApiResponse(responseCode = "200"), @ApiResponse(responseCode = "400", description = "请求参数校验失败"), @ApiResponse(responseCode = "401", description = "未认证"), @ApiResponse(responseCode = "403", description = "权限不足")})
     public ApiResponse<LlmTriggerRunResponse> run(@Valid @RequestBody LlmTriggerRunRequest request) {
         return ApiResponse.ok(llmTriggerService.run(CurrentUserContext.requireCurrentUser(), request));
     }
 
     @GetMapping("/runs/{triggerRunId}")
     @Operation(summary = "查询 LLM 触发器运行结果", description = "查询异步 LLM 触发器的运行状态、字段建议和错误信息。")
+    @ApiResponses({@ApiResponse(responseCode = "200"), @ApiResponse(responseCode = "400", description = "请求参数校验失败"), @ApiResponse(responseCode = "401", description = "未认证"), @ApiResponse(responseCode = "403", description = "权限不足")})
     public ApiResponse<LlmTriggerRunResponse> getRun(@PathVariable Long triggerRunId) {
         return ApiResponse.ok(llmTriggerService.getRun(CurrentUserContext.requireCurrentUser(), triggerRunId));
     }

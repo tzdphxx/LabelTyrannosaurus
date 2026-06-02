@@ -1,4 +1,4 @@
-package com.labelhub.modules.dataset.controller;
+﻿package com.labelhub.modules.dataset.controller;
 
 import com.labelhub.common.api.ApiResponse;
 import com.labelhub.modules.dataset.dto.DatasetImportJobResponse;
@@ -6,6 +6,8 @@ import com.labelhub.modules.dataset.dto.DatasetImportRequest;
 import com.labelhub.modules.dataset.service.DatasetImportService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import jakarta.validation.Valid;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -40,6 +42,7 @@ public class DatasetImportController {
      */
     @PostMapping("/import")
     @Operation(summary = "追加导入数据集", description = "从已上传文件创建追加导入任务。")
+    @ApiResponses({@ApiResponse(responseCode = "200"), @ApiResponse(responseCode = "400", description = "请求参数校验失败"), @ApiResponse(responseCode = "401", description = "未认证"), @ApiResponse(responseCode = "403", description = "权限不足")})
     public ApiResponse<DatasetImportJobResponse> appendImport(@PathVariable Long taskId,
                                                               @Valid @RequestBody DatasetImportRequest request) {
         return ApiResponse.ok(datasetImportService.createAppendImport(taskId, request));
@@ -52,6 +55,7 @@ public class DatasetImportController {
      */
     @PostMapping("/import/overwrite")
     @Operation(summary = "覆盖导入数据集", description = "从已上传文件创建覆盖导入任务，仅允许草稿任务。")
+    @ApiResponses({@ApiResponse(responseCode = "200"), @ApiResponse(responseCode = "400", description = "请求参数校验失败"), @ApiResponse(responseCode = "401", description = "未认证"), @ApiResponse(responseCode = "403", description = "权限不足")})
     public ApiResponse<DatasetImportJobResponse> overwriteImport(@PathVariable Long taskId,
                                                                  @Valid @RequestBody DatasetImportRequest request) {
         return ApiResponse.ok(datasetImportService.createOverwriteImport(taskId, request));
@@ -64,6 +68,7 @@ public class DatasetImportController {
      */
     @GetMapping("/import-jobs/{jobId}")
     @Operation(summary = "导入任务详情", description = "查询导入任务状态和错误报告下载地址。")
+    @ApiResponses({@ApiResponse(responseCode = "200"), @ApiResponse(responseCode = "400", description = "请求参数校验失败"), @ApiResponse(responseCode = "401", description = "未认证"), @ApiResponse(responseCode = "403", description = "权限不足")})
     public ApiResponse<DatasetImportJobResponse> getImportJob(@PathVariable Long taskId, @PathVariable Long jobId) {
         return ApiResponse.ok(datasetImportService.getImportJob(taskId, jobId));
     }

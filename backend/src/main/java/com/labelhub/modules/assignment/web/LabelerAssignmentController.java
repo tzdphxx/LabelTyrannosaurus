@@ -1,4 +1,4 @@
-package com.labelhub.modules.assignment.web;
+﻿package com.labelhub.modules.assignment.web;
 
 import com.labelhub.common.api.ApiResponse;
 import com.labelhub.common.security.CurrentUserContext;
@@ -9,6 +9,8 @@ import com.labelhub.modules.assignment.service.LabelerAssignmentQueryService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import java.util.List;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -33,6 +35,7 @@ public class LabelerAssignmentController {
 
     @GetMapping
     @Operation(summary = "我的 Assignment 列表",
+    @ApiResponses({@ApiResponse(responseCode = "200"), @ApiResponse(responseCode = "400", description = "请求参数校验失败"), @ApiResponse(responseCode = "401", description = "未认证"), @ApiResponse(responseCode = "403", description = "权限不足")})
             description = "分页查询当前标注员的所有 assignment，支持按任务和状态筛选。")
     public ApiResponse<List<LabelerAssignmentListItem>> list(
             @RequestParam(required = false) Long taskId,
@@ -46,6 +49,7 @@ public class LabelerAssignmentController {
 
     @PostMapping("/{assignmentId}/cancel")
     @Operation(summary = "放弃领取",
+    @ApiResponses({@ApiResponse(responseCode = "200"), @ApiResponse(responseCode = "400", description = "请求参数校验失败"), @ApiResponse(responseCode = "401", description = "未认证"), @ApiResponse(responseCode = "403", description = "权限不足")})
             description = "标注员放弃已领取的 assignment，释放数据项回市场池。"
                     + "仅 CLAIMED/DRAFTING/RETURNED 状态可放弃。")
     public ApiResponse<Void> cancel(

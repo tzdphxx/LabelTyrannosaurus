@@ -1,4 +1,4 @@
-package com.labelhub.modules.ai.web;
+﻿package com.labelhub.modules.ai.web;
 
 import com.labelhub.common.api.ApiResponse;
 import com.labelhub.common.security.CurrentUserContext;
@@ -9,6 +9,8 @@ import com.labelhub.modules.ai.dto.AiReviewPromptTestResponse;
 import com.labelhub.modules.ai.service.AiReviewConfigService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -31,6 +33,7 @@ public class AiReviewConfigController {
 
     @PostMapping
     @Operation(summary = "保存 AI 审核配置", description = "创建或保存任务 AI 审核配置。")
+    @ApiResponses({@ApiResponse(responseCode = "200"), @ApiResponse(responseCode = "400", description = "请求参数校验失败"), @ApiResponse(responseCode = "401", description = "未认证"), @ApiResponse(responseCode = "403", description = "权限不足")})
     public ApiResponse<AiReviewConfigResponse> save(@PathVariable Long taskId,
                                                     @Valid @RequestBody AiReviewConfigRequest request) {
         return ApiResponse.ok(aiReviewConfigService.save(CurrentUserContext.getUserId(), taskId, request));
@@ -38,6 +41,7 @@ public class AiReviewConfigController {
 
     @PutMapping("/{configId}")
     @Operation(summary = "更新 AI 审核配置", description = "更新指定 AI 审核配置。")
+    @ApiResponses({@ApiResponse(responseCode = "200"), @ApiResponse(responseCode = "400", description = "请求参数校验失败"), @ApiResponse(responseCode = "401", description = "未认证"), @ApiResponse(responseCode = "403", description = "权限不足")})
     public ApiResponse<AiReviewConfigResponse> update(@PathVariable Long taskId,
                                                       @PathVariable Long configId,
                                                       @Valid @RequestBody AiReviewConfigRequest request) {
@@ -47,12 +51,14 @@ public class AiReviewConfigController {
 
     @GetMapping
     @Operation(summary = "获取 AI 审核配置", description = "查询任务当前 AI 审核配置。")
+    @ApiResponses({@ApiResponse(responseCode = "200"), @ApiResponse(responseCode = "400", description = "请求参数校验失败"), @ApiResponse(responseCode = "401", description = "未认证"), @ApiResponse(responseCode = "403", description = "权限不足")})
     public ApiResponse<AiReviewConfigResponse> get(@PathVariable Long taskId) {
         return ApiResponse.ok(aiReviewConfigService.get(CurrentUserContext.getUserId(), taskId));
     }
 
     @PostMapping("/{configId}/test")
     @Operation(summary = "测试 AI 审核提示词", description = "用样例输入测试 AI 审核提示词和输出结构。")
+    @ApiResponses({@ApiResponse(responseCode = "200"), @ApiResponse(responseCode = "400", description = "请求参数校验失败"), @ApiResponse(responseCode = "401", description = "未认证"), @ApiResponse(responseCode = "403", description = "权限不足")})
     public ApiResponse<AiReviewPromptTestResponse> test(@PathVariable Long taskId,
                                                         @PathVariable Long configId,
                                                         @Valid @RequestBody AiReviewPromptTestRequest request) {

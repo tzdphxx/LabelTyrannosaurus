@@ -1,4 +1,4 @@
-package com.labelhub.modules.review.web;
+﻿package com.labelhub.modules.review.web;
 
 import com.labelhub.common.api.ApiResponse;
 import com.labelhub.common.security.CurrentUserContext;
@@ -8,6 +8,8 @@ import com.labelhub.modules.review.dto.ExportPageResponse;
 import com.labelhub.modules.review.service.ExportSnapshotService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -26,6 +28,7 @@ public class GoldenSubmissionExportController {
 
     @GetMapping("/golden-submissions")
     @Operation(summary = "优质提交分页", description = "查询可导出的优质提交快照。")
+    @ApiResponses({@ApiResponse(responseCode = "200"), @ApiResponse(responseCode = "400", description = "请求参数校验失败"), @ApiResponse(responseCode = "401", description = "未认证"), @ApiResponse(responseCode = "403", description = "权限不足")})
     public ApiResponse<ExportPageResponse> queryGoldenSubmissions(
             @RequestParam Long taskId,
             @RequestParam(required = false) Long lastId,

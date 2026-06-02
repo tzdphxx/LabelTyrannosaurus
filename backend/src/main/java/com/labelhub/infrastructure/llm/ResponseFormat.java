@@ -1,5 +1,6 @@
 package com.labelhub.infrastructure.llm;
 
+import io.swagger.v3.oas.annotations.media.Schema;
 import java.util.Map;
 
 /**
@@ -12,7 +13,15 @@ import java.util.Map;
  *       and the caller supplies a schema)</li>
  * </ul>
  */
-public record ResponseFormat(Mode mode, Map<String, Object> jsonSchema, String schemaName) {
+@Schema(description = "LLM 响应格式约束")
+public record ResponseFormat(
+        @Schema(description = "响应模式")
+        Mode mode,
+        @Schema(description = "JSON Schema 定义")
+        Map<String, Object> jsonSchema,
+        @Schema(description = "Schema 名称")
+        String schemaName
+) {
 
     public enum Mode {
         NONE,

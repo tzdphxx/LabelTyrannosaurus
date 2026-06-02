@@ -1,4 +1,4 @@
-package com.labelhub.modules.storage.controller;
+﻿package com.labelhub.modules.storage.controller;
 
 import com.labelhub.common.api.ApiResponse;
 import com.labelhub.modules.storage.dto.FileUploadResponse;
@@ -6,6 +6,8 @@ import com.labelhub.modules.storage.dto.SignedUrlResponse;
 import com.labelhub.modules.storage.service.FileService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -33,6 +35,7 @@ public class FileController {
      */
     @PostMapping(value = "/upload", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     @Operation(summary = "上传文件", description = "上传文件到对象存储，并记录当前用户归属的文件元数据。")
+    @ApiResponses({@ApiResponse(responseCode = "200"), @ApiResponse(responseCode = "400", description = "请求参数校验失败"), @ApiResponse(responseCode = "401", description = "未认证"), @ApiResponse(responseCode = "403", description = "权限不足")})
     public ApiResponse<FileUploadResponse> upload(@RequestParam("file") MultipartFile file,
                                                    @RequestParam("businessType") String businessType) {
         return ApiResponse.ok(fileService.upload(file, businessType));
@@ -45,6 +48,7 @@ public class FileController {
      */
     @GetMapping("/{fileId}/signed-url")
     @Operation(summary = "获取签名下载地址", description = "根据文件权限生成短期有效的下载地址。")
+    @ApiResponses({@ApiResponse(responseCode = "200"), @ApiResponse(responseCode = "400", description = "请求参数校验失败"), @ApiResponse(responseCode = "401", description = "未认证"), @ApiResponse(responseCode = "403", description = "权限不足")})
     public ApiResponse<SignedUrlResponse> signedUrl(@PathVariable Long fileId) {
         return ApiResponse.ok(fileService.generateSignedUrl(fileId));
     }

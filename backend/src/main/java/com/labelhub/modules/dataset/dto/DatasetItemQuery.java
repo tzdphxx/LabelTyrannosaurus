@@ -1,5 +1,7 @@
 package com.labelhub.modules.dataset.dto;
 
+import io.swagger.v3.oas.annotations.media.Schema;
+
 /**
  * 题目列表查询参数。
  *
@@ -7,9 +9,11 @@ package com.labelhub.modules.dataset.dto;
  * @param pageSize 每页条数
  * @param externalId 可选 externalId 查询关键字
  */
-public record DatasetItemQuery(Integer page,
-                               Integer pageSize,
-                               String externalId) {
+@Schema(description = "题目列表查询参数")
+public record DatasetItemQuery(
+        @Schema(description = "页码，从1开始") Integer page,
+        @Schema(description = "每页条数") Integer pageSize,
+        @Schema(description = "外部ID查询关键字") String externalId) {
 
     public int normalizedPage() {
         return page == null || page < 1 ? 1 : page;

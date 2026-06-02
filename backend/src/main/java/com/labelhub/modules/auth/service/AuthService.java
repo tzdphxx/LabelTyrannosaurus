@@ -129,8 +129,8 @@ public class AuthService {
     }
 
     private RoleCode requireSingleRole(Set<RoleCode> roles) {
-        if (roles == null || roles.isEmpty()) {
-            throw new BusinessException(400102, "User has no role assigned");
+        if (roles == null || roles.size() != 1) {
+            throw new BusinessException(400102, "User must have exactly one role");
         }
         return roles.iterator().next();
     }

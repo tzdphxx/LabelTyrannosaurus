@@ -29,6 +29,10 @@
 - [附录 B：统一错误码](#附录-b统一错误码)
 - [附录 C：缺失接口清单](#附录-c缺失接口清单)
 
+### D.11 环境变量联调注意事项
+
+- LLM Provider 会加密保存 API Key；生产/联调环境建议显式配置 `LABELHUB_LLM_KEY_ENCRYPTION_SECRET`。`local` profile 在未配置该变量时提供本地 fallback，便于开发环境跑通接口，但正式部署不应依赖默认值。
+
 ---
 
 ## 通用约定
@@ -2811,13 +2815,19 @@ POST /api/v1/reviewer/submissions/batch/assign
 | 冲突仲裁 | groupId, goldenSubmissionId | RESOLVED |
 | 导出 | taskId | exportJobId, downloadUrl |
 
-### D.10 核心流程缺口说明
+### D.10 已补齐入口与联调注意事项
 
-当前主流程接口链路完整可跑通，但有两个薄弱环节：
+当前主流程接口链路完整可跑通，原先的两个工作台入口缺口已补齐：
 
-1. **标注员"回到工作台"**：领取后如果关闭页面，没有专门的"我的进行中任务"列表。`GET /labeler/submissions` 可按 `assignmentStatus=CLAIMED` 筛选，但 CLAIMED 状态下可能还没有 submission 记录（还没提交过），这条数据查不出来。**建议补充** `GET /api/v1/labeler/assignments` 接口。
+1. **标注员"回到工作台"**：使用 `GET /api/v1/labeler/assignments` 查询当前标注员的 assignment 列表，可按 `taskId` 和 `status` 筛选；使用 `POST /api/v1/labeler/assignments/{assignmentId}/cancel` 放弃已领取但尚未进入终态的 assignment。`GET /api/v1/labeler/submissions` 继续用于查看已经产生 submission 的提交记录。
 
-2. **审核员"怎么开始工作"**：审核员能查到待审列表，但没有人告诉他"你该审哪些"。当前只能自己去列表里翻所有 PENDING_FINAL 的提交，或等别人用 batch/assign 分配后按 `assignedReviewerId` 筛选。**建议补充**审核员自领取或任务级审核员绑定机制。
+2. **审核员"开始工作"**：使用 `GET /api/v1/reviewer/tasks` 作为任务导航入口，使用 `GET /api/v1/reviewer/dashboard` 渲染审核员工作台概览，使用 `POST /api/v1/reviewer/submissions/claim` 主动领取待审提交；领取后通过 `GET /api/v1/reviewer/submissions?assignedReviewerId=<当前审核员ID>` 查看自己的待审列表。
+
+联调时需注意：
+
+- 普通注册只允许 `LABELER` 和 `OWNER`；`REVIEWER` 需由管理员创建或调整角色。
+- 每个普通用户只能拥有一个角色；用户无角色或多角色时登录/刷新会返回 `400102`。
+- 大模型供应商配置使用 canonical 路径 `/api/v1/llm-providers`，权限为 `OWNER`，不再使用旧的 `/api/v1/admin/llm-providers`。
 
 ---
 

@@ -353,8 +353,16 @@ Authorization: Bearer <accessToken>
 | deadlineAt | LocalDateTime | 是 | 必须为未来时间 | 截止时间 |
 | overlapCount | Integer | 是 | ≥ 1 | 每条数据需要的标注份数 |
 | publishedTemplateVersionId | Long | 否 | - | 关联的模板版本 ID |
-| aiReviewConfigId | Long | 否 | - | 关联的 AI 审核配置 ID |
-| reviewLevelCount | Integer | 否 | ≥ 1，默认 1 | 审核级别数（1=单级，2=初审+终审，3=初审+复审+终审） |
+| **── AI 审核（引用已有 或 内联创建，二选一）──** |
+| aiReviewConfigId | Long | 否 | - | 引用已创建的 AI 配置 ID |
+| aiProviderId | Long | 否* | - | AI 模型供应商 ID（内联时必填） |
+| aiModelName | String | 否 | 最大 128 字符 | 模型名（可选，须匹配 Provider defaultModel） |
+| aiPrompt | String | 否* | 最大 10000 字符 | AI 审核 Prompt（内联时必填） |
+| aiScoringDimensions | List&lt;String&gt; | 否* | 每项最大 64 字符 | 评分维度（内联时必填） |
+| aiPassThreshold | BigDecimal | 否* | 0.00~100.00 | 通过阈值（内联时必填） |
+| aiManualReviewThreshold | BigDecimal | 否* | 0.00~100.00 | 人工复核阈值（内联时必填） |
+| **── 通用 ──** |
+| reviewLevelCount | Integer | 否 | ≥ 1，默认 1 | 审核级别数 |
 | datasetFileId | Long | 否 | - | 已上传的数据集文件 ID |
 
 **响应体** `CreateTaskResponse`：
@@ -364,6 +372,20 @@ Authorization: Bearer <accessToken>
 | taskId | Long | 新建任务 ID |
 | status | String | 任务状态，固定为 DRAFT |
 | datasetImportJob | Object | 数据集导入任务信息（无 datasetFileId 时为 null） |
+
+> **内联 AI 配置示例** — 一步创建任务 + AI 审核：
+> ```json
+> {
+>   "title": "图像分类标注", "quota": 100, "overlapCount": 1,
+>   "deadlineAt": "2026-07-01T23:59:59",
+>   "aiProviderId": 50,
+>   "aiPrompt": "请评估以下标注答案的质量...",
+>   "aiScoringDimensions": ["准确性", "完整性"],
+>   "aiPassThreshold": 80.00,
+>   "aiManualReviewThreshold": 60.00,
+>   "datasetFileId": 99
+> }
+> ```
 
 ---
 

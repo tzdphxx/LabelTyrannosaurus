@@ -80,7 +80,6 @@ class AiReviewConfigControllerTest {
                 List.of("accuracy"),
                 new BigDecimal("90.00"),
                 new BigDecimal("60.00"),
-                Map.of("type", "object"),
                 3,
                 null, null, null, null, null, null
         );

@@ -18,7 +18,8 @@ import com.labelhub.modules.dataset.dto.DatasetImportJobResponse;
 import com.labelhub.modules.dataset.dto.DatasetImportRequest;
 import com.labelhub.modules.dataset.service.DatasetImportService;
 import com.labelhub.modules.dataset.mapper.DatasetItemMapper;
-import com.labelhub.modules.reward.mapper.RewardRuleMapper;
+import com.labelhub.modules.ai.service.AiReviewConfigService;
+import com.labelhub.modules.reward.repository.RewardRuleRepositoryMapper;
 import com.labelhub.modules.template.mapper.TemplateVersionMapper;
 import com.labelhub.modules.task.domain.Task;
 import com.labelhub.modules.task.domain.TaskStatus;
@@ -68,6 +69,9 @@ class TaskLifecycleServiceTest {
     @Mock
     private org.springframework.context.ApplicationEventPublisher applicationEventPublisher;
 
+    @Mock
+    private AiReviewConfigService aiReviewConfigService;
+
     private TaskLifecycleService taskLifecycleService;
 
     @BeforeEach
@@ -79,6 +83,7 @@ class TaskLifecycleServiceTest {
                 auditAppender,
                 traceIdProvider,
                 datasetImportService,
+                aiReviewConfigService,
                 applicationEventPublisher
         );
     }
@@ -302,9 +307,9 @@ class TaskLifecycleServiceTest {
         AiReviewConfigMapper aiReviewConfigMapper = Mockito.mock(AiReviewConfigMapper.class);
         DatasetItemMapper datasetItemMapper = Mockito.mock(DatasetItemMapper.class);
         TemplateVersionMapper templateVersionMapper = Mockito.mock(TemplateVersionMapper.class);
-        RewardRuleMapper rewardRuleMapper = Mockito.mock(RewardRuleMapper.class);
+        RewardRuleRepositoryMapper rewardRuleRepoMapper = Mockito.mock(RewardRuleRepositoryMapper.class);
         DefaultTaskPublishDependencyChecker checker = new DefaultTaskPublishDependencyChecker(
-                dependencyTaskMapper, aiReviewConfigMapper, datasetItemMapper, templateVersionMapper, rewardRuleMapper);
+                dependencyTaskMapper, aiReviewConfigMapper, datasetItemMapper, templateVersionMapper, rewardRuleRepoMapper);
 
         assertThat(checker.datasetReady(TASK_ID)).isFalse();
         assertThat(checker.templateVersionOwnedBy(OWNER_ID, 100L)).isFalse();
@@ -319,9 +324,9 @@ class TaskLifecycleServiceTest {
         AiReviewConfigMapper aiReviewConfigMapper = Mockito.mock(AiReviewConfigMapper.class);
         DatasetItemMapper datasetItemMapper = Mockito.mock(DatasetItemMapper.class);
         TemplateVersionMapper templateVersionMapper = Mockito.mock(TemplateVersionMapper.class);
-        RewardRuleMapper rewardRuleMapper = Mockito.mock(RewardRuleMapper.class);
+        RewardRuleRepositoryMapper rewardRuleRepoMapper = Mockito.mock(RewardRuleRepositoryMapper.class);
         DefaultTaskPublishDependencyChecker checker = new DefaultTaskPublishDependencyChecker(
-                dependencyTaskMapper, aiReviewConfigMapper, datasetItemMapper, templateVersionMapper, rewardRuleMapper);
+                dependencyTaskMapper, aiReviewConfigMapper, datasetItemMapper, templateVersionMapper, rewardRuleRepoMapper);
         Task task = publishableDraftTask();
         com.labelhub.modules.template.domain.TemplateVersion version = new com.labelhub.modules.template.domain.TemplateVersion();
         version.setId(100L);
@@ -352,6 +357,7 @@ class TaskLifecycleServiceTest {
                 overlapCount,
                 100L,
                 200L,
+                null, null, null, null, null, null,
                 1,
                 null
         );
@@ -368,6 +374,7 @@ class TaskLifecycleServiceTest {
                 1,
                 100L,
                 200L,
+                null, null, null, null, null, null,
                 1,
                 99L
         );

@@ -19,6 +19,7 @@ import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
+import java.util.Arrays;
 import java.util.List;
 
 @Configuration
@@ -27,6 +28,8 @@ import java.util.List;
 public class SecurityConfig {
 
     private static final String[] SWAGGER_PATHS = {
+            "/doc.html",
+            "/webjars/**",
             "/swagger-ui.html",
             "/swagger-ui/**",
             "/v3/api-docs",
@@ -92,5 +95,9 @@ public class SecurityConfig {
             }
         }
         return false;
+    }
+
+    static List<String> swaggerPaths() {
+        return Arrays.asList(SWAGGER_PATHS);
     }
 }

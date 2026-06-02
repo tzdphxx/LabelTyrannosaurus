@@ -35,6 +35,9 @@ springdoc:
   swagger-ui:
     enabled: false
 
+knife4j:
+  enable: false
+
 server:
   port: 8080
 

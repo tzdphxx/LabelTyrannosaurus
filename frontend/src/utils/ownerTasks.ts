@@ -15,9 +15,9 @@ export const ownerTaskStatusColors: Record<OwnerTaskStatus, string> = {
 }
 
 export const distributionStrategyLabels = {
-  manual: '手动分发',
-  auto: '自动分发',
-  balanced: '均衡分发',
+  先到先得: '先到先得',
+  配额分发: '配额分发',
+  指派: '指派',
 }
 
 export function getProgressPercent(progress: TaskProgress) {

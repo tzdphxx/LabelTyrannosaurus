@@ -31,3 +31,12 @@ export interface ImportPreview {
   samples: DatasetSampleRow[]
   issues: ImportIssue[]
 }
+
+export interface FileUploadResponse {
+  fileId: number
+  fileName: string
+  fileSize: number
+  contentType: string
+  businessType: string
+  uploadedAt: string
+}

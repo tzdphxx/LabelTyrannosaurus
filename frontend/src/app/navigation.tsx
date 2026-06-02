@@ -13,79 +13,79 @@ import type { Role } from '../types/auth'
 import type { NavItem } from '../types/navigation'
 
 export const roleNavigation: Record<Role, NavItem[]> = {
-  owner: [
+  OWNER: [
     {
       key: 'owner-dashboard',
       label: '工作台',
       path: '/app/owner',
-      role: 'owner',
+      role: 'OWNER',
       icon: <DashboardOutlined />,
     },
     {
       key: 'owner-tasks',
       label: '任务管理',
       path: '/app/owner/tasks',
-      role: 'owner',
+      role: 'OWNER',
       icon: <ProjectOutlined />,
     },
     {
       key: 'owner-templates',
       label: '模板管理',
       path: '/app/owner/templates',
-      role: 'owner',
+      role: 'OWNER',
       icon: <FormOutlined />,
     },
     {
       key: 'owner-audit',
       label: '导出与审计',
       path: '/app/owner/audit',
-      role: 'owner',
+      role: 'OWNER',
       icon: <AuditOutlined />,
     },
   ],
-  labeler: [
+  LABELER: [
     {
       key: 'labeler-dashboard',
       label: '工作台',
       path: '/app/labeler',
-      role: 'labeler',
+      role: 'LABELER',
       icon: <DashboardOutlined />,
     },
     {
       key: 'labeler-market',
       label: '任务广场',
       path: '/app/labeler/market',
-      role: 'labeler',
+      role: 'LABELER',
       icon: <InboxOutlined />,
     },
     {
       key: 'labeler-submissions',
       label: '我的提交',
       path: '/app/labeler/submissions',
-      role: 'labeler',
+      role: 'LABELER',
       icon: <FileDoneOutlined />,
     },
   ],
-  reviewer: [
+  REVIEWER: [
     {
       key: 'reviewer-dashboard',
       label: '工作台',
       path: '/app/reviewer',
-      role: 'reviewer',
+      role: 'REVIEWER',
       icon: <DashboardOutlined />,
     },
     {
       key: 'reviewer-queue',
       label: '审核队列',
       path: '/app/reviewer/queue',
-      role: 'reviewer',
+      role: 'REVIEWER',
       icon: <CheckSquareOutlined />,
     },
     {
       key: 'reviewer-history',
       label: '审核历史',
       path: '/app/reviewer/history',
-      role: 'reviewer',
+      role: 'REVIEWER',
       icon: <ReadOutlined />,
     },
   ],

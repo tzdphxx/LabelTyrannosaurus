@@ -4,12 +4,13 @@ import { ownerTaskService } from './ownerTaskService'
 
 export const ownerDashboardService = {
   async getDashboardData(): Promise<OwnerDashboardData> {
-    const tasks = await ownerTaskService.listTasks({ keyword: '', status: 'all' })
+    const taskPage = await ownerTaskService.listTasks({ keyword: '', page: 1, pageSize: 20, status: 'all' })
+    const tasks = taskPage.items
     const focusedTask = tasks.find((task) => task.id === mockDashboardFocusTaskId) ?? tasks[0] ?? null
 
     return {
       stats: {
-        totalTasks: tasks.length,
+        totalTasks: taskPage.total,
         draftTasks: tasks.filter((task) => task.status === 'draft').length,
         publishedTasks: tasks.filter((task) => task.status === 'published').length,
         runningTasks: tasks.filter((task) => task.status === 'published' || task.status === 'paused').length,

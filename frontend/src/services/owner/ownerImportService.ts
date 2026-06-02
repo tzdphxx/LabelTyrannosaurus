@@ -1,5 +1,6 @@
 import { mockImportPreviews } from '../../mocks'
-import type { ImportPreview } from '../../types/import'
+import type { FileUploadResponse, ImportPreview } from '../../types/import'
+import { isRealServiceMode, request } from '../http'
 
 function cloneImportPreview(preview: ImportPreview): ImportPreview {
   return {
@@ -14,6 +15,24 @@ function cloneImportPreview(preview: ImportPreview): ImportPreview {
 }
 
 export const ownerImportService = {
+  async uploadDatasetFile(file: File): Promise<FileUploadResponse> {
+    if (isRealServiceMode()) {
+      const formData = new FormData()
+      formData.append('file', file)
+
+      return request.post<FileUploadResponse, FormData>('/v1/files/upload', formData)
+    }
+
+    return {
+      fileId: Date.now(),
+      fileName: file.name,
+      fileSize: file.size,
+      contentType: file.type || 'application/octet-stream',
+      businessType: 'DATASET',
+      uploadedAt: new Date().toISOString(),
+    }
+  },
+
   async getDefaultImportPreview(): Promise<ImportPreview> {
     const preview = mockImportPreviews.find((item) => item.issues.every((issue) => issue.level !== 'blocking')) ?? mockImportPreviews[0]
 

@@ -1,23 +1,30 @@
 import { create } from 'zustand'
-import { ownerImportService, ownerTaskService } from '../services'
-import type { ImportPreview } from '../types/import'
-import type { OwnerTask, PublishValidationResult, TaskDraftInput } from '../types/task'
+import { isRealServiceMode, ownerImportService, ownerTaskService } from '../services'
+import type { FileUploadResponse, ImportPreview } from '../types/import'
+import type { AiReviewConfigDraft, OwnerTask, PublishValidationResult, TaskDraftInput } from '../types/task'
+
+type TaskDraftChanges = Partial<Omit<TaskDraftInput, 'aiReview'>> & {
+  aiReview?: Partial<AiReviewConfigDraft>
+}
 
 interface OwnerDraftStore {
   draftId: string | null
   draft: TaskDraftInput
   importPreview: ImportPreview | null
+  uploadedDatasetFile: FileUploadResponse | null
   currentStep: number
   hasUnsavedChanges: boolean
   isSaving: boolean
   isLoading: boolean
+  isUploadingDataset: boolean
   validationResult: PublishValidationResult | null
   error: string | null
   resetDraft: () => Promise<void>
   loadFromTask: (taskId: string) => Promise<void>
-  updateDraft: (changes: Partial<TaskDraftInput>) => void
+  updateDraft: (changes: TaskDraftChanges) => void
   setStep: (step: number) => void
   loadImportPreview: () => Promise<void>
+  uploadDatasetFile: (file: File) => Promise<FileUploadResponse | null>
   saveDraft: () => Promise<OwnerTask | null>
   validatePublish: () => Promise<PublishValidationResult>
   publishDraft: () => Promise<OwnerTask | null>
@@ -29,13 +36,21 @@ const emptyDraft: TaskDraftInput = {
   instruction: '',
   tags: [],
   deadline: '',
+  quota: 1,
   rewardRule: {
     unitPrice: 0.12,
     currency: 'CNY',
     description: '按有效标注条目结算',
   },
-  distributionStrategy: 'balanced',
-  templateId: null,
+  distributionStrategy: '先到先得',
+  publishedTemplateVersionId: null,
+  aiReview: {
+    prompt: '',
+    model: '',
+    rating: '',
+  },
+  reviewLevelCount: 1,
+  datasetFileId: null,
 }
 
 function toDraftInput(task: OwnerTask): TaskDraftInput {
@@ -45,9 +60,13 @@ function toDraftInput(task: OwnerTask): TaskDraftInput {
     instruction: task.instruction,
     tags: [...task.tags],
     deadline: task.deadline,
+    quota: task.quota,
     rewardRule: { ...task.rewardRule },
     distributionStrategy: task.distributionStrategy,
-    templateId: task.templateId,
+    publishedTemplateVersionId: task.publishedTemplateVersionId,
+    aiReview: { ...task.aiReview },
+    reviewLevelCount: task.reviewLevelCount,
+    datasetFileId: task.datasetFileId,
   }
 }
 
@@ -55,10 +74,12 @@ export const useOwnerDraftStore = create<OwnerDraftStore>((set, get) => ({
   draftId: null,
   draft: emptyDraft,
   importPreview: null,
+  uploadedDatasetFile: null,
   currentStep: 0,
   hasUnsavedChanges: false,
   isSaving: false,
   isLoading: false,
+  isUploadingDataset: false,
   validationResult: null,
   error: null,
   resetDraft: async () => {
@@ -66,10 +87,12 @@ export const useOwnerDraftStore = create<OwnerDraftStore>((set, get) => ({
       draftId: null,
       draft: {
         ...emptyDraft,
+        aiReview: { ...emptyDraft.aiReview },
         rewardRule: { ...emptyDraft.rewardRule },
         tags: [],
       },
       importPreview: null,
+      uploadedDatasetFile: null,
       currentStep: 0,
       hasUnsavedChanges: false,
       validationResult: null,
@@ -93,6 +116,7 @@ export const useOwnerDraftStore = create<OwnerDraftStore>((set, get) => ({
         draftId: detail.task.id,
         draft: toDraftInput(detail.task),
         importPreview: detail.importPreview,
+        uploadedDatasetFile: null,
         currentStep: 0,
         hasUnsavedChanges: false,
         validationResult: null,
@@ -108,6 +132,7 @@ export const useOwnerDraftStore = create<OwnerDraftStore>((set, get) => ({
       draft: {
         ...state.draft,
         ...changes,
+        aiReview: changes.aiReview ? { ...state.draft.aiReview, ...changes.aiReview } : state.draft.aiReview,
         rewardRule: changes.rewardRule ? { ...changes.rewardRule } : state.draft.rewardRule,
         tags: changes.tags ? [...changes.tags] : state.draft.tags,
       },
@@ -126,6 +151,33 @@ export const useOwnerDraftStore = create<OwnerDraftStore>((set, get) => ({
       set({ error: '导入预览加载失败' })
     } finally {
       set({ isLoading: false })
+    }
+  },
+  uploadDatasetFile: async (file) => {
+    set({ error: null, isUploadingDataset: true })
+
+    try {
+      const uploadedDatasetFile = await ownerImportService.uploadDatasetFile(file)
+      const importPreview = isRealServiceMode() ? null : await ownerImportService.getDefaultImportPreview()
+
+      set((state) => ({
+        draft: {
+          ...state.draft,
+          datasetFileId: String(uploadedDatasetFile.fileId),
+        },
+        uploadedDatasetFile,
+        importPreview,
+        hasUnsavedChanges: true,
+        validationResult: null,
+      }))
+
+      return uploadedDatasetFile
+    } catch {
+      set({ error: '数据集文件上传失败' })
+
+      return null
+    } finally {
+      set({ isUploadingDataset: false })
     }
   },
   saveDraft: async () => {
@@ -153,6 +205,14 @@ export const useOwnerDraftStore = create<OwnerDraftStore>((set, get) => ({
     }
   },
   validatePublish: async () => {
+    const draftValidation = ownerTaskService.validateDraftForPublish(get().draft, get().draftId ?? 'pending')
+
+    if (!draftValidation.valid) {
+      set({ validationResult: draftValidation })
+
+      return draftValidation
+    }
+
     const task = get().draftId && !get().hasUnsavedChanges ? null : await get().saveDraft()
     const taskId = get().draftId ?? task?.id
 
@@ -166,19 +226,20 @@ export const useOwnerDraftStore = create<OwnerDraftStore>((set, get) => ({
       return result
     }
 
-    const validationResult = await ownerTaskService.validatePublish(taskId)
+    const validationResult = ownerTaskService.validateDraftForPublish(get().draft, taskId)
     set({ validationResult })
 
     return validationResult
   },
   publishDraft: async () => {
     const validationResult = await get().validatePublish()
+    const draftId = get().draftId
 
-    if (!validationResult.valid || !get().draftId) {
+    if (!validationResult.valid || !draftId) {
       return null
     }
 
-    const task = await ownerTaskService.updateTaskStatus(get().draftId, 'published')
+    const task = await ownerTaskService.publishTask(draftId)
 
     if (task) {
       set({

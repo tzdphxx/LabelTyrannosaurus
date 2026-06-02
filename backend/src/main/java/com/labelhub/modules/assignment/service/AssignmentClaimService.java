@@ -5,6 +5,7 @@ import com.labelhub.common.audit.AuditCommand;
 import com.labelhub.common.exception.BusinessException;
 import com.labelhub.common.security.CurrentUserContext;
 import com.labelhub.common.security.RoleCode;
+import com.labelhub.common.web.TraceIdProvider;
 import com.labelhub.infrastructure.redis.RedisLockService;
 import com.labelhub.modules.assignment.domain.Assignment;
 import com.labelhub.modules.assignment.domain.AssignmentStatus;
@@ -42,6 +43,7 @@ public class AssignmentClaimService {
     private final AssignmentMapper assignmentMapper;
     private final RedisLockService redisLockService;
     private final AuditAppender auditAppender;
+    private final TraceIdProvider traceIdProvider;
     private final TransactionTemplate transactionTemplate;
 
     public AssignmentClaimService(TaskMapper taskMapper,
@@ -50,6 +52,7 @@ public class AssignmentClaimService {
                                   AssignmentMapper assignmentMapper,
                                   RedisLockService redisLockService,
                                   AuditAppender auditAppender,
+                                  TraceIdProvider traceIdProvider,
                                   TransactionTemplate transactionTemplate) {
         this.taskMapper = taskMapper;
         this.datasetClaimService = datasetClaimService;
@@ -57,6 +60,7 @@ public class AssignmentClaimService {
         this.assignmentMapper = assignmentMapper;
         this.redisLockService = redisLockService;
         this.auditAppender = auditAppender;
+        this.traceIdProvider = traceIdProvider;
         this.transactionTemplate = transactionTemplate;
     }
 
@@ -141,7 +145,7 @@ public class AssignmentClaimService {
         afterJson.put("status", assignment.getStatus());
         auditAppender.append(new AuditCommand(USER_ACTOR_TYPE, assignment.getLabelerId(),
                 ASSIGNMENT_BIZ_TYPE, assignment.getId(),
-                "ASSIGNMENT_CLAIMED", null, afterJson, null, null));
+                "ASSIGNMENT_CLAIMED", null, afterJson, traceIdProvider.currentTraceId(), null));
     }
 
     private BusinessException claimConflict(String message) {

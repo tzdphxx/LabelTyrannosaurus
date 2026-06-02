@@ -95,6 +95,7 @@ public class PreAnnotationService {
     @Autowired(required = false)
     private MediaContextResolver mediaContextResolver;
 
+    @Autowired
     public PreAnnotationService(AssignmentMapper assignmentMapper,
                                 TaskMapper taskMapper,
                                 DatasetItemMapper datasetItemMapper,

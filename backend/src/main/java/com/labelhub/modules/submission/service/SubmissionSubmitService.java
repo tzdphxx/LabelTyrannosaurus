@@ -6,6 +6,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.labelhub.common.audit.AuditAppender;
 import com.labelhub.common.audit.AuditCommand;
 import com.labelhub.common.exception.BusinessException;
+import com.labelhub.common.web.TraceIdProvider;
 import com.labelhub.modules.agent.domain.AgentRun;
 import com.labelhub.modules.agent.domain.AgentRunStatus;
 import com.labelhub.modules.agent.mapper.AgentRunMapper;
@@ -62,6 +63,7 @@ public class SubmissionSubmitService {
     private final AiReviewDispatcher aiReviewDispatcher;
     private final DatasetClaimService datasetClaimService;
     private final ObjectMapper objectMapper;
+    private final TraceIdProvider traceIdProvider;
 
     @Autowired
     public SubmissionSubmitService(AssignmentMapper assignmentMapper,
@@ -71,9 +73,10 @@ public class SubmissionSubmitService {
                                    AnswerSchemaValidator answerSchemaValidator,
                                    AuditAppender auditAppender,
                                    AiReviewDispatcher aiReviewDispatcher,
-                                   DatasetClaimService datasetClaimService) {
+                                   DatasetClaimService datasetClaimService,
+                                   TraceIdProvider traceIdProvider) {
         this(assignmentMapper, submissionMapper, taskMapper, agentRunMapper, answerSchemaValidator, auditAppender,
-                aiReviewDispatcher, datasetClaimService, new ObjectMapper());
+                aiReviewDispatcher, datasetClaimService, new ObjectMapper(), traceIdProvider);
     }
 
     SubmissionSubmitService(AssignmentMapper assignmentMapper,
@@ -84,7 +87,8 @@ public class SubmissionSubmitService {
                             AuditAppender auditAppender,
                             AiReviewDispatcher aiReviewDispatcher,
                             DatasetClaimService datasetClaimService,
-                            ObjectMapper objectMapper) {
+                            ObjectMapper objectMapper,
+                            TraceIdProvider traceIdProvider) {
         this.assignmentMapper = assignmentMapper;
         this.submissionMapper = submissionMapper;
         this.taskMapper = taskMapper;
@@ -94,6 +98,7 @@ public class SubmissionSubmitService {
         this.aiReviewDispatcher = aiReviewDispatcher;
         this.datasetClaimService = datasetClaimService;
         this.objectMapper = objectMapper;
+        this.traceIdProvider = traceIdProvider;
     }
 
     @Transactional
@@ -236,7 +241,7 @@ public class SubmissionSubmitService {
 
         auditAppender.append(new AuditCommand(USER_ACTOR_TYPE, assignment.getLabelerId(),
                 ASSIGNMENT_BIZ_TYPE, assignment.getId(),
-                "ASSIGNMENT_SUBMITTED", beforeJson, afterJson, null, agentRunId));
+                "ASSIGNMENT_SUBMITTED", beforeJson, afterJson, traceIdProvider.currentTraceId(), agentRunId));
     }
 
     private SubmissionSubmitResponse toResponse(Submission submission, Long agentRunId) {

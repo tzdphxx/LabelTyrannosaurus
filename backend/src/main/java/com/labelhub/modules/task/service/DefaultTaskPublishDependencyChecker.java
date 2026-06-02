@@ -37,6 +37,11 @@ public class DefaultTaskPublishDependencyChecker implements TaskPublishDependenc
     }
 
     @Override
+    public boolean templateVersionExists(Long templateVersionId) {
+        return templateVersionId != null && templateVersionMapper.selectById(templateVersionId) != null;
+    }
+
+    @Override
     public boolean templateVersionOwnedBy(Long ownerId, Long templateVersionId) {
         if (ownerId == null || templateVersionId == null) {
             return false;

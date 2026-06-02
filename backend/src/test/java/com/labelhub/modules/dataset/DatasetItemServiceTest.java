@@ -7,10 +7,8 @@ import com.labelhub.common.security.CurrentUserContext;
 import com.labelhub.common.security.RoleCode;
 import com.labelhub.modules.dataset.domain.DatasetItemChangeLogEntity;
 import com.labelhub.modules.dataset.domain.DatasetItemEntity;
-import com.labelhub.modules.dataset.dto.BatchAppendItemsRequest;
 import com.labelhub.modules.dataset.dto.BatchDeleteItemsRequest;
 import com.labelhub.modules.dataset.dto.BatchUpdateItemsRequest;
-import com.labelhub.modules.dataset.dto.DatasetItemAppendRequest;
 import com.labelhub.modules.dataset.dto.DatasetItemQuery;
 import com.labelhub.modules.dataset.dto.DatasetItemStatus;
 import com.labelhub.modules.dataset.dto.DatasetItemUpdateRequest;
@@ -24,7 +22,6 @@ import com.labelhub.modules.task.domain.TaskStatus;
 import com.labelhub.modules.task.repository.TaskRepositoryMapper;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
-import org.mockito.ArgumentCaptor;
 
 import java.util.List;
 import java.util.Map;
@@ -33,7 +30,6 @@ import java.util.Set;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -106,58 +102,6 @@ class DatasetItemServiceTest {
         assertThat(response.items()).extracting("labelerId").containsExactly(
                 null, 20L, 21L, 22L, 23L, 24L
         );
-    }
-
-    @Test
-    void nonOwnerCannotBatchAppend() {
-        CurrentUserContext.set(new CurrentUser(20L, "other", "other@example.com", Set.of(RoleCode.OWNER), 1));
-        stubTask(10L, TaskStatus.DRAFT, 2);
-
-        assertThatThrownBy(() -> itemService.batchAppend(1L, new BatchAppendItemsRequest(List.of(
-                new DatasetItemAppendRequest("q1", Map.of("question", "one"), Map.of())
-        ))))
-                .isInstanceOf(BusinessException.class)
-                .extracting("code")
-                .isEqualTo(403001);
-    }
-
-    @Test
-    void batchAppendReturnsPerItemResultForDuplicateExternalId() {
-        CurrentUserContext.set(new CurrentUser(10L, "owner", "owner@example.com", Set.of(RoleCode.OWNER), 1));
-        stubTask(10L, TaskStatus.DRAFT, 2);
-        when(datasetItemMapper.selectActiveByTaskIdAndExternalId(1L, "q1")).thenReturn(null);
-        when(datasetItemMapper.selectActiveByTaskIdAndExternalId(1L, "q2")).thenReturn(item(101L, "q2", 0, 0, false));
-
-        var results = itemService.batchAppend(1L, new BatchAppendItemsRequest(List.of(
-                new DatasetItemAppendRequest("q1", Map.of("question", "one"), Map.of("source", "manual")),
-                new DatasetItemAppendRequest("q2", Map.of("question", "two"), Map.of())
-        )));
-
-        assertThat(results).extracting("success").containsExactly(true, false);
-        assertThat(results.get(1).errorCode()).isEqualTo(400102);
-        verify(datasetItemMapper).insert(any(DatasetItemEntity.class));
-        verify(changeLogMapper).insert(any(DatasetItemChangeLogEntity.class));
-    }
-
-    @Test
-    void batchAppendRefreshesMediaContextForNewItem() {
-        CurrentUserContext.set(new CurrentUser(10L, "owner", "owner@example.com", Set.of(RoleCode.OWNER), 1));
-        stubTask(10L, TaskStatus.DRAFT, 2);
-        when(datasetItemMapper.selectActiveByTaskIdAndExternalId(1L, "img1")).thenReturn(null);
-        when(datasetItemMapper.insert(any(DatasetItemEntity.class))).thenAnswer(invocation -> {
-            DatasetItemEntity entity = invocation.getArgument(0);
-            entity.setId(200L);
-            return 1;
-        });
-
-        itemService.batchAppend(1L, new BatchAppendItemsRequest(List.of(
-                new DatasetItemAppendRequest("img1",
-                        Map.of("media_type", "image", "media_file_id", 99), Map.of())
-        )));
-
-        ArgumentCaptor<String> itemJsonCaptor = ArgumentCaptor.forClass(String.class);
-        verify(mediaProcessingService).refreshContext(eq(1L), eq(200L), itemJsonCaptor.capture(), eq(10L));
-        assertThat(itemJsonCaptor.getValue()).contains("\"media_type\":\"image\"", "\"media_file_id\":99");
     }
 
     @Test

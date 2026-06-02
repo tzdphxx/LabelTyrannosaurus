@@ -612,7 +612,7 @@ Authorization: Bearer <accessToken>
 
 ### 4.2 POST /api/v1/tasks/{taskId}/dataset/items/batch-append
 
-**作用**：向任务数据集批量追加数据项。同任务内 externalId 重复的项会进入错误报告。
+**作用**：基于已上传文件创建追加导入任务。前端先调用文件上传接口取得 `fileId`，再通过本接口提交追加。
 
 **权限**：ADMIN 或 OWNER
 
@@ -620,25 +620,25 @@ Authorization: Bearer <accessToken>
 
 | 字段 | 类型 | 必填 | 说明 |
 |------|------|------|------|
-| items | List | 是 | 待追加的数据项列表 |
+| fileId | Long | 是 | 已上传到对象存储的数据集源文件 ID |
 
-每个 item：
-
-| 字段 | 类型 | 必填 | 说明 |
-|------|------|------|------|
-| externalId | String | 是 | 外部唯一标识 |
-| itemJson | String | 是 | 题目内容 JSON |
-| metadataJson | String | 否 | 元数据 JSON |
-
-**响应体** `List<BatchItemResult>`：
+**响应体** `DatasetImportJobResponse`：
 
 | 字段 | 类型 | 说明 |
 |------|------|------|
-| itemId | Long | 数据项 ID（成功时） |
-| externalId | String | 外部 ID |
-| success | Boolean | 是否成功 |
-| errorCode | String | 错误码（失败时） |
-| errorMessage | String | 错误信息（失败时） |
+| jobId | Long | 导入任务 ID |
+| taskId | Long | 关联任务 ID |
+| status | String | 任务状态：PENDING / RUNNING / SUCCESS / FAILED / PARTIAL_SUCCESS |
+| importMode | String | 固定为 APPEND |
+| totalCount | Integer | 总行数 |
+| successCount | Integer | 成功导入数 |
+| failedCount | Integer | 失败数 |
+| errorReportFileId | Long | 错误报告文件 ID（存在失败行时） |
+| errorReportUrl | String | 错误报告下载地址（存在失败行时） |
+| errorMessage | String | 任务级错误信息 |
+| createdAt | LocalDateTime | 创建时间 |
+
+**说明**：非 ADMIN 用户只能使用自己上传的文件；解析、判重、错误报告、媒体上下文刷新规则同追加导入接口。
 
 ---
 

@@ -35,10 +35,10 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                                     HttpServletResponse response,
                                     FilterChain filterChain) throws ServletException, IOException {
         try {
-            String authorization = request.getHeader(HttpHeaders.AUTHORIZATION);
-            if (authorization != null && authorization.startsWith("Bearer ")) {
+            String token = extractToken(request);
+            if (token != null) {
                 try {
-                    authenticate(authorization.substring(7));
+                    authenticate(token);
                 } catch (Exception ignored) {
                     SecurityContextHolder.clearContext();
                     CurrentUserContext.clear();
@@ -49,6 +49,18 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             CurrentUserContext.clear();
             SecurityContextHolder.clearContext();
         }
+    }
+
+    private String extractToken(HttpServletRequest request) {
+        String authorization = request.getHeader(HttpHeaders.AUTHORIZATION);
+        if (authorization != null && authorization.startsWith("Bearer ")) {
+            return authorization.substring(7);
+        }
+        String tokenParam = request.getParameter("token");
+        if (tokenParam != null && !tokenParam.isBlank()) {
+            return tokenParam;
+        }
+        return null;
     }
 
     private void authenticate(String token) {

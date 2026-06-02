@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.labelhub.common.audit.AuditAppender;
 import com.labelhub.common.audit.AuditCommand;
 import com.labelhub.common.exception.BusinessException;
+import com.labelhub.common.web.TraceIdProvider;
 import com.labelhub.modules.ai.domain.LlmProvider;
 import com.labelhub.modules.ai.dto.CreateLlmProviderRequest;
 import com.labelhub.modules.ai.dto.LlmProviderResponse;
@@ -40,25 +41,29 @@ public class LlmProviderService {
     private final LlmApiKeyEncryptor encryptor;
     private final LlmProviderTester llmProviderTester;
     private final AuditAppender auditAppender;
+    private final TraceIdProvider traceIdProvider;
     private final ObjectMapper objectMapper;
 
     @Autowired
     public LlmProviderService(LlmProviderMapper llmProviderMapper,
                               LlmApiKeyEncryptor encryptor,
                               LlmProviderTester llmProviderTester,
-                              AuditAppender auditAppender) {
-        this(llmProviderMapper, encryptor, llmProviderTester, auditAppender, new ObjectMapper());
+                              AuditAppender auditAppender,
+                              TraceIdProvider traceIdProvider) {
+        this(llmProviderMapper, encryptor, llmProviderTester, auditAppender, traceIdProvider, new ObjectMapper());
     }
 
     LlmProviderService(LlmProviderMapper llmProviderMapper,
                        LlmApiKeyEncryptor encryptor,
                        LlmProviderTester llmProviderTester,
                        AuditAppender auditAppender,
+                       TraceIdProvider traceIdProvider,
                        ObjectMapper objectMapper) {
         this.llmProviderMapper = llmProviderMapper;
         this.encryptor = encryptor;
         this.llmProviderTester = llmProviderTester;
         this.auditAppender = auditAppender;
+        this.traceIdProvider = traceIdProvider;
         this.objectMapper = objectMapper;
     }
 
@@ -77,14 +82,15 @@ public class LlmProviderService {
         applyProviderFields(provider, request.providerCode(), request.providerName(), request.baseUrl(),
                 request.defaultModel(), request.customHeaders(), request.platformRateLimitPerMinute(),
                 request.taskRateLimitPerMinute(), request.userRateLimitPerMinute(),
-                request.supportVision(), request.supportMultiImage(), request.maxImageCount(), request.visionModel());
+                request.supportVision(), request.supportMultiImage(), request.maxImageCount(), request.visionModel(),
+                request.structuredOutputMode());
         provider.setEncryptedApiKey(encryptor.encrypt(request.apiKey()));
         provider.setEnabled(true);
         provider.setOwnerId(actorId);
         provider.setCreatedBy(actorId);
         llmProviderMapper.insert(provider);
         auditAppender.append(new AuditCommand(USER_ACTOR_TYPE, actorId, BIZ_TYPE, provider.getId(), "LLM_PROVIDER_CREATED",
-                null, auditSnapshot(provider), null, null));
+                null, auditSnapshot(provider), traceIdProvider.currentTraceId(), null));
         return toResponse(provider);
     }
 
@@ -95,13 +101,14 @@ public class LlmProviderService {
         applyProviderFields(provider, request.providerCode(), request.providerName(), request.baseUrl(),
                 request.defaultModel(), request.customHeaders(), request.platformRateLimitPerMinute(),
                 request.taskRateLimitPerMinute(), request.userRateLimitPerMinute(),
-                request.supportVision(), request.supportMultiImage(), request.maxImageCount(), request.visionModel());
+                request.supportVision(), request.supportMultiImage(), request.maxImageCount(), request.visionModel(),
+                request.structuredOutputMode());
         if (hasText(request.apiKey())) {
             provider.setEncryptedApiKey(encryptor.encrypt(request.apiKey().trim()));
         }
         llmProviderMapper.updateById(provider);
         auditAppender.append(new AuditCommand(USER_ACTOR_TYPE, actorId, BIZ_TYPE, provider.getId(), "LLM_PROVIDER_UPDATED",
-                beforeJson, auditSnapshot(provider), null, null));
+                beforeJson, auditSnapshot(provider), traceIdProvider.currentTraceId(), null));
         return toResponse(provider);
     }
 
@@ -156,7 +163,7 @@ public class LlmProviderService {
         provider.setEnabled(enabled);
         llmProviderMapper.updateById(provider);
         auditAppender.append(new AuditCommand(USER_ACTOR_TYPE, actorId, BIZ_TYPE, provider.getId(), action,
-                beforeJson, auditSnapshot(provider), null, null));
+                beforeJson, auditSnapshot(provider), traceIdProvider.currentTraceId(), null));
         return toResponse(provider);
     }
 
@@ -172,7 +179,8 @@ public class LlmProviderService {
                                      Boolean supportVision,
                                      Boolean supportMultiImage,
                                      Integer maxImageCount,
-                                     String visionModel) {
+                                     String visionModel,
+                                     String structuredOutputMode) {
         provider.setProviderCode(providerCode.trim());
         provider.setProviderName(providerName.trim());
         provider.setBaseUrl(trimTrailingSlash(baseUrl.trim()));
@@ -185,6 +193,18 @@ public class LlmProviderService {
         provider.setSupportMultiImage(Boolean.TRUE.equals(supportMultiImage));
         provider.setMaxImageCount(maxImageCount != null ? maxImageCount : 10);
         provider.setVisionModel(hasText(visionModel) ? visionModel.trim() : null);
+        provider.setStructuredOutputMode(normalizeStructuredOutputMode(structuredOutputMode));
+    }
+
+    private String normalizeStructuredOutputMode(String mode) {
+        if (!hasText(mode)) {
+            return "NONE";
+        }
+        String normalized = mode.trim().toUpperCase(java.util.Locale.ROOT);
+        return switch (normalized) {
+            case "JSON_OBJECT", "JSON_SCHEMA", "NONE" -> normalized;
+            default -> "NONE";
+        };
     }
 
     private LlmProvider loadProvider(Long providerId) {
@@ -215,10 +235,11 @@ public class LlmProviderService {
                 provider.getPlatformRateLimitPerMinute(),
                 provider.getTaskRateLimitPerMinute(),
                 provider.getUserRateLimitPerMinute(),
-                Boolean.TRUE.equals(provider.getSupportVision()),
-                Boolean.TRUE.equals(provider.getSupportMultiImage()),
-                provider.getMaxImageCount() != null ? provider.getMaxImageCount() : 10,
+                provider.getSupportVision(),
+                provider.getSupportMultiImage(),
+                provider.getMaxImageCount(),
                 provider.getVisionModel(),
+                provider.getStructuredOutputMode(),
                 hasText(provider.getEncryptedApiKey()),
                 provider.getOwnerId(),
                 provider.getCreatedBy(),
@@ -243,6 +264,8 @@ public class LlmProviderService {
         snapshot.put("supportMultiImage", Boolean.TRUE.equals(provider.getSupportMultiImage()));
         snapshot.put("maxImageCount", provider.getMaxImageCount() != null ? provider.getMaxImageCount() : 10);
         snapshot.put("visionModel", provider.getVisionModel());
+        snapshot.put("structuredOutputMode",
+                hasText(provider.getStructuredOutputMode()) ? provider.getStructuredOutputMode() : "NONE");
         snapshot.put("apiKeyConfigured", hasText(provider.getEncryptedApiKey()));
         return snapshot;
     }
@@ -255,7 +278,8 @@ public class LlmProviderService {
                 Boolean.TRUE.equals(provider.getSupportVision()),
                 Boolean.TRUE.equals(provider.getSupportMultiImage()),
                 provider.getMaxImageCount() != null ? provider.getMaxImageCount() : 10,
-                provider.getVisionModel()
+                provider.getVisionModel(),
+                hasText(provider.getStructuredOutputMode()) ? provider.getStructuredOutputMode() : "NONE"
         );
     }
 

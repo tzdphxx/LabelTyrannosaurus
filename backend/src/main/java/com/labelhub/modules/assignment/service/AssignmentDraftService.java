@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.labelhub.common.audit.AuditAppender;
 import com.labelhub.common.audit.AuditCommand;
 import com.labelhub.common.exception.BusinessException;
+import com.labelhub.common.web.TraceIdProvider;
 import com.labelhub.modules.assignment.domain.Assignment;
 import com.labelhub.modules.assignment.domain.AssignmentStatus;
 import com.labelhub.modules.assignment.dto.AssignmentDraftResponse;
@@ -37,15 +38,18 @@ public class AssignmentDraftService {
     private final AssignmentDraftCacheService assignmentDraftCacheService;
     private final AuditAppender auditAppender;
     private final ObjectMapper objectMapper;
+    private final TraceIdProvider traceIdProvider;
 
     public AssignmentDraftService(AssignmentMapper assignmentMapper,
                                   AssignmentDraftCacheService assignmentDraftCacheService,
                                   AuditAppender auditAppender,
-                                  ObjectMapper objectMapper) {
+                                  ObjectMapper objectMapper,
+                                  TraceIdProvider traceIdProvider) {
         this.assignmentMapper = assignmentMapper;
         this.assignmentDraftCacheService = assignmentDraftCacheService;
         this.auditAppender = auditAppender;
         this.objectMapper = objectMapper;
+        this.traceIdProvider = traceIdProvider;
     }
 
     @Transactional
@@ -145,7 +149,7 @@ public class AssignmentDraftService {
 
         auditAppender.append(new AuditCommand(USER_ACTOR_TYPE, afterEntry.labelerId(),
                 ASSIGNMENT_BIZ_TYPE, afterEntry.assignmentId(),
-                "ASSIGNMENT_DRAFT_SAVED", beforeJson, afterJson, null, null));
+                "ASSIGNMENT_DRAFT_SAVED", beforeJson, afterJson, traceIdProvider.currentTraceId(), null));
     }
 
     private AssignmentDraftResponse toResponse(AssignmentDraftCacheEntry entry) {

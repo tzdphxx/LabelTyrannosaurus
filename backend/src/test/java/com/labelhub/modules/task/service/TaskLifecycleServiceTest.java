@@ -65,6 +65,9 @@ class TaskLifecycleServiceTest {
     @Mock
     private DatasetImportService datasetImportService;
 
+    @Mock
+    private org.springframework.context.ApplicationEventPublisher applicationEventPublisher;
+
     private TaskLifecycleService taskLifecycleService;
 
     @BeforeEach
@@ -75,7 +78,8 @@ class TaskLifecycleServiceTest {
                 publishDependencyChecker,
                 auditAppender,
                 traceIdProvider,
-                datasetImportService
+                datasetImportService,
+                applicationEventPublisher
         );
     }
 
@@ -245,6 +249,7 @@ class TaskLifecycleServiceTest {
                 1,
                 100L,
                 200L,
+                1,
                 null
         );
     }
@@ -260,6 +265,7 @@ class TaskLifecycleServiceTest {
                 1,
                 100L,
                 200L,
+                1,
                 99L
         );
     }
@@ -274,7 +280,8 @@ class TaskLifecycleServiceTest {
                 LocalDateTime.now().plusDays(2),
                 2,
                 100L,
-                200L
+                200L,
+                1
         );
     }
 

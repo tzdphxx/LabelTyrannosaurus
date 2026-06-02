@@ -14,6 +14,7 @@ import com.labelhub.common.exception.BusinessException;
 import com.labelhub.common.security.CurrentUser;
 import com.labelhub.common.security.CurrentUserContext;
 import com.labelhub.common.security.RoleCode;
+import com.labelhub.common.web.TraceIdProvider;
 import com.labelhub.infrastructure.redis.RedisLockService;
 import com.labelhub.modules.assignment.domain.Assignment;
 import com.labelhub.modules.assignment.domain.AssignmentStatus;
@@ -69,6 +70,9 @@ class AssignmentClaimServiceTest {
     private AuditAppender auditAppender;
 
     @Mock
+    private TraceIdProvider traceIdProvider;
+
+    @Mock
     private TransactionTemplate transactionTemplate;
 
     private AssignmentClaimService assignmentClaimService;
@@ -80,6 +84,7 @@ class AssignmentClaimServiceTest {
             TransactionCallback<?> callback = invocation.getArgument(0);
             return callback.doInTransaction(null);
         });
+        lenient().when(traceIdProvider.currentTraceId()).thenReturn("trace-claim");
         assignmentClaimService = new AssignmentClaimService(
                 taskMapper,
                 datasetClaimService,
@@ -87,6 +92,7 @@ class AssignmentClaimServiceTest {
                 assignmentMapper,
                 redisLockService,
                 auditAppender,
+                traceIdProvider,
                 transactionTemplate
         );
         CurrentUserContext.set(new CurrentUser(LABELER_ID, "labeler", "test@labelhub.dev", Set.of(RoleCode.LABELER), 1));
@@ -123,7 +129,9 @@ class AssignmentClaimServiceTest {
         ArgumentCaptor<Assignment> assignmentCaptor = ArgumentCaptor.forClass(Assignment.class);
         verify(assignmentMapper).insert(assignmentCaptor.capture());
         assertThat(assignmentCaptor.getValue().getStatus()).isEqualTo(AssignmentStatus.CLAIMED);
-        verify(auditAppender).append(any(AuditCommand.class));
+        ArgumentCaptor<AuditCommand> auditCaptor = ArgumentCaptor.forClass(AuditCommand.class);
+        verify(auditAppender).append(auditCaptor.capture());
+        assertThat(auditCaptor.getValue().traceId()).isEqualTo("trace-claim");
         verify(redisLockService).unlock("lock:claim:task:10");
     }
 
@@ -221,6 +229,7 @@ class AssignmentClaimServiceTest {
                 assignmentMapper,
                 redisLockService,
                 auditAppender,
+                traceIdProvider,
                 transactionTemplate
         );
         when(taskMapper.selectById(TASK_ID)).thenReturn(publishedTask(1));

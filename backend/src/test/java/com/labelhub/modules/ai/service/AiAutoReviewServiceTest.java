@@ -80,6 +80,7 @@ class AiAutoReviewServiceTest {
     @Mock private AssignmentMapper assignmentMapper;
     @Mock private ReviewRecordMapper reviewRecordMapper;
     @Mock private DatasetClaimService datasetClaimService;
+    @Mock private com.labelhub.infrastructure.redis.RedisLockService redisLockService;
 
     private AiReviewRetryStrategy retryStrategy;
     private AiAutoReviewService service;
@@ -104,6 +105,11 @@ class AiAutoReviewServiceTest {
         ReflectionTestUtils.setField(service, "assignmentMapper", assignmentMapper);
         ReflectionTestUtils.setField(service, "reviewRecordMapper", reviewRecordMapper);
         ReflectionTestUtils.setField(service, "datasetClaimService", datasetClaimService);
+        ReflectionTestUtils.setField(service, "redisLockService", redisLockService);
+        org.mockito.Mockito.lenient()
+                .when(redisLockService.tryLock(org.mockito.ArgumentMatchers.anyString(),
+                        org.mockito.ArgumentMatchers.anyLong(), org.mockito.ArgumentMatchers.anyLong()))
+                .thenReturn(true);
     }
 
     @Test

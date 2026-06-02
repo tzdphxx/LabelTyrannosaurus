@@ -1,10 +1,13 @@
 package com.labelhub.modules.auth.controller;
 
 import com.labelhub.common.api.ApiResponse;
+import com.labelhub.common.security.CurrentUserContext;
+import com.labelhub.modules.auth.dto.ChangePasswordRequest;
 import com.labelhub.modules.auth.dto.LoginRequest;
 import com.labelhub.modules.auth.dto.RefreshRequest;
 import com.labelhub.modules.auth.dto.RegisterRequest;
 import com.labelhub.modules.auth.dto.TokenResponse;
+import com.labelhub.modules.auth.dto.UpdateProfileRequest;
 import com.labelhub.modules.auth.dto.UserProfileResponse;
 import com.labelhub.modules.auth.service.AuthService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -13,6 +16,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -45,7 +49,7 @@ public class AuthController {
      */
     @PostMapping("/auth/register")
     @SecurityRequirements
-    @Operation(summary = "用户注册", description = "创建普通用户，按 role 参数授予 LABELER、OWNER 或 REVIEWER，并返回 accessToken 和 refreshToken。")
+    @Operation(summary = "用户注册", description = "创建普通用户，按 role 参数授予 LABELER 或 OWNER，并返回 accessToken 和 refreshToken。")
     public ApiResponse<TokenResponse> register(@Valid @RequestBody RegisterRequest request) {
         return ApiResponse.ok(authService.register(request));
     }
@@ -94,5 +98,19 @@ public class AuthController {
     @Operation(summary = "当前用户信息", description = "返回当前认证用户的最小资料和角色集合。")
     public ApiResponse<UserProfileResponse> currentUser() {
         return ApiResponse.ok(authService.currentUser());
+    }
+
+    @PutMapping("/users/me/password")
+    @Operation(summary = "修改密码", description = "校验旧密码后更新为新密码，成功后旧令牌失效需重新登录。")
+    public ApiResponse<Void> changePassword(@Valid @RequestBody ChangePasswordRequest request) {
+        authService.changePassword(CurrentUserContext.getUserId(), request);
+        return ApiResponse.ok(null);
+    }
+
+    @PutMapping("/users/me/profile")
+    @Operation(summary = "更新个人信息", description = "更新当前用户的显示名称和邮箱。邮箱需全局唯一。")
+    public ApiResponse<Void> updateProfile(@Valid @RequestBody UpdateProfileRequest request) {
+        authService.updateProfile(CurrentUserContext.getUserId(), request);
+        return ApiResponse.ok(null);
     }
 }

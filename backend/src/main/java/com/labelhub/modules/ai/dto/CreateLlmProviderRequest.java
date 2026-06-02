@@ -18,7 +18,8 @@ public record CreateLlmProviderRequest(
         Boolean supportVision,
         Boolean supportMultiImage,
         @Min(0) Integer maxImageCount,
-        @Size(max = 100) String visionModel
+        @Size(max = 100) String visionModel,
+        @Size(max = 20) String structuredOutputMode
 ) {
     public CreateLlmProviderRequest(String providerCode, String providerName, String baseUrl, String apiKey,
                                     String defaultModel, Map<String, String> customHeaders,
@@ -26,6 +27,16 @@ public record CreateLlmProviderRequest(
                                     Integer userRateLimitPerMinute) {
         this(providerCode, providerName, baseUrl, apiKey, defaultModel, customHeaders,
                 platformRateLimitPerMinute, taskRateLimitPerMinute, userRateLimitPerMinute,
-                false, false, 10, null);
+                false, false, 10, null, "NONE");
+    }
+
+    public CreateLlmProviderRequest(String providerCode, String providerName, String baseUrl, String apiKey,
+                                    String defaultModel, Map<String, String> customHeaders,
+                                    Integer platformRateLimitPerMinute, Integer taskRateLimitPerMinute,
+                                    Integer userRateLimitPerMinute, Boolean supportVision, Boolean supportMultiImage,
+                                    Integer maxImageCount, String visionModel) {
+        this(providerCode, providerName, baseUrl, apiKey, defaultModel, customHeaders,
+                platformRateLimitPerMinute, taskRateLimitPerMinute, userRateLimitPerMinute,
+                supportVision, supportMultiImage, maxImageCount, visionModel, "NONE");
     }
 }

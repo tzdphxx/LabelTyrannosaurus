@@ -1,6 +1,7 @@
 package com.labelhub.modules.review.web;
 
 import com.labelhub.common.api.ApiResponse;
+import com.labelhub.common.api.PageResponse;
 import com.labelhub.common.security.CurrentUserContext;
 import com.labelhub.common.security.RoleCode;
 import com.labelhub.modules.review.dto.ApproveRequest;
@@ -11,11 +12,13 @@ import com.labelhub.modules.review.dto.BatchRejectRequest;
 import com.labelhub.modules.review.dto.BatchReviewResponse;
 import com.labelhub.modules.review.dto.RejectRequest;
 import com.labelhub.modules.review.dto.ReviewActionResponse;
+import com.labelhub.modules.review.dto.ReviewClaimResponse;
 import com.labelhub.modules.review.dto.ReviewerSubmissionDetailResponse;
 import com.labelhub.modules.review.dto.ReviewerSubmissionListItem;
 import com.labelhub.modules.review.dto.SubmissionReviewItem;
 import com.labelhub.modules.review.mapper.ReviewerSubmissionListMapper;
 import com.labelhub.modules.review.service.BatchReviewService;
+import com.labelhub.modules.review.service.ReviewClaimService;
 import com.labelhub.modules.review.service.ReviewService;
 import com.labelhub.modules.review.service.ReviewerSubmissionQueryService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -40,20 +43,32 @@ public class ReviewController {
     private final BatchReviewService batchReviewService;
     private final ReviewerSubmissionQueryService reviewerQueryService;
     private final ReviewerSubmissionListMapper reviewerListMapper;
+    private final ReviewClaimService reviewClaimService;
 
     public ReviewController(ReviewService reviewService,
                             BatchReviewService batchReviewService,
                             ReviewerSubmissionQueryService reviewerQueryService,
-                            ReviewerSubmissionListMapper reviewerListMapper) {
+                            ReviewerSubmissionListMapper reviewerListMapper,
+                            ReviewClaimService reviewClaimService) {
         this.reviewService = reviewService;
         this.batchReviewService = batchReviewService;
         this.reviewerQueryService = reviewerQueryService;
         this.reviewerListMapper = reviewerListMapper;
+        this.reviewClaimService = reviewClaimService;
+    }
+
+    @PostMapping("/claim")
+    @Operation(summary = "领取待审提交", description = "审核员主动从未分配池中领取待审提交。支持按任务筛选，使用数据库行锁保证并发安全。")
+    public ApiResponse<ReviewClaimResponse> claim(
+            @Parameter(description = "领取数量，默认 10，最大 50") @RequestParam(defaultValue = "10") int count,
+            @Parameter(description = "按任务 ID 筛选") @RequestParam(required = false) Long taskId) {
+        CurrentUserContext.requireRole(RoleCode.REVIEWER);
+        return ApiResponse.ok(reviewClaimService.claim(CurrentUserContext.getUserId(), count, taskId));
     }
 
     @GetMapping
     @Operation(summary = "待审提交列表", description = "查询审核员可处理的提交列表，支持按任务、提交状态、AI 结论、冲突状态、审核级别和分配审核员筛选。")
-    public ApiResponse<List<ReviewerSubmissionListItem>> list(
+    public ApiResponse<PageResponse<ReviewerSubmissionListItem>> list(
             @Parameter(description = "按任务 ID 筛选") @RequestParam(required = false) Long taskId,
             @Parameter(description = "按提交状态筛选") @RequestParam(required = false) String submissionStatus,
             @Parameter(description = "按 AI 结论筛选：PASS / REJECT / MANUAL_REVIEW") @RequestParam(required = false) String aiDecision,
@@ -67,9 +82,13 @@ public class ReviewController {
         int safePage = Math.max(1, page);
         int safeSize = Math.max(1, Math.min(size, 100));
         int offset = (safePage - 1) * safeSize;
-        return ApiResponse.ok(reviewerListMapper.selectWithFilters(
+        long total = reviewerListMapper.countWithFilters(
                 taskId, submissionStatus, aiDecision, aiReviewStatus,
-                conflictStatus, reviewLevel, assignedReviewerId, offset, safeSize));
+                conflictStatus, reviewLevel, assignedReviewerId);
+        List<ReviewerSubmissionListItem> items = reviewerListMapper.selectWithFilters(
+                taskId, submissionStatus, aiDecision, aiReviewStatus,
+                conflictStatus, reviewLevel, assignedReviewerId, offset, safeSize);
+        return ApiResponse.ok(new PageResponse<>(items, safePage, safeSize, total));
     }
 
     @GetMapping("/{submissionId}")

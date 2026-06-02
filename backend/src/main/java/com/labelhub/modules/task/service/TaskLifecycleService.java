@@ -44,19 +44,22 @@ public class TaskLifecycleService {
     private final AuditAppender auditAppender;
     private final TraceIdProvider traceIdProvider;
     private final DatasetImportService datasetImportService;
+    private final org.springframework.context.ApplicationEventPublisher applicationEventPublisher;
 
     public TaskLifecycleService(TaskMapper taskMapper,
                                 TaskTagMapper taskTagMapper,
                                 TaskPublishDependencyChecker publishDependencyChecker,
                                 AuditAppender auditAppender,
                                 TraceIdProvider traceIdProvider,
-                                DatasetImportService datasetImportService) {
+                                DatasetImportService datasetImportService,
+                                org.springframework.context.ApplicationEventPublisher applicationEventPublisher) {
         this.taskMapper = taskMapper;
         this.taskTagMapper = taskTagMapper;
         this.publishDependencyChecker = publishDependencyChecker;
         this.auditAppender = auditAppender;
         this.traceIdProvider = traceIdProvider;
         this.datasetImportService = datasetImportService;
+        this.applicationEventPublisher = applicationEventPublisher;
     }
 
     public List<OwnerTaskSummaryResponse> listOwnerTasks(Long ownerId) {
@@ -100,6 +103,7 @@ public class TaskLifecycleService {
         task.setDeadlineAt(request.deadlineAt());
         task.setPublishedTemplateVersionId(request.publishedTemplateVersionId());
         task.setAiReviewConfigId(request.aiReviewConfigId());
+        task.setReviewLevelCount(request.reviewLevelCount() != null ? request.reviewLevelCount() : 1);
         task.setRewardVisible(true);
         taskMapper.insert(task);
         replaceTags(task.getId(), request.tags());
@@ -135,6 +139,9 @@ public class TaskLifecycleService {
         task.setDeadlineAt(request.deadlineAt());
         task.setPublishedTemplateVersionId(request.publishedTemplateVersionId());
         task.setAiReviewConfigId(request.aiReviewConfigId());
+        if (request.reviewLevelCount() != null) {
+            task.setReviewLevelCount(request.reviewLevelCount());
+        }
         taskMapper.updateById(task);
         taskTagMapper.delete(new QueryWrapper<TaskTag>().eq("task_id", taskId));
         replaceTags(taskId, request.tags());
@@ -182,7 +189,18 @@ public class TaskLifecycleService {
         Map<String, Object> beforeJson = Map.of("status", beforeStatus);
         taskMapper.updateById(task);
         appendAudit(task, ownerId, action, beforeJson, Map.of("status", task.getStatus()));
+        publishTaskStatusChanged(task, beforeStatus);
         return new TaskLifecycleResponse(task.getId(), task.getStatus());
+    }
+
+    private void publishTaskStatusChanged(Task task, TaskStatus beforeStatus) {
+        if (applicationEventPublisher != null) {
+            applicationEventPublisher.publishEvent(
+                    new com.labelhub.modules.review.event.TaskStatusChangedEvent(
+                            this, task.getId(), task.getTitle(),
+                            beforeStatus.name(), task.getStatus().name(),
+                            LocalDateTime.now()));
+        }
     }
 
     private void requireStatus(Task task, Set<TaskStatus> allowedStatuses) {
@@ -234,6 +252,7 @@ public class TaskLifecycleService {
                 task.getDeadlineAt(),
                 task.getPublishedTemplateVersionId(),
                 task.getAiReviewConfigId(),
+                task.getReviewLevelCount(),
                 task.getRewardVisible(),
                 task.getPublishedAt(),
                 task.getEndedAt(),

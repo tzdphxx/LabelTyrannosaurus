@@ -146,6 +146,7 @@ class LlmProviderControllerTest {
                 false,
                 10,
                 null,
+                "NONE",
                 true,
                 1L,
                 1L,

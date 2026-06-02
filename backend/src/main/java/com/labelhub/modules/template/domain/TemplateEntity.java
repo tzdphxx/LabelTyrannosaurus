@@ -17,6 +17,7 @@ public class TemplateEntity {
     @TableId(type = IdType.AUTO)
     private Long id;
     private Long taskId;
+    private Long ownerId;
     private String name;
     private Integer currentVersionNo;
     private Long createdBy;
@@ -37,6 +38,14 @@ public class TemplateEntity {
 
     public void setTaskId(Long taskId) {
         this.taskId = taskId;
+    }
+
+    public Long getOwnerId() {
+        return ownerId;
+    }
+
+    public void setOwnerId(Long ownerId) {
+        this.ownerId = ownerId;
     }
 
     public String getName() {

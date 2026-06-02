@@ -29,4 +29,41 @@ public interface ReviewRecordMapper extends BaseMapper<ReviewRecord> {
             </script>
             """)
     List<ReviewRecord> selectBySubmissionIds(@Param("submissionIds") List<Long> submissionIds);
+
+    @Select("""
+            SELECT COUNT(1)
+            FROM review_records
+            WHERE reviewer_id = #{reviewerId}
+              AND action IN ('APPROVE', 'REJECT')
+              AND DATE(created_at) = CURDATE()
+            """)
+    int countTodayReviewed(@Param("reviewerId") Long reviewerId);
+
+    @Select("""
+            SELECT COUNT(1)
+            FROM review_records
+            WHERE reviewer_id = #{reviewerId}
+              AND action = 'APPROVE'
+            """)
+    int countTotalApproved(@Param("reviewerId") Long reviewerId);
+
+    @Select("""
+            SELECT COUNT(1)
+            FROM review_records
+            WHERE reviewer_id = #{reviewerId}
+              AND action = 'REJECT'
+            """)
+    int countTotalRejected(@Param("reviewerId") Long reviewerId);
+
+    @Select("""
+            SELECT COUNT(1)
+            FROM review_records
+            WHERE submission_id = #{submissionId}
+              AND reviewer_id = #{reviewerId}
+              AND review_level <> #{excludeLevel}
+              AND action IN ('APPROVE', 'REJECT')
+            """)
+    int countBySubmissionAndReviewerExcludingLevel(@Param("submissionId") Long submissionId,
+                                                   @Param("reviewerId") Long reviewerId,
+                                                   @Param("excludeLevel") int excludeLevel);
 }

@@ -79,9 +79,11 @@ class TemplateVersionServiceTest {
         verify(schemaValidator).validateSchema(any());
         ArgumentCaptor<TemplateEntity> templateCaptor = ArgumentCaptor.forClass(TemplateEntity.class);
         verify(templateMapper).insert(templateCaptor.capture());
+        assertThat(templateCaptor.getValue().getOwnerId()).isEqualTo(10L);
         assertThat(templateCaptor.getValue().getCurrentVersionNo()).isEqualTo(1);
         ArgumentCaptor<TemplateVersionEntity> versionCaptor = ArgumentCaptor.forClass(TemplateVersionEntity.class);
         verify(templateVersionMapper).insert(versionCaptor.capture());
+        assertThat(versionCaptor.getValue().getOwnerId()).isEqualTo(10L);
         assertThat(versionCaptor.getValue().getPublishedSnapshot()).isFalse();
     }
 
@@ -166,6 +168,7 @@ class TemplateVersionServiceTest {
         verify(schemaValidator).validateSchema(any());
         ArgumentCaptor<TemplateVersionEntity> versionCaptor = ArgumentCaptor.forClass(TemplateVersionEntity.class);
         verify(templateVersionMapper).insert(versionCaptor.capture());
+        assertThat(versionCaptor.getValue().getOwnerId()).isEqualTo(10L);
         assertThat(versionCaptor.getValue().getVersionNo()).isEqualTo(3);
         verify(templateMapper).updateCurrentVersionNo(100L, 3);
     }
@@ -215,6 +218,7 @@ class TemplateVersionServiceTest {
     private TemplateEntity template(Long id, Long taskId, int currentVersionNo) {
         TemplateEntity template = new TemplateEntity();
         template.setId(id);
+        template.setOwnerId(10L);
         template.setTaskId(taskId);
         template.setName("质检模板");
         template.setCurrentVersionNo(currentVersionNo);
@@ -227,6 +231,7 @@ class TemplateVersionServiceTest {
         version.setId(id);
         version.setTemplateId(templateId);
         version.setTaskId(taskId);
+        version.setOwnerId(10L);
         version.setVersionNo(versionNo);
         version.setSchemaJson("{\"components\":[{\"type\":\"Input\",\"field\":\"answer\"}]}");
         version.setPublishedSnapshot(publishedSnapshot);

@@ -10,6 +10,7 @@ import com.baomidou.mybatisplus.core.conditions.Wrapper;
 import com.labelhub.common.audit.AuditAppender;
 import com.labelhub.common.audit.AuditCommand;
 import com.labelhub.common.exception.BusinessException;
+import com.labelhub.common.web.TraceIdProvider;
 import com.labelhub.modules.ai.domain.LlmProvider;
 import com.labelhub.modules.ai.dto.CreateLlmProviderRequest;
 import com.labelhub.modules.ai.dto.LlmProviderResponse;
@@ -43,13 +44,18 @@ class LlmProviderServiceTest {
     @Mock
     private AuditAppender auditAppender;
 
+    @Mock
+    private TraceIdProvider traceIdProvider;
+
     private LlmApiKeyEncryptor encryptor;
     private LlmProviderService service;
 
     @BeforeEach
     void setUp() {
         encryptor = new LlmApiKeyEncryptor(SECRET);
-        service = new LlmProviderService(llmProviderMapper, encryptor, llmProviderTester, auditAppender);
+        org.mockito.Mockito.lenient().when(traceIdProvider.currentTraceId()).thenReturn("trace-test");
+        service = new LlmProviderService(llmProviderMapper, encryptor, llmProviderTester, auditAppender,
+                traceIdProvider, new com.fasterxml.jackson.databind.ObjectMapper());
     }
 
     @Test
@@ -77,7 +83,9 @@ class LlmProviderServiceTest {
         assertThat(stored.getSupportMultiImage()).isTrue();
         assertThat(stored.getVisionModel()).isEqualTo("qwen-vl-plus");
         assertThat(stored.getCustomHeadersJson()).contains("Authorization").doesNotContain("unused");
-        verify(auditAppender).append(any(AuditCommand.class));
+        ArgumentCaptor<AuditCommand> auditCaptor = ArgumentCaptor.forClass(AuditCommand.class);
+        verify(auditAppender).append(auditCaptor.capture());
+        assertThat(auditCaptor.getValue().traceId()).isEqualTo("trace-test");
     }
 
     @Test

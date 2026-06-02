@@ -37,6 +37,8 @@ public class Task {
 
     private Long aiReviewConfigId;
 
+    private Integer reviewLevelCount;
+
     private Boolean rewardVisible;
 
     private LocalDateTime publishedAt;

@@ -37,8 +37,22 @@ public record CreateTaskRequest(
         Integer overlapCount,
         @Schema(description = "已发布模板版本 ID", example = "20")
         Long publishedTemplateVersionId,
-        @Schema(description = "AI 审核配置 ID", example = "30")
+        @Schema(description = "AI 审核配置 ID（引用已创建的配置，与内联 aiPrompt 互斥）", example = "30")
         Long aiReviewConfigId,
+        @Schema(description = "AI 模型供应商 ID（内联创建 AI 配置时必填）")
+        Long aiProviderId,
+        @Schema(description = "AI 模型名称（可选，如提供则必须匹配 Provider defaultModel）")
+        @Size(max = 128)
+        String aiModelName,
+        @Schema(description = "AI 审核 Prompt 模板（内联创建 AI 配置时必填）")
+        @Size(max = 10000)
+        String aiPrompt,
+        @Schema(description = "AI 评分维度列表（内联创建 AI 配置时必填）")
+        List<@Size(max = 64) String> aiScoringDimensions,
+        @Schema(description = "AI 通过阈值（0-100）", example = "80.00")
+        java.math.BigDecimal aiPassThreshold,
+        @Schema(description = "AI 人工复核阈值（0-100）", example = "60.00")
+        java.math.BigDecimal aiManualReviewThreshold,
         @Schema(description = "审核级别数（1=单级审核，2=初审+终审，3=初审+复审+终审）", example = "3")
         @Min(1)
         Integer reviewLevelCount,

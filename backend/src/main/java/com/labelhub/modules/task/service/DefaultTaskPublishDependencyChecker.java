@@ -3,7 +3,7 @@ package com.labelhub.modules.task.service;
 import com.labelhub.modules.ai.domain.AiReviewConfig;
 import com.labelhub.modules.ai.mapper.AiReviewConfigMapper;
 import com.labelhub.modules.dataset.mapper.DatasetItemMapper;
-import com.labelhub.modules.reward.mapper.RewardRuleMapper;
+import com.labelhub.modules.reward.repository.RewardRuleRepositoryMapper;
 import com.labelhub.modules.task.domain.Task;
 import com.labelhub.modules.task.mapper.TaskMapper;
 import com.labelhub.modules.template.domain.TemplateVersion;
@@ -17,13 +17,13 @@ public class DefaultTaskPublishDependencyChecker implements TaskPublishDependenc
     private final DatasetItemMapper datasetItemMapper;
     private final TaskMapper taskMapper;
     private final TemplateVersionMapper templateVersionMapper;
-    private final RewardRuleMapper rewardRuleMapper;
+    private final RewardRuleRepositoryMapper rewardRuleMapper;
 
     public DefaultTaskPublishDependencyChecker(TaskMapper taskMapper,
                                                AiReviewConfigMapper aiReviewConfigMapper,
                                                DatasetItemMapper datasetItemMapper,
                                                TemplateVersionMapper templateVersionMapper,
-                                               RewardRuleMapper rewardRuleMapper) {
+                                               RewardRuleRepositoryMapper rewardRuleMapper) {
         this.taskMapper = taskMapper;
         this.aiReviewConfigMapper = aiReviewConfigMapper;
         this.datasetItemMapper = datasetItemMapper;
@@ -70,6 +70,6 @@ public class DefaultTaskPublishDependencyChecker implements TaskPublishDependenc
 
     @Override
     public boolean rewardRuleExists(Long taskId) {
-        return rewardRuleMapper.countByTaskId(taskId) > 0;
+        return rewardRuleMapper.selectLatestByTaskId(taskId) != null;
     }
 }

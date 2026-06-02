@@ -72,6 +72,7 @@ public class AssignmentDetailService {
                 assignment.getDatasetItemId(),
                 assignment.getTemplateVersionId(),
                 assignment.getStatus(),
+                item != null ? item.getStatus() : null,
                 tv != null ? tv.getSchemaJson() : null,
                 item != null ? item.getItemJson() : null,
                 assignment.getDraftAnswerJson(),
@@ -80,6 +81,7 @@ public class AssignmentDetailService {
                 latest != null ? latest.getStatus() : null,
                 returnedReason,
                 assignment.getReturnedAt(),
+                null, // rewardSummary — can be added later via Task lookup
                 assignment.getClaimedAt(),
                 assignment.getUpdatedAt()
         );

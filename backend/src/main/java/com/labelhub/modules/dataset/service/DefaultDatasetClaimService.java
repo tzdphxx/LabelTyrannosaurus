@@ -1,6 +1,7 @@
 package com.labelhub.modules.dataset.service;
 
 import com.labelhub.modules.dataset.domain.DatasetItem;
+import com.labelhub.modules.dataset.domain.DatasetItemStatus;
 import com.labelhub.modules.dataset.mapper.DatasetItemMapper;
 import java.util.Optional;
 import org.springframework.stereotype.Service;
@@ -27,6 +28,8 @@ public class DefaultDatasetClaimService implements DatasetClaimService {
         if (datasetItem == null) {
             return Optional.empty();
         }
+        datasetItem.setStatus(DatasetItemStatus.FULL);
+        datasetItemMapper.updateById(datasetItem);
         return Optional.of(new DatasetItemSnapshot(datasetItem.getId(), datasetItem.getItemJson()));
     }
 

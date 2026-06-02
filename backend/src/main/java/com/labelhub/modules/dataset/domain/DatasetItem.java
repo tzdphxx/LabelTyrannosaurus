@@ -25,6 +25,8 @@ public class DatasetItem {
 
     private Integer assignedCount;
 
+    private DatasetItemStatus status;
+
     private Integer submittedCount;
 
     private Integer approvedCount;

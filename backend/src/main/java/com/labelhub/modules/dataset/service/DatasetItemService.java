@@ -250,6 +250,7 @@ public class DatasetItemService {
                 entity.getExternalId(),
                 readJson(entity.getItemJson()),
                 readJson(entity.getMetadataJson()),
+                null,
                 entity.getAssignedCount(),
                 entity.getSubmittedCount(),
                 entity.getApprovedCount(),

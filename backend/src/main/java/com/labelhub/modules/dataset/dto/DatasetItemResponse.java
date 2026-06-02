@@ -1,6 +1,7 @@
 package com.labelhub.modules.dataset.dto;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import com.labelhub.modules.dataset.domain.DatasetItemStatus;
 import io.swagger.v3.oas.annotations.media.Schema;
 
 import java.time.LocalDateTime;
@@ -15,6 +16,7 @@ public record DatasetItemResponse(
         @Schema(description = "外部ID") String externalId,
         @Schema(description = "题目JSON数据") JsonNode itemJson,
         @Schema(description = "元数据JSON") JsonNode metadataJson,
+        @Schema(description = "题目状态") DatasetItemStatus status,
         @Schema(description = "已分配数量") Integer assignedCount,
         @Schema(description = "已提交数量") Integer submittedCount,
         @Schema(description = "已通过数量") Integer approvedCount,

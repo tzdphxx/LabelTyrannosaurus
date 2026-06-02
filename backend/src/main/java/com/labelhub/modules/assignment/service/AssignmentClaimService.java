@@ -20,7 +20,9 @@ import com.labelhub.modules.task.mapper.TaskMapper;
 import com.labelhub.modules.template.service.TemplateSchemaService;
 import com.labelhub.modules.template.service.TemplateSchemaSnapshot;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
@@ -154,6 +156,35 @@ public class AssignmentClaimService {
         auditAppender.append(new AuditCommand(USER_ACTOR_TYPE, assignment.getLabelerId(),
                 ASSIGNMENT_BIZ_TYPE, assignment.getId(),
                 "ASSIGNMENT_CLAIMED", null, afterJson, traceIdProvider.currentTraceId(), null));
+    }
+
+    public List<AssignmentClaimResponse> assign(Long taskId, Long labelerId, List<Long> datasetItemIds) {
+        Task task = taskMapper.selectById(taskId);
+        if (task == null) {
+            throw new BusinessException(TASK_NOT_FOUND, "Task not found");
+        }
+        if (task.getStrategy() != Strategy.ASSIGNED) {
+            throw new BusinessException(PERMISSION_DENIED, "Only ASSIGNED strategy tasks support assignment");
+        }
+        List<AssignmentClaimResponse> results = new ArrayList<>();
+        for (Long datasetItemId : datasetItemIds) {
+            try {
+                Assignment assignment = new Assignment();
+                assignment.setTaskId(taskId);
+                assignment.setDatasetItemId(datasetItemId);
+                assignment.setLabelerId(labelerId);
+                assignment.setTemplateVersionId(task.getPublishedTemplateVersionId());
+                assignment.setStatus(AssignmentStatus.CLAIMED);
+                assignment.setDraftVersion(1);
+                assignmentMapper.insert(assignment);
+                results.add(new AssignmentClaimResponse(
+                        assignment.getId(), datasetItemId,
+                        task.getPublishedTemplateVersionId(), null, null, null, 1));
+            } catch (DuplicateKeyException ex) {
+                // skip already assigned
+            }
+        }
+        return results;
     }
 
     private BusinessException claimConflict(String message) {

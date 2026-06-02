@@ -49,15 +49,36 @@ public class TaskMarketService {
     }
 
     private MarketTaskResponse toResponse(Long labelerId, Task task) {
+        int available = datasetMarketStatsService.countAvailableItems(task.getId(), labelerId);
+        int claimedByMe = assignmentMarketStatsService.countClaimedByLabeler(task.getId(), labelerId);
         return new MarketTaskResponse(
                 task.getId(),
                 task.getTitle(),
                 listTags(task.getId()),
                 task.getDeadlineAt(),
-                datasetMarketStatsService.countAvailableItems(task.getId(), labelerId),
-                assignmentMarketStatsService.countClaimedByLabeler(task.getId(), labelerId),
+                available,
+                claimedByMe,
+                task.getStrategy(),
+                deriveTaskStatus(task, available, claimedByMe),
                 rewardSummaryService.findRewardSummary(task.getId())
         );
+    }
+
+    private String deriveTaskStatus(Task task, int available, int claimedByMe) {
+        if (task.getStatus() != TaskStatus.PUBLISHED || task.getDeadlineAt() == null
+                || !task.getDeadlineAt().isAfter(java.time.LocalDateTime.now())) {
+            return "UNAVAILABLE";
+        }
+        if (task.getStrategy() == com.labelhub.modules.task.domain.Strategy.ASSIGNED) {
+            return "UNAVAILABLE"; // assigned tasks cannot be freely claimed from market
+        }
+        if (available <= 0) {
+            return "UNAVAILABLE";
+        }
+        if (claimedByMe > 0) {
+            return "CLAIMED_SOME";
+        }
+        return "CAN_CLAIM";
     }
 
     private List<String> listTags(Long taskId) {

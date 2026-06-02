@@ -73,9 +73,15 @@ public class OpenAiCompatibleAdapter {
 
     public OpenAiCompatibleResponse chat(LlmProviderRuntimeConfig config, List<LlmMessage> messages,
                                          Integer maxTokens, List<ToolDefinition> tools) {
+        return chat(config, messages, maxTokens, tools, ResponseFormat.none());
+    }
+
+    public OpenAiCompatibleResponse chat(LlmProviderRuntimeConfig config, List<LlmMessage> messages,
+                                         Integer maxTokens, List<ToolDefinition> tools,
+                                         ResponseFormat responseFormat) {
         Instant startedAt = Instant.now();
         try {
-            HttpRequest request = buildRequest(config, messages, maxTokens, tools);
+            HttpRequest request = buildRequest(config, messages, maxTokens, tools, responseFormat);
             HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
             long latencyMs = Duration.between(startedAt, Instant.now()).toMillis();
             if (response.statusCode() >= 200 && response.statusCode() < 300) {
@@ -98,7 +104,8 @@ public class OpenAiCompatibleAdapter {
     }
 
     private HttpRequest buildRequest(LlmProviderRuntimeConfig config, List<LlmMessage> messages,
-                                     Integer maxTokens, List<ToolDefinition> tools)
+                                     Integer maxTokens, List<ToolDefinition> tools,
+                                     ResponseFormat responseFormat)
             throws JsonProcessingException {
         URI originalUri = URI.create(config.baseUrl() + CHAT_COMPLETIONS_PATH);
         URI requestUri = resolveAndValidateUri(config.baseUrl(), originalUri);
@@ -120,11 +127,12 @@ public class OpenAiCompatibleAdapter {
         if (config.apiKey() != null && !config.apiKey().isBlank()) {
             builder.setHeader("Authorization", "Bearer " + config.apiKey());
         }
-        return builder.POST(HttpRequest.BodyPublishers.ofString(requestBody(config.modelName(), messages, maxTokens, tools))).build();
+        return builder.POST(HttpRequest.BodyPublishers.ofString(
+                requestBody(config.modelName(), messages, maxTokens, tools, responseFormat))).build();
     }
 
     private String requestBody(String modelName, List<LlmMessage> messages, Integer maxTokens,
-                               List<ToolDefinition> tools) throws JsonProcessingException {
+                               List<ToolDefinition> tools, ResponseFormat responseFormat) throws JsonProcessingException {
         Map<String, Object> payload = new LinkedHashMap<>();
         payload.put("model", modelName);
         payload.put("messages", serializeMessages(messages));
@@ -134,8 +142,31 @@ public class OpenAiCompatibleAdapter {
         if (tools != null && !tools.isEmpty()) {
             payload.put("tools", tools);
         }
+        Map<String, Object> responseFormatPayload = serializeResponseFormat(responseFormat);
+        if (responseFormatPayload != null) {
+            payload.put("response_format", responseFormatPayload);
+        }
         payload.put("temperature", 0);
         return objectMapper.writeValueAsString(payload);
+    }
+
+    private Map<String, Object> serializeResponseFormat(ResponseFormat responseFormat) {
+        if (responseFormat == null || responseFormat.mode() == ResponseFormat.Mode.NONE) {
+            return null;
+        }
+        if (responseFormat.mode() == ResponseFormat.Mode.JSON_OBJECT) {
+            return Map.of("type", "json_object");
+        }
+        if (responseFormat.mode() == ResponseFormat.Mode.JSON_SCHEMA
+                && responseFormat.jsonSchema() != null) {
+            Map<String, Object> jsonSchema = new LinkedHashMap<>();
+            jsonSchema.put("name", responseFormat.schemaName() != null ? responseFormat.schemaName() : "response");
+            jsonSchema.put("schema", responseFormat.jsonSchema());
+            jsonSchema.put("strict", true);
+            return Map.of("type", "json_schema", "json_schema", jsonSchema);
+        }
+        // JSON_SCHEMA without a schema falls back to json_object
+        return Map.of("type", "json_object");
     }
 
     private List<Map<String, Object>> serializeMessages(List<LlmMessage> messages) {

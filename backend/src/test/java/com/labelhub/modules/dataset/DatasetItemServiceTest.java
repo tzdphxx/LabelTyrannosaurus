@@ -121,7 +121,7 @@ class DatasetItemServiceTest {
         });
 
         itemService.batchAppend(1L, new BatchAppendItemsRequest(List.of(
-                new DatasetItemAppendRequest("img1", DatasetType.QA_QUALITY,
+                new DatasetItemAppendRequest("img1",
                         Map.of("media_type", "image", "media_file_id", 99), Map.of())
         )));
 

@@ -145,7 +145,8 @@ public class AiReviewRetryService implements AiReviewRetryCallback {
         LlmGatewayResponse response = llmGateway.review(new LlmGatewayRequest(
                 config.getProviderId(), config.getModelName(),
                 List.of(new LlmMessage("system", "You are LabelHub AI reviewer. Return valid JSON only."),
-                        new LlmMessage("user", promptSnapshot))
+                        new LlmMessage("user", promptSnapshot)),
+                com.labelhub.infrastructure.llm.ResponseFormat.jsonSchema(AiReviewSchema.NAME, AiReviewSchema.SCHEMA)
         ));
 
         if (response.status() != LlmGatewayStatus.SUCCESS) {

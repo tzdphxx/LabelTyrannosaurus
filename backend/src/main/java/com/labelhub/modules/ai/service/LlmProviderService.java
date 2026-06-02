@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.labelhub.common.audit.AuditAppender;
 import com.labelhub.common.audit.AuditCommand;
 import com.labelhub.common.exception.BusinessException;
+import com.labelhub.common.web.TraceIdProvider;
 import com.labelhub.modules.ai.domain.LlmProvider;
 import com.labelhub.modules.ai.dto.CreateLlmProviderRequest;
 import com.labelhub.modules.ai.dto.LlmProviderResponse;
@@ -40,25 +41,29 @@ public class LlmProviderService {
     private final LlmApiKeyEncryptor encryptor;
     private final LlmProviderTester llmProviderTester;
     private final AuditAppender auditAppender;
+    private final TraceIdProvider traceIdProvider;
     private final ObjectMapper objectMapper;
 
     @Autowired
     public LlmProviderService(LlmProviderMapper llmProviderMapper,
                               LlmApiKeyEncryptor encryptor,
                               LlmProviderTester llmProviderTester,
-                              AuditAppender auditAppender) {
-        this(llmProviderMapper, encryptor, llmProviderTester, auditAppender, new ObjectMapper());
+                              AuditAppender auditAppender,
+                              TraceIdProvider traceIdProvider) {
+        this(llmProviderMapper, encryptor, llmProviderTester, auditAppender, traceIdProvider, new ObjectMapper());
     }
 
     LlmProviderService(LlmProviderMapper llmProviderMapper,
                        LlmApiKeyEncryptor encryptor,
                        LlmProviderTester llmProviderTester,
                        AuditAppender auditAppender,
+                       TraceIdProvider traceIdProvider,
                        ObjectMapper objectMapper) {
         this.llmProviderMapper = llmProviderMapper;
         this.encryptor = encryptor;
         this.llmProviderTester = llmProviderTester;
         this.auditAppender = auditAppender;
+        this.traceIdProvider = traceIdProvider;
         this.objectMapper = objectMapper;
     }
 
@@ -85,7 +90,7 @@ public class LlmProviderService {
         provider.setCreatedBy(actorId);
         llmProviderMapper.insert(provider);
         auditAppender.append(new AuditCommand(USER_ACTOR_TYPE, actorId, BIZ_TYPE, provider.getId(), "LLM_PROVIDER_CREATED",
-                null, auditSnapshot(provider), null, null));
+                null, auditSnapshot(provider), traceIdProvider.currentTraceId(), null));
         return toResponse(provider);
     }
 
@@ -103,7 +108,7 @@ public class LlmProviderService {
         }
         llmProviderMapper.updateById(provider);
         auditAppender.append(new AuditCommand(USER_ACTOR_TYPE, actorId, BIZ_TYPE, provider.getId(), "LLM_PROVIDER_UPDATED",
-                beforeJson, auditSnapshot(provider), null, null));
+                beforeJson, auditSnapshot(provider), traceIdProvider.currentTraceId(), null));
         return toResponse(provider);
     }
 
@@ -158,7 +163,7 @@ public class LlmProviderService {
         provider.setEnabled(enabled);
         llmProviderMapper.updateById(provider);
         auditAppender.append(new AuditCommand(USER_ACTOR_TYPE, actorId, BIZ_TYPE, provider.getId(), action,
-                beforeJson, auditSnapshot(provider), null, null));
+                beforeJson, auditSnapshot(provider), traceIdProvider.currentTraceId(), null));
         return toResponse(provider);
     }
 

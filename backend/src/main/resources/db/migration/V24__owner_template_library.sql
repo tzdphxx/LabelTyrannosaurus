@@ -1,4 +1,4 @@
--- V17: Promote task-bound templates to reusable owner template library.
+﻿-- V24: Promote task-bound templates to reusable owner template library.
 
 ALTER TABLE templates ADD COLUMN owner_id BIGINT NULL COMMENT '模板所有者ID' AFTER task_id;
 
@@ -7,16 +7,16 @@ JOIN tasks task ON task.id = t.task_id
 SET t.owner_id = task.owner_id
 WHERE t.owner_id IS NULL;
 
-CREATE TEMPORARY TABLE flyway_v17_template_owner_precheck AS
+CREATE TEMPORARY TABLE flyway_v24_template_owner_precheck AS
 SELECT COUNT(*) AS missing_owner_count
 FROM templates
 WHERE owner_id IS NULL;
 
-ALTER TABLE flyway_v17_template_owner_precheck
+ALTER TABLE flyway_v24_template_owner_precheck
     ADD CONSTRAINT chk_template_owner_backfill_source
         CHECK (missing_owner_count = 0);
 
-DROP TEMPORARY TABLE flyway_v17_template_owner_precheck;
+DROP TEMPORARY TABLE flyway_v24_template_owner_precheck;
 
 ALTER TABLE templates MODIFY COLUMN owner_id BIGINT NOT NULL COMMENT '模板所有者ID';
 
@@ -35,16 +35,16 @@ JOIN templates t ON t.id = tv.template_id
 SET tv.owner_id = t.owner_id
 WHERE tv.owner_id IS NULL;
 
-CREATE TEMPORARY TABLE flyway_v17_template_version_owner_precheck AS
+CREATE TEMPORARY TABLE flyway_v24_template_version_owner_precheck AS
 SELECT COUNT(*) AS missing_owner_count
 FROM template_versions
 WHERE owner_id IS NULL;
 
-ALTER TABLE flyway_v17_template_version_owner_precheck
+ALTER TABLE flyway_v24_template_version_owner_precheck
     ADD CONSTRAINT chk_template_version_owner_backfill_source
         CHECK (missing_owner_count = 0);
 
-DROP TEMPORARY TABLE flyway_v17_template_version_owner_precheck;
+DROP TEMPORARY TABLE flyway_v24_template_version_owner_precheck;
 
 ALTER TABLE template_versions MODIFY COLUMN owner_id BIGINT NOT NULL COMMENT '模板版本所有者ID';
 

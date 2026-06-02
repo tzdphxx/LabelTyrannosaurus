@@ -58,7 +58,7 @@ class DatabaseMigrationSafetyTest {
 
     @Test
     void ownerTemplateMigrationBackfillsBeforeEnforcingOwner() throws IOException {
-        String migration = Files.readString(MIGRATION_DIR.resolve("V17__owner_template_library.sql"));
+        String migration = Files.readString(MIGRATION_DIR.resolve("V24__owner_template_library.sql"));
 
         assertThat(migration).contains("ADD COLUMN owner_id BIGINT NULL");
         assertThat(migration).contains("UPDATE templates t");

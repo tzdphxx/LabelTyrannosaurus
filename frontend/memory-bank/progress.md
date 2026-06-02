@@ -375,3 +375,94 @@
 - 此前执行 `nvm list` 时当前 shell 找不到 `nvm`。
 - 此前尝试 `npm run build` 时被用户中断，后续按用户意图未继续执行 npm 命令。
 - 已执行 `git diff --check -- .\src`，未发现空白错误，仅有 Git 行尾转换提示。
+
+## 2026-06-01 - 标注工作台题目级提交与状态流程调整
+
+### 已实现
+
+- 扩展标注题目状态，题目导航支持展示：待标注、进行中、已打回、已提交、草稿。
+- 新增题目状态文案与颜色映射，工作台左侧题目导航和右侧状态展示复用统一映射。
+- 将工作台提交逻辑从任务级提交调整为题目级提交：
+  - 新增题目级草稿校验。
+  - 新增 `submitQuestionDraft` 服务层方法。
+  - 新增 `labelingStore.submitQuestionDraft` action。
+  - 当前题提交成功后只更新当前题为已提交，不再把整任务所有题目置为已提交。
+- 调整标注工作台布局：
+  - 上一题/下一题移动到中间表单区域左下方。
+  - 保存草稿/提交当前题移动到中间表单区域右下方。
+  - 右侧栏改为“题目状态与流程”，展示当前题状态、回填来源、保存状态、最近保存和本题流程时间线。
+- Mock 数据中将返修任务题目标记为已打回，用于覆盖已打回状态展示。
+- 优化工作台页面内部表单值处理，避免在 effect 中同步重置 state 导致 ESLint `react-hooks/set-state-in-effect` 命中。
+
+### 当前约束
+
+- 本次仍基于前端 Mock 服务层实现，不接真实后端接口。
+- 题目级提交生成的提交记录仍复用现有 `LabelingSubmission` 结构，后续接后端时可进一步拆分为题目级提交实体。
+- “进行中”当前作为页面临时编辑态展示：当前题有未保存修改时显示为进行中，保存后显示为草稿。
+- 全量构建和 lint 仍受既有问题阻塞，阻塞点不在本次工作改动文件中。
+
+### 已验证
+
+- 已执行 `nvm list`，当前可用 Node 版本为 `22.14.0`。
+- 已执行 `npm ci` 安装 lockfile 依赖。
+- 已执行本次修改文件的局部 ESLint： 
+  - `npx eslint src\pages\labeler\LabelerWorkbenchPage.tsx src\stores\labelingStore.ts src\services\labeler\labelingService.ts src\services\labeler\labelingServiceHelpers.ts src\types\labeling.ts src\utils\labeling.ts src\mocks\labeling.mock.ts`
+  - 结果通过。
+- 已执行 `git diff --check -- src\pages\labeler\LabelerWorkbenchPage.tsx src\stores\labelingStore.ts src\services\labeler\labelingService.ts src\services\labeler\labelingServiceHelpers.ts src\types\labeling.ts src\utils\labeling.ts src\mocks\labeling.mock.ts src\index.css`，未发现空白错误，仅有 Git LF/CRLF 提示。
+- 已执行 `npm run build`，失败于既有 TypeScript 错误：
+  - `src/app/navigation.tsx`
+  - `src/components/navigation/RoleBadge.tsx`
+  - `src/features/dynamic-form/utils/designerDrag.ts`
+  - `src/pages/owner/templates/OwnerTemplateDesignerPage.tsx`
+- 已执行全量 `npm run lint`，失败于既有 lint 错误：
+  - `src/app/navigation.tsx`
+  - `src/features/dynamic-form/components/DynamicFormRenderer.tsx`
+  - `src/features/dynamic-form/components/designer/LinkageRuleEditor.tsx`
+  - `src/features/dynamic-form/components/designer/SchemaManagerPanel.tsx`
+  - `src/features/dynamic-form/materialRegistry.ts`
+  - `src/pages/owner/templates/OwnerTemplatesPage.ts`
+## 2026-06-02 - 标注员市场领取真实服务接入
+
+### 已实现
+
+- 阅读并对齐标注市场与领取接口文档，按文档契约接入真实服务。
+- 新增 `src/services/labeler/labelingRealService.ts`：
+  - 接入 `GET /v1/market/tasks` 查询标注市场任务。
+  - 接入 `POST /v1/tasks/{taskId}/assignments/claim` 领取 assignment。
+  - 接入 `GET /v1/assignments/{assignmentId}` 加载 assignment 详情、题目材料、schema 和草稿。
+  - 接入 `GET /v1/labeler/assignments` 查询当前标注员已领取 assignment，用于市场页找回已领取任务。
+  - 接入 assignment 草稿读取、保存和题目级提交接口。
+- 将原 mock 标注服务改名为 `mockLabelingService`，并在 `src/services/labeler/index.ts` 按 `VITE_SERVICE_MODE` 切换：
+  - `mock` 模式继续使用原 mock 行为。
+  - `real` 模式使用真实接口服务。
+- 保持市场页和工作台现有调用方式不变：
+  - 领取后仍跳转 `/app/labeler/workbench/:taskId`。
+  - 真实服务内部维护 `taskId -> assignmentId` 映射。
+- 完成字段降级策略：
+  - 进度使用 `quota - remainingQuota` 和 `quota` 计算。
+  - `instruction` 使用 `description` 兜底。
+  - `templateName`、`templateId`、审核详情等接口缺失字段使用空值或占位展示。
+  - assignment 题目标题使用 `题目 #datasetItemId` 生成。
+  - `itemList` / `itemJson` 转换为工作台材料区可展示的键值结构。
+- 增加真实状态到前端状态的映射：
+  - `CLAIMED`、`DRAFTING`、`RETURNED`、`SUBMITTED`、`APPROVED`、`CANCELLED` 映射到现有任务/题目状态。
+
+### 当前约束
+
+- 本次不调整工作台路由，仍以 `taskId` 作为 URL 参数。
+- 本次不实现取消领取接口。
+- 真实审核历史、上一轮答案、AI/人工审核详情接口当前仍未接入，相关字段保留为空或占位。
+- 如果 `GET /v1/labeler/assignments` 暂不可用，市场列表仍可通过 `GET /v1/market/tasks` 展示可领取任务，但已领取任务找回会受限。
+
+### 已验证
+
+- 已执行 `nvm list`，当前 Node 版本为 `22.14.0`；项目无 `.nvmrc`，`package.json` 未声明 `engines.node`。
+- 已执行本次相关文件的局部 ESLint：
+  - `npx eslint src\services\labeler\labelingService.ts src\services\labeler\labelingRealService.ts src\services\labeler\index.ts src\stores\labelingStore.ts src\pages\labeler\LabelerMarketPage.tsx src\pages\labeler\LabelerWorkbenchPage.tsx`
+  - 结果通过。
+- 已执行相关文件 `git diff --check`，未发现空白错误，仅有 Git LF/CRLF 提示。
+- 已执行 `npm run build`，失败于既有无关 TypeScript 错误：
+  - `src/app/navigation.tsx`
+  - `src/components/navigation/RoleBadge.tsx`
+  - `src/features/dynamic-form/utils/designerDrag.ts`
+  - `src/pages/owner/templates/OwnerTemplateDesignerPage.tsx`

@@ -40,6 +40,7 @@ interface LabelingStore {
   loadDraft: (taskId: string, questionId: string, userId: string) => Promise<void>
   saveDraft: (payload: Omit<LabelingDraft, 'id' | 'updatedAt'>) => Promise<LabelingDraft | null>
   submitAnswers: (taskId: string, userId: string, answers: DynamicFormSubmitResult[]) => Promise<LabelingSubmission | null>
+  submitQuestionDraft: (taskId: string, questionId: string, userId: string) => Promise<LabelingSubmitResult>
   submitTaskDrafts: (taskId: string, userId: string) => Promise<LabelingSubmitResult>
   loadSubmissions: () => Promise<void>
 }
@@ -191,6 +192,73 @@ export const useLabelingStore = create<LabelingStore>((set, get) => ({
       set({ error: '答案提交失败' })
 
       return null
+    } finally {
+      set({ isSubmitting: false })
+    }
+  },
+  submitQuestionDraft: async (taskId, questionId, userId) => {
+    set({ isSubmitting: true, error: null, submitValidation: null })
+
+    try {
+      const result = await labelingService.submitQuestionDraft(taskId, questionId, userId)
+      set((state) => {
+        const submittedQuestion = result.submission
+          ? state.questions.find((question) => question.id === questionId)
+          : null
+        const nextQuestions = result.submission
+          ? state.questions.map((question) =>
+              question.id === questionId
+                ? {
+                    ...question,
+                    status: 'submitted' as const,
+                  }
+                : question,
+            )
+          : state.questions
+        const completedQuestions = nextQuestions.filter((question) => question.status === 'submitted').length
+
+        return {
+          submitValidation: result.validation,
+          questions: nextQuestions,
+          currentQuestion: submittedQuestion
+            ? {
+                ...submittedQuestion,
+                status: 'submitted',
+              }
+            : state.currentQuestion,
+          currentTask:
+            result.submission && state.currentTask
+              ? {
+                  ...state.currentTask,
+                  status: completedQuestions > 0 ? 'in_progress' : state.currentTask.status,
+                  completedQuestions,
+                }
+              : state.currentTask,
+        }
+      })
+
+      if (result.submission) {
+        await Promise.all([get().loadMarket(), get().loadSubmissions()])
+      }
+
+      return result
+    } catch {
+      const result: LabelingSubmitResult = {
+        submission: null,
+        validation: {
+          valid: false,
+          errors: [
+            {
+              questionId,
+              questionTitle: '',
+              message: '当前题目提交失败',
+            },
+          ],
+        },
+      }
+      set({ error: '当前题目提交失败', submitValidation: result.validation })
+
+      return result
     } finally {
       set({ isSubmitting: false })
     }

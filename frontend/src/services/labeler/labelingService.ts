@@ -32,6 +32,7 @@ import {
   mergeDrafts,
   persistDrafts,
   readStoredDrafts,
+  validateQuestionDraft,
   validateTaskDrafts,
 } from './labelingServiceHelpers'
 
@@ -138,7 +139,7 @@ function applyReviewOutcomeToLabelingState(payload: ReviewOutcomeSyncPayload) {
 
 reviewService.registerReviewOutcomeSync(applyReviewOutcomeToLabelingState)
 
-export const labelingService = {
+export const mockLabelingService = {
   async listMarketTasks(query: LabelerTaskListQuery): Promise<LabelerTaskSummary[]> {
     return tasks.filter((task) => matchesTaskQuery(task, query)).map(cloneTask)
   },
@@ -269,6 +270,66 @@ export const labelingService = {
         }
       }
     })
+
+    return {
+      submission: reviewedSubmission,
+      validation,
+    }
+  },
+
+  async submitQuestionDraft(taskId: string, questionId: string, userId: string): Promise<LabelingSubmitResult> {
+    const validation = validateQuestionDraft(questions, drafts, taskId, questionId, userId)
+
+    if (!validation.valid) {
+      return {
+        submission: null,
+        validation,
+      }
+    }
+
+    const taskIndex = getTaskIndex(taskId)
+    const question = questions.find((item) => item.taskId === taskId && item.id === questionId)
+
+    if (taskIndex < 0 || !question) {
+      return {
+        submission: null,
+        validation: {
+          valid: false,
+          errors: [
+            {
+              questionId,
+              questionTitle: question?.title ?? '',
+              message: '当前题目不可提交',
+            },
+          ],
+        },
+      }
+    }
+
+    const draft = drafts.find((item) => item.taskId === taskId && item.questionId === questionId && item.userId === userId)
+    const answer: DynamicFormSubmitResult = {
+      templateId: question.schema.id,
+      schemaVersion: question.schema.version,
+      values: { ...(draft?.values ?? {}) },
+    }
+    const reviewedSubmission = await submitTaskAnswers(taskId, userId, [answer])
+    const questionIndex = questions.findIndex((item) => item.id === questionId)
+
+    if (questionIndex >= 0) {
+      questions[questionIndex] = {
+        ...questions[questionIndex],
+        status: 'submitted',
+      }
+    }
+
+    const taskQuestions = questions.filter((item) => item.taskId === taskId)
+    const completedQuestions = taskQuestions.filter((item) => item.status === 'submitted').length
+
+    tasks[taskIndex] = {
+      ...tasks[taskIndex],
+      status: completedQuestions > 0 ? 'in_progress' : tasks[taskIndex].status,
+      completedQuestions,
+    }
 
     return {
       submission: reviewedSubmission,

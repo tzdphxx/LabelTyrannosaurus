@@ -34,8 +34,7 @@ import com.labelhub.modules.dataset.domain.DatasetItem;
 import com.labelhub.modules.dataset.mapper.DatasetItemMapper;
 import com.labelhub.modules.task.domain.Task;
 import com.labelhub.modules.task.mapper.TaskMapper;
-import com.labelhub.modules.template.domain.TemplateVersion;
-import com.labelhub.modules.template.mapper.TemplateVersionMapper;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -51,7 +50,6 @@ class LlmTriggerServiceTest {
     private static final Long OWNER_ID = 1L;
     private static final Long LABELER_ID = 2L;
     private static final Long TASK_ID = 10L;
-    private static final Long TEMPLATE_VERSION_ID = 20L;
     private static final Long DATASET_ITEM_ID = 30L;
     private static final Long ASSIGNMENT_ID = 40L;
     private static final Long PROVIDER_ID = 50L;
@@ -60,9 +58,6 @@ class LlmTriggerServiceTest {
 
     @Mock
     private TaskMapper taskMapper;
-
-    @Mock
-    private TemplateVersionMapper templateVersionMapper;
 
     @Mock
     private DatasetItemMapper datasetItemMapper;
@@ -98,19 +93,19 @@ class LlmTriggerServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new LlmTriggerService(taskMapper, templateVersionMapper, datasetItemMapper, assignmentMapper,
+        service = new LlmTriggerService(taskMapper, datasetItemMapper, assignmentMapper,
                 llmProviderService, rateLimiter, llmGateway, agentRunService, auditAppender, traceIdProvider,
                 llmTaskQueueService, llmTriggerRunMapper);
     }
 
     @Test
-    void ownerPreviewEnqueuesLlmTriggerAndReturnsRunning() {
+    void labelerTriggersFromAssignmentAndEnqueuesRun() {
+        when(assignmentMapper.selectOwnedAssignment(ASSIGNMENT_ID, LABELER_ID)).thenReturn(assignment());
         when(taskMapper.selectById(TASK_ID)).thenReturn(task());
-        when(templateVersionMapper.selectById(TEMPLATE_VERSION_ID)).thenReturn(templateVersion());
         when(datasetItemMapper.selectById(DATASET_ITEM_ID)).thenReturn(datasetItem());
-        when(llmProviderService.findEnabledOwnedById(OWNER_ID, PROVIDER_ID)).thenReturn(Optional.of(provider()));
+        when(llmProviderService.findEnabledById(PROVIDER_ID)).thenReturn(Optional.of(provider()));
         when(agentRunService.create(eq("LLM_TRIGGER"), isNull(), eq(PROVIDER_ID), eq("qwen-plus"),
-                eq("component:assist-summary"), any(), isNull())).thenReturn(agentRun());
+                eq("target:summary"), any(), eq(ASSIGNMENT_ID))).thenReturn(agentRun());
         when(traceIdProvider.currentTraceId()).thenReturn("trace-1");
         doAnswer(invocation -> {
             LlmTriggerRun run = invocation.getArgument(0);
@@ -118,11 +113,10 @@ class LlmTriggerServiceTest {
             return 1;
         }).when(llmTriggerRunMapper).insert(any(LlmTriggerRun.class));
 
-        LlmTriggerRunResponse response = service.run(owner(), request(true, null));
+        LlmTriggerRunResponse response = service.runForAssignment(labeler(), ASSIGNMENT_ID, request());
 
         assertThat(response.triggerRunId()).isEqualTo(TRIGGER_RUN_ID);
         assertThat(response.agentRunId()).isEqualTo(AGENT_RUN_ID);
-        assertThat(response.componentId()).isEqualTo("assist-summary");
         assertThat(response.status()).isEqualTo(LlmTaskStatus.RUNNING.name());
         assertThat(response.targetFields()).containsExactly("summary");
         verify(agentRunService).start(AGENT_RUN_ID);
@@ -131,28 +125,62 @@ class LlmTriggerServiceTest {
     }
 
     @Test
-    void labelerWorkbenchRequiresOwnedAssignment() {
-        when(taskMapper.selectById(TASK_ID)).thenReturn(task());
-        when(templateVersionMapper.selectById(TEMPLATE_VERSION_ID)).thenReturn(templateVersion());
+    void labelerRequiresOwnedAssignment() {
         when(assignmentMapper.selectOwnedAssignment(ASSIGNMENT_ID, LABELER_ID)).thenReturn(null);
 
-        assertThatThrownBy(() -> service.run(labeler(), request(false, ASSIGNMENT_ID)))
+        assertThatThrownBy(() -> service.runForAssignment(labeler(), ASSIGNMENT_ID, request()))
+                .isInstanceOfSatisfying(BusinessException.class,
+                        ex -> assertThat(ex.getCode()).isEqualTo(404504));
+    }
+
+    @Test
+    void ownerTestRequiresTaskOwnership() {
+        Task task = task();
+        task.setOwnerId(99L);
+        when(taskMapper.selectById(TASK_ID)).thenReturn(task);
+
+        assertThatThrownBy(() -> service.testFromTask(owner(), TASK_ID, requestWithItem()))
                 .isInstanceOfSatisfying(BusinessException.class,
                         ex -> assertThat(ex.getCode()).isEqualTo(403001));
     }
 
     @Test
-    void rejectsNonLlmTriggerComponent() {
-        TemplateVersion templateVersion = templateVersion("""
-                {"components":[{"id":"text-1","type":"Textarea"}]}
-                """);
-        when(taskMapper.selectById(TASK_ID)).thenReturn(task());
-        when(templateVersionMapper.selectById(TEMPLATE_VERSION_ID)).thenReturn(templateVersion);
+    void ownerTestEnqueuesLlmTrigger() {
+        Task task = task();
+        task.setPublishedTemplateVersionId(20L);
+        when(taskMapper.selectById(TASK_ID)).thenReturn(task);
         when(datasetItemMapper.selectById(DATASET_ITEM_ID)).thenReturn(datasetItem());
+        when(llmProviderService.findEnabledById(PROVIDER_ID)).thenReturn(Optional.of(provider()));
+        when(agentRunService.create(eq("LLM_TRIGGER"), isNull(), eq(PROVIDER_ID), eq("qwen-plus"),
+                any(), any(), isNull())).thenReturn(agentRun());
+        when(traceIdProvider.currentTraceId()).thenReturn("trace-1");
+        doAnswer(invocation -> {
+            LlmTriggerRun run = invocation.getArgument(0);
+            run.setId(TRIGGER_RUN_ID);
+            return 1;
+        }).when(llmTriggerRunMapper).insert(any(LlmTriggerRun.class));
 
-        assertThatThrownBy(() -> service.run(owner(), request(true, null)))
+        LlmTriggerRunResponse response = service.testFromTask(owner(), TASK_ID, requestWithItem());
+
+        assertThat(response.triggerRunId()).isEqualTo(TRIGGER_RUN_ID);
+    }
+
+    @Test
+    void rejectsDisabledProvider() {
+        when(assignmentMapper.selectOwnedAssignment(ASSIGNMENT_ID, LABELER_ID)).thenReturn(assignment());
+        when(taskMapper.selectById(TASK_ID)).thenReturn(task());
+        when(llmProviderService.findEnabledById(PROVIDER_ID)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.runForAssignment(labeler(), ASSIGNMENT_ID, request()))
                 .isInstanceOfSatisfying(BusinessException.class,
-                        ex -> assertThat(ex.getCode()).isEqualTo(400501));
+                        ex -> assertThat(ex.getCode()).isEqualTo(400503));
+    }
+
+    @Test
+    void labelerCannotUseOwnerTestEndpoint() {
+        assertThatThrownBy(() -> service.testFromTask(labeler(), TASK_ID, requestWithItem()))
+                .isInstanceOfSatisfying(BusinessException.class,
+                        ex -> assertThat(ex.getCode()).isEqualTo(403001));
     }
 
     @Test
@@ -162,14 +190,7 @@ class LlmTriggerServiceTest {
         when(taskMapper.selectById(TASK_ID)).thenReturn(task());
         when(rateLimiter.acquire(TASK_ID, OWNER_ID, PROVIDER_ID)).thenReturn(true);
         when(llmGateway.review(any(LlmGatewayRequest.class))).thenReturn(new LlmGatewayResponse(
-                LlmGatewayStatus.TIMEOUT,
-                null,
-                null,
-                Map.of(),
-                3000L,
-                "TIMEOUT",
-                "Provider timed out"
-        ));
+                LlmGatewayStatus.TIMEOUT, null, null, Map.of(), 3000L, "TIMEOUT", "Provider timed out"));
 
         service.executeQueuedTrigger(TRIGGER_RUN_ID);
 
@@ -190,18 +211,6 @@ class LlmTriggerServiceTest {
         assertThat(run.getErrorCode()).isEqualTo("RATE_LIMITED");
     }
 
-    @Test
-    void rejectsProviderNotOwnedByTaskOwner() {
-        when(taskMapper.selectById(TASK_ID)).thenReturn(task());
-        when(templateVersionMapper.selectById(TEMPLATE_VERSION_ID)).thenReturn(templateVersion());
-        when(datasetItemMapper.selectById(DATASET_ITEM_ID)).thenReturn(datasetItem());
-        when(llmProviderService.findEnabledOwnedById(OWNER_ID, PROVIDER_ID)).thenReturn(Optional.empty());
-
-        assertThatThrownBy(() -> service.run(owner(), request(true, null)))
-                .isInstanceOfSatisfying(BusinessException.class,
-                        ex -> assertThat(ex.getCode()).isEqualTo(400503));
-    }
-
     private CurrentUser owner() {
         return new CurrentUser(OWNER_ID, "owner", "test@labelhub.dev", Set.of(RoleCode.OWNER), 1);
     }
@@ -210,16 +219,20 @@ class LlmTriggerServiceTest {
         return new CurrentUser(LABELER_ID, "labeler", "test@labelhub.dev", Set.of(RoleCode.LABELER), 1);
     }
 
-    private LlmTriggerRunRequest request(boolean previewMode, Long assignmentId) {
+    private LlmTriggerRunRequest request() {
         return new LlmTriggerRunRequest(
-                TASK_ID,
-                TEMPLATE_VERSION_ID,
-                "assist-summary",
-                DATASET_ITEM_ID,
-                assignmentId,
-                Map.of("summary", "draft"),
-                previewMode
-        );
+                PROVIDER_ID, "qwen-plus",
+                "Suggest a concise summary.",
+                List.of("summary"),
+                null, Map.of("summary", "draft"));
+    }
+
+    private LlmTriggerRunRequest requestWithItem() {
+        return new LlmTriggerRunRequest(
+                PROVIDER_ID, "qwen-plus",
+                "Suggest a concise summary.",
+                List.of("summary"),
+                DATASET_ITEM_ID, Map.of("summary", "draft"));
     }
 
     private Task task() {
@@ -229,29 +242,13 @@ class LlmTriggerServiceTest {
         return task;
     }
 
-    private TemplateVersion templateVersion() {
-        return templateVersion("""
-                {
-                  "components": [
-                    {
-                      "id": "assist-summary",
-                      "type": "LlmTrigger",
-                      "providerId": 50,
-                      "modelName": "qwen-plus",
-                      "promptTemplate": "Suggest a concise summary.",
-                      "targetFields": ["summary"]
-                    }
-                  ]
-                }
-                """);
-    }
-
-    private TemplateVersion templateVersion(String schemaJson) {
-        TemplateVersion templateVersion = new TemplateVersion();
-        templateVersion.setId(TEMPLATE_VERSION_ID);
-        templateVersion.setTaskId(TASK_ID);
-        templateVersion.setSchemaJson(schemaJson);
-        return templateVersion;
+    private Assignment assignment() {
+        Assignment assignment = new Assignment();
+        assignment.setId(ASSIGNMENT_ID);
+        assignment.setTaskId(TASK_ID);
+        assignment.setDatasetItemId(DATASET_ITEM_ID);
+        assignment.setTemplateVersionId(20L);
+        return assignment;
     }
 
     private DatasetItem datasetItem() {
@@ -280,15 +277,14 @@ class LlmTriggerServiceTest {
         run.setId(TRIGGER_RUN_ID);
         run.setTaskId(TASK_ID);
         run.setAssignmentId(ASSIGNMENT_ID);
-        run.setTemplateVersionId(TEMPLATE_VERSION_ID);
+        run.setTemplateVersionId(20L);
         run.setDatasetItemId(DATASET_ITEM_ID);
-        run.setComponentId("assist-summary");
         run.setProviderId(PROVIDER_ID);
         run.setModelName("qwen-plus");
         run.setAgentRunId(AGENT_RUN_ID);
         run.setStatus(LlmTaskStatus.RUNNING.name());
         run.setTargetFieldsJson("[\"summary\"]");
-        run.setInputSnapshotJson("{\"componentId\":\"assist-summary\"}");
+        run.setInputSnapshotJson("{\"promptTemplate\":\"Suggest a concise summary.\"}");
         run.setCreatedBy(OWNER_ID);
         return run;
     }

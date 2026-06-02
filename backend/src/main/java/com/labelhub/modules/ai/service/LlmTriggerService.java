@@ -32,11 +32,8 @@ import com.labelhub.modules.dataset.mapper.DatasetItemMapper;
 import com.labelhub.modules.media.service.MediaContextResolver;
 import com.labelhub.modules.task.domain.Task;
 import com.labelhub.modules.task.mapper.TaskMapper;
-import com.labelhub.modules.template.domain.TemplateVersion;
-import com.labelhub.modules.template.mapper.TemplateVersionMapper;
 import java.time.Instant;
 import java.time.LocalDateTime;
-import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -49,10 +46,10 @@ public class LlmTriggerService {
     private static final int FORBIDDEN = 403001;
     private static final int TASK_NOT_FOUND = 404001;
     private static final int LLM_TRIGGER_INVALID = 400501;
-    private static final int TEMPLATE_VERSION_NOT_FOUND = 404501;
     private static final int DATASET_ITEM_NOT_FOUND = 404502;
     private static final int LLM_TRIGGER_PROVIDER_UNAVAILABLE = 400503;
     private static final int RUN_NOT_FOUND = 404503;
+    private static final int ASSIGNMENT_NOT_FOUND = 404504;
     private static final String BIZ_TYPE = "LLM_TRIGGER";
     private static final String USER_ACTOR_TYPE = "USER";
     private static final String AGENT_TYPE = "LLM_TRIGGER";
@@ -62,7 +59,6 @@ public class LlmTriggerService {
     };
 
     private final TaskMapper taskMapper;
-    private final TemplateVersionMapper templateVersionMapper;
     private final DatasetItemMapper datasetItemMapper;
     private final AssignmentMapper assignmentMapper;
     private final LlmProviderService llmProviderService;
@@ -80,7 +76,6 @@ public class LlmTriggerService {
 
     @Autowired
     public LlmTriggerService(TaskMapper taskMapper,
-                             TemplateVersionMapper templateVersionMapper,
                              DatasetItemMapper datasetItemMapper,
                              AssignmentMapper assignmentMapper,
                              LlmProviderService llmProviderService,
@@ -91,13 +86,12 @@ public class LlmTriggerService {
                              TraceIdProvider traceIdProvider,
                              LlmTaskQueueService llmTaskQueueService,
                              LlmTriggerRunMapper llmTriggerRunMapper) {
-        this(taskMapper, templateVersionMapper, datasetItemMapper, assignmentMapper, llmProviderService, rateLimiter,
+        this(taskMapper, datasetItemMapper, assignmentMapper, llmProviderService, rateLimiter,
                 llmGateway, agentRunService, auditAppender, traceIdProvider, llmTaskQueueService,
                 llmTriggerRunMapper, new ObjectMapper(), false);
     }
 
     public LlmTriggerService(TaskMapper taskMapper,
-                             TemplateVersionMapper templateVersionMapper,
                              DatasetItemMapper datasetItemMapper,
                              AssignmentMapper assignmentMapper,
                              LlmProviderService llmProviderService,
@@ -106,13 +100,12 @@ public class LlmTriggerService {
                              AgentRunService agentRunService,
                              AuditAppender auditAppender,
                              TraceIdProvider traceIdProvider) {
-        this(taskMapper, templateVersionMapper, datasetItemMapper, assignmentMapper, llmProviderService, rateLimiter,
+        this(taskMapper, datasetItemMapper, assignmentMapper, llmProviderService, rateLimiter,
                 llmGateway, agentRunService, auditAppender, traceIdProvider, null, null,
                 new ObjectMapper(), true);
     }
 
     LlmTriggerService(TaskMapper taskMapper,
-                      TemplateVersionMapper templateVersionMapper,
                       DatasetItemMapper datasetItemMapper,
                       AssignmentMapper assignmentMapper,
                       LlmProviderService llmProviderService,
@@ -124,13 +117,12 @@ public class LlmTriggerService {
                       LlmTaskQueueService llmTaskQueueService,
                       LlmTriggerRunMapper llmTriggerRunMapper,
                       ObjectMapper objectMapper) {
-        this(taskMapper, templateVersionMapper, datasetItemMapper, assignmentMapper, llmProviderService, rateLimiter,
+        this(taskMapper, datasetItemMapper, assignmentMapper, llmProviderService, rateLimiter,
                 llmGateway, agentRunService, auditAppender, traceIdProvider, llmTaskQueueService,
                 llmTriggerRunMapper, objectMapper, false);
     }
 
     private LlmTriggerService(TaskMapper taskMapper,
-                              TemplateVersionMapper templateVersionMapper,
                               DatasetItemMapper datasetItemMapper,
                               AssignmentMapper assignmentMapper,
                               LlmProviderService llmProviderService,
@@ -144,7 +136,6 @@ public class LlmTriggerService {
                               ObjectMapper objectMapper,
                               boolean immediateExecution) {
         this.taskMapper = taskMapper;
-        this.templateVersionMapper = templateVersionMapper;
         this.datasetItemMapper = datasetItemMapper;
         this.assignmentMapper = assignmentMapper;
         this.llmProviderService = llmProviderService;
@@ -159,32 +150,69 @@ public class LlmTriggerService {
         this.immediateExecution = immediateExecution;
     }
 
-    public LlmTriggerRunResponse run(CurrentUser currentUser, LlmTriggerRunRequest request) {
-        Task task = loadTask(request.taskId());
-        TemplateVersion templateVersion = loadTemplateVersion(request.templateVersionId(), task.getId());
-        validateAccess(currentUser, task, templateVersion, request);
-        DatasetItem datasetItem = loadDatasetItem(request.datasetItemId(), task.getId());
-        LlmTriggerComponent component = loadComponent(templateVersion, request.componentId());
-        requireEnabledProvider(task.getOwnerId(), component.providerId());
-        Map<String, Object> inputSnapshot = inputSnapshot(component, datasetItem, request);
+    // ── Labeler 从 assignment 触发 ──
 
-        AgentRun agentRun = agentRunService.create(AGENT_TYPE, null, component.providerId(), component.modelName(),
-                "component:" + component.componentId(), toJson(inputSnapshot), request.assignmentId());
+    public LlmTriggerRunResponse runForAssignment(CurrentUser currentUser, Long assignmentId,
+                                                   LlmTriggerRunRequest request) {
+        if (!currentUser.roles().contains(RoleCode.LABELER)) {
+            throw new BusinessException(FORBIDDEN, "Only labelers can trigger from assignment");
+        }
+        Assignment assignment = assignmentMapper.selectOwnedAssignment(assignmentId, currentUser.userId());
+        if (assignment == null) {
+            throw new BusinessException(ASSIGNMENT_NOT_FOUND, "Assignment not found");
+        }
+        Task task = loadTask(assignment.getTaskId());
+        requireEnabledProvider(request.providerId());
+        DatasetItem datasetItem = loadDatasetItem(assignment.getDatasetItemId(), task.getId());
+
+        return doRun(task, assignment.getTemplateVersionId(), datasetItem,
+                request, currentUser.userId(), assignmentId);
+    }
+
+    // ── Owner 预览测试 ──
+
+    public LlmTriggerRunResponse testFromTask(CurrentUser currentUser, Long taskId,
+                                               LlmTriggerRunRequest request) {
+        if (!currentUser.roles().contains(RoleCode.OWNER)) {
+            throw new BusinessException(FORBIDDEN, "Only owners can test LlmTrigger");
+        }
+        Task task = loadTask(taskId);
+        if (!currentUser.userId().equals(task.getOwnerId())) {
+            throw new BusinessException(FORBIDDEN, "Not the task owner");
+        }
+        requireEnabledProvider(request.providerId());
+        DatasetItem datasetItem = loadDatasetItem(request.datasetItemId(), task.getId());
+
+        return doRun(task, task.getPublishedTemplateVersionId(), datasetItem,
+                request, currentUser.userId(), null);
+    }
+
+    // ── 公共执行逻辑 ──
+
+    private LlmTriggerRunResponse doRun(Task task, Long templateVersionId,
+                                         DatasetItem datasetItem, LlmTriggerRunRequest request,
+                                         Long actorId, Long assignmentId) {
+        Map<String, Object> inputSnapshot = buildInputSnapshot(datasetItem, request);
+
+        AgentRun agentRun = agentRunService.create(AGENT_TYPE, null, request.providerId(),
+                request.modelName().trim(),
+                "target:" + String.join(",", request.targetFields()),
+                toJson(inputSnapshot), assignmentId);
         agentRunService.start(agentRun.getId());
 
         LlmTriggerRun run = new LlmTriggerRun();
         run.setTaskId(task.getId());
-        run.setAssignmentId(request.assignmentId());
-        run.setTemplateVersionId(templateVersion.getId());
-        run.setDatasetItemId(request.datasetItemId());
-        run.setComponentId(component.componentId());
-        run.setProviderId(component.providerId());
-        run.setModelName(component.modelName());
+        run.setAssignmentId(assignmentId);
+        run.setTemplateVersionId(templateVersionId);
+        run.setDatasetItemId(datasetItem != null ? datasetItem.getId() : request.datasetItemId());
+        run.setComponentId(null);
+        run.setProviderId(request.providerId());
+        run.setModelName(request.modelName().trim());
         run.setAgentRunId(agentRun.getId());
         run.setStatus(LlmTaskStatus.RUNNING.name());
-        run.setTargetFieldsJson(toJson(component.targetFields()));
+        run.setTargetFieldsJson(toJson(request.targetFields()));
         run.setInputSnapshotJson(toJson(inputSnapshot));
-        run.setCreatedBy(currentUser.userId());
+        run.setCreatedBy(actorId);
         run.setCreatedAt(LocalDateTime.now());
         run.setUpdatedAt(LocalDateTime.now());
         if (llmTriggerRunMapper != null) {
@@ -194,13 +222,13 @@ public class LlmTriggerService {
         }
 
         if (immediateExecution) {
-            executeRun(run, task, component);
+            executeRun(run, task, request.providerId(), request.modelName().trim());
         } else {
             llmTaskQueueService.enqueue(new LlmTaskQueueMessage(
                     LlmTaskType.LLM_TRIGGER,
                     run.getId(),
                     task.getId(),
-                    request.assignmentId(),
+                    assignmentId,
                     null,
                     null,
                     run.getId(),
@@ -211,7 +239,7 @@ public class LlmTriggerService {
             ));
         }
 
-        appendAudit(currentUser.userId(), task.getId(), request, component, run);
+        appendAudit(actorId, task.getId(), request, run);
         return toRunResponse(run);
     }
 
@@ -239,27 +267,20 @@ public class LlmTriggerService {
             return;
         }
         Task task = loadTask(run.getTaskId());
-        LlmTriggerComponent component = new LlmTriggerComponent(
-                run.getComponentId(),
-                run.getProviderId(),
-                run.getModelName(),
-                null,
-                parseStringList(run.getTargetFieldsJson())
-        );
-        executeRun(run, task, component);
+        executeRun(run, task, run.getProviderId(), run.getModelName());
     }
 
-    private void executeRun(LlmTriggerRun run, Task task, LlmTriggerComponent component) {
-        if (!rateLimiter.acquire(run.getTaskId(), run.getCreatedBy(), run.getProviderId())) {
+    private void executeRun(LlmTriggerRun run, Task task, Long providerId, String modelName) {
+        if (!rateLimiter.acquire(run.getTaskId(), run.getCreatedBy(), providerId)) {
             agentRunService.fail(run.getAgentRunId(), AgentRunStatus.RATE_LIMITED, "LLM trigger rate limited");
             fillFailure(run, LlmTaskStatus.RATE_LIMITED.name(), "RATE_LIMITED", "LLM trigger rate limited");
-            appendAudit(run.getCreatedBy(), task.getId(), null, component, run);
+            appendAudit(run.getCreatedBy(), task.getId(), null, run);
             return;
         }
 
         LlmGatewayResponse gatewayResponse = llmGateway.review(new LlmGatewayRequest(
-                run.getProviderId(),
-                run.getModelName(),
+                providerId,
+                modelName,
                 List.of(
                         new LlmMessage("system", "You are a LabelHub field-level LlmTrigger assistant. Return JSON."),
                         new LlmMessage("user", run.getInputSnapshotJson())
@@ -287,7 +308,7 @@ public class LlmTriggerService {
         if (llmTriggerRunMapper != null) {
             llmTriggerRunMapper.updateById(run);
         }
-        appendAudit(run.getCreatedBy(), task.getId(), null, component, run);
+        appendAudit(run.getCreatedBy(), task.getId(), null, run);
     }
 
     private Task loadTask(Long taskId) {
@@ -298,31 +319,9 @@ public class LlmTriggerService {
         return task;
     }
 
-    private TemplateVersion loadTemplateVersion(Long templateVersionId, Long taskId) {
-        TemplateVersion templateVersion = templateVersionMapper.selectById(templateVersionId);
-        if (templateVersion == null || !taskId.equals(templateVersion.getTaskId())) {
-            throw new BusinessException(TEMPLATE_VERSION_NOT_FOUND, "Template version not found");
-        }
-        return templateVersion;
-    }
-
-    private void validateAccess(CurrentUser currentUser, Task task, TemplateVersion templateVersion,
-                                LlmTriggerRunRequest request) {
-        if (request.previewMode()) {
-            if (!currentUser.roles().contains(RoleCode.OWNER) || !currentUser.userId().equals(task.getOwnerId())) {
-                throw new BusinessException(FORBIDDEN, "No permission to preview LlmTrigger");
-            }
-            return;
-        }
-        if (!currentUser.roles().contains(RoleCode.LABELER) || request.assignmentId() == null) {
-            throw new BusinessException(FORBIDDEN, "Labeler assignment is required to run LlmTrigger");
-        }
-        Assignment assignment = assignmentMapper.selectOwnedAssignment(request.assignmentId(), currentUser.userId());
-        if (assignment == null
-                || !task.getId().equals(assignment.getTaskId())
-                || !templateVersion.getId().equals(assignment.getTemplateVersionId())
-                || (request.datasetItemId() != null && !request.datasetItemId().equals(assignment.getDatasetItemId()))) {
-            throw new BusinessException(FORBIDDEN, "No permission to run LlmTrigger");
+    private void requireEnabledProvider(Long providerId) {
+        if (llmProviderService.findEnabledById(providerId).isEmpty()) {
+            throw new BusinessException(LLM_TRIGGER_PROVIDER_UNAVAILABLE, "Enabled LLM provider is required");
         }
     }
 
@@ -337,70 +336,10 @@ public class LlmTriggerService {
         return datasetItem;
     }
 
-    private LlmTriggerComponent loadComponent(TemplateVersion templateVersion, String componentId) {
-        Map<String, Object> schema = parseObjectMap(templateVersion.getSchemaJson());
-        Map<String, Object> component = findComponent(schema, componentId);
-        if (component == null || !"LlmTrigger".equals(component.get("type"))) {
-            throw new BusinessException(LLM_TRIGGER_INVALID, "Component must be LlmTrigger");
-        }
-        return toComponent(componentId, component);
-    }
-
-    @SuppressWarnings("unchecked")
-    private Map<String, Object> findComponent(Object node, String componentId) {
-        if (node instanceof Map<?, ?> rawMap) {
-            Map<String, Object> map = (Map<String, Object>) rawMap;
-            Object id = map.get("id") != null ? map.get("id") : map.get("componentId");
-            if (componentId.equals(id)) {
-                return map;
-            }
-            for (Object value : map.values()) {
-                Map<String, Object> found = findComponent(value, componentId);
-                if (found != null) {
-                    return found;
-                }
-            }
-        } else if (node instanceof Iterable<?> values) {
-            for (Object value : values) {
-                Map<String, Object> found = findComponent(value, componentId);
-                if (found != null) {
-                    return found;
-                }
-            }
-        }
-        return null;
-    }
-
-    private LlmTriggerComponent toComponent(String requestedComponentId, Map<String, Object> component) {
-        Long providerId = asLong(component.get("providerId"));
-        String modelName = asText(component.get("modelName"));
-        String promptTemplate = asText(component.get("promptTemplate"));
-        if (providerId == null || isBlank(modelName) || isBlank(promptTemplate)) {
-            throw new BusinessException(LLM_TRIGGER_INVALID,
-                    "LlmTrigger providerId, modelName and promptTemplate are required");
-        }
-        return new LlmTriggerComponent(
-                requestedComponentId,
-                providerId,
-                modelName.trim(),
-                promptTemplate.trim(),
-                asStringList(component.get("targetFields"))
-        );
-    }
-
-    private void requireEnabledProvider(Long ownerId, Long providerId) {
-        if (llmProviderService.findEnabledOwnedById(ownerId, providerId).isEmpty()) {
-            throw new BusinessException(LLM_TRIGGER_PROVIDER_UNAVAILABLE, "Enabled LLM provider is required");
-        }
-    }
-
-    private Map<String, Object> inputSnapshot(LlmTriggerComponent component, DatasetItem datasetItem,
-                                              LlmTriggerRunRequest request) {
+    private Map<String, Object> buildInputSnapshot(DatasetItem datasetItem, LlmTriggerRunRequest request) {
         Map<String, Object> input = new LinkedHashMap<>();
-        input.put("componentId", component.componentId());
-        input.put("promptTemplate", component.promptTemplate());
-        input.put("targetFields", component.targetFields());
-        input.put("previewMode", request.previewMode());
+        input.put("promptTemplate", request.promptTemplate().trim());
+        input.put("targetFields", request.targetFields());
         String itemJson = datasetItem == null ? null : datasetItem.getItemJson();
         if (mediaContextResolver != null && datasetItem != null) {
             itemJson = mediaContextResolver.resolveItemJson(datasetItem.getId(), itemJson);
@@ -414,7 +353,6 @@ public class LlmTriggerService {
         return new LlmTriggerRunResponse(
                 run.getId(),
                 run.getAgentRunId(),
-                run.getComponentId(),
                 parseObjectMapOrEmpty(run.getResultJson()),
                 run.getContentText(),
                 parseStringList(run.getTargetFieldsJson()),
@@ -436,16 +374,13 @@ public class LlmTriggerService {
         }
     }
 
-    private void appendAudit(Long actorId, Long taskId, LlmTriggerRunRequest request,
-                             LlmTriggerComponent component, LlmTriggerRun run) {
+    private void appendAudit(Long actorId, Long taskId, LlmTriggerRunRequest request, LlmTriggerRun run) {
         Map<String, Object> snapshot = new LinkedHashMap<>();
         snapshot.put("taskId", taskId);
         snapshot.put("triggerRunId", run.getId());
-        snapshot.put("componentId", component.componentId());
-        snapshot.put("providerId", component.providerId());
-        snapshot.put("modelName", component.modelName());
-        snapshot.put("targetFields", component.targetFields());
-        snapshot.put("previewMode", request != null && request.previewMode());
+        snapshot.put("providerId", run.getProviderId());
+        snapshot.put("modelName", run.getModelName());
+        snapshot.put("targetFields", parseStringList(run.getTargetFieldsJson()));
         snapshot.put("status", run.getStatus());
         snapshot.put("errorCode", run.getErrorCode());
         snapshot.put("errorMessage", run.getErrorMessage());
@@ -466,21 +401,13 @@ public class LlmTriggerService {
     }
 
     private Object parseJsonValue(String json) {
-        if (isBlank(json)) {
+        if (json == null || json.isBlank()) {
             return Map.of();
         }
         try {
             return objectMapper.readValue(json, Object.class);
         } catch (JsonProcessingException ex) {
             throw new BusinessException(LLM_TRIGGER_INVALID, "Dataset item JSON is invalid");
-        }
-    }
-
-    private Map<String, Object> parseObjectMap(String json) {
-        try {
-            return objectMapper.readValue(json, OBJECT_MAP);
-        } catch (JsonProcessingException ex) {
-            throw new BusinessException(LLM_TRIGGER_INVALID, "Template schema JSON is invalid");
         }
     }
 
@@ -512,49 +439,5 @@ public class LlmTriggerService {
         } catch (JsonProcessingException ex) {
             throw new BusinessException(LLM_TRIGGER_INVALID, "LlmTrigger payload JSON is invalid");
         }
-    }
-
-    private Long asLong(Object value) {
-        if (value instanceof Number number) {
-            return number.longValue();
-        }
-        if (value instanceof String text && !text.isBlank()) {
-            try {
-                return Long.parseLong(text);
-            } catch (NumberFormatException ex) {
-                return null;
-            }
-        }
-        return null;
-    }
-
-    private String asText(Object value) {
-        return value == null ? null : String.valueOf(value);
-    }
-
-    private List<String> asStringList(Object value) {
-        if (!(value instanceof Iterable<?> iterable)) {
-            return List.of();
-        }
-        List<String> values = new ArrayList<>();
-        for (Object item : iterable) {
-            if (item != null && !String.valueOf(item).isBlank()) {
-                values.add(String.valueOf(item).trim());
-            }
-        }
-        return values;
-    }
-
-    private boolean isBlank(String value) {
-        return value == null || value.isBlank();
-    }
-
-    private record LlmTriggerComponent(
-            String componentId,
-            Long providerId,
-            String modelName,
-            String promptTemplate,
-            List<String> targetFields
-    ) {
     }
 }

@@ -80,7 +80,7 @@ public class AssignmentClaimService {
         try {
             return transactionTemplate.execute(status -> {
                 DatasetItemSnapshot itemSnapshot = datasetClaimService
-                        .reserveClaimableItem(taskId, labelerId, task.getOverlapCount())
+                        .reserveClaimableItem(taskId, labelerId, 1)
                         .orElseThrow(() -> claimConflict("No claimable item is available"));
                 TemplateSchemaSnapshot templateSchema = templateSchemaService.getTemplateSchema(task.getPublishedTemplateVersionId());
                 Assignment assignment = createAssignment(taskId, labelerId, itemSnapshot.datasetItemId(), templateSchema.templateVersionId());
@@ -111,7 +111,7 @@ public class AssignmentClaimService {
         try {
             assignmentMapper.insert(assignment);
         } catch (DuplicateKeyException ex) {
-            throw claimConflict("Dataset item was already claimed by this labeler");
+            throw claimConflict("Dataset item was already claimed");
         }
         return assignment;
     }
@@ -130,8 +130,8 @@ public class AssignmentClaimService {
         if (task.getPublishedTemplateVersionId() == null) {
             throw new BusinessException(TASK_STATUS_NOT_ALLOWED, "Task template version is missing");
         }
-        if (task.getOverlapCount() == null || task.getOverlapCount() < 1) {
-            throw new BusinessException(TASK_STATUS_NOT_ALLOWED, "Task overlap count is invalid");
+        if (!Integer.valueOf(1).equals(task.getOverlapCount())) {
+            throw new BusinessException(TASK_STATUS_NOT_ALLOWED, "Task overlap count must be 1");
         }
         return task;
     }

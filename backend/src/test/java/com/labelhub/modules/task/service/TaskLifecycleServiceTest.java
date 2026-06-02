@@ -20,6 +20,7 @@ import com.labelhub.modules.dataset.service.DatasetImportService;
 import com.labelhub.modules.dataset.mapper.DatasetItemMapper;
 import com.labelhub.modules.reward.mapper.RewardRuleMapper;
 import com.labelhub.modules.template.mapper.TemplateVersionMapper;
+import com.labelhub.modules.template.service.TemplateVersionService;
 import com.labelhub.modules.task.domain.Task;
 import com.labelhub.modules.task.domain.TaskStatus;
 import com.labelhub.modules.task.domain.TaskTag;
@@ -66,7 +67,7 @@ class TaskLifecycleServiceTest {
     private DatasetImportService datasetImportService;
 
     @Mock
-    private org.springframework.context.ApplicationEventPublisher applicationEventPublisher;
+    private TemplateVersionService templateVersionService;
 
     private TaskLifecycleService taskLifecycleService;
 
@@ -79,13 +80,14 @@ class TaskLifecycleServiceTest {
                 auditAppender,
                 traceIdProvider,
                 datasetImportService,
-                applicationEventPublisher
+                templateVersionService
         );
     }
 
     @Test
     void createsDraftTaskWithTagsAndAudit() {
         when(traceIdProvider.currentTraceId()).thenReturn("trace-1");
+        when(publishDependencyChecker.templateVersionOwnedBy(OWNER_ID, 100L)).thenReturn(true);
         when(taskMapper.insert(any(Task.class))).thenAnswer(invocation -> {
             Task task = invocation.getArgument(0);
             task.setId(TASK_ID);
@@ -104,8 +106,18 @@ class TaskLifecycleServiceTest {
     }
 
     @Test
+    void rejectsTaskCreationWhenOverlapCountIsNotOne() {
+        assertThatThrownBy(() -> taskLifecycleService.create(OWNER_ID, createRequestWithOverlapCount(2)))
+                .isInstanceOfSatisfying(BusinessException.class,
+                        ex -> assertThat(ex.getCode()).isEqualTo(400101));
+
+        verify(taskMapper, never()).insert(any(Task.class));
+    }
+
+    @Test
     void createsDraftTaskAndStartsDatasetImportWhenFileProvided() {
         when(traceIdProvider.currentTraceId()).thenReturn("trace-1");
+        when(publishDependencyChecker.templateVersionOwnedBy(OWNER_ID, 100L)).thenReturn(true);
         when(taskMapper.insert(any(Task.class))).thenAnswer(invocation -> {
             Task task = invocation.getArgument(0);
             task.setId(TASK_ID);
@@ -126,6 +138,17 @@ class TaskLifecycleServiceTest {
         assertThat(response.status()).isEqualTo(TaskStatus.DRAFT);
         assertThat(response.datasetImportJob()).isEqualTo(importJob);
         verify(datasetImportService).createAppendImport(TASK_ID, new DatasetImportRequest(99L));
+    }
+
+    @Test
+    void rejectsTaskCreationWithForeignTemplateVersion() {
+        when(publishDependencyChecker.templateVersionOwnedBy(OWNER_ID, 100L)).thenReturn(false);
+
+        assertThatThrownBy(() -> taskLifecycleService.create(OWNER_ID, createRequest()))
+                .isInstanceOfSatisfying(BusinessException.class,
+                        ex -> assertThat(ex.getCode()).isEqualTo(403001));
+
+        verify(taskMapper, never()).insert(any(Task.class));
     }
 
     @Test
@@ -161,6 +184,7 @@ class TaskLifecycleServiceTest {
     void updatesDraftTaskOnly() {
         Task task = draftTask();
         when(taskMapper.selectById(TASK_ID)).thenReturn(task);
+        when(publishDependencyChecker.templateVersionOwnedBy(OWNER_ID, 100L)).thenReturn(true);
         when(taskMapper.updateById(any(Task.class))).thenReturn(1);
         when(taskTagMapper.delete(any(Wrapper.class))).thenReturn(1);
 
@@ -169,6 +193,31 @@ class TaskLifecycleServiceTest {
         assertThat(response.status()).isEqualTo(TaskStatus.DRAFT);
         assertThat(task.getTitle()).isEqualTo("Updated task");
         verify(auditAppender).append(any(AuditCommand.class));
+    }
+
+    @Test
+    void rejectsDraftUpdateWhenOverlapCountIsNotOne() {
+        Task task = draftTask();
+        when(taskMapper.selectById(TASK_ID)).thenReturn(task);
+
+        assertThatThrownBy(() -> taskLifecycleService.updateDraft(OWNER_ID, TASK_ID, updateRequestWithOverlapCount(2)))
+                .isInstanceOfSatisfying(BusinessException.class,
+                        ex -> assertThat(ex.getCode()).isEqualTo(400101));
+
+        verify(taskMapper, never()).updateById(any(Task.class));
+    }
+
+    @Test
+    void rejectsDraftUpdateWithForeignTemplateVersion() {
+        Task task = draftTask();
+        when(taskMapper.selectById(TASK_ID)).thenReturn(task);
+        when(publishDependencyChecker.templateVersionOwnedBy(OWNER_ID, 100L)).thenReturn(false);
+
+        assertThatThrownBy(() -> taskLifecycleService.updateDraft(OWNER_ID, TASK_ID, updateRequest()))
+                .isInstanceOfSatisfying(BusinessException.class,
+                        ex -> assertThat(ex.getCode()).isEqualTo(403001));
+
+        verify(taskMapper, never()).updateById(any(Task.class));
     }
 
     @Test
@@ -188,7 +237,7 @@ class TaskLifecycleServiceTest {
         when(taskMapper.selectById(TASK_ID)).thenReturn(task);
         when(taskMapper.updateById(any(Task.class))).thenReturn(1);
         when(publishDependencyChecker.datasetReady(TASK_ID)).thenReturn(true);
-        when(publishDependencyChecker.templateVersionExists(100L)).thenReturn(true);
+        when(publishDependencyChecker.templateVersionUsableByTask(TASK_ID, 100L)).thenReturn(true);
         when(publishDependencyChecker.aiReviewConfigExists(TASK_ID, 200L)).thenReturn(true);
         when(publishDependencyChecker.rewardRuleExists(TASK_ID)).thenReturn(true);
 
@@ -216,7 +265,19 @@ class TaskLifecycleServiceTest {
         task.setAiReviewConfigId(null);
         when(taskMapper.selectById(TASK_ID)).thenReturn(task);
         when(publishDependencyChecker.datasetReady(TASK_ID)).thenReturn(true);
-        when(publishDependencyChecker.templateVersionExists(100L)).thenReturn(true);
+        when(publishDependencyChecker.templateVersionUsableByTask(TASK_ID, 100L)).thenReturn(true);
+
+        assertThatThrownBy(() -> taskLifecycleService.publish(OWNER_ID, TASK_ID))
+                .isInstanceOfSatisfying(BusinessException.class,
+                        ex -> assertThat(ex.getCode()).isEqualTo(400102));
+    }
+
+    @Test
+    void rejectsPublishWhenTemplateVersionDoesNotBelongToTaskOwner() {
+        Task task = publishableDraftTask();
+        when(taskMapper.selectById(TASK_ID)).thenReturn(task);
+        when(publishDependencyChecker.datasetReady(TASK_ID)).thenReturn(true);
+        when(publishDependencyChecker.templateVersionUsableByTask(TASK_ID, 100L)).thenReturn(false);
 
         assertThatThrownBy(() -> taskLifecycleService.publish(OWNER_ID, TASK_ID))
                 .isInstanceOfSatisfying(BusinessException.class,
@@ -225,20 +286,50 @@ class TaskLifecycleServiceTest {
 
     @Test
     void defaultPublishDependencyCheckerDoesNotPassExternalChecks() {
+        TaskMapper dependencyTaskMapper = Mockito.mock(TaskMapper.class);
         AiReviewConfigMapper aiReviewConfigMapper = Mockito.mock(AiReviewConfigMapper.class);
         DatasetItemMapper datasetItemMapper = Mockito.mock(DatasetItemMapper.class);
         TemplateVersionMapper templateVersionMapper = Mockito.mock(TemplateVersionMapper.class);
         RewardRuleMapper rewardRuleMapper = Mockito.mock(RewardRuleMapper.class);
         DefaultTaskPublishDependencyChecker checker = new DefaultTaskPublishDependencyChecker(
-                aiReviewConfigMapper, datasetItemMapper, templateVersionMapper, rewardRuleMapper);
+                dependencyTaskMapper, aiReviewConfigMapper, datasetItemMapper, templateVersionMapper, rewardRuleMapper);
 
         assertThat(checker.datasetReady(TASK_ID)).isFalse();
-        assertThat(checker.templateVersionExists(100L)).isFalse();
+        assertThat(checker.templateVersionOwnedBy(OWNER_ID, 100L)).isFalse();
+        assertThat(checker.templateVersionUsableByTask(TASK_ID, 100L)).isFalse();
         assertThat(checker.aiReviewConfigExists(TASK_ID, 200L)).isFalse();
         assertThat(checker.rewardRuleExists(TASK_ID)).isFalse();
     }
 
+    @Test
+    void defaultPublishDependencyCheckerAllowsOnlyOwnerTemplateVersion() {
+        TaskMapper dependencyTaskMapper = Mockito.mock(TaskMapper.class);
+        AiReviewConfigMapper aiReviewConfigMapper = Mockito.mock(AiReviewConfigMapper.class);
+        DatasetItemMapper datasetItemMapper = Mockito.mock(DatasetItemMapper.class);
+        TemplateVersionMapper templateVersionMapper = Mockito.mock(TemplateVersionMapper.class);
+        RewardRuleMapper rewardRuleMapper = Mockito.mock(RewardRuleMapper.class);
+        DefaultTaskPublishDependencyChecker checker = new DefaultTaskPublishDependencyChecker(
+                dependencyTaskMapper, aiReviewConfigMapper, datasetItemMapper, templateVersionMapper, rewardRuleMapper);
+        Task task = publishableDraftTask();
+        com.labelhub.modules.template.domain.TemplateVersion version = new com.labelhub.modules.template.domain.TemplateVersion();
+        version.setId(100L);
+        version.setOwnerId(OWNER_ID);
+        when(dependencyTaskMapper.selectById(TASK_ID)).thenReturn(task);
+        when(templateVersionMapper.selectById(100L)).thenReturn(version);
+
+        assertThat(checker.templateVersionOwnedBy(OWNER_ID, 100L)).isTrue();
+        assertThat(checker.templateVersionUsableByTask(TASK_ID, 100L)).isTrue();
+
+        version.setOwnerId(99L);
+        assertThat(checker.templateVersionOwnedBy(OWNER_ID, 100L)).isFalse();
+        assertThat(checker.templateVersionUsableByTask(TASK_ID, 100L)).isFalse();
+    }
+
     private CreateTaskRequest createRequest() {
+        return createRequestWithOverlapCount(1);
+    }
+
+    private CreateTaskRequest createRequestWithOverlapCount(int overlapCount) {
         return new CreateTaskRequest(
                 "New task",
                 "Description",
@@ -246,10 +337,9 @@ class TaskLifecycleServiceTest {
                 List.of("qa"),
                 10,
                 LocalDateTime.now().plusDays(1),
-                1,
+                overlapCount,
                 100L,
                 200L,
-                1,
                 null
         );
     }
@@ -265,12 +355,15 @@ class TaskLifecycleServiceTest {
                 1,
                 100L,
                 200L,
-                1,
                 99L
         );
     }
 
     private UpdateTaskRequest updateRequest() {
+        return updateRequestWithOverlapCount(1);
+    }
+
+    private UpdateTaskRequest updateRequestWithOverlapCount(int overlapCount) {
         return new UpdateTaskRequest(
                 "Updated task",
                 "Updated description",
@@ -278,10 +371,9 @@ class TaskLifecycleServiceTest {
                 List.of("review"),
                 20,
                 LocalDateTime.now().plusDays(2),
-                2,
+                overlapCount,
                 100L,
-                200L,
-                1
+                200L
         );
     }
 

@@ -42,7 +42,6 @@ class TemplateVersionServiceTest {
     private final TemplateSchemaValidator schemaValidator = mock(TemplateSchemaValidator.class);
     private final ObjectMapper objectMapper = new ObjectMapper();
     private final TemplateVersionService versionService = new TemplateVersionService(
-            taskMapper,
             templateMapper,
             templateVersionMapper,
             objectMapper
@@ -85,6 +84,47 @@ class TemplateVersionServiceTest {
         verify(templateVersionMapper).insert(versionCaptor.capture());
         assertThat(versionCaptor.getValue().getOwnerId()).isEqualTo(10L);
         assertThat(versionCaptor.getValue().getPublishedSnapshot()).isFalse();
+    }
+
+    @Test
+    void ownerCreatesReusableTemplateWithoutTask() {
+        CurrentUserContext.set(new CurrentUser(10L, "owner", "owner@example.com", Set.of(RoleCode.OWNER), 1));
+        stubInsertIds();
+
+        var response = templateService.createOwnerTemplate(new CreateTemplateRequest(
+                "通用质检模板",
+                Map.of("components", List.of(Map.of("type", "Input", "field", "answer"))),
+                "初始版本"
+        ));
+
+        assertThat(response.templateId()).isEqualTo(100L);
+        assertThat(response.ownerId()).isEqualTo(10L);
+        assertThat(response.taskId()).isNull();
+        assertThat(response.currentVersion().ownerId()).isEqualTo(10L);
+        assertThat(response.currentVersion().taskId()).isNull();
+        ArgumentCaptor<TemplateEntity> templateCaptor = ArgumentCaptor.forClass(TemplateEntity.class);
+        verify(templateMapper).insert(templateCaptor.capture());
+        assertThat(templateCaptor.getValue().getOwnerId()).isEqualTo(10L);
+        assertThat(templateCaptor.getValue().getTaskId()).isNull();
+        ArgumentCaptor<TemplateVersionEntity> versionCaptor = ArgumentCaptor.forClass(TemplateVersionEntity.class);
+        verify(templateVersionMapper).insert(versionCaptor.capture());
+        assertThat(versionCaptor.getValue().getTaskId()).isNull();
+    }
+
+    @Test
+    void listsOnlyCurrentOwnersReusableTemplates() {
+        CurrentUserContext.set(new CurrentUser(10L, "owner", "owner@example.com", Set.of(RoleCode.OWNER), 1));
+        TemplateEntity template = ownerTemplate(100L, 10L, 2);
+        TemplateVersionEntity current = ownerVersion(200L, 100L, 10L, 2, false);
+        when(templateMapper.selectByOwnerId(10L)).thenReturn(List.of(template));
+        when(templateVersionMapper.selectByTemplateIdAndVersionNo(100L, 2)).thenReturn(current);
+
+        var response = templateService.listOwnerTemplates();
+
+        assertThat(response).hasSize(1);
+        assertThat(response.get(0).ownerId()).isEqualTo(10L);
+        assertThat(response.get(0).taskId()).isNull();
+        assertThat(response.get(0).currentVersion().ownerId()).isEqualTo(10L);
     }
 
     @Test
@@ -148,6 +188,19 @@ class TemplateVersionServiceTest {
     }
 
     @Test
+    void getOwnerVersionValidatesTemplateOwner() {
+        CurrentUserContext.set(new CurrentUser(20L, "other", "other@example.com", Set.of(RoleCode.OWNER), 1));
+        TemplateEntity template = ownerTemplate(100L, 10L, 1);
+        when(templateVersionMapper.selectById(200L)).thenReturn(ownerVersion(200L, 100L, 10L, 1, false));
+        when(templateMapper.selectById(100L)).thenReturn(template);
+
+        assertThatThrownBy(() -> versionService.getVersion(200L))
+                .isInstanceOf(BusinessException.class)
+                .extracting("code")
+                .isEqualTo(403001);
+    }
+
+    @Test
     void forkPublishedVersionCreatesNewVersionWithoutChangingOldVersion() {
         CurrentUserContext.set(new CurrentUser(10L, "owner", "owner@example.com", Set.of(RoleCode.OWNER), 1));
         stubTask(10L);
@@ -175,11 +228,13 @@ class TemplateVersionServiceTest {
 
     @Test
     void getTemplateSchemaReturnsSchemaForBeA() {
-        when(templateVersionMapper.selectById(200L)).thenReturn(version(200L, 100L, 1L, 1, true));
+        when(templateVersionMapper.selectById(200L)).thenReturn(ownerVersion(200L, 100L, 10L, 1, true));
+        when(templateMapper.selectById(100L)).thenReturn(ownerTemplate(100L, 10L, 1));
 
         var response = versionService.getTemplateSchema(200L);
 
         assertThat(response.versionId()).isEqualTo(200L);
+        assertThat(response.ownerId()).isEqualTo(10L);
         assertThat(response.schemaJson().get("components").isArray()).isTrue();
     }
 
@@ -220,9 +275,20 @@ class TemplateVersionServiceTest {
         template.setId(id);
         template.setOwnerId(10L);
         template.setTaskId(taskId);
+        template.setOwnerId(10L);
         template.setName("质检模板");
         template.setCurrentVersionNo(currentVersionNo);
         template.setCreatedBy(10L);
+        return template;
+    }
+
+    private TemplateEntity ownerTemplate(Long id, Long ownerId, int currentVersionNo) {
+        TemplateEntity template = new TemplateEntity();
+        template.setId(id);
+        template.setOwnerId(ownerId);
+        template.setName("通用质检模板");
+        template.setCurrentVersionNo(currentVersionNo);
+        template.setCreatedBy(ownerId);
         return template;
     }
 
@@ -230,6 +296,7 @@ class TemplateVersionServiceTest {
         TemplateVersionEntity version = new TemplateVersionEntity();
         version.setId(id);
         version.setTemplateId(templateId);
+        version.setOwnerId(10L);
         version.setTaskId(taskId);
         version.setOwnerId(10L);
         version.setVersionNo(versionNo);
@@ -237,6 +304,12 @@ class TemplateVersionServiceTest {
         version.setPublishedSnapshot(publishedSnapshot);
         version.setChangeNote("版本说明");
         version.setCreatedBy(10L);
+        return version;
+    }
+
+    private TemplateVersionEntity ownerVersion(Long id, Long templateId, Long ownerId, int versionNo, boolean publishedSnapshot) {
+        TemplateVersionEntity version = version(id, templateId, null, versionNo, publishedSnapshot);
+        version.setOwnerId(ownerId);
         return version;
     }
 }

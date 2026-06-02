@@ -57,8 +57,8 @@ instructionRichText optional
 tags optional, each tag max 64
 quota required, >= 1
 deadlineAt required, must be future time
-overlapCount required, >= 1
-publishedTemplateVersionId optional
+overlapCount required, must be 1
+publishedTemplateVersionId optional, must belong to current OWNER
 aiReviewConfigId optional
 ```
 
@@ -73,6 +73,7 @@ Effects:
 
 ```text
 Creates a tasks row with ownerId = current user and status = DRAFT.
+If publishedTemplateVersionId is provided, verifies the template version belongs to current OWNER.
 Normalizes non-blank tags into task_tags.
 Appends TASK_CREATED audit log.
 ```
@@ -135,8 +136,8 @@ instructionRichText optional
 tags optional, each tag max 64
 quota required, >= 1
 deadlineAt required, must be future time
-overlapCount required, >= 1
-publishedTemplateVersionId optional
+overlapCount required, must be 1
+publishedTemplateVersionId optional, must belong to current OWNER
 aiReviewConfigId optional
 ```
 
@@ -151,6 +152,7 @@ Rules:
 
 ```text
 Only DRAFT tasks can be edited.
+If publishedTemplateVersionId is provided, verifies the template version belongs to current OWNER.
 Replaces the task tag set with normalized non-blank tags from the request.
 Appends TASK_UPDATED audit log.
 ```
@@ -177,10 +179,10 @@ Publish checks:
 ```text
 Task status must be DRAFT.
 Task quota must be > 0.
-Task overlapCount must be >= 1.
+Task overlapCount must be 1.
 Task deadlineAt must be in the future.
 BE-B dataset must be ready.
-BE-B template version must exist.
+BE-B template version must exist and belong to the task owner.
 BE-B reward rule must exist.
 BE-A AI review config must exist.
 ```
@@ -196,7 +198,7 @@ Errors:
 
 ```text
 400101 Task status transition is not allowed.
-400102 Publish prerequisite is missing.
+400102 Publish prerequisite is missing or template version is not usable by this task.
 404001 Task not found or not owned by current user.
 ```
 

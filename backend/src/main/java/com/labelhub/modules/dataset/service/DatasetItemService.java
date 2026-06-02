@@ -17,6 +17,7 @@ import com.labelhub.modules.dataset.dto.DatasetItemAppendRequest;
 import com.labelhub.modules.dataset.dto.DatasetItemPageResponse;
 import com.labelhub.modules.dataset.dto.DatasetItemQuery;
 import com.labelhub.modules.dataset.dto.DatasetItemResponse;
+import com.labelhub.modules.dataset.dto.DatasetItemStatus;
 import com.labelhub.modules.dataset.dto.DatasetItemUpdateRequest;
 import com.labelhub.modules.dataset.repository.DatasetItemChangeLogMapper;
 import com.labelhub.modules.dataset.repository.DatasetItemRepositoryMapper;
@@ -253,9 +254,26 @@ public class DatasetItemService {
                 entity.getAssignedCount(),
                 entity.getSubmittedCount(),
                 entity.getApprovedCount(),
+                toItemStatus(entity.getAssignmentStatus()),
+                entity.getLabelerId(),
                 entity.getCreatedAt(),
                 entity.getUpdatedAt()
         );
+    }
+
+    private DatasetItemStatus toItemStatus(String assignmentStatus) {
+        if (assignmentStatus == null || assignmentStatus.isBlank()) {
+            return DatasetItemStatus.UNCLAIMED;
+        }
+        return switch (assignmentStatus) {
+            case "CLAIMED" -> DatasetItemStatus.CLAIMED;
+            case "DRAFTING" -> DatasetItemStatus.DRAFT;
+            case "SUBMITTED" -> DatasetItemStatus.SUBMITTED;
+            case "AI_RETURNED", "RETURNED" -> DatasetItemStatus.RETURNED;
+            case "APPROVED" -> DatasetItemStatus.APPROVED;
+            case "CANCELLED" -> DatasetItemStatus.UNCLAIMED;
+            default -> throw new BusinessException(500001, "Unknown assignment status for dataset item");
+        };
     }
 
     private String writeJson(Map<String, Object> json) {

@@ -7,34 +7,31 @@ import com.labelhub.common.exception.BusinessException;
 import com.labelhub.common.security.CurrentUser;
 import com.labelhub.common.security.CurrentUserContext;
 import com.labelhub.common.security.RoleCode;
-import com.labelhub.modules.task.domain.TaskEntity;
-import com.labelhub.modules.task.repository.TaskRepositoryMapper;
+import com.labelhub.modules.template.domain.TemplateEntity;
 import com.labelhub.modules.template.domain.TemplateVersionEntity;
 import com.labelhub.modules.template.dto.TemplateSchemaResponse;
 import com.labelhub.modules.template.dto.TemplateVersionResponse;
 import com.labelhub.modules.template.repository.TemplateMapper;
 import com.labelhub.modules.template.repository.TemplateVersionRepositoryMapper;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 /**
  * 模板版本读取服务。
  *
- * <p>该服务承接 HTTP 查询和 BE-A 内部读取 schema 的需求。BE-B 不在这里修改任务发布引用，
- * 只按 versionId 返回稳定 schema 快照。</p>
+ * <p>该服务承接 HTTP 查询和 BE-A 内部读取 schema 的需求。模板版本归属于 OWNER；
+ * BE-B 不在这里修改任务发布引用，只按 versionId 返回稳定 schema 快照。</p>
  */
 @Service
 public class TemplateVersionService {
 
-    private final TaskRepositoryMapper taskMapper;
     private final TemplateMapper templateMapper;
     private final TemplateVersionRepositoryMapper templateVersionMapper;
     private final ObjectMapper objectMapper;
 
-    public TemplateVersionService(TaskRepositoryMapper taskMapper,
-                                  TemplateMapper templateMapper,
+    public TemplateVersionService(TemplateMapper templateMapper,
                                   TemplateVersionRepositoryMapper templateVersionMapper,
                                   ObjectMapper objectMapper) {
-        this.taskMapper = taskMapper;
         this.templateMapper = templateMapper;
         this.templateVersionMapper = templateVersionMapper;
         this.objectMapper = objectMapper;
@@ -45,7 +42,7 @@ public class TemplateVersionService {
      */
     public TemplateVersionResponse getVersion(Long versionId) {
         TemplateVersionEntity version = requireVersion(versionId);
-        requireOwnedTask(version.getTaskId());
+        requireOwnedTemplate(version);
         return toResponse(version);
     }
 
@@ -54,14 +51,24 @@ public class TemplateVersionService {
      */
     public TemplateSchemaResponse getTemplateSchema(Long templateVersionId) {
         TemplateVersionEntity version = requireVersion(templateVersionId);
+        Long ownerId = resolveOwnerId(version);
         return new TemplateSchemaResponse(
                 version.getId(),
                 version.getTemplateId(),
-                version.getTaskId(),
+                ownerId,
                 version.getVersionNo(),
                 readJson(version.getSchemaJson()),
                 version.getPublishedSnapshot()
         );
+    }
+
+    /**
+     * 任务发布后冻结该模板版本的发布快照标记。
+     */
+    @Transactional
+    public void markPublishedSnapshot(Long templateVersionId) {
+        requireVersion(templateVersionId);
+        templateVersionMapper.markPublishedSnapshot(templateVersionId);
     }
 
     TemplateVersionResponse toResponse(TemplateVersionEntity version) {
@@ -69,6 +76,7 @@ public class TemplateVersionService {
                 version.getId(),
                 version.getTemplateId(),
                 version.getTaskId(),
+                resolveOwnerId(version),
                 version.getVersionNo(),
                 readJson(version.getSchemaJson()),
                 version.getPublishedSnapshot(),
@@ -87,16 +95,23 @@ public class TemplateVersionService {
         return version;
     }
 
-    private TaskEntity requireOwnedTask(Long taskId) {
+    private void requireOwnedTemplate(TemplateVersionEntity version) {
         CurrentUser currentUser = CurrentUserContext.requireCurrentUser();
-        TaskEntity task = taskMapper.selectById(taskId);
-        if (task == null) {
-            throw new BusinessException(400102, "Task not found");
-        }
-        if (!currentUser.roles().contains(RoleCode.ADMIN) && !currentUser.userId().equals(task.getOwnerId())) {
+        Long ownerId = resolveOwnerId(version);
+        if (!currentUser.roles().contains(RoleCode.ADMIN) && !currentUser.userId().equals(ownerId)) {
             throw new BusinessException(403001, "Forbidden");
         }
-        return task;
+    }
+
+    private Long resolveOwnerId(TemplateVersionEntity version) {
+        if (version.getOwnerId() != null) {
+            return version.getOwnerId();
+        }
+        TemplateEntity template = templateMapper.selectById(version.getTemplateId());
+        if (template == null) {
+            throw new BusinessException(400102, "Template not found");
+        }
+        return template.getOwnerId();
     }
 
     private JsonNode readJson(String json) {

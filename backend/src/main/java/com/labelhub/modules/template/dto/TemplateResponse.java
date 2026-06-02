@@ -7,6 +7,7 @@ import java.time.LocalDateTime;
  */
 public record TemplateResponse(Long templateId,
                                Long taskId,
+                               Long ownerId,
                                String name,
                                Integer currentVersionNo,
                                TemplateVersionResponse currentVersion,

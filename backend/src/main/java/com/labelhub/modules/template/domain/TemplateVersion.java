@@ -17,6 +17,8 @@ public class TemplateVersion {
 
     private Long templateId;
 
+    private Long ownerId;
+
     private Long taskId;
 
     private Integer versionNo;

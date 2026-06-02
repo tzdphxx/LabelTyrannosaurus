@@ -1,6 +1,7 @@
 package com.labelhub.modules.dataset.domain;
 
 import com.baomidou.mybatisplus.annotation.IdType;
+import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
 
@@ -25,6 +26,10 @@ public class DatasetItemEntity {
     private Integer submittedCount;
     private Integer approvedCount;
     private Boolean deleted;
+    @TableField(exist = false)
+    private Long labelerId;
+    @TableField(exist = false)
+    private String assignmentStatus;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 
@@ -98,6 +103,22 @@ public class DatasetItemEntity {
 
     public void setDeleted(Boolean deleted) {
         this.deleted = deleted;
+    }
+
+    public Long getLabelerId() {
+        return labelerId;
+    }
+
+    public void setLabelerId(Long labelerId) {
+        this.labelerId = labelerId;
+    }
+
+    public String getAssignmentStatus() {
+        return assignmentStatus;
+    }
+
+    public void setAssignmentStatus(String assignmentStatus) {
+        this.assignmentStatus = assignmentStatus;
     }
 
     public LocalDateTime getCreatedAt() {

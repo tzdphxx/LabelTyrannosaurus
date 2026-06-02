@@ -55,4 +55,18 @@ class DatabaseMigrationSafetyTest {
         assertThat(migration.indexOf("created_by IS NULL"))
                 .isLessThan(migration.indexOf("MODIFY COLUMN owner_id BIGINT NOT NULL"));
     }
+
+    @Test
+    void ownerTemplateMigrationBackfillsBeforeEnforcingOwner() throws IOException {
+        String migration = Files.readString(MIGRATION_DIR.resolve("V17__owner_template_library.sql"));
+
+        assertThat(migration).contains("ADD COLUMN owner_id BIGINT NULL");
+        assertThat(migration).contains("UPDATE templates t");
+        assertThat(migration).contains("JOIN tasks task ON task.id = t.task_id");
+        assertThat(migration).contains("chk_template_owner_backfill_source");
+        assertThat(migration.indexOf("UPDATE templates t"))
+                .isLessThan(migration.indexOf("MODIFY COLUMN owner_id BIGINT NOT NULL"));
+        assertThat(migration.indexOf("DROP FOREIGN KEY fk_templates_task"))
+                .isLessThan(migration.indexOf("MODIFY COLUMN task_id BIGINT NULL"));
+    }
 }

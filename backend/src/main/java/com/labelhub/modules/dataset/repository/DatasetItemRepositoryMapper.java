@@ -31,13 +31,18 @@ public interface DatasetItemRepositoryMapper extends BaseMapper<DatasetItemEntit
      */
     @Select("""
             <script>
-            select * from dataset_items
-            where task_id = #{taskId}
-              and deleted = 0
+            select di.*,
+                   a.labeler_id as labeler_id,
+                   a.status as assignment_status
+            from dataset_items di
+            left join assignments a on a.dataset_item_id = di.id
+                                      and a.status != 'CANCELLED'
+            where di.task_id = #{taskId}
+              and di.deleted = 0
               <if test="externalId != null and externalId != ''">
-                and external_id like concat('%', #{externalId}, '%')
+                and di.external_id like concat('%', #{externalId}, '%')
               </if>
-            order by id asc
+            order by di.id asc
             limit #{limit} offset #{offset}
             </script>
             """)
@@ -118,26 +123,33 @@ public interface DatasetItemRepositoryMapper extends BaseMapper<DatasetItemEntit
      * 查询一个可领取题目。BE-B 只负责数据集预留，不创建 BE-A 的 assignment。
      */
     @Select("""
-            select * from dataset_items
-            where task_id = #{taskId}
-              and deleted = 0
-              and assigned_count < #{overlapLimit}
-            order by assigned_count asc, id asc
+            select di.*
+            from dataset_items di
+            where di.task_id = #{taskId}
+              and di.deleted = 0
+              and di.assigned_count = 0
+              and not exists (
+                select 1
+                from assignments a
+                where a.dataset_item_id = di.id
+                  and a.status != 'CANCELLED'
+              )
+            order by di.id asc
             limit 1
             """)
-    DatasetItemEntity selectClaimableItem(@Param("taskId") Long taskId, @Param("overlapLimit") int overlapLimit);
+    DatasetItemEntity selectClaimableItem(@Param("taskId") Long taskId);
 
     /**
-     * 原子递增领取计数，使用 overlapLimit 防止并发领取超发。
+     * 原子标记题目已领取，防止并发领取超发。
      */
     @Update("""
             update dataset_items
-            set assigned_count = assigned_count + 1
+            set assigned_count = 1
             where id = #{itemId}
               and deleted = 0
-              and assigned_count < #{overlapLimit}
+              and assigned_count = 0
             """)
-    int increaseAssignedCount(@Param("itemId") Long itemId, @Param("overlapLimit") int overlapLimit);
+    int markAssignedIfUnassigned(@Param("itemId") Long itemId);
 
     /**
      * 明确由 BE-A 提交成功入口调用，BE-B 不私自读取 submission 状态推断。

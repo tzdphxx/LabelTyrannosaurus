@@ -9,7 +9,8 @@ import java.time.LocalDateTime;
 /**
  * 模板主表实体。
  *
- * <p>模板归属于任务，BE-B 只维护模板名称和当前版本号；任务发布时引用哪个版本由 BE-A 负责冻结。</p>
+ * <p>模板归属于 OWNER，任务只在创建或发布时引用某个模板版本快照。历史任务内模板会保留
+ * {@code taskId} 作为来源追踪，新建模板不再依赖任务先存在。</p>
  */
 @TableName("templates")
 public class TemplateEntity {

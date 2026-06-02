@@ -5,6 +5,7 @@ import com.labelhub.modules.template.domain.TemplateVersionEntity;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 import org.apache.ibatis.annotations.Select;
+import org.apache.ibatis.annotations.Update;
 
 /**
  * 模板版本表 Mapper。
@@ -23,4 +24,14 @@ public interface TemplateVersionRepositoryMapper extends BaseMapper<TemplateVers
             """)
     TemplateVersionEntity selectByTemplateIdAndVersionNo(@Param("templateId") Long templateId,
                                                          @Param("versionNo") Integer versionNo);
+
+    /**
+     * 任务发布后标记该版本已被发布任务引用，后续只能 fork 新版本。
+     */
+    @Update("""
+            update template_versions
+            set published_snapshot = true
+            where id = #{versionId}
+            """)
+    int markPublishedSnapshot(@Param("versionId") Long versionId);
 }

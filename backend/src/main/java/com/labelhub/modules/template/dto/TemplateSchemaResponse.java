@@ -7,7 +7,7 @@ import com.fasterxml.jackson.databind.JsonNode;
  */
 public record TemplateSchemaResponse(Long versionId,
                                      Long templateId,
-                                     Long taskId,
+                                     Long ownerId,
                                      Integer versionNo,
                                      JsonNode schemaJson,
                                      Boolean publishedSnapshot) {

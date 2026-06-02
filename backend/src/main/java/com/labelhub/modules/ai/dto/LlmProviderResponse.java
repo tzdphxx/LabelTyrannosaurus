@@ -36,6 +36,8 @@ public record LlmProviderResponse(
         String visionModel,
         @Schema(description = "结构化输出模式")
         String structuredOutputMode,
+        @Schema(description = "JSON Schema 输出结构定义")
+        String outputSchema,
         @Schema(description = "API密钥是否已配置")
         Boolean apiKeyConfigured,
         @Schema(description = "所有者用户ID")

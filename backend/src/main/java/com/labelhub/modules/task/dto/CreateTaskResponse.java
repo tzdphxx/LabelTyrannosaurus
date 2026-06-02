@@ -3,14 +3,19 @@ package com.labelhub.modules.task.dto;
 import com.labelhub.modules.dataset.dto.DatasetImportJobResponse;
 import com.labelhub.modules.task.domain.TaskStatus;
 import io.swagger.v3.oas.annotations.media.Schema;
+import java.util.List;
 
-@Schema(description = "Create task response")
+@Schema(description = "创建任务响应")
 public record CreateTaskResponse(
-        @Schema(description = "Task ID", example = "100")
+        @Schema(description = "任务 ID", example = "100")
         Long taskId,
-        @Schema(description = "Task status", example = "DRAFT")
+        @Schema(description = "任务状态", example = "DRAFT")
         TaskStatus status,
-        @Schema(description = "Dataset import job created with this task, or null when no dataset file was provided")
+        @Schema(description = "任务描述", example = "对商品图片进行类别标注")
+        String description,
+        @Schema(description = "任务标签列表", example = "[\"image\", \"classification\"]")
+        List<String> tags,
+        @Schema(description = "随任务创建的数据集导入任务，未提供数据集文件时为 null")
         DatasetImportJobResponse datasetImportJob
 ) {
 }

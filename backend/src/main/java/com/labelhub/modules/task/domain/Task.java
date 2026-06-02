@@ -3,6 +3,7 @@ package com.labelhub.modules.task.domain;
 import com.baomidou.mybatisplus.annotation.IdType;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import lombok.Getter;
 import lombok.Setter;
@@ -29,8 +30,6 @@ public class Task {
 
     private Integer claimedCount;
 
-    private Integer overlapCount;
-
     private LocalDateTime deadlineAt;
 
     private Long publishedTemplateVersionId;
@@ -39,7 +38,15 @@ public class Task {
 
     private Integer reviewLevelCount;
 
-    private Boolean rewardVisible;
+    private Strategy strategy;
+
+    private BigDecimal rewardPerApproval;
+
+    private BigDecimal penaltyPerRejection;
+
+    private Integer bonusThreshold;
+
+    private BigDecimal bonusPoints;
 
     private LocalDateTime publishedAt;
 

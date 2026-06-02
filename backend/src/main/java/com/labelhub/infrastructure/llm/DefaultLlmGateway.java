@@ -99,6 +99,16 @@ public class DefaultLlmGateway implements LlmGateway {
             return ResponseFormat.none();
         }
         if ("JSON_SCHEMA".equals(mode)) {
+            String providerSchema = config.capability().outputSchemaJson();
+            if (providerSchema != null && !providerSchema.isBlank()) {
+                try {
+                    @SuppressWarnings("unchecked")
+                    Map<String, Object> schemaMap = objectMapper.readValue(providerSchema, Map.class);
+                    return ResponseFormat.jsonSchema("labelhub_response", schemaMap);
+                } catch (JsonProcessingException ex) {
+                    return ResponseFormat.jsonObject();
+                }
+            }
             if (requested != null && requested.mode() == ResponseFormat.Mode.JSON_SCHEMA
                     && requested.jsonSchema() != null) {
                 return requested;

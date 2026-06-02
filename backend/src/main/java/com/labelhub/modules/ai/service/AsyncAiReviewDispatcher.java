@@ -6,6 +6,7 @@ import com.labelhub.infrastructure.llmtask.LlmTaskQueueMessage;
 import com.labelhub.infrastructure.llmtask.LlmTaskQueueService;
 import com.labelhub.infrastructure.llmtask.LlmTaskType;
 import com.labelhub.modules.agent.domain.AgentRun;
+import com.labelhub.modules.agent.domain.AgentRunStatus;
 import com.labelhub.modules.agent.mapper.AgentRunMapper;
 import com.labelhub.modules.submission.domain.Submission;
 import com.labelhub.modules.submission.mapper.SubmissionMapper;
@@ -53,6 +54,7 @@ public class AsyncAiReviewDispatcher implements AiReviewDispatcher {
         return agentRunMapper.selectOne(new LambdaQueryWrapper<AgentRun>()
                 .eq(AgentRun::getSubmissionId, submissionId)
                 .eq(AgentRun::getAgentType, "AI_REVIEW")
+                .eq(AgentRun::getStatus, AgentRunStatus.PENDING)
                 .orderByDesc(AgentRun::getId)
                 .last("LIMIT 1"));
     }

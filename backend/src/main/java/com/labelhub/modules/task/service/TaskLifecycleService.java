@@ -8,6 +8,7 @@ import com.labelhub.common.web.TraceIdProvider;
 import com.labelhub.modules.dataset.dto.DatasetImportJobResponse;
 import com.labelhub.modules.dataset.dto.DatasetImportRequest;
 import com.labelhub.modules.dataset.service.DatasetImportService;
+import com.labelhub.modules.task.domain.Strategy;
 import com.labelhub.modules.task.domain.Task;
 import com.labelhub.modules.task.domain.TaskStatus;
 import com.labelhub.modules.task.domain.TaskTag;
@@ -71,12 +72,17 @@ public class TaskLifecycleService {
                 .map(task -> new OwnerTaskSummaryResponse(
                         task.getId(),
                         task.getTitle(),
+                        task.getDescription(),
                         task.getStatus(),
                         listTags(task.getId()),
                         task.getQuota(),
                         task.getClaimedCount(),
-                        task.getOverlapCount(),
                         task.getDeadlineAt(),
+                        task.getStrategy(),
+                        task.getRewardPerApproval(),
+                        task.getPenaltyPerRejection(),
+                        task.getBonusThreshold(),
+                        task.getBonusPoints(),
                         task.getPublishedAt(),
                         task.getEndedAt(),
                         task.getCreatedAt(),
@@ -99,16 +105,20 @@ public class TaskLifecycleService {
         task.setStatus(TaskStatus.DRAFT);
         task.setQuota(request.quota());
         task.setClaimedCount(0);
-        task.setOverlapCount(request.overlapCount());
         task.setDeadlineAt(request.deadlineAt());
         task.setPublishedTemplateVersionId(request.publishedTemplateVersionId());
         task.setAiReviewConfigId(request.aiReviewConfigId());
         task.setReviewLevelCount(request.reviewLevelCount() != null ? request.reviewLevelCount() : 1);
-        task.setRewardVisible(true);
+        task.setStrategy(request.strategy() != null ? request.strategy() : Strategy.FCFS);
+        task.setRewardPerApproval(request.rewardPerApproval());
+        task.setPenaltyPerRejection(request.penaltyPerRejection());
+        task.setBonusThreshold(request.bonusThreshold());
+        task.setBonusPoints(request.bonusPoints());
         taskMapper.insert(task);
         replaceTags(task.getId(), request.tags());
         appendAudit(task, ownerId, "TASK_CREATED", null, snapshot(task));
-        return new TaskLifecycleResponse(task.getId(), task.getStatus());
+        return new TaskLifecycleResponse(task.getId(), task.getStatus(),
+                task.getDescription(), listTags(task.getId()));
     }
 
     @Transactional
@@ -121,7 +131,8 @@ public class TaskLifecycleService {
                     new DatasetImportRequest(request.datasetFileId())
             );
         }
-        return new CreateTaskResponse(task.taskId(), task.status(), importJob);
+        return new CreateTaskResponse(task.taskId(), task.status(),
+                task.description(), task.tags(), importJob);
     }
 
     @Transactional
@@ -135,18 +146,23 @@ public class TaskLifecycleService {
         task.setDescription(request.description());
         task.setInstructionRichText(request.instructionRichText());
         task.setQuota(request.quota());
-        task.setOverlapCount(request.overlapCount());
         task.setDeadlineAt(request.deadlineAt());
         task.setPublishedTemplateVersionId(request.publishedTemplateVersionId());
         task.setAiReviewConfigId(request.aiReviewConfigId());
         if (request.reviewLevelCount() != null) {
             task.setReviewLevelCount(request.reviewLevelCount());
         }
+        task.setStrategy(request.strategy() != null ? request.strategy() : Strategy.FCFS);
+        task.setRewardPerApproval(request.rewardPerApproval());
+        task.setPenaltyPerRejection(request.penaltyPerRejection());
+        task.setBonusThreshold(request.bonusThreshold());
+        task.setBonusPoints(request.bonusPoints());
         taskMapper.updateById(task);
         taskTagMapper.delete(new QueryWrapper<TaskTag>().eq("task_id", taskId));
         replaceTags(taskId, request.tags());
         appendAudit(task, ownerId, "TASK_UPDATED", beforeJson, snapshot(task));
-        return new TaskLifecycleResponse(task.getId(), task.getStatus());
+        return new TaskLifecycleResponse(task.getId(), task.getStatus(),
+                task.getDescription(), listTags(task.getId()));
     }
 
     @Transactional
@@ -190,7 +206,8 @@ public class TaskLifecycleService {
         taskMapper.updateById(task);
         appendAudit(task, ownerId, action, beforeJson, Map.of("status", task.getStatus()));
         publishTaskStatusChanged(task, beforeStatus);
-        return new TaskLifecycleResponse(task.getId(), task.getStatus());
+        return new TaskLifecycleResponse(task.getId(), task.getStatus(),
+                task.getDescription(), listTags(task.getId()));
     }
 
     private void publishTaskStatusChanged(Task task, TaskStatus beforeStatus) {
@@ -213,9 +230,6 @@ public class TaskLifecycleService {
         if (task.getQuota() == null || task.getQuota() <= 0) {
             throw missingPublishRequirement("Task quota is required");
         }
-        if (task.getOverlapCount() == null || task.getOverlapCount() < 1) {
-            throw missingPublishRequirement("Task overlap count is required");
-        }
         if (task.getDeadlineAt() == null || !task.getDeadlineAt().isAfter(LocalDateTime.now())) {
             throw missingPublishRequirement("Task deadline must be in the future");
         }
@@ -227,9 +241,6 @@ public class TaskLifecycleService {
         }
         if (!publishDependencyChecker.aiReviewConfigExists(task.getId(), task.getAiReviewConfigId())) {
             throw missingPublishRequirement("Task AI review config is required");
-        }
-        if (!publishDependencyChecker.rewardRuleExists(task.getId())) {
-            throw missingPublishRequirement("Task reward rule is required");
         }
     }
 
@@ -248,12 +259,15 @@ public class TaskLifecycleService {
                 listTags(task.getId()),
                 task.getQuota(),
                 task.getClaimedCount(),
-                task.getOverlapCount(),
                 task.getDeadlineAt(),
                 task.getPublishedTemplateVersionId(),
                 task.getAiReviewConfigId(),
                 task.getReviewLevelCount(),
-                task.getRewardVisible(),
+                task.getStrategy(),
+                task.getRewardPerApproval(),
+                task.getPenaltyPerRejection(),
+                task.getBonusThreshold(),
+                task.getBonusPoints(),
                 task.getPublishedAt(),
                 task.getEndedAt(),
                 task.getCreatedAt(),
@@ -286,10 +300,11 @@ public class TaskLifecycleService {
         snapshot.put("title", task.getTitle());
         snapshot.put("status", task.getStatus());
         snapshot.put("quota", task.getQuota());
-        snapshot.put("overlapCount", task.getOverlapCount());
         snapshot.put("deadlineAt", task.getDeadlineAt());
         snapshot.put("publishedTemplateVersionId", task.getPublishedTemplateVersionId());
         snapshot.put("aiReviewConfigId", task.getAiReviewConfigId());
+        snapshot.put("strategy", task.getStrategy());
+        snapshot.put("reviewLevelCount", task.getReviewLevelCount());
         return snapshot;
     }
 

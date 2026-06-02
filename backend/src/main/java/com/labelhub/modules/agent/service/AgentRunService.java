@@ -55,6 +55,10 @@ public class AgentRunService {
         agentRunMapper.updateById(run);
     }
 
+    public AgentRun findById(Long agentRunId) {
+        return agentRunMapper.selectById(agentRunId);
+    }
+
     @Transactional
     public void complete(Long agentRunId, String outputSnapshot) {
         AgentRun run = requireRun(agentRunId);

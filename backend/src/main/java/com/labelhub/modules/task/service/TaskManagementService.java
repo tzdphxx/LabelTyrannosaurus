@@ -68,11 +68,14 @@ public class TaskManagementService {
                 .selectOwnerTasksPage(ownerId, status, keyword, normalizedSize, offset)
                 .stream()
                 .map(task -> new OwnerTaskSummaryResponse(
-                        task.getId(), task.getTitle(), task.getStatus(),
-                        listTags(task.getId()), task.getQuota(),
-                        task.getClaimedCount(), task.getOverlapCount(),
-                        task.getDeadlineAt(), task.getPublishedAt(),
-                        task.getEndedAt(), task.getCreatedAt(), task.getUpdatedAt()))
+                        task.getId(), task.getTitle(), task.getDescription(),
+                        task.getStatus(), listTags(task.getId()), task.getQuota(),
+                        task.getClaimedCount(), task.getDeadlineAt(),
+                        task.getStrategy(),
+                        task.getRewardPerApproval(), task.getPenaltyPerRejection(),
+                        task.getBonusThreshold(), task.getBonusPoints(),
+                        task.getPublishedAt(), task.getEndedAt(),
+                        task.getCreatedAt(), task.getUpdatedAt()))
                 .toList();
 
         return new OwnerTaskPageResponse(items, normalizedPage, normalizedSize, total);

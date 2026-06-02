@@ -47,6 +47,8 @@ public class LlmProvider {
 
     private String structuredOutputMode;
 
+    private String outputSchemaJson;
+
     private Long createdBy;
 
     private LocalDateTime createdAt;

@@ -1,7 +1,9 @@
 package com.labelhub.modules.task.dto;
 
+import com.labelhub.modules.task.domain.Strategy;
 import com.labelhub.modules.task.domain.TaskStatus;
 import io.swagger.v3.oas.annotations.media.Schema;
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
 
@@ -25,8 +27,6 @@ public record TaskDetailResponse(
         Integer quota,
         @Schema(description = "已被领取的数量", example = "45")
         Integer claimedCount,
-        @Schema(description = "每条数据需要的标注份数", example = "3")
-        Integer overlapCount,
         @Schema(description = "截止时间", example = "2026-06-30T23:59:59")
         LocalDateTime deadlineAt,
         @Schema(description = "已发布模板版本 ID", example = "20")
@@ -35,8 +35,16 @@ public record TaskDetailResponse(
         Long aiReviewConfigId,
         @Schema(description = "审核级别数", example = "3")
         Integer reviewLevelCount,
-        @Schema(description = "奖励是否可见", example = "true")
-        Boolean rewardVisible,
+        @Schema(description = "分发策略", example = "FCFS")
+        Strategy strategy,
+        @Schema(description = "每条通过奖励积分", example = "10.00")
+        BigDecimal rewardPerApproval,
+        @Schema(description = "每条驳回扣分", example = "5.00")
+        BigDecimal penaltyPerRejection,
+        @Schema(description = "额外奖励的通过数阈值", example = "50")
+        Integer bonusThreshold,
+        @Schema(description = "达标后额外奖励积分", example = "100.00")
+        BigDecimal bonusPoints,
         @Schema(description = "发布时间", example = "2026-05-01T10:00:00")
         LocalDateTime publishedAt,
         @Schema(description = "结束时间", example = "2026-06-30T23:59:59")

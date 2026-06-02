@@ -15,7 +15,7 @@ public interface DatasetItemMapper extends BaseMapper<DatasetItem> {
             FROM dataset_items di
             WHERE di.task_id = #{taskId}
               AND di.deleted = 0
-              AND di.assigned_count < #{overlapCount}
+              AND di.assigned_count < 1
               AND NOT EXISTS (
                 SELECT 1
                 FROM assignments a
@@ -26,25 +26,23 @@ public interface DatasetItemMapper extends BaseMapper<DatasetItem> {
             LIMIT 1
             """)
     Long selectClaimableItemId(@Param("taskId") Long taskId,
-                               @Param("labelerId") Long labelerId,
-                               @Param("overlapCount") Integer overlapCount);
+                               @Param("labelerId") Long labelerId);
 
     @Update("""
             UPDATE dataset_items
             SET assigned_count = assigned_count + 1
             WHERE id = #{datasetItemId}
               AND deleted = 0
-              AND assigned_count < #{overlapCount}
+              AND assigned_count < 1
             """)
-    int reserveIfAvailable(@Param("datasetItemId") Long datasetItemId,
-                           @Param("overlapCount") Integer overlapCount);
+    int reserveIfAvailable(@Param("datasetItemId") Long datasetItemId);
 
     @Select("""
             SELECT COUNT(1)
             FROM dataset_items di
             WHERE di.task_id = #{taskId}
               AND di.deleted = 0
-              AND di.assigned_count < #{overlapCount}
+              AND di.assigned_count < 1
               AND NOT EXISTS (
                 SELECT 1
                 FROM assignments a
@@ -53,8 +51,7 @@ public interface DatasetItemMapper extends BaseMapper<DatasetItem> {
               )
             """)
     Integer countAvailableForLabeler(@Param("taskId") Long taskId,
-                                     @Param("labelerId") Long labelerId,
-                                     @Param("overlapCount") Integer overlapCount);
+                                     @Param("labelerId") Long labelerId);
 
     @Update("""
             UPDATE dataset_items

@@ -22,7 +22,6 @@ public class TaskEntity {
     private TaskStatus status;
     private Integer quota;
     private Integer claimedCount;
-    private Integer overlapCount;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 
@@ -80,14 +79,6 @@ public class TaskEntity {
 
     public void setClaimedCount(Integer claimedCount) {
         this.claimedCount = claimedCount;
-    }
-
-    public Integer getOverlapCount() {
-        return overlapCount;
-    }
-
-    public void setOverlapCount(Integer overlapCount) {
-        this.overlapCount = overlapCount;
     }
 
     public LocalDateTime getCreatedAt() {

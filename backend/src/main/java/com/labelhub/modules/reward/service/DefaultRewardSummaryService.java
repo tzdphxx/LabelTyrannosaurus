@@ -1,36 +1,34 @@
 package com.labelhub.modules.reward.service;
 
-import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.labelhub.modules.assignment.dto.RewardSummaryResponse;
-import com.labelhub.modules.reward.domain.RewardRule;
-import com.labelhub.modules.reward.mapper.RewardRuleMapper;
+import com.labelhub.modules.task.domain.Task;
+import com.labelhub.modules.task.mapper.TaskMapper;
+import java.math.BigDecimal;
 import org.springframework.stereotype.Service;
 
 @Service
 public class DefaultRewardSummaryService implements RewardSummaryService {
 
-    private final RewardRuleMapper rewardRuleMapper;
+    private final TaskMapper taskMapper;
 
-    public DefaultRewardSummaryService(RewardRuleMapper rewardRuleMapper) {
-        this.rewardRuleMapper = rewardRuleMapper;
+    public DefaultRewardSummaryService(TaskMapper taskMapper) {
+        this.taskMapper = taskMapper;
     }
 
     @Override
-    public RewardSummaryResponse findRewardSummary(Long taskId, boolean rewardVisible) {
-        if (!rewardVisible) {
+    public RewardSummaryResponse findRewardSummary(Long taskId) {
+        Task task = taskMapper.selectById(taskId);
+        if (task == null) {
             return null;
         }
-        RewardRule rewardRule = rewardRuleMapper.selectOne(new QueryWrapper<RewardRule>()
-                .eq("task_id", taskId)
-                .orderByDesc("effective_version")
-                .last("LIMIT 1"));
-        if (rewardRule == null) {
+        if (task.getRewardPerApproval() == null && task.getPenaltyPerRejection() == null) {
             return null;
         }
         return new RewardSummaryResponse(
-                rewardRule.getRewardMode(),
-                rewardRule.getUnitReward(),
-                rewardRule.getRewardCurrency()
+                task.getRewardPerApproval() != null ? task.getRewardPerApproval() : BigDecimal.ZERO,
+                task.getPenaltyPerRejection() != null ? task.getPenaltyPerRejection() : BigDecimal.ZERO,
+                task.getBonusThreshold(),
+                task.getBonusPoints()
         );
     }
 }

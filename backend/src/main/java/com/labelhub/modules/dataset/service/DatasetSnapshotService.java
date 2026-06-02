@@ -62,13 +62,12 @@ public class DatasetSnapshotService {
         if (task.getStatus() != TaskStatus.PUBLISHED) {
             throw new BusinessException(400101, "Task is not claimable");
         }
-        int overlapLimit = task.getOverlapCount() == null ? 1 : task.getOverlapCount();
         for (int i = 0; i < MAX_RESERVE_RETRY; i++) {
-            DatasetItemEntity item = datasetItemMapper.selectClaimableItem(taskId, overlapLimit);
+            DatasetItemEntity item = datasetItemMapper.selectClaimableItem(taskId, 1);
             if (item == null) {
                 throw new BusinessException(409201, "No claimable dataset item");
             }
-            if (datasetItemMapper.increaseAssignedCount(item.getId(), overlapLimit) > 0) {
+            if (datasetItemMapper.increaseAssignedCount(item.getId(), 1) > 0) {
                 return toSnapshot(item);
             }
         }

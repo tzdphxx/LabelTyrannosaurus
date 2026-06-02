@@ -95,11 +95,11 @@ public class AiReviewConfigService {
         validateRequest(request, provider);
         AiReviewConfig existing = findByTaskId(taskId);
         if (existing != null) {
-            return updateExisting(ownerId, task, existing, request, "AI_REVIEW_CONFIG_UPDATED");
+            return updateExisting(ownerId, task, existing, request, provider, "AI_REVIEW_CONFIG_UPDATED");
         }
 
         AiReviewConfig config = new AiReviewConfig();
-        applyRequest(config, taskId, request);
+        applyRequest(config, taskId, request, provider);
         config.setPromptVersion("v1");
         config.setCreatedBy(ownerId);
         aiReviewConfigMapper.insert(config);
@@ -116,7 +116,7 @@ public class AiReviewConfigService {
         AiReviewConfig config = loadTaskConfig(taskId, configId);
         LlmProvider provider = requireEnabledProvider(ownerId, request.providerId());
         validateRequest(request, provider);
-        return updateExisting(ownerId, task, config, request, "AI_REVIEW_CONFIG_UPDATED");
+        return updateExisting(ownerId, task, config, request, provider, "AI_REVIEW_CONFIG_UPDATED");
     }
 
     public AiReviewConfigResponse get(Long ownerId, Long taskId) {
@@ -172,9 +172,9 @@ public class AiReviewConfigService {
     }
 
     private AiReviewConfigResponse updateExisting(Long ownerId, Task task, AiReviewConfig config,
-                                                  AiReviewConfigRequest request, String action) {
+                                                  AiReviewConfigRequest request, LlmProvider provider, String action) {
         Map<String, Object> beforeJson = auditSnapshot(config);
-        applyRequest(config, task.getId(), request);
+        applyRequest(config, task.getId(), request, provider);
         config.setPromptVersion(nextPromptVersion(config.getPromptVersion()));
         aiReviewConfigMapper.updateById(config);
         if (!config.getId().equals(task.getAiReviewConfigId())) {
@@ -186,15 +186,14 @@ public class AiReviewConfigService {
         return toResponse(config);
     }
 
-    private void applyRequest(AiReviewConfig config, Long taskId, AiReviewConfigRequest request) {
+    private void applyRequest(AiReviewConfig config, Long taskId, AiReviewConfigRequest request, LlmProvider provider) {
         config.setTaskId(taskId);
         config.setProviderId(request.providerId());
-        config.setModelName(request.modelName().trim());
+        config.setModelName(provider.getDefaultModel());
         config.setPromptTemplate(request.promptTemplate().trim());
         config.setScoringDimensionsJson(toJson(normalizeDimensions(request.scoringDimensions())));
         config.setPassThreshold(request.passThreshold());
         config.setManualReviewThreshold(request.manualReviewThreshold());
-        config.setOutputSchemaJson(toJson(request.outputSchema()));
         config.setMaxRetry(request.maxRetry() != null ? request.maxRetry() : 3);
         config.setAiFlowPolicy(request.aiFlowPolicy() != null ? request.aiFlowPolicy() : "MANUAL_FIRST");
         config.setAllowAiDirectApprove(Boolean.TRUE.equals(request.allowAiDirectApprove()));
@@ -213,15 +212,17 @@ public class AiReviewConfigService {
     }
 
     private void validateRequest(AiReviewConfigRequest request, LlmProvider provider) {
+        if (request.modelName() != null && !request.modelName().isBlank()
+                && !request.modelName().trim().equals(provider.getDefaultModel())) {
+            throw new BusinessException(AI_REVIEW_CONFIG_INVALID,
+                    "Model name must match provider default model");
+        }
         if (request.manualReviewThreshold().compareTo(request.passThreshold()) > 0) {
             throw new BusinessException(AI_REVIEW_CONFIG_INVALID,
                     "Manual review threshold must not be greater than pass threshold");
         }
         if (normalizeDimensions(request.scoringDimensions()).isEmpty()) {
             throw new BusinessException(AI_REVIEW_CONFIG_INVALID, "AI review scoring dimensions are required");
-        }
-        if (request.outputSchema() == null || request.outputSchema().isEmpty()) {
-            throw new BusinessException(AI_REVIEW_CONFIG_INVALID, "AI review output schema is required");
         }
         String visionDetail = request.visionDetail();
         if (visionDetail != null && !visionDetail.isBlank()
@@ -238,7 +239,7 @@ public class AiReviewConfigService {
     }
 
     private LlmProvider requireEnabledProvider(Long ownerId, Long providerId) {
-        return llmProviderService.findEnabledOwnedById(ownerId, providerId)
+        return llmProviderService.findEnabledById(providerId)
                 .orElseThrow(() -> new BusinessException(AI_REVIEW_PROVIDER_DISABLED,
                         "Enabled LLM provider is required"));
     }
@@ -281,7 +282,7 @@ public class AiReviewConfigService {
                 parseDimensions(config.getScoringDimensionsJson()),
                 config.getPassThreshold(),
                 config.getManualReviewThreshold(),
-                parseObjectMap(config.getOutputSchemaJson()),
+                config.getOutputSchemaJson() != null ? parseObjectMap(config.getOutputSchemaJson()) : null,
                 config.getPromptVersion(),
                 config.getMaxRetry(),
                 config.getAiFlowPolicy(),
@@ -308,7 +309,8 @@ public class AiReviewConfigService {
         snapshot.put("scoringDimensions", parseDimensions(config.getScoringDimensionsJson()));
         snapshot.put("passThreshold", config.getPassThreshold());
         snapshot.put("manualReviewThreshold", config.getManualReviewThreshold());
-        snapshot.put("outputSchema", parseObjectMap(config.getOutputSchemaJson()));
+        snapshot.put("outputSchema", config.getOutputSchemaJson() != null
+                ? parseObjectMap(config.getOutputSchemaJson()) : null);
         snapshot.put("promptVersion", config.getPromptVersion());
         snapshot.put("multimodalEnabled", config.getMultimodalEnabled());
         snapshot.put("degradationPenalty", config.getDegradationPenalty());
@@ -343,7 +345,8 @@ public class AiReviewConfigService {
         payload.put("scoringDimensions", parseDimensions(config.getScoringDimensionsJson()));
         payload.put("passThreshold", config.getPassThreshold());
         payload.put("manualReviewThreshold", config.getManualReviewThreshold());
-        payload.put("outputSchema", parseObjectMap(config.getOutputSchemaJson()));
+        payload.put("outputSchema", config.getOutputSchemaJson() != null
+                ? parseObjectMap(config.getOutputSchemaJson()) : null);
         payload.put("itemSnapshot", request.itemSnapshot());
         payload.put("answerJson", request.answerJson());
         return toJson(payload);

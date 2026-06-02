@@ -189,10 +189,7 @@ public class AiAutoReviewService {
             AiReviewConfig config = loadConfig(task);
             DatasetItem datasetItem = datasetItemMapper.selectById(submission.getDatasetItemId());
             MediaPromptResult prompt = buildPrompt(submission, datasetItem, config);
-            AgentRun agentRun = queuedAgentRunId == null
-                    ? agentRunService.create(AGENT_TYPE, submissionId, config.getProviderId(),
-                    config.getModelName(), config.getPromptVersion(), prompt.promptSnapshot())
-                    : existingAgentRun(queuedAgentRunId);
+            AgentRun agentRun = prepareAgentRun(submissionId, queuedAgentRunId, config, prompt.promptSnapshot());
             agentRunService.start(agentRun.getId());
             return ReviewPrepareResult.ready(submission, config, agentRun, prompt);
         });
@@ -581,10 +578,6 @@ public class AiAutoReviewService {
         if (action != AiFlowAction.AI_DIRECT_APPROVE) {
             return action;
         }
-        Task task = taskMapper.selectById(submission.getTaskId());
-        if (task != null && task.getOverlapCount() != null && task.getOverlapCount() > 1) {
-            return AiFlowAction.AI_ASSIGN_MANUAL_REVIEW;
-        }
         return action;
     }
 
@@ -720,10 +713,16 @@ public class AiAutoReviewService {
         );
     }
 
-    private AgentRun existingAgentRun(Long agentRunId) {
-        AgentRun run = new AgentRun();
-        run.setId(agentRunId);
-        return run;
+    private AgentRun prepareAgentRun(Long submissionId, Long queuedAgentRunId,
+                                     AiReviewConfig config, String promptSnapshot) {
+        if (queuedAgentRunId != null) {
+            AgentRun queuedRun = agentRunService.findById(queuedAgentRunId);
+            if (queuedRun != null && queuedRun.getStatus() == AgentRunStatus.PENDING) {
+                return queuedRun;
+            }
+        }
+        return agentRunService.create(AGENT_TYPE, submissionId, config.getProviderId(),
+                config.getModelName(), config.getPromptVersion(), promptSnapshot);
     }
 
     private Object parseJsonValue(String json) {

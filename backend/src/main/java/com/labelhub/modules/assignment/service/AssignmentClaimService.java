@@ -13,6 +13,7 @@ import com.labelhub.modules.assignment.dto.AssignmentClaimResponse;
 import com.labelhub.modules.assignment.mapper.AssignmentMapper;
 import com.labelhub.modules.dataset.service.DatasetClaimService;
 import com.labelhub.modules.dataset.service.DatasetItemSnapshot;
+import com.labelhub.modules.task.domain.Strategy;
 import com.labelhub.modules.task.domain.Task;
 import com.labelhub.modules.task.domain.TaskStatus;
 import com.labelhub.modules.task.mapper.TaskMapper;
@@ -72,6 +73,16 @@ public class AssignmentClaimService {
             throw new BusinessException(PERMISSION_DENIED, "Cannot claim assignment for another user");
         }
         Task task = loadClaimableTask(taskId);
+        if (task.getStrategy() == Strategy.ASSIGNED) {
+            throw new BusinessException(PERMISSION_DENIED, "This task uses ASSIGNED strategy, claim is not allowed");
+        }
+        if (task.getStrategy() == Strategy.QUOTA_CLAIM) {
+            int claimedCount = assignmentMapper.countByTaskAndLabeler(taskId, labelerId);
+            Integer limit = task.getBonusThreshold();
+            if (limit != null && limit > 0 && claimedCount >= limit) {
+                throw claimConflict("Quota limit reached: " + limit + " items already claimed");
+            }
+        }
         String lockKey = "lock:claim:task:" + taskId;
         boolean locked = redisLockService.tryLock(lockKey, CLAIM_LOCK_WAIT_MILLIS, CLAIM_LOCK_LEASE_MILLIS);
         if (!locked) {
@@ -80,7 +91,7 @@ public class AssignmentClaimService {
         try {
             return transactionTemplate.execute(status -> {
                 DatasetItemSnapshot itemSnapshot = datasetClaimService
-                        .reserveClaimableItem(taskId, labelerId, task.getOverlapCount())
+                        .reserveClaimableItem(taskId, labelerId)
                         .orElseThrow(() -> claimConflict("No claimable item is available"));
                 TemplateSchemaSnapshot templateSchema = templateSchemaService.getTemplateSchema(task.getPublishedTemplateVersionId());
                 Assignment assignment = createAssignment(taskId, labelerId, itemSnapshot.datasetItemId(), templateSchema.templateVersionId());
@@ -129,9 +140,6 @@ public class AssignmentClaimService {
         }
         if (task.getPublishedTemplateVersionId() == null) {
             throw new BusinessException(TASK_STATUS_NOT_ALLOWED, "Task template version is missing");
-        }
-        if (task.getOverlapCount() == null || task.getOverlapCount() < 1) {
-            throw new BusinessException(TASK_STATUS_NOT_ALLOWED, "Task overlap count is invalid");
         }
         return task;
     }

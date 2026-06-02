@@ -3,7 +3,6 @@ package com.labelhub.modules.task.service;
 import com.labelhub.modules.ai.domain.AiReviewConfig;
 import com.labelhub.modules.ai.mapper.AiReviewConfigMapper;
 import com.labelhub.modules.dataset.mapper.DatasetItemMapper;
-import com.labelhub.modules.reward.mapper.RewardRuleMapper;
 import com.labelhub.modules.template.mapper.TemplateVersionMapper;
 import org.springframework.stereotype.Component;
 
@@ -13,16 +12,13 @@ public class DefaultTaskPublishDependencyChecker implements TaskPublishDependenc
     private final AiReviewConfigMapper aiReviewConfigMapper;
     private final DatasetItemMapper datasetItemMapper;
     private final TemplateVersionMapper templateVersionMapper;
-    private final RewardRuleMapper rewardRuleMapper;
 
     public DefaultTaskPublishDependencyChecker(AiReviewConfigMapper aiReviewConfigMapper,
                                                DatasetItemMapper datasetItemMapper,
-                                               TemplateVersionMapper templateVersionMapper,
-                                               RewardRuleMapper rewardRuleMapper) {
+                                               TemplateVersionMapper templateVersionMapper) {
         this.aiReviewConfigMapper = aiReviewConfigMapper;
         this.datasetItemMapper = datasetItemMapper;
         this.templateVersionMapper = templateVersionMapper;
-        this.rewardRuleMapper = rewardRuleMapper;
     }
 
     @Override
@@ -44,8 +40,4 @@ public class DefaultTaskPublishDependencyChecker implements TaskPublishDependenc
         return config != null && taskId.equals(config.getTaskId());
     }
 
-    @Override
-    public boolean rewardRuleExists(Long taskId) {
-        return rewardRuleMapper.countByTaskId(taskId) > 0;
-    }
 }

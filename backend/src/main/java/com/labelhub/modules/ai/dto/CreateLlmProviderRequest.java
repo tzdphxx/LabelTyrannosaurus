@@ -35,7 +35,9 @@ public record CreateLlmProviderRequest(
         @Schema(description = "视觉模型名称")
         @Size(max = 100) String visionModel,
         @Schema(description = "结构化输出模式", example = "NONE")
-        @Size(max = 20) String structuredOutputMode
+        @Size(max = 20) String structuredOutputMode,
+        @Schema(description = "JSON Schema 输出结构定义（Admin 统一管理，JSON_SCHEMA 模式时使用）")
+        @Size(max = 10000) String outputSchema
 ) {
     public CreateLlmProviderRequest(String providerCode, String providerName, String baseUrl, String apiKey,
                                     String defaultModel, Map<String, String> customHeaders,
@@ -43,7 +45,7 @@ public record CreateLlmProviderRequest(
                                     Integer userRateLimitPerMinute) {
         this(providerCode, providerName, baseUrl, apiKey, defaultModel, customHeaders,
                 platformRateLimitPerMinute, taskRateLimitPerMinute, userRateLimitPerMinute,
-                false, false, 10, null, "NONE");
+                false, false, 10, null, "NONE", null);
     }
 
     public CreateLlmProviderRequest(String providerCode, String providerName, String baseUrl, String apiKey,
@@ -53,6 +55,6 @@ public record CreateLlmProviderRequest(
                                     Integer maxImageCount, String visionModel) {
         this(providerCode, providerName, baseUrl, apiKey, defaultModel, customHeaders,
                 platformRateLimitPerMinute, taskRateLimitPerMinute, userRateLimitPerMinute,
-                supportVision, supportMultiImage, maxImageCount, visionModel, "NONE");
+                supportVision, supportMultiImage, maxImageCount, visionModel, "NONE", null);
     }
 }

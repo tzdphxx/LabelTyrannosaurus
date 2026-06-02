@@ -389,7 +389,7 @@ public class LlmTriggerService {
     }
 
     private void requireEnabledProvider(Long ownerId, Long providerId) {
-        if (llmProviderService.findEnabledOwnedById(ownerId, providerId).isEmpty()) {
+        if (llmProviderService.findEnabledById(providerId).isEmpty()) {
             throw new BusinessException(LLM_TRIGGER_PROVIDER_UNAVAILABLE, "Enabled LLM provider is required");
         }
     }

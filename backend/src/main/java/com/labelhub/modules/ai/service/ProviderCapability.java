@@ -5,14 +5,21 @@ public record ProviderCapability(
         boolean supportMultiImage,
         int maxImageCount,
         String visionModel,
-        String structuredOutputMode
+        String structuredOutputMode,
+        String outputSchemaJson
 ) {
     public ProviderCapability(boolean supportVision, boolean supportMultiImage,
                               int maxImageCount, String visionModel) {
-        this(supportVision, supportMultiImage, maxImageCount, visionModel, "NONE");
+        this(supportVision, supportMultiImage, maxImageCount, visionModel, "NONE", null);
+    }
+
+    public ProviderCapability(boolean supportVision, boolean supportMultiImage,
+                              int maxImageCount, String visionModel,
+                              String structuredOutputMode) {
+        this(supportVision, supportMultiImage, maxImageCount, visionModel, structuredOutputMode, null);
     }
 
     public static ProviderCapability textOnly() {
-        return new ProviderCapability(false, false, 0, null, "NONE");
+        return new ProviderCapability(false, false, 0, null, "NONE", null);
     }
 }

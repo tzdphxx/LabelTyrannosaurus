@@ -5,7 +5,12 @@ import java.math.BigDecimal;
 
 @Schema(description = "奖励摘要响应")
 public record RewardSummaryResponse(
-        @Schema(description = "奖励模式") String rewardMode,
-        @Schema(description = "单位奖励金额") BigDecimal unitReward,
-        @Schema(description = "奖励货币") String rewardCurrency) {
+        @Schema(description = "每条通过奖励积分", example = "10.00")
+        BigDecimal rewardPerApproval,
+        @Schema(description = "每条驳回扣分", example = "5.00")
+        BigDecimal penaltyPerRejection,
+        @Schema(description = "额外奖励的通过数阈值", example = "50")
+        Integer bonusThreshold,
+        @Schema(description = "达标后额外奖励积分", example = "100.00")
+        BigDecimal bonusPoints) {
 }

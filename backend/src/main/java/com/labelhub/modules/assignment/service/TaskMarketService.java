@@ -54,9 +54,9 @@ public class TaskMarketService {
                 task.getTitle(),
                 listTags(task.getId()),
                 task.getDeadlineAt(),
-                datasetMarketStatsService.countAvailableItems(task.getId(), labelerId, task.getOverlapCount()),
+                datasetMarketStatsService.countAvailableItems(task.getId(), labelerId),
                 assignmentMarketStatsService.countClaimedByLabeler(task.getId(), labelerId),
-                rewardSummaryService.findRewardSummary(task.getId(), Boolean.TRUE.equals(task.getRewardVisible()))
+                rewardSummaryService.findRewardSummary(task.getId())
         );
     }
 

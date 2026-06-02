@@ -17,8 +17,8 @@ import java.util.Map;
 public record AiReviewConfigRequest(
         @Schema(description = "供应商ID")
         @NotNull Long providerId,
-        @Schema(description = "模型名称", example = "gpt-4o")
-        @NotBlank @Size(max = 128) String modelName,
+        @Schema(description = "模型名称（可选，如提供则必须匹配供应商默认模型）", example = "gpt-4o")
+        @Size(max = 128) String modelName,
         @Schema(description = "提示词模板")
         @NotBlank @Size(max = 10000) String promptTemplate,
         @Schema(description = "评分维度列表")
@@ -27,8 +27,6 @@ public record AiReviewConfigRequest(
         @NotNull @DecimalMin("0.00") @DecimalMax("100.00") BigDecimal passThreshold,
         @Schema(description = "人工审核阈值（0-100）", example = "60.00")
         @NotNull @DecimalMin("0.00") @DecimalMax("100.00") BigDecimal manualReviewThreshold,
-        @Schema(description = "输出结构定义")
-        @NotEmpty Map<String, Object> outputSchema,
         @Schema(description = "最大重试次数", example = "3")
         @Min(0) @Max(10) Integer maxRetry,
         @Schema(description = "AI流程策略")
@@ -56,12 +54,12 @@ public record AiReviewConfigRequest(
 ) {
     public AiReviewConfigRequest(Long providerId, String modelName, String promptTemplate,
                                  List<String> scoringDimensions, BigDecimal passThreshold,
-                                 BigDecimal manualReviewThreshold, Map<String, Object> outputSchema,
+                                 BigDecimal manualReviewThreshold,
                                  Integer maxRetry, String aiFlowPolicy, Boolean allowAiDirectApprove,
                                  Boolean allowAiDirectReject, BigDecimal rejectThreshold,
                                  BigDecimal confidenceThreshold, List<String> riskFlagsForceManual) {
         this(providerId, modelName, promptTemplate, scoringDimensions, passThreshold, manualReviewThreshold,
-                outputSchema, maxRetry, aiFlowPolicy, allowAiDirectApprove, allowAiDirectReject,
+                maxRetry, aiFlowPolicy, allowAiDirectApprove, allowAiDirectReject,
                 rejectThreshold, confidenceThreshold, riskFlagsForceManual,
                 true, new BigDecimal("0.20"), "auto", 5, false);
     }

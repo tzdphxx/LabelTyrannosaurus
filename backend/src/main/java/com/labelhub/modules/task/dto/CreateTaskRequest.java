@@ -1,11 +1,13 @@
 package com.labelhub.modules.task.dto;
 
+import com.labelhub.modules.task.domain.Strategy;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.Future;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
 
@@ -29,10 +31,6 @@ public record CreateTaskRequest(
         @NotNull
         @Future
         LocalDateTime deadlineAt,
-        @Schema(description = "每条数据需要的标注份数", example = "3")
-        @NotNull
-        @Min(1)
-        Integer overlapCount,
         @Schema(description = "已发布模板版本 ID", example = "20")
         Long publishedTemplateVersionId,
         @Schema(description = "AI 审核配置 ID", example = "30")
@@ -40,6 +38,16 @@ public record CreateTaskRequest(
         @Schema(description = "审核级别数（1=单级审核，2=初审+终审，3=初审+复审+终审）", example = "3")
         @Min(1)
         Integer reviewLevelCount,
+        @Schema(description = "分发策略：FCFS（先到先得）/ ASSIGNED（指派）/ QUOTA_CLAIM（配额抢单）", example = "FCFS")
+        Strategy strategy,
+        @Schema(description = "每条通过奖励积分", example = "10.00")
+        BigDecimal rewardPerApproval,
+        @Schema(description = "每条驳回扣分", example = "5.00")
+        BigDecimal penaltyPerRejection,
+        @Schema(description = "额外奖励的通过数阈值", example = "50")
+        Integer bonusThreshold,
+        @Schema(description = "达标后额外奖励积分", example = "100.00")
+        BigDecimal bonusPoints,
         @Schema(description = "Dataset file ID uploaded by /api/v1/files/upload", example = "99")
         Long datasetFileId
 ) {

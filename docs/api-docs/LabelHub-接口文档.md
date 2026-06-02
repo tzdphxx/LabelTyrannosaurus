@@ -2194,7 +2194,6 @@ Authorization: Bearer <accessToken>
 | 参数 | 类型 | 必填 | 说明 |
 |------|------|------|------|
 | file | MultipartFile | 是 | 上传的文件 |
-| businessType | String | 是 | 业务类型标识（如 DATASET_IMPORT、EXPORT） |
 
 **响应体** `FileUploadResponse`：
 
@@ -2204,7 +2203,6 @@ Authorization: Bearer <accessToken>
 | fileName | String | 原始文件名 |
 | fileSize | Long | 文件大小（字节） |
 | contentType | String | MIME 类型 |
-| businessType | String | 业务类型 |
 | uploadedAt | LocalDateTime | 上传时间 |
 
 ---
@@ -2540,7 +2538,7 @@ Owner 完整工作流：
 
 ```text
 1. POST /api/v1/files/upload
-   请求: multipart/form-data { file: <数据集文件>, businessType: "DATASET_IMPORT" }
+   请求: multipart/form-data { file: <数据集文件> }
    响应: { fileId: 99 }
    说明: 上传数据集文件（支持 JSON / JSONL / Excel 格式）
 

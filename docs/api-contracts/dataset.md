@@ -185,7 +185,7 @@ Response body: same shape as `DatasetImportJobResponse`. The frontend should pol
 ```
 
 Notes:
-- `fileId` comes from `/api/v1/files/upload`; use `businessType=dataset` for dataset source files.
+- `fileId` comes from `/api/v1/files/upload`; upload requests only send the multipart `file` field.
 - Non-admin users can only import files they uploaded.
 - Parsing, duplicate `externalId`, error report, and media context refresh rules match `/api/v1/tasks/{taskId}/dataset/import`.
 

@@ -9,6 +9,7 @@ import com.labelhub.common.security.CurrentUser;
 import com.labelhub.common.security.CurrentUserContext;
 import com.labelhub.common.security.RoleCode;
 import com.labelhub.modules.ai.dto.LlmTriggerRunRequest;
+import com.labelhub.infrastructure.llm.LlmGatewayStatus;
 import com.labelhub.modules.ai.dto.LlmTriggerRunResponse;
 import com.labelhub.modules.ai.service.LlmTriggerService;
 import java.util.List;
@@ -32,20 +33,47 @@ class LlmTriggerControllerTest {
     }
 
     @Test
-    void passesCurrentUserToService() {
+    void labelerTriggersFromAssignment() {
         LlmTriggerController controller = new LlmTriggerController(llmTriggerService);
         CurrentUser currentUser = new CurrentUser(2L, "labeler", "test@labelhub.dev", Set.of(RoleCode.LABELER), 1);
         CurrentUserContext.set(currentUser);
-        LlmTriggerRunRequest request = new LlmTriggerRunRequest(10L, 20L, "assist", 30L, 40L,
-                Map.of("answer", "draft"), false);
-        LlmTriggerRunResponse serviceResponse = new LlmTriggerRunResponse(50L, 60L, "assist",
-                Map.of("suggestion", "ok"), "ok", List.of("answer"), "raw", "SUCCESS",
-                12L, null, null);
-        when(llmTriggerService.run(currentUser, request)).thenReturn(serviceResponse);
+        LlmTriggerRunRequest request = request();
+        LlmTriggerRunResponse serviceResponse = response();
+        when(llmTriggerService.runForAssignment(currentUser, 40L, request)).thenReturn(serviceResponse);
 
-        ApiResponse<LlmTriggerRunResponse> response = controller.run(request);
+        ApiResponse<LlmTriggerRunResponse> response = controller.runForAssignment(40L, request);
 
         assertThat(response.data()).isEqualTo(serviceResponse);
-        verify(llmTriggerService).run(currentUser, request);
+        verify(llmTriggerService).runForAssignment(currentUser, 40L, request);
+    }
+
+    @Test
+    void ownerTestsFromTask() {
+        LlmTriggerController controller = new LlmTriggerController(llmTriggerService);
+        CurrentUser currentUser = new CurrentUser(1L, "owner", "test@labelhub.dev", Set.of(RoleCode.OWNER), 1);
+        CurrentUserContext.set(currentUser);
+        LlmTriggerRunRequest request = requestWithItem();
+        LlmTriggerRunResponse serviceResponse = response();
+        when(llmTriggerService.testFromTask(currentUser, 10L, request)).thenReturn(serviceResponse);
+
+        ApiResponse<LlmTriggerRunResponse> response = controller.testFromTask(10L, request);
+
+        assertThat(response.data()).isEqualTo(serviceResponse);
+        verify(llmTriggerService).testFromTask(currentUser, 10L, request);
+    }
+
+    private LlmTriggerRunRequest request() {
+        return new LlmTriggerRunRequest(50L, "qwen-plus", "Suggest a summary.",
+                List.of("summary"), null, Map.of());
+    }
+
+    private LlmTriggerRunRequest requestWithItem() {
+        return new LlmTriggerRunRequest(50L, "qwen-plus", "Suggest a summary.",
+                List.of("summary"), 30L, Map.of("answer", "draft"));
+    }
+
+    private LlmTriggerRunResponse response() {
+        return new LlmTriggerRunResponse(70L, Map.of("suggestion", "ok"), "ok",
+                List.of("summary"), "raw", LlmGatewayStatus.SUCCESS, 12L, null, null);
     }
 }

@@ -1798,57 +1798,91 @@ Authorization: Bearer <accessToken>
 
 ---
 
-## 13. LLM 触发器
+## 13. LlmTrigger（字段级 AI 辅助）
 
-### 13.1 POST /api/v1/llm/triggers/run
+LlmTrigger 是前端在标注作答过程中直接调用的 AI 辅助能力。前端全量传入模型参数和 prompt，后端不解析模板 schema。
 
-**作用**：执行模板中定义的 LLM 触发器组件。用于设计器预览（previewMode=true）或标注员工作台辅助填写。触发器输出仅作为参考建议，前端必须由用户确认后才写入 answerJson。每次调用产生一条 AgentRun 记录。
+### 13.1 POST /api/v1/assignments/{assignmentId}/llm-triggers（标注时触发）
 
-**权限**：需认证（OWNER 设计器预览 / LABELER 标注辅助）
+**作用**：标注员在作答过程中点击按钮，触发 LLM 为指定字段生成建议。后端从 assignment 自动获取 taskId、templateVersionId、datasetItemId 等上下文。
+
+**权限**：LABELER（必须是该 assignment 的持有者）
 
 **请求体** `LlmTriggerRunRequest`：
 
 | 字段 | 类型 | 必填 | 约束 | 说明 |
-|------|------|------|------|------|
-| taskId | Long | 是 | 非空 | 任务 ID |
-| templateVersionId | Long | 是 | 非空 | 模板版本 ID |
-| componentId | String | 是 | 非空 | 触发器组件 ID，必须指向 LlmTrigger 类型组件 |
-| datasetItemId | Long | 否 | - | 数据项 ID（标注时传入） |
-| assignmentId | Long | 否 | - | Assignment ID（标注时传入） |
-| currentAnswerJson | Map | 否 | - | 当前已填写的答案 JSON |
-| previewMode | boolean | 否 | 默认 false | 预览模式（true 时不产生 submission） |
+|------|------|:--:|------|------|
+| providerId | Long | 是 | 非空 | Admin 启用的模型 ID |
+| modelName | String | 是 | 非空，最大 128 字符 | 模型名称 |
+| promptTemplate | String | 是 | 非空，最大 10000 字符 | 发给 LLM 的 prompt 模板 |
+| targetFields | List&lt;String&gt; | 是 | 非空列表 | AI 输出建议要填入的目标字段 |
+| currentAnswerJson | Map | 否 | - | 当前已填写的草稿答案（传入后 AI 可基于已有内容优化） |
 
-**响应体** `LlmTriggerRunResponse`：
+**示例**：
+```json
+{
+  "providerId": 50,
+  "modelName": "qwen-plus",
+  "promptTemplate": "根据以下内容生成摘要：",
+  "targetFields": ["summary"],
+  "currentAnswerJson": { "summary": "草稿内容" }
+}
+```
 
-| 字段 | 类型 | 说明 |
-|------|------|------|
-| triggerRunId | Long | 触发器运行记录 ID |
-| agentRunId | Long | 关联的 Agent 运行 ID |
-| componentId | String | 触发器组件 ID |
-| suggestionJson | Map | 模型建议的答案 JSON |
-| displayText | String | 展示给用户的建议文本 |
-| targetFields | List&lt;String&gt; | 建议填充的目标字段列表 |
-| rawModelSummary | String | 模型原始输出摘要 |
-| status | String | 运行状态：SUCCESS / FAILED / RUNNING |
-| latencyMs | Long | 耗时毫秒 |
-| errorCode | String | 错误码（失败时） |
-| errorMessage | String | 错误信息（失败时） |
+### 13.2 POST /api/v1/tasks/{taskId}/llm-triggers/test（Owner 预览测试）
 
----
+**作用**：Owner 搭模板时用指定题目测试 prompt 效果。不创建 submission。
 
-### 13.2 GET /api/v1/llm/triggers/runs/{triggerRunId}
+**权限**：OWNER（必须是该任务的 Owner）
 
-**作用**：查询异步 LLM 触发器的运行状态和结果。用于轮询异步触发器的完成情况。
+**请求体** `LlmTriggerRunRequest`（比标注模式多传 `datasetItemId`）：
 
-**权限**：需认证（仅能查看自己触发的运行）
+| 字段 | 类型 | 必填 | 说明 |
+|------|------|:--:|------|
+| providerId | Long | 是 | Admin 启用的模型 ID |
+| modelName | String | 是 | 模型名称 |
+| promptTemplate | String | 是 | 发给 LLM 的 prompt 模板 |
+| targetFields | List&lt;String&gt; | 是 | 目标字段列表 |
+| datasetItemId | Long | 是 | 测试用的题目 ID |
+| currentAnswerJson | Map | 否 | 草稿答案 |
+
+**示例**：
+```json
+{
+  "providerId": 50,
+  "modelName": "qwen-plus",
+  "promptTemplate": "根据以下内容生成摘要：",
+  "targetFields": ["summary"],
+  "datasetItemId": 70
+}
+```
+
+### 13.3 GET /api/v1/llm/triggers/runs/{triggerRunId}
+
+**作用**：轮询异步 LlmTrigger 的运行状态和结果。
+
+**权限**：OWNER（自己的任务）/ LABELER（自己的 assignment）
 
 **路径参数**：
 
 | 参数 | 类型 | 说明 |
 |------|------|------|
-| triggerRunId | Long | 触发器运行记录 ID |
+| triggerRunId | Long | 运行记录 ID |
 
-**响应体**：同 `LlmTriggerRunResponse`
+**响应体** `LlmTriggerRunResponse`（三个接口通用）：
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| triggerRunId | Long | 运行记录 ID |
+| agentRunId | Long | 关联的 Agent 运行 ID |
+| suggestionJson | Map | AI 建议的字段值 |
+| displayText | String | 展示文本 |
+| targetFields | List&lt;String&gt; | 目标字段列表 |
+| rawModelSummary | String | 原始输出摘要 |
+| status | String | SUCCESS / FAILED / RUNNING |
+| latencyMs | Long | 耗时毫秒 |
+| errorCode | String | 错误码 |
+| errorMessage | String | 错误信息 |
 
 ---
 
@@ -2655,9 +2689,25 @@ POST /api/v1/templates/10/fork
     请求: { answerJson: "{\"label\":\"猫\"}", clientVersion: 0 }
     响应: { draftVersion: 1 }
     说明: 保存草稿（可多次调用，每次 clientVersion 递增）
-```
 
-（可选）触发 AI 预标注辅助：
+    ── 标注过程中可触发 LlmTrigger（字段级 AI 辅助）──
+
+15. POST /api/v1/assignments/100/llm-triggers
+    请求: {
+      providerId: 50,
+      modelName: "qwen-plus",
+      promptTemplate: "根据以下内容生成摘要：",
+      targetFields: ["summary"],
+      currentAnswerJson: { "summary": "当前草稿" }
+    }
+    响应: { triggerRunId: 500, agentRunId: 600, status: "RUNNING", targetFields: ["summary"] }
+    说明: 前端全量传参，无需解析模板；后端根据 assignment 自动获取上下文
+
+16. GET /api/v1/llm/triggers/runs/500  ← 轮询
+    响应: { status: "SUCCESS", suggestionJson: { "summary": "AI建议..." }, targetFields: ["summary"] }
+    说明: 标注员参考 AI 建议，自行决定是否采纳
+
+    ──（可选）AI 预标注辅助（整题级别）──
 ```text
 15a. POST /api/v1/assignments/100/pre-annotations/run
      响应: { preAnnotationId: 200, status: "RUNNING" }
@@ -2832,19 +2882,65 @@ POST /api/v1/reviewer/submissions/batch/assign
 | 冲突仲裁 | groupId, goldenSubmissionId | RESOLVED |
 | 导出 | taskId | exportJobId, downloadUrl |
 
-### D.10 已补齐入口与联调注意事项
+### D.10 LlmTrigger 详解
 
-当前主流程接口链路完整可跑通，原先的两个工作台入口缺口已补齐：
+#### 设计原则
 
-1. **标注员"回到工作台"**：使用 `GET /api/v1/labeler/assignments` 查询当前标注员的 assignment 列表，可按 `taskId` 和 `status` 筛选；使用 `POST /api/v1/labeler/assignments/{assignmentId}/cancel` 放弃已领取但尚未进入终态的 assignment。`GET /api/v1/labeler/submissions` 继续用于查看已经产生 submission 的提交记录。
+**前端全量传参，后端不解析模板**。LlmTrigger 不再依赖模板 schema 中定义的组件——前端直接在调用时传入 `providerId`、`modelName`、`promptTemplate`、`targetFields`。
 
-2. **审核员"开始工作"**：使用 `GET /api/v1/reviewer/tasks` 作为任务导航入口，使用 `GET /api/v1/reviewer/dashboard` 渲染审核员工作台概览，使用 `POST /api/v1/reviewer/submissions/claim` 主动领取待审提交；领取后通过 `GET /api/v1/reviewer/submissions?assignedReviewerId=<当前审核员ID>` 查看自己的待审列表。
+#### 标注时触发
 
-联调时需注意：
+```
+POST /api/v1/assignments/{assignmentId}/llm-triggers
+```
 
-- 普通注册只允许 `LABELER` 和 `OWNER`；`REVIEWER` 需由管理员创建或调整角色。
-- 每个普通用户只能拥有一个角色；用户无角色或多角色时登录/刷新会返回 `400102`。
-- 大模型供应商配置使用 canonical 路径 `/api/v1/llm-providers`，权限为 `OWNER`，不再使用旧的 `/api/v1/admin/llm-providers`。
+权限：LABELER（必须是 assignment 持有者）。后端从 assignment 自动获取 taskId、datasetItemId 等上下文。
+
+#### Owner 预览测试
+
+```
+POST /api/v1/tasks/{taskId}/llm-triggers/test
+```
+
+权限：OWNER（必须是任务所有者）。需传 `datasetItemId` 指定测试题目。
+
+#### 与 AI 审核、预标注的区别
+
+| | LlmTrigger | 预标注 | AI 审核 |
+|---|:--:|:--:|:--:|
+| 触发 | **手动点击** | 手动 | 提交后**自动** |
+| 粒度 | 字段级 | 整题 | submission |
+| 参数来源 | **前端全量传** | API 调用 | ai-review-configs |
+| 结果影响 | 前端展示，标注员决定 | 前端展示 | 写入 ai_review_result |
+
+#### 数据流
+
+```text
+前端点击按钮
+  ↓
+POST /api/v1/assignments/{id}/llm-triggers
+  { providerId, modelName, promptTemplate, targetFields, currentAnswerJson }
+  → 校验：assignment 属于当前 LABELER
+  → 校验：Provider 已启用
+  → 构造 inputSnapshot（itemJson + promptTemplate + currentAnswerJson）
+  → 进入异步队列
+  ↓
+Worker 消费
+  → LlmGateway.review()
+  → 写入 llm_trigger_runs
+  ↓
+前端轮询 GET /api/v1/llm/triggers/runs/{id}
+  → 拿到 suggestionJson
+  → 标注员决定是否采纳
+```
+
+### D.11 联调注意事项
+
+- 普通注册只允许 `LABELER` 和 `OWNER`；`REVIEWER` 需由管理员创建或调整角色
+- 每个普通用户只能拥有一个角色；用户无角色或多角色时登录/刷新会返回 `400102`
+- 大模型供应商管理：`/api/v1/admin/llm-providers`（ADMIN）；OWNER 通过 `GET /api/v1/llm-providers` 查看
+- LlmTrigger 前端全量传参，不依赖模板解析
+- 所有 LLM 调用均通过异步队列执行，前端需轮询结果
 
 ---
 

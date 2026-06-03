@@ -107,7 +107,7 @@ class AssignmentClaimServiceTest {
     void claimsItemWithLockAssignmentAndAudit() {
         when(taskMapper.selectById(TASK_ID)).thenReturn(publishedTask(1));
         when(redisLockService.tryLock("lock:claim:task:10", 2000, 10000)).thenReturn(true);
-        when(datasetClaimService.reserveClaimableItem(TASK_ID, LABELER_ID, 1))
+        when(datasetClaimService.reserveClaimableItem(TASK_ID, LABELER_ID))
                 .thenReturn(Optional.of(new DatasetItemSnapshot(ITEM_ID, "{\"text\":\"hello\"}")));
         when(templateSchemaService.getTemplateSchema(TEMPLATE_VERSION_ID))
                 .thenReturn(new TemplateSchemaSnapshot(TEMPLATE_VERSION_ID, "{\"type\":\"object\"}"));
@@ -144,7 +144,7 @@ class AssignmentClaimServiceTest {
                 .isInstanceOfSatisfying(BusinessException.class,
                         ex -> assertThat(ex.getCode()).isEqualTo(409201));
 
-        verify(datasetClaimService, never()).reserveClaimableItem(any(), any(), any());
+        verify(datasetClaimService, never()).reserveClaimableItem(any(), any());
         verify(redisLockService, never()).unlock(any());
     }
 
@@ -152,7 +152,7 @@ class AssignmentClaimServiceTest {
     void rejectsWhenNoClaimableItemExists() {
         when(taskMapper.selectById(TASK_ID)).thenReturn(publishedTask(1));
         when(redisLockService.tryLock("lock:claim:task:10", 2000, 10000)).thenReturn(true);
-        when(datasetClaimService.reserveClaimableItem(TASK_ID, LABELER_ID, 1)).thenReturn(Optional.empty());
+        when(datasetClaimService.reserveClaimableItem(TASK_ID, LABELER_ID)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> assignmentClaimService.claim(TASK_ID, LABELER_ID))
                 .isInstanceOfSatisfying(BusinessException.class,
@@ -167,7 +167,7 @@ class AssignmentClaimServiceTest {
     void rejectsDuplicateClaimAndLetsTransactionRollbackReservation() {
         when(taskMapper.selectById(TASK_ID)).thenReturn(publishedTask(1));
         when(redisLockService.tryLock("lock:claim:task:10", 2000, 10000)).thenReturn(true);
-        when(datasetClaimService.reserveClaimableItem(TASK_ID, LABELER_ID, 1))
+        when(datasetClaimService.reserveClaimableItem(TASK_ID, LABELER_ID))
                 .thenReturn(Optional.of(new DatasetItemSnapshot(ITEM_ID, "{\"text\":\"hello\"}")));
         when(templateSchemaService.getTemplateSchema(TEMPLATE_VERSION_ID))
                 .thenReturn(new TemplateSchemaSnapshot(TEMPLATE_VERSION_ID, "{\"type\":\"object\"}"));
@@ -283,10 +283,10 @@ class AssignmentClaimServiceTest {
         private final AtomicInteger assignedCount = new AtomicInteger();
 
         @Override
-        public Optional<DatasetItemSnapshot> reserveClaimableItem(Long taskId, Long labelerId, Integer overlapCount) {
+        public Optional<DatasetItemSnapshot> reserveClaimableItem(Long taskId, Long labelerId) {
             while (true) {
                 int current = assignedCount.get();
-                if (current >= overlapCount) {
+                if (current >= 1) {
                     return Optional.empty();
                 }
                 if (assignedCount.compareAndSet(current, current + 1)) {

@@ -37,6 +37,7 @@ public class TaskLifecycleService {
     private static final int TASK_NOT_FOUND = 404001;
     private static final int TASK_STATUS_NOT_ALLOWED = 400101;
     private static final int TASK_PUBLISH_REQUIREMENT_MISSING = 400102;
+    private static final int SINGLE_LABELER_OVERLAP_COUNT = 1;
     private static final String TASK_BIZ_TYPE = "TASK";
     private static final String USER_ACTOR_TYPE = "USER";
 
@@ -104,7 +105,7 @@ public class TaskLifecycleService {
         task.setStatus(TaskStatus.DRAFT);
         task.setQuota(request.quota());
         task.setClaimedCount(0);
-        task.setOverlapCount(request.overlapCount());
+        task.setOverlapCount(SINGLE_LABELER_OVERLAP_COUNT);
         task.setDeadlineAt(request.deadlineAt());
         task.setPublishedTemplateVersionId(request.publishedTemplateVersionId());
         task.setAiReviewConfigId(request.aiReviewConfigId());
@@ -155,7 +156,6 @@ public class TaskLifecycleService {
         task.setDescription(request.description());
         task.setInstructionRichText(request.instructionRichText());
         task.setQuota(request.quota());
-        task.setOverlapCount(request.overlapCount());
         task.setDeadlineAt(request.deadlineAt());
         task.setPublishedTemplateVersionId(request.publishedTemplateVersionId());
         task.setAiReviewConfigId(request.aiReviewConfigId());
@@ -233,8 +233,8 @@ public class TaskLifecycleService {
         if (task.getQuota() == null || task.getQuota() <= 0) {
             throw missingPublishRequirement("Task quota is required");
         }
-        if (task.getOverlapCount() == null || task.getOverlapCount() < 1) {
-            throw missingPublishRequirement("Task overlap count is required");
+        if (!Integer.valueOf(SINGLE_LABELER_OVERLAP_COUNT).equals(task.getOverlapCount())) {
+            throw missingPublishRequirement("Task overlap count must be 1");
         }
         if (task.getDeadlineAt() == null || !task.getDeadlineAt().isAfter(LocalDateTime.now())) {
             throw missingPublishRequirement("Task deadline must be in the future");

@@ -351,7 +351,6 @@ Authorization: Bearer <accessToken>
 | tags | List&lt;String&gt; | 否 | 每个标签最大 64 字符 | 任务标签 |
 | quota | Integer | 是 | ≥ 1 | 任务配额（可领取总数） |
 | deadlineAt | LocalDateTime | 是 | 必须为未来时间 | 截止时间 |
-| overlapCount | Integer | 是 | ≥ 1 | 每条数据需要的标注份数 |
 | publishedTemplateVersionId | Long | 否 | - | 关联的模板版本 ID |
 | **── AI 审核（引用已有 或 内联创建，二选一）──** |
 | aiReviewConfigId | Long | 否 | - | 引用已创建的 AI 配置 ID |
@@ -376,7 +375,7 @@ Authorization: Bearer <accessToken>
 > **内联 AI 配置示例** — 一步创建任务 + AI 审核：
 > ```json
 > {
->   "title": "图像分类标注", "quota": 100, "overlapCount": 1,
+>   "title": "图像分类标注", "quota": 100,
 >   "deadlineAt": "2026-07-01T23:59:59",
 >   "aiProviderId": 50,
 >   "aiPrompt": "请评估以下标注答案的质量...",
@@ -448,7 +447,7 @@ Authorization: Bearer <accessToken>
 
 ### 3.5 POST /api/v1/tasks/{taskId}/publish
 
-**作用**：发布任务。发布前自动校验：数据集是否存在、模板版本是否存在、奖励规则是否配置、截止时间是否合理、配额和重叠数是否合法。校验通过后任务状态变为 PUBLISHED。
+**作用**：发布任务。发布前自动校验：数据集是否存在、模板版本是否存在、奖励规则是否配置、截止时间是否合理、配额是否合法。校验通过后任务状态变为 PUBLISHED。
 
 **权限**：OWNER
 
@@ -2739,7 +2738,6 @@ Owner 完整工作流：
      title: "图像分类标注",
      quota: 100,
      deadlineAt: "2026-07-01T23:59:59",
-     overlapCount: 3,
      datasetFileId: 99
    }
    响应: { taskId: 1, status: "DRAFT", datasetImportJob: { jobId: 10, status: "PENDING" } }

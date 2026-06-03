@@ -109,8 +109,7 @@ class TaskLifecycleServiceTest {
     }
 
     @Test
-    void acceptsTaskCreationWithOverlapCount() {
-        // overlapCount validation is now handled by @Max(1) on CreateTaskRequest DTO at controller layer
+    void createsDraftTaskWithFixedOverlapCount() {
         when(traceIdProvider.currentTraceId()).thenReturn("trace-1");
         when(taskMapper.insert(any(Task.class))).thenAnswer(invocation -> {
             Task task = invocation.getArgument(0);
@@ -118,10 +117,12 @@ class TaskLifecycleServiceTest {
             return 1;
         });
 
-        TaskLifecycleResponse response = taskLifecycleService.create(OWNER_ID, createRequestWithOverlapCount(2));
+        TaskLifecycleResponse response = taskLifecycleService.create(OWNER_ID, createRequest());
 
         assertThat(response.taskId()).isEqualTo(TASK_ID);
-        verify(taskMapper).insert(any(Task.class));
+        ArgumentCaptor<Task> taskCaptor = ArgumentCaptor.forClass(Task.class);
+        verify(taskMapper).insert(taskCaptor.capture());
+        assertThat(taskCaptor.getValue().getOverlapCount()).isEqualTo(1);
     }
 
     @Test
@@ -209,17 +210,18 @@ class TaskLifecycleServiceTest {
     }
 
     @Test
-    void acceptsDraftUpdateWithOverlapCount() {
-        // overlapCount validation is now handled by @Max(1) on UpdateTaskRequest DTO at controller layer
+    void updatesDraftWithoutChangingFixedOverlapCount() {
         Task task = draftTask();
         when(taskMapper.selectById(TASK_ID)).thenReturn(task);
         when(taskMapper.updateById(any(Task.class))).thenReturn(1);
         when(taskTagMapper.delete(any(Wrapper.class))).thenReturn(1);
 
-        TaskLifecycleResponse response = taskLifecycleService.updateDraft(OWNER_ID, TASK_ID, updateRequestWithOverlapCount(2));
+        TaskLifecycleResponse response = taskLifecycleService.updateDraft(OWNER_ID, TASK_ID, updateRequest());
 
         assertThat(response.status()).isEqualTo(TaskStatus.DRAFT);
-        verify(taskMapper).updateById(any(Task.class));
+        ArgumentCaptor<Task> taskCaptor = ArgumentCaptor.forClass(Task.class);
+        verify(taskMapper).updateById(taskCaptor.capture());
+        assertThat(taskCaptor.getValue().getOverlapCount()).isEqualTo(1);
     }
 
     @Test
@@ -253,7 +255,6 @@ class TaskLifecycleServiceTest {
         when(taskMapper.selectById(TASK_ID)).thenReturn(task);
         when(taskMapper.updateById(any(Task.class))).thenReturn(1);
         when(publishDependencyChecker.datasetReady(TASK_ID)).thenReturn(true);
-        when(publishDependencyChecker.templateVersionExists(100L)).thenReturn(true);
         when(publishDependencyChecker.aiReviewConfigExists(TASK_ID, 200L)).thenReturn(true);
         when(publishDependencyChecker.rewardRuleExists(TASK_ID)).thenReturn(true);
 
@@ -281,7 +282,6 @@ class TaskLifecycleServiceTest {
         task.setAiReviewConfigId(null);
         when(taskMapper.selectById(TASK_ID)).thenReturn(task);
         when(publishDependencyChecker.datasetReady(TASK_ID)).thenReturn(true);
-        when(publishDependencyChecker.templateVersionExists(100L)).thenReturn(true);
 
         assertThatThrownBy(() -> taskLifecycleService.publish(OWNER_ID, TASK_ID))
                 .isInstanceOfSatisfying(BusinessException.class,
@@ -289,12 +289,10 @@ class TaskLifecycleServiceTest {
     }
 
     @Test
-    void rejectsPublishWhenTemplateVersionDoesNotExist() {
-        // publish validates templateVersionExists, not templateVersionUsableByTask (removed)
+    void rejectsPublishWhenAiReviewConfigCheckFails() {
         Task task = publishableDraftTask();
         when(taskMapper.selectById(TASK_ID)).thenReturn(task);
         when(publishDependencyChecker.datasetReady(TASK_ID)).thenReturn(true);
-        when(publishDependencyChecker.templateVersionExists(100L)).thenReturn(false);
 
         assertThatThrownBy(() -> taskLifecycleService.publish(OWNER_ID, TASK_ID))
                 .isInstanceOfSatisfying(BusinessException.class,
@@ -343,10 +341,6 @@ class TaskLifecycleServiceTest {
     }
 
     private CreateTaskRequest createRequest() {
-        return createRequestWithOverlapCount(1);
-    }
-
-    private CreateTaskRequest createRequestWithOverlapCount(int overlapCount) {
         return new CreateTaskRequest(
                 "New task",
                 "Description",
@@ -354,7 +348,6 @@ class TaskLifecycleServiceTest {
                 List.of("qa"),
                 10,
                 LocalDateTime.now().plusDays(1),
-                overlapCount,
                 100L,
                 200L,
                 null, null, null, null, null, null,
@@ -371,7 +364,6 @@ class TaskLifecycleServiceTest {
                 List.of("qa"),
                 10,
                 LocalDateTime.now().plusDays(1),
-                1,
                 100L,
                 200L,
                 null, null, null, null, null, null,
@@ -381,10 +373,6 @@ class TaskLifecycleServiceTest {
     }
 
     private UpdateTaskRequest updateRequest() {
-        return updateRequestWithOverlapCount(1);
-    }
-
-    private UpdateTaskRequest updateRequestWithOverlapCount(int overlapCount) {
         return new UpdateTaskRequest(
                 "Updated task",
                 "Updated description",
@@ -392,7 +380,6 @@ class TaskLifecycleServiceTest {
                 List.of("review"),
                 20,
                 LocalDateTime.now().plusDays(2),
-                overlapCount,
                 100L,
                 200L,
                 1

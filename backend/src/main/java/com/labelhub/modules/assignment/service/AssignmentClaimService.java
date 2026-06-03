@@ -80,7 +80,7 @@ public class AssignmentClaimService {
         try {
             return transactionTemplate.execute(status -> {
                 DatasetItemSnapshot itemSnapshot = datasetClaimService
-                        .reserveClaimableItem(taskId, labelerId, 1)
+                        .reserveClaimableItem(taskId, labelerId)
                         .orElseThrow(() -> claimConflict("No claimable item is available"));
                 TemplateSchemaSnapshot templateSchema = templateSchemaService.getTemplateSchema(task.getPublishedTemplateVersionId());
                 Assignment assignment = createAssignment(taskId, labelerId, itemSnapshot.datasetItemId(), templateSchema.templateVersionId());

@@ -57,7 +57,6 @@ instructionRichText optional
 tags optional, each tag max 64
 quota required, >= 1
 deadlineAt required, must be future time
-overlapCount required, must be 1
 publishedTemplateVersionId optional, must belong to current OWNER
 aiReviewConfigId optional
 ```
@@ -73,6 +72,7 @@ Effects:
 
 ```text
 Creates a tasks row with ownerId = current user and status = DRAFT.
+Sets overlapCount to 1 on the server; clients do not send this field.
 If publishedTemplateVersionId is provided, verifies the template version belongs to current OWNER.
 Normalizes non-blank tags into task_tags.
 Appends TASK_CREATED audit log.
@@ -136,7 +136,6 @@ instructionRichText optional
 tags optional, each tag max 64
 quota required, >= 1
 deadlineAt required, must be future time
-overlapCount required, must be 1
 publishedTemplateVersionId optional, must belong to current OWNER
 aiReviewConfigId optional
 ```
@@ -152,6 +151,7 @@ Rules:
 
 ```text
 Only DRAFT tasks can be edited.
+overlapCount is not editable and remains fixed at 1.
 If publishedTemplateVersionId is provided, verifies the template version belongs to current OWNER.
 Replaces the task tag set with normalized non-blank tags from the request.
 Appends TASK_UPDATED audit log.

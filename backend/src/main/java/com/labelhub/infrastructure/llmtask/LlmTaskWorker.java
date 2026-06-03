@@ -69,12 +69,14 @@ public class LlmTaskWorker {
         String lockKey = "lock:llm-task:%s:%s".formatted(message.taskType(), message.bizId());
         try {
             redisLockService.withLock(lockKey, 1000L, 300000L, () -> {
-                if (handler.isCompleted(message)) {
+                LlmTaskExecutionContext.runWithTraceId(message.traceId(), () -> {
+                    if (handler.isCompleted(message)) {
+                        queueService.ack(message.taskType(), record.messageId());
+                        return;
+                    }
+                    handler.handle(message);
                     queueService.ack(message.taskType(), record.messageId());
-                    return;
-                }
-                handler.handle(message);
-                queueService.ack(message.taskType(), record.messageId());
+                });
             });
         } catch (Exception ex) {
             log.warn("LLM task execution failed: type={}, bizId={}, messageId={}",

@@ -1,4 +1,6 @@
 -- Enforce one active labeler per dataset item and normalize task overlap to 1.
+-- Idempotent for development databases that already received this change under
+-- an older migration number.
 
 UPDATE tasks
 SET overlap_count = 1
@@ -33,14 +35,41 @@ SET di.assigned_count = CASE
     ELSE 0
 END;
 
-ALTER TABLE assignments
-    ADD COLUMN active_dataset_item_id BIGINT
-        GENERATED ALWAYS AS (
-            CASE WHEN status <> 'CANCELLED' THEN dataset_item_id ELSE NULL END
-        ) STORED;
+SET @add_assignments_active_dataset_item_id = (
+    SELECT IF(COUNT(*) = 0,
+        'ALTER TABLE assignments ADD COLUMN active_dataset_item_id BIGINT GENERATED ALWAYS AS (CASE WHEN status <> ''CANCELLED'' THEN dataset_item_id ELSE NULL END) STORED',
+        'SELECT 1')
+    FROM information_schema.columns
+    WHERE table_schema = DATABASE()
+      AND table_name = 'assignments'
+      AND column_name = 'active_dataset_item_id'
+);
+PREPARE stmt FROM @add_assignments_active_dataset_item_id;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
 
-ALTER TABLE assignments
-    ADD CONSTRAINT uk_assignments_active_item UNIQUE (active_dataset_item_id);
+SET @add_assignments_active_item_unique = (
+    SELECT IF(COUNT(*) = 0,
+        'ALTER TABLE assignments ADD CONSTRAINT uk_assignments_active_item UNIQUE (active_dataset_item_id)',
+        'SELECT 1')
+    FROM information_schema.table_constraints
+    WHERE table_schema = DATABASE()
+      AND table_name = 'assignments'
+      AND constraint_name = 'uk_assignments_active_item'
+);
+PREPARE stmt FROM @add_assignments_active_item_unique;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
 
-ALTER TABLE tasks
-    ADD CONSTRAINT chk_tasks_overlap_single CHECK (overlap_count = 1);
+SET @add_tasks_overlap_single_check = (
+    SELECT IF(COUNT(*) = 0,
+        'ALTER TABLE tasks ADD CONSTRAINT chk_tasks_overlap_single CHECK (overlap_count = 1)',
+        'SELECT 1')
+    FROM information_schema.table_constraints
+    WHERE table_schema = DATABASE()
+      AND table_name = 'tasks'
+      AND constraint_name = 'chk_tasks_overlap_single'
+);
+PREPARE stmt FROM @add_tasks_overlap_single_check;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;

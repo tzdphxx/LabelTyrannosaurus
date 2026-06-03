@@ -65,6 +65,10 @@ labelhub:
     rate-limit:
       default-rate: ${REDIS_RATE_LIMIT_DEFAULT_RATE:60}
       default-interval: ${REDIS_RATE_LIMIT_DEFAULT_INTERVAL:60s}
+  review:
+    # 审核员改为整任务领取（POST /api/v1/reviewer/tasks/{taskId}/claim）后，
+    # 不再使用按题目的自动分配调度器。如需回退到题目级分配可置为 true。
+    auto-assign-enabled: ${LABELHUB_REVIEW_AUTO_ASSIGN_ENABLED:false}
 
 mybatis-plus:
   configuration:

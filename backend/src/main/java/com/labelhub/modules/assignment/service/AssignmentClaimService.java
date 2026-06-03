@@ -10,8 +10,10 @@ import com.labelhub.infrastructure.redis.RedisLockService;
 import com.labelhub.modules.assignment.domain.Assignment;
 import com.labelhub.modules.assignment.domain.AssignmentStatus;
 import com.labelhub.modules.assignment.dto.AssignmentClaimResponse;
+import com.labelhub.modules.assignment.mapper.AssignmentDispatchMapper;
 import com.labelhub.modules.assignment.mapper.AssignmentMapper;
 import com.labelhub.modules.dataset.service.DatasetClaimService;
+import com.labelhub.modules.task.domain.ClaimStrategy;
 import com.labelhub.modules.dataset.service.DatasetItemSnapshot;
 import com.labelhub.modules.task.domain.Task;
 import com.labelhub.modules.task.domain.TaskStatus;
@@ -32,6 +34,8 @@ public class AssignmentClaimService {
     private static final int TASK_STATUS_NOT_ALLOWED = 400101;
     private static final int CLAIM_CONFLICT = 409201;
     private static final int PERMISSION_DENIED = 403001;
+    private static final int QUOTA_EXCEEDED = 409202;
+    private static final int CLAIM_LIMIT_EXCEEDED = 409203;
     private static final long CLAIM_LOCK_WAIT_MILLIS = 2000L;
     private static final long CLAIM_LOCK_LEASE_MILLIS = 10000L;
     private static final String ASSIGNMENT_BIZ_TYPE = "ASSIGNMENT";
@@ -41,6 +45,7 @@ public class AssignmentClaimService {
     private final DatasetClaimService datasetClaimService;
     private final TemplateSchemaService templateSchemaService;
     private final AssignmentMapper assignmentMapper;
+    private final AssignmentDispatchMapper dispatchMapper;
     private final RedisLockService redisLockService;
     private final AuditAppender auditAppender;
     private final TraceIdProvider traceIdProvider;
@@ -50,6 +55,7 @@ public class AssignmentClaimService {
                                   DatasetClaimService datasetClaimService,
                                   TemplateSchemaService templateSchemaService,
                                   AssignmentMapper assignmentMapper,
+                                  AssignmentDispatchMapper dispatchMapper,
                                   RedisLockService redisLockService,
                                   AuditAppender auditAppender,
                                   TraceIdProvider traceIdProvider,
@@ -58,6 +64,7 @@ public class AssignmentClaimService {
         this.datasetClaimService = datasetClaimService;
         this.templateSchemaService = templateSchemaService;
         this.assignmentMapper = assignmentMapper;
+        this.dispatchMapper = dispatchMapper;
         this.redisLockService = redisLockService;
         this.auditAppender = auditAppender;
         this.traceIdProvider = traceIdProvider;
@@ -72,29 +79,113 @@ public class AssignmentClaimService {
             throw new BusinessException(PERMISSION_DENIED, "Cannot claim assignment for another user");
         }
         Task task = loadClaimableTask(taskId);
+        ClaimStrategy strategy = task.getStrategy();
+        if (strategy == null) {
+            strategy = ClaimStrategy.FCFS;
+        }
+        return switch (strategy) {
+            case FCFS -> claimFcfs(task, labelerId);
+            case QUOTA_GRAB -> claimQuotaGrab(task, labelerId);
+            case ASSIGNED -> claimAssigned(task, labelerId);
+        };
+    }
+
+    private AssignmentClaimResponse claimFcfs(Task task, Long labelerId) {
+        return executeWithLock(task.getId(), () ->
+                transactionTemplate.execute(status -> {
+                    DatasetItemSnapshot itemSnapshot = datasetClaimService
+                            .reserveClaimableItem(task.getId(), labelerId, 1)
+                            .orElseThrow(() -> claimConflict("No claimable item is available"));
+                    TemplateSchemaSnapshot templateSchema = templateSchemaService
+                            .getTemplateSchema(task.getPublishedTemplateVersionId());
+                    Assignment assignment = createAssignment(
+                            task.getId(), labelerId,
+                            itemSnapshot.datasetItemId(),
+                            templateSchema.templateVersionId());
+                    appendClaimAudit(assignment, itemSnapshot);
+                    return buildClaimResponse(assignment, itemSnapshot, templateSchema);
+                }));
+    }
+
+    private AssignmentClaimResponse claimQuotaGrab(Task task, Long labelerId) {
+        return executeWithLock(task.getId(), () ->
+                transactionTemplate.execute(status -> {
+                    if (taskMapper.tryIncrementClaimedCount(task.getId()) == 0) {
+                        throw new BusinessException(QUOTA_EXCEEDED, "Task quota is full");
+                    }
+                    int maxPerLabeler = task.getMaxClaimsPerLabeler() != null
+                            ? task.getMaxClaimsPerLabeler() : Integer.MAX_VALUE;
+                    int activeClaims = assignmentMapper.countActiveByTaskAndLabeler(
+                            task.getId(), labelerId);
+                    if (activeClaims >= maxPerLabeler) {
+                        taskMapper.decrementClaimedCount(task.getId());
+                        throw new BusinessException(CLAIM_LIMIT_EXCEEDED,
+                                "Personal claim limit reached for this task");
+                    }
+                    DatasetItemSnapshot itemSnapshot = datasetClaimService
+                            .reserveClaimableItem(task.getId(), labelerId, 1)
+                            .orElseThrow(() -> {
+                                taskMapper.decrementClaimedCount(task.getId());
+                                return claimConflict("No claimable item is available");
+                            });
+                    TemplateSchemaSnapshot templateSchema = templateSchemaService
+                            .getTemplateSchema(task.getPublishedTemplateVersionId());
+                    Assignment assignment = createAssignment(
+                            task.getId(), labelerId,
+                            itemSnapshot.datasetItemId(),
+                            templateSchema.templateVersionId());
+                    appendClaimAudit(assignment, itemSnapshot);
+                    return buildClaimResponse(assignment, itemSnapshot, templateSchema);
+                }));
+    }
+
+    private AssignmentClaimResponse claimAssigned(Task task, Long labelerId) {
+        return executeWithLock(task.getId(), () ->
+                transactionTemplate.execute(status -> {
+                    var dispatch = dispatchMapper.selectPendingForLabeler(
+                            task.getId(), labelerId);
+                    if (dispatch == null) {
+                        throw claimConflict("No pending dispatch for this labeler");
+                    }
+                    if (dispatchMapper.claimById(dispatch.getId()) == 0) {
+                        throw claimConflict("Dispatch was already claimed");
+                    }
+                    DatasetItemSnapshot itemSnapshot = datasetClaimService
+                            .reserveSpecificItem(task.getId(), labelerId, dispatch.getDatasetItemId())
+                            .orElseThrow(() -> claimConflict("Dataset item could not be reserved"));
+                    TemplateSchemaSnapshot templateSchema = templateSchemaService
+                            .getTemplateSchema(task.getPublishedTemplateVersionId());
+                    Assignment assignment = createAssignment(
+                            task.getId(), labelerId,
+                            dispatch.getDatasetItemId(),
+                            templateSchema.templateVersionId());
+                    appendClaimAudit(assignment, itemSnapshot);
+                    return buildClaimResponse(assignment, itemSnapshot, templateSchema);
+                }));
+    }
+
+    private AssignmentClaimResponse buildClaimResponse(Assignment assignment,
+                                                       DatasetItemSnapshot itemSnapshot,
+                                                       TemplateSchemaSnapshot templateSchema) {
+        return new AssignmentClaimResponse(
+                assignment.getId(),
+                assignment.getDatasetItemId(),
+                templateSchema.templateVersionId(),
+                templateSchema.schemaJson(),
+                itemSnapshot != null ? itemSnapshot.itemJson() : null,
+                assignment.getDraftAnswerJson(),
+                assignment.getDraftVersion()
+        );
+    }
+
+    private <T> T executeWithLock(Long taskId, java.util.function.Supplier<T> action) {
         String lockKey = "lock:claim:task:" + taskId;
         boolean locked = redisLockService.tryLock(lockKey, CLAIM_LOCK_WAIT_MILLIS, CLAIM_LOCK_LEASE_MILLIS);
         if (!locked) {
             throw claimConflict("Task claim is busy, please retry");
         }
         try {
-            return transactionTemplate.execute(status -> {
-                DatasetItemSnapshot itemSnapshot = datasetClaimService
-                        .reserveClaimableItem(taskId, labelerId, 1)
-                        .orElseThrow(() -> claimConflict("No claimable item is available"));
-                TemplateSchemaSnapshot templateSchema = templateSchemaService.getTemplateSchema(task.getPublishedTemplateVersionId());
-                Assignment assignment = createAssignment(taskId, labelerId, itemSnapshot.datasetItemId(), templateSchema.templateVersionId());
-                appendClaimAudit(assignment, itemSnapshot);
-                return new AssignmentClaimResponse(
-                        assignment.getId(),
-                        itemSnapshot.datasetItemId(),
-                        templateSchema.templateVersionId(),
-                        templateSchema.schemaJson(),
-                        itemSnapshot.itemJson(),
-                        assignment.getDraftAnswerJson(),
-                        assignment.getDraftVersion()
-                );
-            });
+            return action.get();
         } finally {
             redisLockService.unlock(lockKey);
         }

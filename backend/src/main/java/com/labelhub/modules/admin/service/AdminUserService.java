@@ -53,14 +53,14 @@ public class AdminUserService {
     @Transactional
     public void changeRole(Long userId, RoleCode role) {
         if (role == null) {
-            throw new BusinessException(400102, "User role is required");
+            throw new BusinessException(400102, "用户角色不能为空");
         }
         UserEntity user = requireUser(userId);
         Set<RoleCode> oldRoles = userRoleMapper.selectRoleCodesByUserId(user.getId());
         RoleCode oldRole = requireSingleRole(oldRoles);
         if (oldRole == RoleCode.ADMIN && role != RoleCode.ADMIN
                 && userRoleMapper.countUsersWithRole(RoleCode.ADMIN) <= 1) {
-            throw new BusinessException(400101, "Cannot remove the last admin");
+            throw new BusinessException(400101, "不能移除最后一个管理员");
         }
         userRoleMapper.replaceRoles(userId, Set.of(role));
         userMapper.incrementTokenVersion(userId);
@@ -88,7 +88,7 @@ public class AdminUserService {
     public AdminUserResponse createReviewer(CreateReviewerRequest request) {
         if (userMapper.selectByUsername(request.username()) != null
                 || userMapper.selectByEmail(request.email()) != null) {
-            throw new BusinessException(400102, "Username or email already exists");
+            throw new BusinessException(400102, "用户名或邮箱已存在");
         }
         UserEntity user = new UserEntity();
         user.setUsername(request.username());
@@ -106,7 +106,7 @@ public class AdminUserService {
     private UserEntity requireUser(Long userId) {
         UserEntity user = userMapper.selectById(userId);
         if (user == null) {
-            throw new BusinessException(400102, "User not found");
+            throw new BusinessException(400102, "用户不存在");
         }
         return user;
     }
@@ -126,7 +126,7 @@ public class AdminUserService {
 
     private RoleCode requireSingleRole(Set<RoleCode> roles) {
         if (roles == null || roles.size() != 1) {
-            throw new BusinessException(400102, "User must have exactly one role");
+            throw new BusinessException(400102, "用户必须且只能拥有一个角色");
         }
         return roles.iterator().next();
     }

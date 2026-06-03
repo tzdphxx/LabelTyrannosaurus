@@ -129,7 +129,7 @@ public class SubmissionSubmitService {
                 AssignmentStatus.SUBMITTED
         );
         if (updated != 1) {
-            throw new BusinessException(DRAFT_VERSION_CONFLICT, "Draft version conflict");
+            throw new BusinessException(DRAFT_VERSION_CONFLICT, "草稿版本冲突，请刷新后重试");
         }
         AgentRun agentRun = createPendingAiReviewRun(submission, task);
         appendSubmitAudit(assignment, submission, agentRun.getId());
@@ -141,7 +141,7 @@ public class SubmissionSubmitService {
     private Assignment loadOwnedAssignment(Long assignmentId, Long labelerId) {
         Assignment assignment = assignmentMapper.selectOwnedAssignment(assignmentId, labelerId);
         if (assignment == null) {
-            throw new BusinessException(ASSIGNMENT_NOT_FOUND, "Assignment not found");
+            throw new BusinessException(ASSIGNMENT_NOT_FOUND, "领取记录不存在");
         }
         return assignment;
     }
@@ -150,20 +150,20 @@ public class SubmissionSubmitService {
         Task task = taskMapper.selectById(taskId);
         if (task == null || task.getStatus() != TaskStatus.PUBLISHED
                 || task.getDeadlineAt() == null || !task.getDeadlineAt().isAfter(LocalDateTime.now())) {
-            throw new BusinessException(TASK_NOT_SUBMITTABLE, "Task is not submittable");
+            throw new BusinessException(TASK_NOT_SUBMITTABLE, "当前任务不可提交");
         }
         return task;
     }
 
     private void requireCurrentDraftVersion(Assignment assignment, Integer clientDraftVersion) {
         if (!Objects.equals(assignment.getDraftVersion(), clientDraftVersion)) {
-            throw new BusinessException(DRAFT_VERSION_CONFLICT, "Draft version conflict");
+            throw new BusinessException(DRAFT_VERSION_CONFLICT, "草稿版本冲突，请刷新后重试");
         }
     }
 
     private void requireSubmittableStatus(Assignment assignment) {
         if (!SUBMITTABLE_STATUSES.contains(assignment.getStatus())) {
-            throw new BusinessException(ASSIGNMENT_STATUS_NOT_SUBMITTABLE, "Assignment status is not submittable");
+            throw new BusinessException(ASSIGNMENT_STATUS_NOT_SUBMITTABLE, "当前领取记录状态不可提交");
         }
     }
 
@@ -172,7 +172,7 @@ public class SubmissionSubmitService {
             JsonNode jsonNode = objectMapper.readTree(answerJson);
             return objectMapper.writeValueAsString(jsonNode);
         } catch (JsonProcessingException ex) {
-            throw new BusinessException(INVALID_ANSWER_JSON, "Answer JSON is invalid");
+            throw new BusinessException(INVALID_ANSWER_JSON, "作答 JSON 格式不合法");
         }
     }
 

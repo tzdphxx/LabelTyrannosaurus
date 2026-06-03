@@ -29,7 +29,7 @@ public class PreAnnotationController {
     @PostMapping("/api/v1/assignments/{assignmentId}/pre-annotations/run")
     @Operation(summary = "执行预标注", description = "触发 AI 为当前 assignment 生成整题建议答案。复用任务的 AI 审核配置中的 Provider 和 Prompt。一个 assignment 同时只能有一个预标注在运行。")
     public ApiResponse<PreAnnotationResponse> run(
-            @Parameter(description = "Assignment ID") @PathVariable Long assignmentId,
+            @Parameter(description = "领取记录 ID") @PathVariable Long assignmentId,
             @Valid @RequestBody(required = false) PreAnnotationRunRequest request) {
         CurrentUserContext.requireRole(RoleCode.LABELER);
         return ApiResponse.ok(preAnnotationService.run(assignmentId, CurrentUserContext.getUserId(), request));
@@ -38,7 +38,7 @@ public class PreAnnotationController {
     @GetMapping("/api/v1/assignments/{assignmentId}/pre-annotations/latest")
     @Operation(summary = "最新预标注结果", description = "获取当前 assignment 最新一次预标注的结果，包含建议答案、字段级建议、置信度和风险标记。")
     public ApiResponse<PreAnnotationResponse> latest(
-            @Parameter(description = "Assignment ID") @PathVariable Long assignmentId) {
+            @Parameter(description = "领取记录 ID") @PathVariable Long assignmentId) {
         CurrentUserContext.requireRole(RoleCode.LABELER);
         return ApiResponse.ok(preAnnotationService.latest(assignmentId, CurrentUserContext.getUserId()));
     }

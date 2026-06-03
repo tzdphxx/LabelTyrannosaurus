@@ -27,7 +27,6 @@ import java.util.List;
  */
 @RestController
 @RequestMapping("/api/v1")
-@PreAuthorize("hasAnyRole('ADMIN','OWNER')")
 @Tag(name = "模板", description = "任务模板和模板版本管理")
 public class TemplateController {
 
@@ -42,6 +41,7 @@ public class TemplateController {
     /**
      * 创建 OWNER 可复用模板并生成首个版本。
      */
+    @PreAuthorize("hasAnyRole('ADMIN','OWNER')")
     @PostMapping("/owner/templates")
     @Operation(summary = "创建 OWNER 模板", description = "创建当前 OWNER 可复用模板并生成首个版本。")
     public ApiResponse<TemplateResponse> createOwnerTemplate(@Valid @RequestBody CreateTemplateRequest request) {
@@ -51,6 +51,7 @@ public class TemplateController {
     /**
      * 查询当前 OWNER 的可复用模板库。
      */
+    @PreAuthorize("hasAnyRole('ADMIN','OWNER')")
     @GetMapping("/owner/templates")
     @Operation(summary = "OWNER 模板列表", description = "查询当前 OWNER 的可复用模板列表。")
     public ApiResponse<List<TemplateResponse>> listOwnerTemplates() {
@@ -60,6 +61,7 @@ public class TemplateController {
     /**
      * 创建任务模板并生成首个版本。
      */
+    @PreAuthorize("hasAnyRole('ADMIN','OWNER')")
     @PostMapping("/tasks/{taskId}/templates")
     @Operation(summary = "创建模板", description = "为任务创建模板并生成首个版本。")
     public ApiResponse<TemplateResponse> createTemplate(@PathVariable Long taskId,
@@ -70,6 +72,7 @@ public class TemplateController {
     /**
      * 查询任务下模板列表。
      */
+    @PreAuthorize("hasAnyRole('ADMIN','OWNER')")
     @GetMapping("/tasks/{taskId}/templates")
     @Operation(summary = "模板列表", description = "查询任务下的模板列表。")
     public ApiResponse<List<TemplateResponse>> listTemplates(@PathVariable Long taskId) {
@@ -88,6 +91,7 @@ public class TemplateController {
     /**
      * 基于已有版本 fork 新版本。
      */
+    @PreAuthorize("hasAnyRole('ADMIN','OWNER')")
     @PostMapping("/templates/{templateId}/fork")
     @Operation(summary = "Fork 模板", description = "基于已有模板创建新版本。")
     public ApiResponse<TemplateResponse> forkTemplate(@PathVariable Long templateId,

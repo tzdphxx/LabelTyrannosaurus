@@ -80,7 +80,7 @@ public class BatchReviewService {
         try {
             Submission submission = submissionMapper.selectById(submissionId);
             if (submission == null) {
-                return BatchReviewItemResult.fail(submissionId, "Submission not found");
+                return BatchReviewItemResult.fail(submissionId, "提交记录不存在");
             }
             if (isConflict(submission)) {
                 return BatchReviewItemResult.fail(submissionId,
@@ -117,7 +117,7 @@ public class BatchReviewService {
         try {
             Submission submission = submissionMapper.selectById(submissionId);
             if (submission == null) {
-                return BatchReviewItemResult.fail(submissionId, "Submission not found");
+                return BatchReviewItemResult.fail(submissionId, "提交记录不存在");
             }
             if (submission.getStatus() != SubmissionStatus.PENDING_FINAL) {
                 return BatchReviewItemResult.fail(submissionId, "Not in PENDING_FINAL status");
@@ -140,7 +140,7 @@ public class BatchReviewService {
         try {
             Submission submission = submissionMapper.selectById(submissionId);
             if (submission == null) {
-                return BatchReviewItemResult.fail(submissionId, "Submission not found");
+                return BatchReviewItemResult.fail(submissionId, "提交记录不存在");
             }
             if (submission.getStatus() != SubmissionStatus.PENDING_FINAL) {
                 return BatchReviewItemResult.fail(submissionId, "Not in PENDING_FINAL status");

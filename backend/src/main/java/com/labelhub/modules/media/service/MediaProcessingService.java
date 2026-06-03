@@ -134,7 +134,7 @@ public class MediaProcessingService {
         CurrentUser currentUser = CurrentUserContext.requireCurrentUser();
         MediaProcessingJobEntity job = jobMapper.selectById(jobId);
         if (job == null) {
-            throw new BusinessException(400102, "Media processing job not found");
+            throw new BusinessException(400102, "媒体处理任务不存在");
         }
         requireReadableTask(job.getTaskId(), currentUser);
         return toJobResponse(job);
@@ -243,7 +243,7 @@ public class MediaProcessingService {
     private DatasetItemEntity requireDatasetItem(Long datasetItemId) {
         DatasetItemEntity item = datasetItemMapper.selectById(datasetItemId);
         if (item == null || Boolean.TRUE.equals(item.getDeleted())) {
-            throw new BusinessException(400102, "Dataset item not found");
+            throw new BusinessException(400102, "数据项不存在");
         }
         return item;
     }
@@ -251,10 +251,10 @@ public class MediaProcessingService {
     private TaskEntity requireReadableTask(Long taskId, CurrentUser currentUser) {
         TaskEntity task = taskMapper.selectById(taskId);
         if (task == null) {
-            throw new BusinessException(400102, "Task not found");
+            throw new BusinessException(400102, "任务不存在");
         }
         if (!currentUser.roles().contains(RoleCode.ADMIN) && !currentUser.userId().equals(task.getOwnerId())) {
-            throw new BusinessException(403001, "Forbidden");
+            throw new BusinessException(403001, "当前账号没有权限执行该操作");
         }
         return task;
     }

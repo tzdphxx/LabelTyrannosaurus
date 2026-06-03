@@ -154,7 +154,7 @@ public class TaskManagementService {
     private Task loadOwnedTask(Long ownerId, Long taskId) {
         Task task = taskMapper.selectById(taskId);
         if (task == null || !ownerId.equals(task.getOwnerId())) {
-            throw new BusinessException(TASK_NOT_FOUND, "Task not found");
+            throw new BusinessException(TASK_NOT_FOUND, "任务不存在");
         }
         return task;
     }

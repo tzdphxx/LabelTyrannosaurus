@@ -155,11 +155,11 @@ public class LlmTriggerService {
     public LlmTriggerRunResponse runForAssignment(CurrentUser currentUser, Long assignmentId,
                                                    LlmTriggerRunRequest request) {
         if (!currentUser.roles().contains(RoleCode.LABELER)) {
-            throw new BusinessException(FORBIDDEN, "Only labelers can trigger from assignment");
+            throw new BusinessException(FORBIDDEN, "只有标注员可以在作答页触发 LLM 辅助");
         }
         Assignment assignment = assignmentMapper.selectOwnedAssignment(assignmentId, currentUser.userId());
         if (assignment == null) {
-            throw new BusinessException(ASSIGNMENT_NOT_FOUND, "Assignment not found");
+            throw new BusinessException(ASSIGNMENT_NOT_FOUND, "领取记录不存在");
         }
         Task task = loadTask(assignment.getTaskId());
         requireEnabledProvider(request.providerId());
@@ -174,11 +174,11 @@ public class LlmTriggerService {
     public LlmTriggerRunResponse testFromTask(CurrentUser currentUser, Long taskId,
                                                LlmTriggerRunRequest request) {
         if (!currentUser.roles().contains(RoleCode.OWNER)) {
-            throw new BusinessException(FORBIDDEN, "Only owners can test LlmTrigger");
+            throw new BusinessException(FORBIDDEN, "只有任务负责人可以测试 LLM 触发器");
         }
         Task task = loadTask(taskId);
         if (!currentUser.userId().equals(task.getOwnerId())) {
-            throw new BusinessException(FORBIDDEN, "Not the task owner");
+            throw new BusinessException(FORBIDDEN, "当前账号不是任务负责人");
         }
         requireEnabledProvider(request.providerId());
         DatasetItem datasetItem = loadDatasetItem(request.datasetItemId(), task.getId());
@@ -246,7 +246,7 @@ public class LlmTriggerService {
     public LlmTriggerRunResponse getRun(CurrentUser currentUser, Long triggerRunId) {
         LlmTriggerRun run = llmTriggerRunMapper.selectById(triggerRunId);
         if (run == null) {
-            throw new BusinessException(RUN_NOT_FOUND, "LLM trigger run not found");
+            throw new BusinessException(RUN_NOT_FOUND, "LLM 触发运行记录不存在");
         }
         Task task = loadTask(run.getTaskId());
         if (currentUser.roles().contains(RoleCode.OWNER) && currentUser.userId().equals(task.getOwnerId())) {
@@ -258,7 +258,7 @@ public class LlmTriggerService {
                 return toRunResponse(run);
             }
         }
-        throw new BusinessException(FORBIDDEN, "No permission to view LlmTrigger run");
+        throw new BusinessException(FORBIDDEN, "无权查看 LLM 触发运行记录");
     }
 
     public void executeQueuedTrigger(Long triggerRunId) {
@@ -314,14 +314,14 @@ public class LlmTriggerService {
     private Task loadTask(Long taskId) {
         Task task = taskMapper.selectById(taskId);
         if (task == null) {
-            throw new BusinessException(TASK_NOT_FOUND, "Task not found");
+            throw new BusinessException(TASK_NOT_FOUND, "任务不存在");
         }
         return task;
     }
 
     private void requireEnabledProvider(Long providerId) {
         if (llmProviderService.findEnabledById(providerId).isEmpty()) {
-            throw new BusinessException(LLM_TRIGGER_PROVIDER_UNAVAILABLE, "Enabled LLM provider is required");
+            throw new BusinessException(LLM_TRIGGER_PROVIDER_UNAVAILABLE, "需要配置已启用的 LLM Provider");
         }
     }
 
@@ -331,7 +331,7 @@ public class LlmTriggerService {
         }
         DatasetItem datasetItem = datasetItemMapper.selectById(datasetItemId);
         if (datasetItem == null || !taskId.equals(datasetItem.getTaskId())) {
-            throw new BusinessException(DATASET_ITEM_NOT_FOUND, "Dataset item not found");
+            throw new BusinessException(DATASET_ITEM_NOT_FOUND, "数据项不存在");
         }
         return datasetItem;
     }
@@ -407,7 +407,7 @@ public class LlmTriggerService {
         try {
             return objectMapper.readValue(json, Object.class);
         } catch (JsonProcessingException ex) {
-            throw new BusinessException(LLM_TRIGGER_INVALID, "Dataset item JSON is invalid");
+            throw new BusinessException(LLM_TRIGGER_INVALID, "数据项 JSON 格式不合法");
         }
     }
 
@@ -437,7 +437,7 @@ public class LlmTriggerService {
         try {
             return objectMapper.writeValueAsString(value);
         } catch (JsonProcessingException ex) {
-            throw new BusinessException(LLM_TRIGGER_INVALID, "LlmTrigger payload JSON is invalid");
+            throw new BusinessException(LLM_TRIGGER_INVALID, "LLM 触发请求 JSON 格式不合法");
         }
     }
 }

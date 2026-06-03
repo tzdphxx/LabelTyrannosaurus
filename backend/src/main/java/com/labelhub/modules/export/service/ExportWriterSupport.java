@@ -91,13 +91,13 @@ final class ExportWriterSupport {
         try {
             return objectMapper.writeValueAsString(node);
         } catch (Exception ex) {
-            throw new BusinessException(500001, "Export row serialization failed");
+            throw new BusinessException(500001, "导出行序列化失败");
         }
     }
 
     private static JsonNode extractNode(JsonNode root, String sourceJsonPath, ObjectMapper objectMapper) {
         if (sourceJsonPath == null || sourceJsonPath.isBlank() || !sourceJsonPath.startsWith("$")) {
-            throw new BusinessException(400102, "Invalid export source path");
+            throw new BusinessException(400102, "导出源路径不合法");
         }
         if ("$".equals(sourceJsonPath)) {
             return root;
@@ -106,7 +106,7 @@ final class ExportWriterSupport {
         JsonNode current = root;
         for (String segment : path.split("\\.")) {
             if (segment.isBlank()) {
-                throw new BusinessException(400102, "Invalid export source path");
+                throw new BusinessException(400102, "导出源路径不合法");
             }
             if (current == null || current.isNull()) {
                 return objectMapper.nullNode();

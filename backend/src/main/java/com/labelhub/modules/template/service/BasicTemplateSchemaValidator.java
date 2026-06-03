@@ -23,10 +23,10 @@ public class BasicTemplateSchemaValidator implements TemplateSchemaValidator {
     public void validateSchema(String schemaJson) {
         try {
             if (!objectMapper.readTree(schemaJson).isObject()) {
-                throw new BusinessException(409301, "Schema must be a JSON object");
+                throw new BusinessException(409301, "Schema 必须是 JSON 对象");
             }
         } catch (JsonProcessingException ex) {
-            throw new BusinessException(409301, "Invalid schema JSON");
+            throw new BusinessException(409301, "Schema JSON 格式不合法");
         }
     }
 }

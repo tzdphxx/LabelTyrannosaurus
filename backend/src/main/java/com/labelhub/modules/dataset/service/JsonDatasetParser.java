@@ -34,7 +34,7 @@ public class JsonDatasetParser extends AbstractDatasetParser {
         try {
             JsonNode root = objectMapper.readTree(inputStream);
             if (!root.isArray()) {
-                throw new IllegalArgumentException("JSON dataset must be an array");
+                throw new IllegalArgumentException("JSON 数据集必须是数组");
             }
             int rowNo = 0;
             for (JsonNode rawRow : root) {
@@ -46,7 +46,7 @@ public class JsonDatasetParser extends AbstractDatasetParser {
                 }
             }
         } catch (IOException ex) {
-            throw new IllegalStateException("Read JSON dataset failed", ex);
+            throw new IllegalStateException("读取 JSON 数据集失败", ex);
         }
         return new DatasetParseResult(rows, errors);
     }

@@ -144,7 +144,7 @@ public class TemplateService {
                 ? currentVersion(template)
                 : templateVersionMapper.selectById(baseVersionId);
         if (baseVersion == null || !template.getId().equals(baseVersion.getTemplateId())) {
-            throw new BusinessException(400102, "Template version not found");
+            throw new BusinessException(400102, "模板版本不存在");
         }
         return baseVersion;
     }
@@ -153,7 +153,7 @@ public class TemplateService {
         TemplateVersionEntity version = templateVersionMapper.selectByTemplateIdAndVersionNo(
                 template.getId(), template.getCurrentVersionNo());
         if (version == null) {
-            throw new BusinessException(400102, "Template current version not found");
+            throw new BusinessException(400102, "模板当前版本不存在");
         }
         return version;
     }
@@ -161,7 +161,7 @@ public class TemplateService {
     private TemplateEntity requireTemplate(Long templateId) {
         TemplateEntity template = templateMapper.selectById(templateId);
         if (template == null) {
-            throw new BusinessException(400102, "Template not found");
+            throw new BusinessException(400102, "模板不存在");
         }
         return template;
     }
@@ -170,7 +170,7 @@ public class TemplateService {
         TemplateEntity template = requireTemplate(templateId);
         CurrentUser currentUser = CurrentUserContext.requireCurrentUser();
         if (!currentUser.roles().contains(RoleCode.ADMIN) && !currentUser.userId().equals(template.getOwnerId())) {
-            throw new BusinessException(403001, "Forbidden");
+            throw new BusinessException(403001, "当前账号没有权限执行该操作");
         }
         return template;
     }
@@ -179,10 +179,10 @@ public class TemplateService {
         CurrentUser currentUser = CurrentUserContext.requireCurrentUser();
         TaskEntity task = taskMapper.selectById(taskId);
         if (task == null) {
-            throw new BusinessException(400102, "Task not found");
+            throw new BusinessException(400102, "任务不存在");
         }
         if (!currentUser.roles().contains(RoleCode.ADMIN) && !currentUser.userId().equals(task.getOwnerId())) {
-            throw new BusinessException(403001, "Forbidden");
+            throw new BusinessException(403001, "当前账号没有权限执行该操作");
         }
         return task;
     }
@@ -225,7 +225,7 @@ public class TemplateService {
         try {
             return objectMapper.writeValueAsString(schemaJson == null ? Map.of() : schemaJson);
         } catch (JsonProcessingException ex) {
-            throw new BusinessException(400102, "Invalid schema payload");
+            throw new BusinessException(400102, "Schema 请求内容不合法");
         }
     }
 }

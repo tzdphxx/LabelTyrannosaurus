@@ -21,7 +21,7 @@ public final class CurrentUserContext {
     }
 
     public static CurrentUser requireCurrentUser() {
-        return get().orElseThrow(() -> new BusinessException(401001, "Unauthorized"));
+        return get().orElseThrow(() -> new BusinessException(401001, "请先登录"));
     }
 
     public static Long getUserId() {
@@ -35,7 +35,7 @@ public final class CurrentUserContext {
     public static CurrentUser requireRole(RoleCode role) {
         CurrentUser currentUser = requireCurrentUser();
         if (!currentUser.roles().contains(role)) {
-            throw new BusinessException(403001, "Forbidden");
+            throw new BusinessException(403001, "当前账号没有权限执行该操作");
         }
         return currentUser;
     }
@@ -44,7 +44,7 @@ public final class CurrentUserContext {
         CurrentUser currentUser = requireCurrentUser();
         boolean matched = currentUser.roles().stream().anyMatch(roles::contains);
         if (!matched) {
-            throw new BusinessException(403001, "Forbidden");
+            throw new BusinessException(403001, "当前账号没有权限执行该操作");
         }
         return currentUser;
     }

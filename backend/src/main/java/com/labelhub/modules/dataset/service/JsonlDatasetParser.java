@@ -52,7 +52,7 @@ public class JsonlDatasetParser extends AbstractDatasetParser {
                 }
             }
         } catch (IOException ex) {
-            throw new IllegalStateException("Read JSONL dataset failed", ex);
+            throw new IllegalStateException("读取 JSONL 数据集失败", ex);
         }
         return new DatasetParseResult(rows, errors);
     }

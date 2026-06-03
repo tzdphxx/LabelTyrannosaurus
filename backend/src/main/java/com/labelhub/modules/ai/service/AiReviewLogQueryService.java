@@ -35,7 +35,7 @@ public class AiReviewLogQueryService {
                                                  AiReviewResultQuery query) {
         Task task = taskMapper.selectById(query.taskId());
         if (task == null) {
-            throw new BusinessException(TASK_NOT_FOUND, "Task not found");
+            throw new BusinessException(TASK_NOT_FOUND, "任务不存在");
         }
         requireAccess(currentUser, task);
 
@@ -61,6 +61,6 @@ public class AiReviewLogQueryService {
         if (currentUser.roles().contains(RoleCode.REVIEWER)) {
             return;
         }
-        throw new BusinessException(FORBIDDEN, "No permission to view AI review logs");
+        throw new BusinessException(FORBIDDEN, "无权查看 AI 审核日志");
     }
 }

@@ -61,7 +61,7 @@ class OpenAiCompatibleProviderTesterTest {
 
         assertThat(response.success()).isTrue();
         assertThat(response.latencyMs()).isGreaterThanOrEqualTo(0L);
-        assertThat(response.message()).isEqualTo("OK");
+        assertThat(response.message()).isEqualTo("测试成功");
         assertThat(authorization.get()).isEqualTo("Bearer sk-live");
         assertThat(customHeader.get()).isEqualTo("yes");
         assertThat(requestBody.get()).contains("\"model\":\"qwen-plus\"");
@@ -76,7 +76,7 @@ class OpenAiCompatibleProviderTesterTest {
         LlmProviderTestResponse response = tester.test(config(baseUrl(), "sk-live", "qwen-plus", Map.of()));
 
         assertThat(response.success()).isFalse();
-        assertThat(response.message()).contains("status 500").doesNotContain("sk-live");
+        assertThat(response.message()).contains("HTTP 状态码 500").doesNotContain("sk-live");
     }
 
     @Test

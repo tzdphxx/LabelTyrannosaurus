@@ -57,12 +57,12 @@ public class SecurityConfig {
                         .authenticationEntryPoint((request, response, authException) -> {
                             response.setStatus(401);
                             response.setContentType(MediaType.APPLICATION_JSON_VALUE);
-                            objectMapper.writeValue(response.getWriter(), ApiResponse.fail(401001, "Unauthorized", request.getHeader("X-Trace-Id")));
+                            objectMapper.writeValue(response.getWriter(), ApiResponse.fail(401001, "请先登录", request.getHeader("X-Trace-Id")));
                         })
                         .accessDeniedHandler((request, response, accessDeniedException) -> {
                             response.setStatus(403);
                             response.setContentType(MediaType.APPLICATION_JSON_VALUE);
-                            objectMapper.writeValue(response.getWriter(), ApiResponse.fail(403001, "Forbidden", request.getHeader("X-Trace-Id")));
+                            objectMapper.writeValue(response.getWriter(), ApiResponse.fail(403001, "当前账号没有权限执行该操作", request.getHeader("X-Trace-Id")));
                         })
                 )
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);

@@ -53,7 +53,7 @@ public class ReviewClaimService {
         String lockKey = "lock:review-claim:reviewer:" + reviewerId;
         boolean locked = redisLockService.tryLock(lockKey, CLAIM_LOCK_WAIT_MILLIS, CLAIM_LOCK_LEASE_MILLIS);
         if (!locked) {
-            throw new BusinessException(CLAIM_CONFLICT, "Review claim is busy, please retry");
+            throw new BusinessException(CLAIM_CONFLICT, "审核领取繁忙，请稍后重试");
         }
         try {
             List<Long> claimed = transactionTemplate.execute(status -> doClaim(reviewerId, safeCount, taskId));

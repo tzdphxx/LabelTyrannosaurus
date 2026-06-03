@@ -170,7 +170,7 @@ public class DatasetImportService {
         TaskEntity task = requireWritableTask(taskId);
         DatasetImportJobEntity job = importJobMapper.selectByTaskAndJob(task.getId(), jobId);
         if (job == null) {
-            throw new BusinessException(400102, "Import job not found");
+            throw new BusinessException(400102, "导入任务不存在");
         }
         return toResponse(job);
     }
@@ -178,14 +178,14 @@ public class DatasetImportService {
     private DatasetImportJobResponse createImport(Long taskId, DatasetImportRequest request, DatasetImportMode mode) {
         TaskEntity task = requireWritableTask(taskId);
         if (mode == DatasetImportMode.OVERWRITE && task.getStatus() != TaskStatus.DRAFT) {
-            throw new BusinessException(409301, "Overwrite import only allowed for draft task");
+            throw new BusinessException(409301, "只有草稿状态任务允许覆盖导入");
         }
         CurrentUser currentUser = CurrentUserContext.requireCurrentUser();
         ObjectFileEntity sourceFile = requireSourceFile(request.fileId(), currentUser);
         DatasetFileFormat format = resolveFormat(sourceFile);
         DatasetParser parser = parsers.get(format);
         if (parser == null || format == DatasetFileFormat.CSV) {
-            throw new BusinessException(400102, "Unsupported dataset file format");
+            throw new BusinessException(400102, "不支持的数据集文件格式");
         }
 
         // 源文件和导入任务先落库，后台任务执行失败时仍可查询到失败状态。
@@ -220,10 +220,10 @@ public class DatasetImportService {
         CurrentUser currentUser = CurrentUserContext.requireCurrentUser();
         TaskEntity task = taskMapper.selectById(taskId);
         if (task == null) {
-            throw new BusinessException(400102, "Task not found");
+            throw new BusinessException(400102, "任务不存在");
         }
         if (!currentUser.roles().contains(RoleCode.ADMIN) && !currentUser.userId().equals(task.getOwnerId())) {
-            throw new BusinessException(403001, "Forbidden");
+            throw new BusinessException(403001, "当前账号没有权限执行该操作");
         }
         return task;
     }
@@ -231,11 +231,11 @@ public class DatasetImportService {
     private ObjectFileEntity requireSourceFile(Long fileId, CurrentUser currentUser) {
         ObjectFileEntity sourceFile = objectFileMapper.selectById(fileId);
         if (sourceFile == null) {
-            throw new BusinessException(400102, "Dataset source file not found");
+            throw new BusinessException(400102, "数据集源文件不存在");
         }
         if (!currentUser.roles().contains(RoleCode.ADMIN)
                 && (sourceFile.getOwnerId() == null || !sourceFile.getOwnerId().equals(currentUser.userId()))) {
-            throw new BusinessException(403001, "Forbidden");
+            throw new BusinessException(403001, "当前账号没有权限执行该操作");
         }
         return sourceFile;
     }
@@ -244,7 +244,7 @@ public class DatasetImportService {
         try {
             return DatasetFileFormat.fromFilename(sourceFile.getOriginalFilename());
         } catch (IllegalArgumentException ex) {
-            throw new BusinessException(400102, "Unsupported dataset file format");
+            throw new BusinessException(400102, "不支持的数据集文件格式");
         }
     }
 
@@ -286,14 +286,14 @@ public class DatasetImportService {
         for (DatasetImportRow row : result.rows()) {
             if (!seenExternalIds.add(row.externalId())) {
                 errors.add(new DatasetImportError(row.rowNo(), row.externalId(), "DUPLICATE_EXTERNAL_ID",
-                        "externalId duplicated in source file", row.rawRow()));
+                        "源文件中 externalId 重复", row.rawRow()));
                 continue;
             }
             // 追加导入需要避开现有活跃题目；覆盖导入会先软删除旧活跃题目，允许复用原 externalId。
             if (mode == DatasetImportMode.APPEND
                     && datasetItemMapper.countActiveByTaskIdAndExternalId(job.getTaskId(), row.externalId()) > 0) {
                 errors.add(new DatasetImportError(row.rowNo(), row.externalId(), "DUPLICATE_EXTERNAL_ID",
-                        "externalId already exists in this task", row.rawRow()));
+                        "该任务中已存在相同 externalId", row.rawRow()));
                 continue;
             }
             items.add(toEntity(job.getTaskId(), row));

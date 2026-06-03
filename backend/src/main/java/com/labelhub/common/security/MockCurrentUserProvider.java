@@ -36,7 +36,7 @@ public class MockCurrentUserProvider implements CurrentUserProvider {
         try {
             return Long.parseLong(userIdHeader);
         } catch (NumberFormatException ex) {
-            throw new BusinessException(INVALID_USER_CONTEXT, "Invalid current user context");
+            throw new BusinessException(INVALID_USER_CONTEXT, "当前用户上下文无效");
         }
     }
 }

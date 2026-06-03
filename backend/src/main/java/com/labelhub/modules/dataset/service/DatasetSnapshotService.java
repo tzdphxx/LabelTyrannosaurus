@@ -42,7 +42,7 @@ public class DatasetSnapshotService {
     public DatasetItemSnapshot getDatasetItemSnapshot(Long itemId) {
         DatasetItemEntity item = datasetItemMapper.selectById(itemId);
         if (item == null || Boolean.TRUE.equals(item.getDeleted())) {
-            throw new BusinessException(400102, "Dataset item not found");
+            throw new BusinessException(400102, "数据项不存在");
         }
         return toSnapshot(item);
     }
@@ -57,21 +57,21 @@ public class DatasetSnapshotService {
     public DatasetItemSnapshot reserveClaimableItem(Long taskId, Long labelerId) {
         TaskEntity task = taskMapper.selectById(taskId);
         if (task == null) {
-            throw new BusinessException(400102, "Task not found");
+            throw new BusinessException(400102, "任务不存在");
         }
         if (task.getStatus() != TaskStatus.PUBLISHED) {
-            throw new BusinessException(400101, "Task is not claimable");
+            throw new BusinessException(400101, "当前任务不可领取");
         }
         for (int i = 0; i < MAX_RESERVE_RETRY; i++) {
             DatasetItemEntity item = datasetItemMapper.selectClaimableItem(taskId);
             if (item == null) {
-                throw new BusinessException(409201, "No claimable dataset item");
+                throw new BusinessException(409201, "没有可领取的数据项");
             }
             if (datasetItemMapper.markAssignedIfUnassigned(item.getId()) > 0) {
                 return toSnapshot(item);
             }
         }
-        throw new BusinessException(409201, "Dataset item reservation conflict");
+        throw new BusinessException(409201, "数据项领取冲突，请稍后重试");
     }
 
     /**
@@ -79,7 +79,7 @@ public class DatasetSnapshotService {
      */
     public void increaseSubmittedCount(Long itemId) {
         if (datasetItemMapper.increaseSubmittedCount(itemId) == 0) {
-            throw new BusinessException(400102, "Dataset item not found");
+            throw new BusinessException(400102, "数据项不存在");
         }
     }
 
@@ -88,7 +88,7 @@ public class DatasetSnapshotService {
      */
     public void increaseApprovedCount(Long itemId) {
         if (datasetItemMapper.increaseApprovedCount(itemId) == 0) {
-            throw new BusinessException(400102, "Dataset item not found");
+            throw new BusinessException(400102, "数据项不存在");
         }
     }
 
@@ -106,7 +106,7 @@ public class DatasetSnapshotService {
         try {
             return json == null ? objectMapper.nullNode() : objectMapper.readTree(json);
         } catch (JsonProcessingException ex) {
-            throw new BusinessException(500001, "Invalid dataset JSON stored");
+            throw new BusinessException(500001, "已存储的数据集 JSON 不合法");
         }
     }
 }

@@ -16,7 +16,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/api/v1/labeler/claimed-tasks")
-@Tag(name = "Labeler Claimed Tasks", description = "Task-level views for the current labeler's claimed items")
+@Tag(name = "标注员已领取任务", description = "标注员按任务维度查看已领取的数据项和作答进度")
 public class LabelerClaimedTaskController {
 
     private final LabelerAssignmentQueryService queryService;
@@ -26,7 +26,7 @@ public class LabelerClaimedTaskController {
     }
 
     @GetMapping
-    @Operation(summary = "List claimed tasks", description = "List tasks that contain items claimed by the current labeler.")
+    @Operation(summary = "已领取任务列表", description = "分页查询当前标注员已领取过数据项的任务列表。")
     public ApiResponse<List<LabelerClaimedTaskResponse>> listClaimedTasks(
             @RequestParam(defaultValue = "1") int page,
             @RequestParam(defaultValue = "20") int size) {
@@ -35,7 +35,7 @@ public class LabelerClaimedTaskController {
     }
 
     @GetMapping("/{taskId}")
-    @Operation(summary = "Get claimed task detail", description = "Get one task and the current labeler's claimed items under it.")
+    @Operation(summary = "已领取任务详情", description = "查询指定任务下当前标注员已领取的数据项，支持按领取状态筛选。")
     public ApiResponse<LabelerClaimedTaskResponse> getClaimedTaskDetail(
             @PathVariable Long taskId,
             @RequestParam(required = false) String status,

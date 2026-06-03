@@ -61,7 +61,7 @@ public class TaskMarketService {
     public MarketTaskResponse getMarketTaskDetail(Long labelerId, Long taskId, int itemPage, int itemSize) {
         Task task = taskMapper.selectPublishedMarketTaskById(taskId, LocalDateTime.now());
         if (task == null) {
-            throw new BusinessException(MARKET_TASK_NOT_FOUND, "Market task not found");
+            throw new BusinessException(MARKET_TASK_NOT_FOUND, "任务广场中的任务不存在");
         }
         return toResponse(labelerId, task, itemPage, itemSize);
     }

@@ -18,7 +18,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/api/v1/market/tasks")
-@Tag(name = "Market Tasks", description = "Labeler-readable published task market")
+@Tag(name = "标注员任务广场", description = "标注员浏览可领取任务、查看任务详情和可领取题目")
 public class MarketTaskController {
 
     private final TaskMarketService taskMarketService;
@@ -28,7 +28,7 @@ public class MarketTaskController {
     }
 
     @GetMapping
-    @Operation(summary = "List market tasks", description = "List published tasks available to the current labeler.")
+    @Operation(summary = "任务广场列表", description = "查询当前标注员可领取的已发布任务，支持关键词、标签和任务状态筛选。")
     public ApiResponse<List<MarketTaskResponse>> listMarketTasks(@RequestParam(required = false) String keyword,
                                                                  @RequestParam(required = false) String tag,
                                                                  @RequestParam(required = false) TaskStatus status) {
@@ -39,7 +39,7 @@ public class MarketTaskController {
     }
 
     @GetMapping("/{taskId}")
-    @Operation(summary = "Get market task detail", description = "Get a published task and its claimable dataset items.")
+    @Operation(summary = "任务广场详情", description = "查询已发布任务详情，以及当前标注员可领取的数据项分页预览。")
     public ApiResponse<MarketTaskResponse> getMarketTaskDetail(@PathVariable Long taskId,
                                                                @RequestParam(defaultValue = "1") int itemPage,
                                                                @RequestParam(defaultValue = "20") int itemSize) {

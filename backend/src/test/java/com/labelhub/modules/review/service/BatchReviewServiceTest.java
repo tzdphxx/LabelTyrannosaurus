@@ -140,7 +140,7 @@ class BatchReviewServiceTest {
                 REVIEWER_ID, new BatchApproveRequest(List.of(999L), "ok", 1));
 
         assertThat(response.failCount()).isEqualTo(1);
-        assertThat(response.results().get(0).error()).contains("not found");
+        assertThat(response.results().get(0).error()).contains("提交记录不存在");
     }
 
     private Submission pendingFinalSubmission(Long id, Long taskId, Long datasetItemId) {

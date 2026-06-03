@@ -88,7 +88,7 @@ public class RewardRuleService {
         requireOwnedTask(taskId);
         RewardRuleEntity rule = rewardRuleMapper.selectLatestByTaskId(taskId);
         if (rule == null) {
-            throw new BusinessException(400102, "Reward rule not found");
+            throw new BusinessException(400102, "奖励规则不存在");
         }
         return toResponse(rule);
     }
@@ -96,10 +96,10 @@ public class RewardRuleService {
     private void validateRule(RewardRuleRequest request) {
         String mode = defaultString(request.rewardMode(), APPROVED_ITEM_MODE);
         if (!APPROVED_ITEM_MODE.equals(mode)) {
-            throw new BusinessException(400102, "Unsupported reward mode");
+            throw new BusinessException(400102, "不支持的奖励模式");
         }
         if (request.unitReward() == null || request.unitReward().compareTo(BigDecimal.ZERO) < 0) {
-            throw new BusinessException(400102, "Invalid unit reward");
+            throw new BusinessException(400102, "单项奖励金额不合法");
         }
     }
 
@@ -107,10 +107,10 @@ public class RewardRuleService {
         CurrentUser currentUser = CurrentUserContext.requireCurrentUser();
         TaskEntity task = taskMapper.selectById(taskId);
         if (task == null) {
-            throw new BusinessException(400102, "Task not found");
+            throw new BusinessException(400102, "任务不存在");
         }
         if (!currentUser.roles().contains(RoleCode.ADMIN) && !currentUser.userId().equals(task.getOwnerId())) {
-            throw new BusinessException(403001, "Forbidden");
+            throw new BusinessException(403001, "当前账号没有权限执行该操作");
         }
         return task;
     }

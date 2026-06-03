@@ -40,10 +40,10 @@ public class AssignmentCancelService {
     public void cancel(Long assignmentId, Long labelerId) {
         Assignment assignment = assignmentMapper.selectById(assignmentId);
         if (assignment == null) {
-            throw new BusinessException(ASSIGNMENT_NOT_FOUND, "Assignment not found");
+            throw new BusinessException(ASSIGNMENT_NOT_FOUND, "领取记录不存在");
         }
         if (!labelerId.equals(assignment.getLabelerId())) {
-            throw new BusinessException(FORBIDDEN, "Forbidden");
+            throw new BusinessException(FORBIDDEN, "当前账号没有权限执行该操作");
         }
 
         transactionTemplate.executeWithoutResult(tx -> {

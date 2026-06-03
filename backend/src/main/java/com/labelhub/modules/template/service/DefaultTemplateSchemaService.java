@@ -20,7 +20,7 @@ public class DefaultTemplateSchemaService implements TemplateSchemaService {
     public TemplateSchemaSnapshot getTemplateSchema(Long templateVersionId) {
         TemplateVersion templateVersion = templateVersionMapper.selectById(templateVersionId);
         if (templateVersion == null) {
-            throw new BusinessException(TEMPLATE_VERSION_NOT_FOUND, "Template version not found");
+            throw new BusinessException(TEMPLATE_VERSION_NOT_FOUND, "模板版本不存在");
         }
         return new TemplateSchemaSnapshot(templateVersion.getId(), templateVersion.getSchemaJson());
     }

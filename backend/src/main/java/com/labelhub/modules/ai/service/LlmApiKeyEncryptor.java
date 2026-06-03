@@ -42,7 +42,7 @@ public class LlmApiKeyEncryptor {
             buffer.put(ciphertext);
             return Base64.getEncoder().encodeToString(buffer.array());
         } catch (GeneralSecurityException ex) {
-            throw new BusinessException(ENCRYPTION_FAILED, "Failed to encrypt LLM API key");
+            throw new BusinessException(ENCRYPTION_FAILED, "加密 LLM API Key 失败");
         }
     }
 
@@ -59,7 +59,7 @@ public class LlmApiKeyEncryptor {
             cipher.init(Cipher.DECRYPT_MODE, secretKey(), new GCMParameterSpec(GCM_TAG_BITS, iv));
             return new String(cipher.doFinal(ciphertext), StandardCharsets.UTF_8);
         } catch (RuntimeException | GeneralSecurityException ex) {
-            throw new BusinessException(ENCRYPTION_FAILED, "Failed to decrypt LLM API key");
+            throw new BusinessException(ENCRYPTION_FAILED, "解密 LLM API Key 失败");
         }
     }
 
@@ -70,7 +70,7 @@ public class LlmApiKeyEncryptor {
 
     private void requireSecret() {
         if (secret == null || secret.isBlank()) {
-            throw new BusinessException(SECRET_NOT_CONFIGURED, "LLM API key encryption secret is not configured");
+            throw new BusinessException(SECRET_NOT_CONFIGURED, "LLM API Key 加密密钥未配置");
         }
     }
 }

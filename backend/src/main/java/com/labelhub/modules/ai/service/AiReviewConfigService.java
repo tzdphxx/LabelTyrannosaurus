@@ -124,7 +124,7 @@ public class AiReviewConfigService {
         loadOwnedTask(ownerId, taskId);
         AiReviewConfig config = findConfigByTaskId(taskId);
         if (config == null) {
-            throw new BusinessException(AI_REVIEW_CONFIG_NOT_FOUND, "AI review config not found");
+            throw new BusinessException(AI_REVIEW_CONFIG_NOT_FOUND, "AI 审核配置不存在");
         }
         return toResponse(config);
     }
@@ -223,7 +223,7 @@ public class AiReviewConfigService {
                     "Manual review threshold must not be greater than pass threshold");
         }
         if (normalizeDimensions(request.scoringDimensions()).isEmpty()) {
-            throw new BusinessException(AI_REVIEW_CONFIG_INVALID, "AI review scoring dimensions are required");
+            throw new BusinessException(AI_REVIEW_CONFIG_INVALID, "AI 审核评分维度不能为空");
         }
         String visionDetail = request.visionDetail();
         if (visionDetail != null && !visionDetail.isBlank()
@@ -242,13 +242,13 @@ public class AiReviewConfigService {
     private LlmProvider requireEnabledProvider(Long providerId) {
         return llmProviderService.findEnabledById(providerId)
                 .orElseThrow(() -> new BusinessException(AI_REVIEW_PROVIDER_DISABLED,
-                        "Enabled LLM provider is required"));
+                        "需要配置已启用的 LLM Provider"));
     }
 
     private Task loadOwnedDraftTask(Long ownerId, Long taskId) {
         Task task = loadOwnedTask(ownerId, taskId);
         if (task.getStatus() != TaskStatus.DRAFT) {
-            throw new BusinessException(AI_REVIEW_CONFIG_INVALID, "Only draft tasks can update AI review config");
+            throw new BusinessException(AI_REVIEW_CONFIG_INVALID, "只有草稿状态的任务可以更新 AI 审核配置");
         }
         return task;
     }
@@ -256,7 +256,7 @@ public class AiReviewConfigService {
     private Task loadOwnedTask(Long ownerId, Long taskId) {
         Task task = taskMapper.selectById(taskId);
         if (task == null || !ownerId.equals(task.getOwnerId())) {
-            throw new BusinessException(TASK_NOT_FOUND, "Task not found");
+            throw new BusinessException(TASK_NOT_FOUND, "任务不存在");
         }
         return task;
     }
@@ -264,7 +264,7 @@ public class AiReviewConfigService {
     private AiReviewConfig loadTaskConfig(Long taskId, Long configId) {
         AiReviewConfig config = aiReviewConfigMapper.selectById(configId);
         if (config == null || !taskId.equals(config.getTaskId())) {
-            throw new BusinessException(AI_REVIEW_CONFIG_NOT_FOUND, "AI review config not found");
+            throw new BusinessException(AI_REVIEW_CONFIG_NOT_FOUND, "AI 审核配置不存在");
         }
         return config;
     }
@@ -379,7 +379,7 @@ public class AiReviewConfigService {
         try {
             return objectMapper.readValue(json, STRING_LIST);
         } catch (JsonProcessingException ex) {
-            throw new BusinessException(AI_REVIEW_CONFIG_INVALID, "AI review scoring dimensions are invalid");
+            throw new BusinessException(AI_REVIEW_CONFIG_INVALID, "AI 审核评分维度不合法");
         }
     }
 
@@ -398,7 +398,7 @@ public class AiReviewConfigService {
         try {
             return objectMapper.readValue(json, OBJECT_MAP);
         } catch (JsonProcessingException ex) {
-            throw new BusinessException(AI_REVIEW_CONFIG_INVALID, "AI review output schema is invalid");
+            throw new BusinessException(AI_REVIEW_CONFIG_INVALID, "AI 审核输出结构不合法");
         }
     }
 
@@ -406,7 +406,7 @@ public class AiReviewConfigService {
         try {
             return objectMapper.writeValueAsString(value);
         } catch (JsonProcessingException ex) {
-            throw new BusinessException(AI_REVIEW_CONFIG_INVALID, "AI review config JSON is invalid");
+            throw new BusinessException(AI_REVIEW_CONFIG_INVALID, "AI 审核配置 JSON 格式不合法");
         }
     }
 }

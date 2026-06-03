@@ -120,10 +120,10 @@ public class LabelerSubmissionQueryService {
     public LabelerSubmissionDetailResponse getDetail(Long submissionId, Long labelerId) {
         Submission submission = submissionMapper.selectById(submissionId);
         if (submission == null) {
-            throw new BusinessException(SUBMISSION_NOT_FOUND, "Submission not found");
+            throw new BusinessException(SUBMISSION_NOT_FOUND, "提交记录不存在");
         }
         if (!submission.getLabelerId().equals(labelerId)) {
-            throw new BusinessException(FORBIDDEN, "Forbidden");
+            throw new BusinessException(FORBIDDEN, "当前账号没有权限执行该操作");
         }
 
         Assignment assignment = assignmentMapper.selectById(submission.getAssignmentId());

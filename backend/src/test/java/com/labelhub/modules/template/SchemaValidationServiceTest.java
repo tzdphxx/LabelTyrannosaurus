@@ -76,7 +76,7 @@ class SchemaValidationServiceTest {
         assertThat(errors)
                 .extracting(SchemaValidationError::path)
                 .containsExactly("/answer");
-        assertThat(errors.get(0).errorMessage()).contains("enum");
+        assertThat(errors.get(0).errorMessage()).contains("可选值");
     }
 
     @Test
@@ -90,7 +90,7 @@ class SchemaValidationServiceTest {
         assertThat(errors)
                 .extracting(SchemaValidationError::path)
                 .containsExactly("/phone");
-        assertThat(errors.get(0).errorMessage()).contains("regex");
+        assertThat(errors.get(0).errorMessage()).contains("正则");
     }
 
     @Test

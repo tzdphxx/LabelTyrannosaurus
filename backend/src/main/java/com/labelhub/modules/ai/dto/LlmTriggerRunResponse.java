@@ -7,7 +7,6 @@ import com.labelhub.infrastructure.llm.LlmGatewayStatus;
 public record LlmTriggerRunResponse(
         Long triggerRunId,
         Long agentRunId,
-        String componentId,
         Map<String, Object> suggestionJson,
         String displayText,
         List<String> targetFields,
@@ -18,7 +17,6 @@ public record LlmTriggerRunResponse(
         String errorMessage
 ) {
     public LlmTriggerRunResponse(Long agentRunId,
-                                 String componentId,
                                  Map<String, Object> suggestionJson,
                                  String displayText,
                                  List<String> targetFields,
@@ -27,7 +25,7 @@ public record LlmTriggerRunResponse(
                                  Long latencyMs,
                                  String errorCode,
                                  String errorMessage) {
-        this(null, agentRunId, componentId, suggestionJson, displayText, targetFields,
+        this(null, agentRunId, suggestionJson, displayText, targetFields,
                 rawModelSummary, status, latencyMs, errorCode, errorMessage);
     }
 }

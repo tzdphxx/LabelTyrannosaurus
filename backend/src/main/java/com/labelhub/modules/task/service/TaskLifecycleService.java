@@ -5,6 +5,8 @@ import com.labelhub.common.audit.AuditAppender;
 import com.labelhub.common.audit.AuditCommand;
 import com.labelhub.common.exception.BusinessException;
 import com.labelhub.common.web.TraceIdProvider;
+import com.labelhub.modules.ai.dto.AiReviewConfigRequest;
+import com.labelhub.modules.ai.service.AiReviewConfigService;
 import com.labelhub.modules.dataset.dto.DatasetImportJobResponse;
 import com.labelhub.modules.dataset.dto.DatasetImportRequest;
 import com.labelhub.modules.dataset.service.DatasetImportService;
@@ -44,6 +46,7 @@ public class TaskLifecycleService {
     private final AuditAppender auditAppender;
     private final TraceIdProvider traceIdProvider;
     private final DatasetImportService datasetImportService;
+    private final AiReviewConfigService aiReviewConfigService;
     private final org.springframework.context.ApplicationEventPublisher applicationEventPublisher;
 
     public TaskLifecycleService(TaskMapper taskMapper,
@@ -52,6 +55,7 @@ public class TaskLifecycleService {
                                 AuditAppender auditAppender,
                                 TraceIdProvider traceIdProvider,
                                 DatasetImportService datasetImportService,
+                                AiReviewConfigService aiReviewConfigService,
                                 org.springframework.context.ApplicationEventPublisher applicationEventPublisher) {
         this.taskMapper = taskMapper;
         this.taskTagMapper = taskTagMapper;
@@ -59,6 +63,7 @@ public class TaskLifecycleService {
         this.auditAppender = auditAppender;
         this.traceIdProvider = traceIdProvider;
         this.datasetImportService = datasetImportService;
+        this.aiReviewConfigService = aiReviewConfigService;
         this.applicationEventPublisher = applicationEventPublisher;
     }
 
@@ -106,6 +111,21 @@ public class TaskLifecycleService {
         task.setReviewLevelCount(request.reviewLevelCount() != null ? request.reviewLevelCount() : 1);
         task.setRewardVisible(true);
         taskMapper.insert(task);
+
+        if (hasAiInlineConfig(request)) {
+            AiReviewConfigRequest aiRequest = new AiReviewConfigRequest(
+                    request.aiProviderId(),
+                    request.aiModelName(),
+                    request.aiPrompt(),
+                    request.aiScoringDimensions(),
+                    request.aiPassThreshold(),
+                    request.aiManualReviewThreshold(),
+                    null, null, null, null, null, null, null);
+            var aiConfig = aiReviewConfigService.save(ownerId, task.getId(), aiRequest);
+            task.setAiReviewConfigId(aiConfig.id());
+            taskMapper.updateById(task);
+        }
+
         replaceTags(task.getId(), request.tags());
         appendAudit(task, ownerId, "TASK_CREATED", null, snapshot(task));
         return new TaskLifecycleResponse(task.getId(), task.getStatus());
@@ -315,6 +335,14 @@ public class TaskLifecycleService {
                 .map(tag -> toTaskTag(taskId, tag))
                 .filter(Objects::nonNull)
                 .forEach(taskTagMapper::insert);
+    }
+
+    private boolean hasAiInlineConfig(CreateTaskRequest request) {
+        return request.aiProviderId() != null
+                && request.aiPrompt() != null && !request.aiPrompt().isBlank()
+                && request.aiScoringDimensions() != null && !request.aiScoringDimensions().isEmpty()
+                && request.aiPassThreshold() != null
+                && request.aiManualReviewThreshold() != null;
     }
 
     private TaskTag toTaskTag(Long taskId, String tagName) {

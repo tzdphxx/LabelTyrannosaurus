@@ -18,9 +18,17 @@ public class RequestTraceIdProvider implements TraceIdProvider {
     public String currentTraceId() {
         HttpServletRequest request = requestProvider.getIfAvailable();
         if (request == null) {
-            return UUID.randomUUID().toString();
+            return newTraceId();
         }
-        String traceId = request.getHeader("X-Trace-Id");
-        return traceId == null || traceId.isBlank() ? UUID.randomUUID().toString() : traceId;
+        try {
+            String traceId = request.getHeader("X-Trace-Id");
+            return traceId == null || traceId.isBlank() ? newTraceId() : traceId;
+        } catch (IllegalStateException ex) {
+            return newTraceId();
+        }
+    }
+
+    private String newTraceId() {
+        return UUID.randomUUID().toString();
     }
 }

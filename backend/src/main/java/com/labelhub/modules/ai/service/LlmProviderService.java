@@ -129,6 +129,14 @@ public class LlmProviderService {
         return Optional.of(provider);
     }
 
+    public Optional<LlmProviderResponse> findResponseById(Long providerId) {
+        if (providerId == null) {
+            return Optional.empty();
+        }
+        LlmProvider provider = llmProviderMapper.selectById(providerId);
+        return provider == null ? Optional.empty() : Optional.of(toResponse(provider));
+    }
+
     public Optional<LlmProviderRuntimeConfig> findEnabledRuntimeConfig(Long providerId, String modelName) {
         return findEnabledById(providerId)
                 .map(provider -> new LlmProviderRuntimeConfig(

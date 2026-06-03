@@ -27,8 +27,7 @@ public interface DatasetItemMapper extends BaseMapper<DatasetItem> {
             LIMIT 1
             """)
     Long selectClaimableItemId(@Param("taskId") Long taskId,
-                               @Param("labelerId") Long labelerId,
-                               @Param("overlapCount") Integer overlapCount);
+                               @Param("labelerId") Long labelerId);
 
     @Update("""
             UPDATE dataset_items
@@ -37,8 +36,7 @@ public interface DatasetItemMapper extends BaseMapper<DatasetItem> {
               AND deleted = 0
               AND assigned_count = 0
             """)
-    int reserveIfAvailable(@Param("datasetItemId") Long datasetItemId,
-                           @Param("overlapCount") Integer overlapCount);
+    int reserveIfAvailable(@Param("datasetItemId") Long datasetItemId);
 
     @Select("""
             SELECT COUNT(1)
@@ -54,8 +52,7 @@ public interface DatasetItemMapper extends BaseMapper<DatasetItem> {
               )
             """)
     Integer countAvailableForLabeler(@Param("taskId") Long taskId,
-                                     @Param("labelerId") Long labelerId,
-                                     @Param("overlapCount") Integer overlapCount);
+                                     @Param("labelerId") Long labelerId);
 
     @Select("""
             SELECT di.*
@@ -74,7 +71,6 @@ public interface DatasetItemMapper extends BaseMapper<DatasetItem> {
             """)
     List<DatasetItem> selectClaimableItems(@Param("taskId") Long taskId,
                                            @Param("labelerId") Long labelerId,
-                                           @Param("overlapCount") Integer overlapCount,
                                            @Param("limit") int limit,
                                            @Param("offset") int offset);
 

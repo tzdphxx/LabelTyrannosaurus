@@ -5,8 +5,11 @@ import com.labelhub.common.audit.AuditAppender;
 import com.labelhub.common.audit.AuditCommand;
 import com.labelhub.common.exception.BusinessException;
 import com.labelhub.common.web.TraceIdProvider;
+import com.labelhub.modules.ai.dto.AiReviewConfigResponse;
+import com.labelhub.modules.ai.dto.LlmProviderResponse;
 import com.labelhub.modules.ai.dto.AiReviewConfigRequest;
 import com.labelhub.modules.ai.service.AiReviewConfigService;
+import com.labelhub.modules.ai.service.LlmProviderService;
 import com.labelhub.modules.dataset.dto.DatasetImportJobResponse;
 import com.labelhub.modules.dataset.dto.DatasetImportRequest;
 import com.labelhub.modules.dataset.service.DatasetImportService;
@@ -37,6 +40,7 @@ public class TaskLifecycleService {
     private static final int TASK_NOT_FOUND = 404001;
     private static final int TASK_STATUS_NOT_ALLOWED = 400101;
     private static final int TASK_PUBLISH_REQUIREMENT_MISSING = 400102;
+    private static final int SINGLE_LABELER_OVERLAP_COUNT = 1;
     private static final String TASK_BIZ_TYPE = "TASK";
     private static final String USER_ACTOR_TYPE = "USER";
 
@@ -47,6 +51,7 @@ public class TaskLifecycleService {
     private final TraceIdProvider traceIdProvider;
     private final DatasetImportService datasetImportService;
     private final AiReviewConfigService aiReviewConfigService;
+    private final LlmProviderService llmProviderService;
     private final org.springframework.context.ApplicationEventPublisher applicationEventPublisher;
 
     public TaskLifecycleService(TaskMapper taskMapper,
@@ -56,6 +61,7 @@ public class TaskLifecycleService {
                                 TraceIdProvider traceIdProvider,
                                 DatasetImportService datasetImportService,
                                 AiReviewConfigService aiReviewConfigService,
+                                LlmProviderService llmProviderService,
                                 org.springframework.context.ApplicationEventPublisher applicationEventPublisher) {
         this.taskMapper = taskMapper;
         this.taskTagMapper = taskTagMapper;
@@ -64,6 +70,7 @@ public class TaskLifecycleService {
         this.traceIdProvider = traceIdProvider;
         this.datasetImportService = datasetImportService;
         this.aiReviewConfigService = aiReviewConfigService;
+        this.llmProviderService = llmProviderService;
         this.applicationEventPublisher = applicationEventPublisher;
     }
 
@@ -104,7 +111,7 @@ public class TaskLifecycleService {
         task.setStatus(TaskStatus.DRAFT);
         task.setQuota(request.quota());
         task.setClaimedCount(0);
-        task.setOverlapCount(request.overlapCount());
+        task.setOverlapCount(SINGLE_LABELER_OVERLAP_COUNT);
         task.setDeadlineAt(request.deadlineAt());
         task.setPublishedTemplateVersionId(request.publishedTemplateVersionId());
         task.setAiReviewConfigId(request.aiReviewConfigId());
@@ -155,7 +162,6 @@ public class TaskLifecycleService {
         task.setDescription(request.description());
         task.setInstructionRichText(request.instructionRichText());
         task.setQuota(request.quota());
-        task.setOverlapCount(request.overlapCount());
         task.setDeadlineAt(request.deadlineAt());
         task.setPublishedTemplateVersionId(request.publishedTemplateVersionId());
         task.setAiReviewConfigId(request.aiReviewConfigId());
@@ -233,8 +239,8 @@ public class TaskLifecycleService {
         if (task.getQuota() == null || task.getQuota() <= 0) {
             throw missingPublishRequirement("Task quota is required");
         }
-        if (task.getOverlapCount() == null || task.getOverlapCount() < 1) {
-            throw missingPublishRequirement("Task overlap count is required");
+        if (!Integer.valueOf(SINGLE_LABELER_OVERLAP_COUNT).equals(task.getOverlapCount())) {
+            throw missingPublishRequirement("Task overlap count must be 1");
         }
         if (task.getDeadlineAt() == null || !task.getDeadlineAt().isAfter(LocalDateTime.now())) {
             throw missingPublishRequirement("Task deadline must be in the future");
@@ -242,9 +248,9 @@ public class TaskLifecycleService {
         if (!publishDependencyChecker.datasetReady(task.getId())) {
             throw missingPublishRequirement("Task dataset is required");
         }
-        if (!publishDependencyChecker.templateVersionExists(task.getPublishedTemplateVersionId())) {
-            throw missingPublishRequirement("Task template version is required");
-        }
+//        if (!publishDependencyChecker.templateVersionExists(task.getPublishedTemplateVersionId())) {
+//            throw missingPublishRequirement("Task template version is required");
+//        }
         if (!publishDependencyChecker.aiReviewConfigExists(task.getId(), task.getAiReviewConfigId())) {
             throw missingPublishRequirement("Task AI review config is required");
         }
@@ -258,6 +264,8 @@ public class TaskLifecycleService {
     }
 
     private TaskDetailResponse toDetailResponse(Task task) {
+        AiReviewConfigResponse aiReviewConfig = findAiReviewConfig(task);
+        LlmProviderResponse aiProvider = findAiProvider(aiReviewConfig);
         return new TaskDetailResponse(
                 task.getId(),
                 task.getOwnerId(),
@@ -277,8 +285,24 @@ public class TaskLifecycleService {
                 task.getPublishedAt(),
                 task.getEndedAt(),
                 task.getCreatedAt(),
-                task.getUpdatedAt()
+                task.getUpdatedAt(),
+                aiProvider,
+                aiReviewConfig
         );
+    }
+
+    private AiReviewConfigResponse findAiReviewConfig(Task task) {
+        if (task.getAiReviewConfigId() == null) {
+            return null;
+        }
+        return aiReviewConfigService.findResponseByTaskId(task.getId()).orElse(null);
+    }
+
+    private LlmProviderResponse findAiProvider(AiReviewConfigResponse aiReviewConfig) {
+        if (aiReviewConfig == null || aiReviewConfig.providerId() == null) {
+            return null;
+        }
+        return llmProviderService.findResponseById(aiReviewConfig.providerId()).orElse(null);
     }
 
     private List<String> listTags(Long taskId) {

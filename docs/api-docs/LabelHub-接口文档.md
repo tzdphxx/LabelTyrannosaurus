@@ -351,7 +351,6 @@ Authorization: Bearer <accessToken>
 | tags | List&lt;String&gt; | 否 | 每个标签最大 64 字符 | 任务标签 |
 | quota | Integer | 是 | ≥ 1 | 任务配额（可领取总数） |
 | deadlineAt | LocalDateTime | 是 | 必须为未来时间 | 截止时间 |
-| overlapCount | Integer | 是 | ≥ 1 | 每条数据需要的标注份数 |
 | publishedTemplateVersionId | Long | 否 | - | 关联的模板版本 ID |
 | **── AI 审核（引用已有 或 内联创建，二选一）──** |
 | aiReviewConfigId | Long | 否 | - | 引用已创建的 AI 配置 ID |
@@ -376,7 +375,7 @@ Authorization: Bearer <accessToken>
 > **内联 AI 配置示例** — 一步创建任务 + AI 审核：
 > ```json
 > {
->   "title": "图像分类标注", "quota": 100, "overlapCount": 1,
+>   "title": "图像分类标注", "quota": 100,
 >   "deadlineAt": "2026-07-01T23:59:59",
 >   "aiProviderId": 50,
 >   "aiPrompt": "请评估以下标注答案的质量...",
@@ -418,12 +417,16 @@ Authorization: Bearer <accessToken>
 | deadlineAt | LocalDateTime | 截止时间 |
 | publishedTemplateVersionId | Long | 模板版本 ID |
 | aiReviewConfigId | Long | AI 审核配置 ID |
+| aiProvider | LlmProviderResponse | AI 审核配置关联的模型供应商安全信息；未配置或供应商不存在时为 null |
+| aiReviewConfig | AiReviewConfigResponse | AI 审核配置脱敏信息；未配置或配置不存在时为 null |
 | reviewLevelCount | Integer | 审核级别数（1=单级，2=初审+终审，3=初审+复审+终审） |
 | rewardVisible | Boolean | 奖励是否对标注员可见 |
 | publishedAt | LocalDateTime | 发布时间 |
 | endedAt | LocalDateTime | 结束时间 |
 | createdAt | LocalDateTime | 创建时间 |
 | updatedAt | LocalDateTime | 更新时间 |
+
+> 任务详情不内嵌题目列表；前端拿到 `taskId` 后调用 `GET /api/v1/tasks/{taskId}/dataset/items` 查询题目。
 
 ---
 
@@ -448,7 +451,7 @@ Authorization: Bearer <accessToken>
 
 ### 3.5 POST /api/v1/tasks/{taskId}/publish
 
-**作用**：发布任务。发布前自动校验：数据集是否存在、模板版本是否存在、奖励规则是否配置、截止时间是否合理、配额和重叠数是否合法。校验通过后任务状态变为 PUBLISHED。
+**作用**：发布任务。发布前自动校验：数据集是否存在、模板版本是否存在、奖励规则是否配置、截止时间是否合理、配额是否合法。校验通过后任务状态变为 PUBLISHED。
 
 **权限**：OWNER
 
@@ -648,7 +651,7 @@ Authorization: Bearer <accessToken>
 
 ### 4.2 POST /api/v1/tasks/{taskId}/dataset/items/batch-append
 
-**作用**：向任务数据集批量追加数据项。同任务内 externalId 重复的项会进入错误报告。
+**作用**：基于已上传文件创建追加导入任务。前端先调用文件上传接口取得 `fileId`，再通过本接口提交追加。
 
 **权限**：ADMIN 或 OWNER
 
@@ -656,25 +659,25 @@ Authorization: Bearer <accessToken>
 
 | 字段 | 类型 | 必填 | 说明 |
 |------|------|------|------|
-| items | List | 是 | 待追加的数据项列表 |
+| fileId | Long | 是 | 已上传到对象存储的数据集源文件 ID |
 
-每个 item：
-
-| 字段 | 类型 | 必填 | 说明 |
-|------|------|------|------|
-| externalId | String | 是 | 外部唯一标识 |
-| itemJson | String | 是 | 题目内容 JSON |
-| metadataJson | String | 否 | 元数据 JSON |
-
-**响应体** `List<BatchItemResult>`：
+**响应体** `DatasetImportJobResponse`：
 
 | 字段 | 类型 | 说明 |
 |------|------|------|
-| itemId | Long | 数据项 ID（成功时） |
-| externalId | String | 外部 ID |
-| success | Boolean | 是否成功 |
-| errorCode | String | 错误码（失败时） |
-| errorMessage | String | 错误信息（失败时） |
+| jobId | Long | 导入任务 ID |
+| taskId | Long | 关联任务 ID |
+| status | String | 任务状态：PENDING / RUNNING / SUCCESS / FAILED / PARTIAL_SUCCESS |
+| importMode | String | 固定为 APPEND |
+| totalCount | Integer | 总行数 |
+| successCount | Integer | 成功导入数 |
+| failedCount | Integer | 失败数 |
+| errorReportFileId | Long | 错误报告文件 ID（存在失败行时） |
+| errorReportUrl | String | 错误报告下载地址（存在失败行时） |
+| errorMessage | String | 任务级错误信息 |
+| createdAt | LocalDateTime | 创建时间 |
+
+**说明**：非 ADMIN 用户只能使用自己上传的文件；解析、判重、错误报告、媒体上下文刷新规则同追加导入接口。
 
 ---
 
@@ -2383,7 +2386,6 @@ LlmTrigger 是前端在标注作答过程中直接调用的 AI 辅助能力。�
 | 参数 | 类型 | 必填 | 说明 |
 |------|------|------|------|
 | file | MultipartFile | 是 | 上传的文件 |
-| businessType | String | 是 | 业务类型标识（如 DATASET_IMPORT、EXPORT） |
 
 **响应体** `FileUploadResponse`：
 
@@ -2393,7 +2395,6 @@ LlmTrigger 是前端在标注作答过程中直接调用的 AI 辅助能力。�
 | fileName | String | 原始文件名 |
 | fileSize | Long | 文件大小（字节） |
 | contentType | String | MIME 类型 |
-| businessType | String | 业务类型 |
 | uploadedAt | LocalDateTime | 上传时间 |
 
 ---
@@ -2732,7 +2733,7 @@ Owner 完整工作流：
 
 ```text
 1. POST /api/v1/files/upload
-   请求: multipart/form-data { file: <数据集文件>, businessType: "DATASET_IMPORT" }
+   请求: multipart/form-data { file: <数据集文件> }
    响应: { fileId: 99 }
    说明: 上传数据集文件（支持 JSON / JSONL / Excel 格式）
 
@@ -2741,7 +2742,6 @@ Owner 完整工作流：
      title: "图像分类标注",
      quota: 100,
      deadlineAt: "2026-07-01T23:59:59",
-     overlapCount: 3,
      datasetFileId: 99
    }
    响应: { taskId: 1, status: "DRAFT", datasetImportJob: { jobId: 10, status: "PENDING" } }

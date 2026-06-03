@@ -9,11 +9,9 @@ import com.labelhub.common.security.CurrentUserContext;
 import com.labelhub.common.security.RoleCode;
 import com.labelhub.modules.dataset.domain.DatasetItemChangeLogEntity;
 import com.labelhub.modules.dataset.domain.DatasetItemEntity;
-import com.labelhub.modules.dataset.dto.BatchAppendItemsRequest;
 import com.labelhub.modules.dataset.dto.BatchDeleteItemsRequest;
 import com.labelhub.modules.dataset.dto.BatchItemResult;
 import com.labelhub.modules.dataset.dto.BatchUpdateItemsRequest;
-import com.labelhub.modules.dataset.dto.DatasetItemAppendRequest;
 import com.labelhub.modules.dataset.dto.DatasetItemPageResponse;
 import com.labelhub.modules.dataset.dto.DatasetItemQuery;
 import com.labelhub.modules.dataset.dto.DatasetItemResponse;
@@ -29,16 +27,15 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 
 /**
- * 题目数据资产编辑服务。
+ * Dataset item edit service.
  *
- * <p>本服务只维护 BE-B 拥有的 {@code dataset_items} 和变更日志。已领取或已提交的题目
- * 可能已被 BE-A 的 assignment/submission 引用，因此禁止直接修改或删除，避免破坏标注链路快照。</p>
+ * <p>This service only maintains BE-B-owned {@code dataset_items} and change logs. Items that have been
+ * claimed or submitted may already be referenced by BE-A assignment/submission records, so direct mutation
+ * is blocked to preserve labeling snapshots.</p>
  */
 @Service
 public class DatasetItemService {
@@ -70,7 +67,7 @@ public class DatasetItemService {
     }
 
     /**
-     * 查询任务下未删除题目列表。
+     * Lists active dataset items under a task.
      */
     public DatasetItemPageResponse listItems(Long taskId, DatasetItemQuery query) {
         requireOwnedTask(taskId);
@@ -91,22 +88,7 @@ public class DatasetItemService {
     }
 
     /**
-     * 批量追加题目。单条失败不会回滚其他成功题目。
-     */
-    @Transactional
-    public List<BatchItemResult> batchAppend(Long taskId, BatchAppendItemsRequest request) {
-        TaskEntity task = requireOwnedTask(taskId);
-        CurrentUser actor = CurrentUserContext.requireCurrentUser();
-        List<BatchItemResult> results = new ArrayList<>();
-        Set<String> seenExternalIds = new HashSet<>();
-        for (DatasetItemAppendRequest itemRequest : request.items()) {
-            results.add(appendOne(task, actor.userId(), itemRequest, seenExternalIds));
-        }
-        return results;
-    }
-
-    /**
-     * 批量更新题目内容。已领取或已提交题目不允许修改。
+     * Batch updates item content. Claimed or submitted items cannot be changed.
      */
     @Transactional
     public List<BatchItemResult> batchUpdate(Long taskId, BatchUpdateItemsRequest request) {
@@ -120,7 +102,7 @@ public class DatasetItemService {
     }
 
     /**
-     * 批量软删除题目。已进入标注链路的题目必须保留，避免 BE-B 破坏 BE-A 引用。
+     * Batch soft-deletes items. Items already in the labeling flow must be kept for BE-A references.
      */
     @Transactional
     public List<BatchItemResult> batchDelete(Long taskId, BatchDeleteItemsRequest request) {
@@ -133,33 +115,6 @@ public class DatasetItemService {
         return results;
     }
 
-    private BatchItemResult appendOne(TaskEntity task,
-                                      Long actorId,
-                                      DatasetItemAppendRequest request,
-                                      Set<String> seenExternalIds) {
-        String externalId = request.externalId();
-        try {
-            if (!seenExternalIds.add(externalId)
-                    || datasetItemMapper.selectActiveByTaskIdAndExternalId(task.getId(), externalId) != null) {
-                return BatchItemResult.failure(null, externalId, 400102, "externalId already exists in this task");
-            }
-            DatasetItemEntity entity = new DatasetItemEntity();
-            entity.setTaskId(task.getId());
-            entity.setExternalId(externalId);
-            entity.setItemJson(writeJson(request.itemJson()));
-            entity.setMetadataJson(writeJson(request.metadataJson()));
-            entity.setAssignedCount(0);
-            entity.setSubmittedCount(0);
-            entity.setApprovedCount(0);
-            entity.setDeleted(false);
-            datasetItemMapper.insert(entity);
-            refreshMediaContext(task.getId(), entity.getId(), entity.getItemJson(), actorId);
-            appendChangeLog(task.getId(), entity.getId(), "BATCH_APPEND", null, entity.getItemJson(), actorId);
-            return BatchItemResult.success(entity.getId(), externalId);
-        } catch (RuntimeException ex) {
-            return BatchItemResult.failure(null, externalId, 500001, ex.getMessage());
-        }
-    }
 
     private BatchItemResult updateOne(TaskEntity task, Long actorId, DatasetItemUpdateRequest request) {
         DatasetItemEntity entity = datasetItemMapper.selectById(request.itemId());

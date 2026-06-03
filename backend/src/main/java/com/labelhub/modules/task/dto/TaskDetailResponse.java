@@ -1,5 +1,7 @@
 package com.labelhub.modules.task.dto;
 
+import com.labelhub.modules.ai.dto.AiReviewConfigResponse;
+import com.labelhub.modules.ai.dto.LlmProviderResponse;
 import com.labelhub.modules.task.domain.TaskStatus;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -23,6 +25,8 @@ public record TaskDetailResponse(
         LocalDateTime publishedAt,
         LocalDateTime endedAt,
         LocalDateTime createdAt,
-        LocalDateTime updatedAt
+        LocalDateTime updatedAt,
+        LlmProviderResponse aiProvider,
+        AiReviewConfigResponse aiReviewConfig
 ) {
 }

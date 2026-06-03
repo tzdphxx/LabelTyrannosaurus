@@ -5,8 +5,11 @@ import com.labelhub.modules.dataset.dto.BatchAppendItemsRequest;
 import com.labelhub.modules.dataset.dto.BatchDeleteItemsRequest;
 import com.labelhub.modules.dataset.dto.BatchItemResult;
 import com.labelhub.modules.dataset.dto.BatchUpdateItemsRequest;
+import com.labelhub.modules.dataset.dto.DatasetImportJobResponse;
+import com.labelhub.modules.dataset.dto.DatasetImportRequest;
 import com.labelhub.modules.dataset.dto.DatasetItemPageResponse;
 import com.labelhub.modules.dataset.dto.DatasetItemQuery;
+import com.labelhub.modules.dataset.service.DatasetImportService;
 import com.labelhub.modules.dataset.service.DatasetItemService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -34,9 +37,12 @@ import java.util.List;
 public class DatasetItemController {
 
     private final DatasetItemService datasetItemService;
+    private final DatasetImportService datasetImportService;
 
-    public DatasetItemController(DatasetItemService datasetItemService) {
+    public DatasetItemController(DatasetItemService datasetItemService,
+                                 DatasetImportService datasetImportService) {
         this.datasetItemService = datasetItemService;
+        this.datasetImportService = datasetImportService;
     }
 
     /**
@@ -56,10 +62,10 @@ public class DatasetItemController {
      * 批量追加题目。
      */
     @PostMapping("/batch-append")
-    @Operation(summary = "批量追加数据项", description = "向任务数据集追加多个数据项。")
-    public ApiResponse<List<BatchItemResult>> batchAppend(@PathVariable Long taskId,
-                                                          @Valid @RequestBody BatchAppendItemsRequest request) {
-        return ApiResponse.ok(datasetItemService.batchAppend(taskId, request));
+    @Operation(summary = "批量追加数据项", description = "基于已上传文件创建追加导入任务。")
+    public ApiResponse<DatasetImportJobResponse> batchAppend(@PathVariable Long taskId,
+                                                             @Valid @RequestBody BatchAppendItemsRequest request) {
+        return ApiResponse.ok(datasetImportService.createAppendImport(taskId, new DatasetImportRequest(request.fileId())));
     }
 
     /**

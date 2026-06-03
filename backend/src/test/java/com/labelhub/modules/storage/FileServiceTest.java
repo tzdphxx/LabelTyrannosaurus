@@ -66,7 +66,7 @@ class FileServiceTest {
                 "{\"id\":1}\n".getBytes()
         );
 
-        FileUploadResponse response = fileService.upload(file, "dataset");
+        FileUploadResponse response = fileService.upload(file);
 
         ArgumentCaptor<ObjectFileEntity> entityCaptor = ArgumentCaptor.forClass(ObjectFileEntity.class);
         verify(objectStorageService).upload(eq("labelhub-test"), any(), eq("application/x-ndjson"), any(), eq(file.getSize()));
@@ -84,25 +84,25 @@ class FileServiceTest {
     }
 
     @Test
-    void uploadAcceptsMediaBusinessTypeAndReturnsChecksum() throws Exception {
+    void uploadUsesDatasetPrefixAndReturnsChecksum() throws Exception {
         CurrentUserContext.set(new CurrentUser(10L, "owner", "owner@example.com", Set.of(RoleCode.OWNER), 1));
-        byte[] bytes = "image-bytes".getBytes();
-        when(objectStorageService.generatePresignedDownloadUrl(eq("labelhub-test"), any(), eq("cat.png"), any()))
-                .thenReturn(new URL("https://cos.example.com/cat"));
+        byte[] bytes = "{\"id\":2}\n".getBytes();
+        when(objectStorageService.generatePresignedDownloadUrl(eq("labelhub-test"), any(), eq("items.jsonl"), any()))
+                .thenReturn(new URL("https://cos.example.com/items"));
         when(objectFileMapper.insert(any(ObjectFileEntity.class))).thenAnswer(invocation -> {
             ObjectFileEntity entity = invocation.getArgument(0);
             entity.setId(100L);
             return 1;
         });
-        MockMultipartFile file = new MockMultipartFile("file", "cat.png", "image/png", bytes);
+        MockMultipartFile file = new MockMultipartFile("file", "items.jsonl", "application/x-ndjson", bytes);
 
-        FileUploadResponse response = fileService.upload(file, "media");
+        FileUploadResponse response = fileService.upload(file);
 
         ArgumentCaptor<ObjectFileEntity> entityCaptor = ArgumentCaptor.forClass(ObjectFileEntity.class);
         verify(objectFileMapper).insert(entityCaptor.capture());
-        assertThat(entityCaptor.getValue().getObjectKey()).startsWith("uploads/media/");
+        assertThat(entityCaptor.getValue().getObjectKey()).startsWith("uploads/dataset/");
         assertThat(entityCaptor.getValue().getChecksum())
-                .isEqualTo("2c8648d103e3dd7ad87660da0f126a1443b6d21ac1bd3ec000c5e24e2373a90c");
+                .isEqualTo("1ca5c4db56f4d95854b8b9a5cef70bd3844b657b93cfebd6037221b1ae74c5d0");
         assertThat(response.checksum()).isEqualTo(entityCaptor.getValue().getChecksum());
     }
 
@@ -132,7 +132,7 @@ class FileServiceTest {
                 .when(objectStorageService)
                 .upload(eq("labelhub-test"), any(), eq("application/x-ndjson"), any(), eq(file.getSize()));
 
-        assertThatThrownBy(() -> fileService.upload(file, "dataset"))
+        assertThatThrownBy(() -> fileService.upload(file))
                 .isInstanceOf(IllegalStateException.class);
 
         assertThat(closed).isTrue();
@@ -143,7 +143,7 @@ class FileServiceTest {
         CurrentUserContext.set(new CurrentUser(10L, "owner", "owner@example.com", Set.of(RoleCode.OWNER), 1));
         MockMultipartFile file = new MockMultipartFile("file", "empty.json", "application/json", new byte[0]);
 
-        assertThatThrownBy(() -> fileService.upload(file, "dataset"))
+        assertThatThrownBy(() -> fileService.upload(file))
                 .isInstanceOf(BusinessException.class)
                 .extracting("code")
                 .isEqualTo(400102);
@@ -155,7 +155,7 @@ class FileServiceTest {
         CurrentUserContext.set(new CurrentUser(10L, "owner", "owner@example.com", Set.of(RoleCode.OWNER), 1));
         MockMultipartFile file = new MockMultipartFile("file", "malware.exe", "application/octet-stream", new byte[]{1});
 
-        assertThatThrownBy(() -> fileService.upload(file, "dataset"))
+        assertThatThrownBy(() -> fileService.upload(file))
                 .isInstanceOf(BusinessException.class)
                 .extracting("code")
                 .isEqualTo(400102);

@@ -31,6 +31,10 @@ public class Task {
 
     private Integer overlapCount;
 
+    private ClaimStrategy strategy;
+
+    private Integer maxClaimsPerLabeler;
+
     private LocalDateTime deadlineAt;
 
     private Long publishedTemplateVersionId;

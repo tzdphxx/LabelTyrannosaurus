@@ -1,6 +1,7 @@
 package com.labelhub.modules.task.dto;
 
 import com.labelhub.modules.reward.dto.RewardRuleResponse;
+import com.labelhub.modules.task.domain.ClaimStrategy;
 import com.labelhub.modules.task.domain.TaskStatus;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -16,6 +17,8 @@ public record TaskDetailResponse(
         Integer quota,
         Integer claimedCount,
         Integer overlapCount,
+        ClaimStrategy strategy,
+        Integer maxClaimsPerLabeler,
         LocalDateTime deadlineAt,
         Long publishedTemplateVersionId,
         Long aiReviewConfigId,

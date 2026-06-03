@@ -71,6 +71,7 @@ public class TaskManagementService {
                         task.getId(), task.getTitle(), task.getStatus(),
                         listTags(task.getId()), task.getQuota(),
                         task.getClaimedCount(), task.getOverlapCount(),
+                        task.getStrategy(),
                         task.getDeadlineAt(), task.getPublishedAt(),
                         task.getEndedAt(), task.getCreatedAt(), task.getUpdatedAt()))
                 .toList();

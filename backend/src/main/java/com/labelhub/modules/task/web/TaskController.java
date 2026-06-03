@@ -108,28 +108,28 @@ public class TaskController {
     }
 
     @PostMapping("/{taskId}/publish")
-    @Operation(summary = "发布任务")
+    @Operation(summary = "发布任务", description = "发布草稿任务。校验所有前置条件（数据集、模板、AI配置、奖励规则）后，将任务状态从 DRAFT 转为 PUBLISHED。策略和配额发布后即冻结不可更改。")
     public ApiResponse<TaskLifecycleResponse> publish(@PathVariable Long taskId) {
         return ApiResponse.ok(taskLifecycleService.publish(
                 CurrentUserContext.getUserId(), taskId));
     }
 
     @PostMapping("/{taskId}/pause")
-    @Operation(summary = "暂停任务")
+    @Operation(summary = "暂停任务", description = "暂停已发布的任务，标注员暂时无法继续领取新的标注工作。")
     public ApiResponse<TaskLifecycleResponse> pause(@PathVariable Long taskId) {
         return ApiResponse.ok(taskLifecycleService.pause(
                 CurrentUserContext.getUserId(), taskId));
     }
 
     @PostMapping("/{taskId}/resume")
-    @Operation(summary = "恢复任务")
+    @Operation(summary = "恢复任务", description = "恢复已暂停的任务，标注员可重新领取标注工作。")
     public ApiResponse<TaskLifecycleResponse> resume(@PathVariable Long taskId) {
         return ApiResponse.ok(taskLifecycleService.resume(
                 CurrentUserContext.getUserId(), taskId));
     }
 
     @PostMapping("/{taskId}/end")
-    @Operation(summary = "结束任务")
+    @Operation(summary = "结束任务", description = "永久结束任务，从活跃分发和审核流程中移除。结束后标注员无法继续领取或提交。")
     public ApiResponse<TaskLifecycleResponse> end(@PathVariable Long taskId) {
         return ApiResponse.ok(taskLifecycleService.end(
                 CurrentUserContext.getUserId(), taskId));

@@ -24,9 +24,8 @@ public record UpdateTaskRequest(
         String instructionRichText,
         @Schema(description = "任务标签", example = "[\"image\", \"classification\"]")
         List<@Size(max = 64) String> tags,
-        @Schema(description = "任务配额", example = "100")
-        @NotNull
-        @Min(1)
+        @Schema(description = "任务配额（FCFS/QUOTA_GRAB必填，ASSIGNED自动推导）", example = "100")
+        @Min(0)
         Integer quota,
         @Schema(description = "截止时间", example = "2026-06-30T23:59:59")
         @NotNull
@@ -44,6 +43,11 @@ public record UpdateTaskRequest(
         @Schema(description = "审核级别数（1=单级审核，2=初审+终审，3=初审+复审+终审）", example = "3")
         @Min(1)
         Integer reviewLevelCount,
+        @Schema(description = "领取策略", example = "FCFS", allowableValues = {"FCFS", "QUOTA_GRAB", "ASSIGNED"})
+        String strategy,
+        @Schema(description = "单人并发未完成上限（仅 QUOTA_GRAB 有效）", example = "10")
+        @Min(1)
+        Integer maxClaimsPerLabeler,
         @Schema(description = "任务奖励规则，可选，填写后自动创建或更新奖励规则")
         @Valid
         RewardRuleRequest rewardRule

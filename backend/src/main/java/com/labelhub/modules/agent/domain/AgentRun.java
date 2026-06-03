@@ -35,6 +35,12 @@ public class AgentRun {
 
     private String errorMessage;
 
+    private String traceId;
+
+    private Long latencyMs;
+
+    private LocalDateTime queuedAt;
+
     private LocalDateTime startedAt;
 
     private LocalDateTime finishedAt;

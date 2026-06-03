@@ -16,6 +16,9 @@ public record AgentRunDetailResponse(
         Map<String, Object> inputSnapshot,
         Map<String, Object> outputSnapshot,
         String errorMessage,
+        String traceId,
+        Long latencyMs,
+        LocalDateTime queuedAt,
         LocalDateTime startedAt,
         LocalDateTime finishedAt,
         LocalDateTime createdAt,
@@ -28,6 +31,7 @@ public record AgentRunDetailResponse(
                                   LocalDateTime startedAt, LocalDateTime finishedAt,
                                   LocalDateTime createdAt, boolean redacted) {
         this(agentRunId, agentType, submissionId, null, providerId, modelName, promptVersion,
-                status, inputSnapshot, outputSnapshot, errorMessage, startedAt, finishedAt, createdAt, redacted);
+                status, inputSnapshot, outputSnapshot, errorMessage, null, null, null,
+                startedAt, finishedAt, createdAt, redacted);
     }
 }

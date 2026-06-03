@@ -6,6 +6,7 @@ import com.labelhub.infrastructure.llmtask.LlmTaskQueueMessage;
 import com.labelhub.infrastructure.llmtask.LlmTaskQueueService;
 import com.labelhub.infrastructure.llmtask.LlmTaskType;
 import com.labelhub.modules.agent.domain.AgentRun;
+import com.labelhub.modules.agent.domain.AgentRunStatus;
 import com.labelhub.modules.agent.mapper.AgentRunMapper;
 import com.labelhub.modules.submission.domain.Submission;
 import com.labelhub.modules.submission.mapper.SubmissionMapper;
@@ -34,6 +35,9 @@ public class AsyncAiReviewDispatcher implements AiReviewDispatcher {
     public void enqueue(Long submissionId) {
         Submission submission = submissionMapper.selectById(submissionId);
         AgentRun agentRun = latestPendingRun(submissionId);
+        Long agentRunId = agentRun != null && agentRun.getStatus() == AgentRunStatus.PENDING
+                ? agentRun.getId()
+                : null;
         queueService.enqueue(new LlmTaskQueueMessage(
                 LlmTaskType.AI_REVIEW,
                 submissionId,
@@ -42,7 +46,7 @@ public class AsyncAiReviewDispatcher implements AiReviewDispatcher {
                 submissionId,
                 null,
                 null,
-                agentRun == null ? null : agentRun.getId(),
+                agentRunId,
                 traceIdProvider.currentTraceId(),
                 0,
                 Instant.now()
@@ -53,6 +57,7 @@ public class AsyncAiReviewDispatcher implements AiReviewDispatcher {
         return agentRunMapper.selectOne(new LambdaQueryWrapper<AgentRun>()
                 .eq(AgentRun::getSubmissionId, submissionId)
                 .eq(AgentRun::getAgentType, "AI_REVIEW")
+                .eq(AgentRun::getStatus, AgentRunStatus.PENDING)
                 .orderByDesc(AgentRun::getId)
                 .last("LIMIT 1"));
     }

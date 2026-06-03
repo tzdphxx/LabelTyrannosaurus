@@ -101,6 +101,88 @@ public interface AssignmentMapper extends BaseMapper<Assignment> {
                                  @Param("taskId") Long taskId,
                                  @Param("status") String status);
 
+    @Select("""
+            SELECT t.id AS task_id,
+                   t.title,
+                   t.description,
+                   t.instruction_rich_text,
+                   t.status,
+                   t.quota,
+                   t.overlap_count,
+                   t.deadline_at,
+                   t.published_template_version_id,
+                   COUNT(a.id) AS claimed_item_count,
+                   MAX(a.updated_at) AS updated_at
+            FROM assignments a
+            INNER JOIN tasks t ON t.id = a.task_id
+            WHERE a.labeler_id = #{labelerId}
+            GROUP BY t.id, t.title, t.description, t.instruction_rich_text, t.status, t.quota,
+                     t.overlap_count, t.deadline_at, t.published_template_version_id
+            ORDER BY updated_at DESC
+            LIMIT #{limit} OFFSET #{offset}
+            """)
+    java.util.List<java.util.Map<String, Object>> selectLabelerClaimedTasks(
+            @Param("labelerId") Long labelerId,
+            @Param("limit") int limit,
+            @Param("offset") int offset);
+
+    @Select("""
+            SELECT t.id AS task_id,
+                   t.title,
+                   t.description,
+                   t.instruction_rich_text,
+                   t.status,
+                   t.quota,
+                   t.overlap_count,
+                   t.deadline_at,
+                   t.published_template_version_id,
+                   COUNT(a.id) AS claimed_item_count,
+                   MAX(a.updated_at) AS updated_at
+            FROM assignments a
+            INNER JOIN tasks t ON t.id = a.task_id
+            WHERE a.labeler_id = #{labelerId}
+              AND a.task_id = #{taskId}
+            GROUP BY t.id, t.title, t.description, t.instruction_rich_text, t.status, t.quota,
+                     t.overlap_count, t.deadline_at, t.published_template_version_id
+            """)
+    java.util.Map<String, Object> selectLabelerClaimedTask(@Param("labelerId") Long labelerId,
+                                                           @Param("taskId") Long taskId);
+
+    @Select("""
+            <script>
+            SELECT a.id AS assignment_id,
+                   a.dataset_item_id,
+                   a.status AS assignment_status,
+                   di.item_json,
+                   di.metadata_json,
+                   a.draft_version,
+                   (
+                     SELECT s.status
+                     FROM submissions s
+                     WHERE s.assignment_id = a.id
+                       AND s.status != 'SUPERSEDED'
+                     ORDER BY s.version_no DESC
+                     LIMIT 1
+                   ) AS latest_submission_status,
+                   a.updated_at
+            FROM assignments a
+            INNER JOIN dataset_items di ON di.id = a.dataset_item_id
+            WHERE a.labeler_id = #{labelerId}
+              AND a.task_id = #{taskId}
+            <if test="status != null">
+              AND a.status = #{status}
+            </if>
+            ORDER BY a.updated_at DESC
+            LIMIT #{limit} OFFSET #{offset}
+            </script>
+            """)
+    java.util.List<java.util.Map<String, Object>> selectLabelerClaimedItems(
+            @Param("labelerId") Long labelerId,
+            @Param("taskId") Long taskId,
+            @Param("status") String status,
+            @Param("limit") int limit,
+            @Param("offset") int offset);
+
     @Update("""
             UPDATE assignments
             SET status = 'CANCELLED',

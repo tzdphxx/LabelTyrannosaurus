@@ -10,6 +10,8 @@ import com.baomidou.mybatisplus.core.conditions.Wrapper;
 import com.labelhub.modules.assignment.dto.MarketTaskQueryRequest;
 import com.labelhub.modules.assignment.dto.MarketTaskResponse;
 import com.labelhub.modules.assignment.dto.RewardSummaryResponse;
+import com.labelhub.modules.dataset.domain.DatasetItem;
+import com.labelhub.modules.dataset.mapper.DatasetItemMapper;
 import com.labelhub.modules.dataset.service.DatasetMarketStatsService;
 import com.labelhub.modules.reward.service.RewardSummaryService;
 import com.labelhub.modules.task.domain.Task;
@@ -42,6 +44,9 @@ class TaskMarketServiceTest {
     private DatasetMarketStatsService datasetMarketStatsService;
 
     @Mock
+    private DatasetItemMapper datasetItemMapper;
+
+    @Mock
     private AssignmentMarketStatsService assignmentMarketStatsService;
 
     @Mock
@@ -55,6 +60,7 @@ class TaskMarketServiceTest {
                 taskMapper,
                 taskTagMapper,
                 datasetMarketStatsService,
+                datasetItemMapper,
                 assignmentMarketStatsService,
                 rewardSummaryService
         );
@@ -72,6 +78,7 @@ class TaskMarketServiceTest {
                 .thenReturn(List.of(task));
         when(taskTagMapper.selectList(any(Wrapper.class))).thenReturn(List.of(taskTag("quality")));
         when(datasetMarketStatsService.countAvailableItems(TASK_ID, LABELER_ID, 2)).thenReturn(3);
+        when(datasetItemMapper.selectClaimableItems(TASK_ID, LABELER_ID, 2, 20, 0)).thenReturn(List.of(datasetItem(100L)));
         when(assignmentMarketStatsService.countClaimedByLabeler(TASK_ID, LABELER_ID)).thenReturn(1);
         when(rewardSummaryService.findRewardSummary(TASK_ID, true)).thenReturn(rewardSummary);
 
@@ -88,6 +95,14 @@ class TaskMarketServiceTest {
         assertThat(response.availableCount()).isEqualTo(3);
         assertThat(response.currentUserClaimedCount()).isEqualTo(1);
         assertThat(response.rewardSummary()).isEqualTo(rewardSummary);
+        assertThat(response.description()).isEqualTo("Check image quality");
+        assertThat(response.instructionRichText()).isEqualTo("<p>Be precise</p>");
+        assertThat(response.quota()).isEqualTo(30);
+        assertThat(response.overlapCount()).isEqualTo(2);
+        assertThat(response.publishedTemplateVersionId()).isEqualTo(99L);
+        assertThat(response.itemsPreview()).hasSize(1);
+        assertThat(response.itemsPreview().get(0).datasetItemId()).isEqualTo(100L);
+        assertThat(response.itemsPreview().get(0).itemJson()).isEqualTo("{\"text\":\"first\"}");
     }
 
     @Test
@@ -96,6 +111,7 @@ class TaskMarketServiceTest {
         when(taskMapper.selectPublishedMarketTasks(isNull(), isNull(), isNull(), any(LocalDateTime.class))).thenReturn(List.of(task));
         when(taskTagMapper.selectList(any(Wrapper.class))).thenReturn(List.of());
         when(datasetMarketStatsService.countAvailableItems(TASK_ID, LABELER_ID, 2)).thenReturn(0);
+        when(datasetItemMapper.selectClaimableItems(TASK_ID, LABELER_ID, 2, 20, 0)).thenReturn(List.of());
         when(assignmentMarketStatsService.countClaimedByLabeler(TASK_ID, LABELER_ID)).thenReturn(0);
         when(rewardSummaryService.findRewardSummary(TASK_ID, true)).thenReturn(null);
 
@@ -119,13 +135,33 @@ class TaskMarketServiceTest {
         assertThat(responses).isEmpty();
     }
 
+    @Test
+    void returnsMarketTaskDetailWithPagedClaimableItems() {
+        Task task = publishedTask();
+        when(taskMapper.selectPublishedMarketTaskById(eq(TASK_ID), any(LocalDateTime.class))).thenReturn(task);
+        when(taskTagMapper.selectList(any(Wrapper.class))).thenReturn(List.of(taskTag("quality")));
+        when(datasetMarketStatsService.countAvailableItems(TASK_ID, LABELER_ID, 2)).thenReturn(2);
+        when(datasetItemMapper.selectClaimableItems(TASK_ID, LABELER_ID, 2, 10, 10)).thenReturn(List.of(datasetItem(101L)));
+        when(assignmentMarketStatsService.countClaimedByLabeler(TASK_ID, LABELER_ID)).thenReturn(1);
+
+        MarketTaskResponse response = taskMarketService.getMarketTaskDetail(LABELER_ID, TASK_ID, 2, 10);
+
+        assertThat(response.taskId()).isEqualTo(TASK_ID);
+        assertThat(response.itemsPreview()).hasSize(1);
+        assertThat(response.itemsPreview().get(0).datasetItemId()).isEqualTo(101L);
+    }
+
     private Task publishedTask() {
         Task task = new Task();
         task.setId(TASK_ID);
         task.setTitle("QA task");
+        task.setDescription("Check image quality");
+        task.setInstructionRichText("<p>Be precise</p>");
         task.setStatus(TaskStatus.PUBLISHED);
+        task.setQuota(30);
         task.setOverlapCount(2);
         task.setDeadlineAt(LocalDateTime.now().plusDays(1));
+        task.setPublishedTemplateVersionId(99L);
         task.setRewardVisible(true);
         return task;
     }
@@ -135,5 +171,15 @@ class TaskMarketServiceTest {
         taskTag.setTaskId(TASK_ID);
         taskTag.setTagName(tagName);
         return taskTag;
+    }
+
+    private DatasetItem datasetItem(Long datasetItemId) {
+        DatasetItem item = new DatasetItem();
+        item.setId(datasetItemId);
+        item.setTaskId(TASK_ID);
+        item.setExternalId("ext-" + datasetItemId);
+        item.setItemJson("{\"text\":\"first\"}");
+        item.setMetadataJson("{\"source\":\"seed\"}");
+        return item;
     }
 }

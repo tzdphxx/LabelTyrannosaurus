@@ -189,10 +189,7 @@ public class AiAutoReviewService {
             AiReviewConfig config = loadConfig(task);
             DatasetItem datasetItem = datasetItemMapper.selectById(submission.getDatasetItemId());
             MediaPromptResult prompt = buildPrompt(submission, datasetItem, config);
-            AgentRun agentRun = queuedAgentRunId == null
-                    ? agentRunService.create(AGENT_TYPE, submissionId, config.getProviderId(),
-                    config.getModelName(), config.getPromptVersion(), prompt.promptSnapshot())
-                    : existingAgentRun(queuedAgentRunId);
+            AgentRun agentRun = resolveReviewAgentRun(queuedAgentRunId, submissionId, config, prompt);
             agentRunService.start(agentRun.getId());
             return ReviewPrepareResult.ready(submission, config, agentRun, prompt);
         });
@@ -720,10 +717,16 @@ public class AiAutoReviewService {
         );
     }
 
-    private AgentRun existingAgentRun(Long agentRunId) {
-        AgentRun run = new AgentRun();
-        run.setId(agentRunId);
-        return run;
+    private AgentRun resolveReviewAgentRun(Long queuedAgentRunId, Long submissionId,
+                                           AiReviewConfig config, MediaPromptResult prompt) {
+        if (queuedAgentRunId != null) {
+            java.util.Optional<AgentRun> pendingRun = agentRunService.findPending(queuedAgentRunId);
+            if (pendingRun.isPresent()) {
+                return pendingRun.get();
+            }
+        }
+        return agentRunService.create(AGENT_TYPE, submissionId, config.getProviderId(),
+                config.getModelName(), config.getPromptVersion(), prompt.promptSnapshot());
     }
 
     private Object parseJsonValue(String json) {

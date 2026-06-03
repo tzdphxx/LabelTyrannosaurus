@@ -2,6 +2,7 @@ package com.labelhub.modules.dataset.mapper;
 
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import com.labelhub.modules.dataset.domain.DatasetItem;
+import java.util.List;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 import org.apache.ibatis.annotations.Select;
@@ -55,6 +56,27 @@ public interface DatasetItemMapper extends BaseMapper<DatasetItem> {
     Integer countAvailableForLabeler(@Param("taskId") Long taskId,
                                      @Param("labelerId") Long labelerId,
                                      @Param("overlapCount") Integer overlapCount);
+
+    @Select("""
+            SELECT di.*
+            FROM dataset_items di
+            WHERE di.task_id = #{taskId}
+              AND di.deleted = 0
+              AND di.assigned_count = 0
+              AND NOT EXISTS (
+                SELECT 1
+                FROM assignments a
+                WHERE a.dataset_item_id = di.id
+                  AND a.status != 'CANCELLED'
+              )
+            ORDER BY di.id
+            LIMIT #{limit} OFFSET #{offset}
+            """)
+    List<DatasetItem> selectClaimableItems(@Param("taskId") Long taskId,
+                                           @Param("labelerId") Long labelerId,
+                                           @Param("overlapCount") Integer overlapCount,
+                                           @Param("limit") int limit,
+                                           @Param("offset") int offset);
 
     @Update("""
             UPDATE dataset_items

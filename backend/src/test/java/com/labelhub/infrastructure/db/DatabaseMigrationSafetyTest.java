@@ -57,6 +57,21 @@ class DatabaseMigrationSafetyTest {
     }
 
     @Test
+    void llmProviderAdminGlobalMigrationGuardsOwnerRemoval() throws IOException {
+        String migration = Files.readString(MIGRATION_DIR.resolve("V29__llm_providers_admin_global.sql"));
+
+        assertThat(migration).contains("information_schema.referential_constraints");
+        assertThat(migration).contains("fk_llm_providers_owner");
+        assertThat(migration).contains("information_schema.statistics");
+        assertThat(migration).contains("uk_llm_providers_owner_code");
+        assertThat(migration).contains("uk_llm_providers_code");
+        assertThat(migration).contains("information_schema.columns");
+        assertThat(migration).contains("DROP COLUMN owner_id");
+        assertThat(migration.indexOf("DROP FOREIGN KEY fk_llm_providers_owner"))
+                .isLessThan(migration.indexOf("DROP COLUMN owner_id"));
+    }
+
+    @Test
     void ownerTemplateMigrationBackfillsBeforeEnforcingOwner() throws IOException {
         String migration = Files.readString(MIGRATION_DIR.resolve("V27__owner_template_library.sql"));
 

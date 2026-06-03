@@ -45,6 +45,7 @@ import java.math.BigDecimal;
 import java.time.Duration;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -422,6 +423,67 @@ class AiAutoReviewServiceTest {
         verify(aiReviewResultMapper, never()).insert(any(AiReviewResult.class));
     }
 
+    @Test
+    void queuedReviewReusesPendingAgentRun() {
+        when(aiReviewResultMapper.selectBySubmissionId(SUBMISSION_ID)).thenReturn(null);
+        when(submissionMapper.selectById(SUBMISSION_ID)).thenReturn(submission());
+        when(taskMapper.selectById(TASK_ID)).thenReturn(task());
+        when(datasetItemMapper.selectById(DATASET_ITEM_ID)).thenReturn(datasetItem());
+        when(aiReviewConfigMapper.selectById(CONFIG_ID)).thenReturn(config());
+        when(agentRunService.findPending(AGENT_RUN_ID)).thenReturn(Optional.of(agentRun()));
+        when(rateLimiter.acquire(TASK_ID, PROVIDER_ID)).thenReturn(true);
+        when(llmGateway.review(any(LlmGatewayRequest.class))).thenReturn(successGateway("PASS", 91.0, 0.88));
+        when(systemAgentProvider.get()).thenReturn(new SystemActorContext(900L));
+
+        AiReviewResultResponse response = service.executeQueuedReview(SUBMISSION_ID, AGENT_RUN_ID);
+
+        assertThat(response.agentRunId()).isEqualTo(AGENT_RUN_ID);
+        verify(agentRunService).findPending(AGENT_RUN_ID);
+        verify(agentRunService).start(AGENT_RUN_ID);
+        verify(agentRunService, never()).create(eq("AI_REVIEW"), eq(SUBMISSION_ID), eq(PROVIDER_ID),
+                eq("qwen-plus"), eq("v2"), any());
+    }
+
+    @Test
+    void queuedReviewCreatesNewAgentRunWhenQueuedRunAlreadyFailed() {
+        Long staleRunId = 51L;
+        Long newRunId = 52L;
+        when(aiReviewResultMapper.selectBySubmissionId(SUBMISSION_ID)).thenReturn(null);
+        when(submissionMapper.selectById(SUBMISSION_ID)).thenReturn(submission());
+        when(taskMapper.selectById(TASK_ID)).thenReturn(task());
+        when(datasetItemMapper.selectById(DATASET_ITEM_ID)).thenReturn(datasetItem());
+        when(aiReviewConfigMapper.selectById(CONFIG_ID)).thenReturn(config());
+        when(agentRunService.findPending(staleRunId)).thenReturn(Optional.empty());
+        when(agentRunService.create(eq("AI_REVIEW"), eq(SUBMISSION_ID), eq(PROVIDER_ID), eq("qwen-plus"),
+                eq("v2"), any())).thenReturn(agentRun(newRunId));
+        when(rateLimiter.acquire(TASK_ID, PROVIDER_ID)).thenReturn(true);
+        when(llmGateway.review(any(LlmGatewayRequest.class))).thenReturn(successGateway("PASS", 91.0, 0.88));
+        when(systemAgentProvider.get()).thenReturn(new SystemActorContext(900L));
+
+        AiReviewResultResponse response = service.executeQueuedReview(SUBMISSION_ID, staleRunId);
+
+        assertThat(response.agentRunId()).isEqualTo(newRunId);
+        verify(agentRunService).findPending(staleRunId);
+        verify(agentRunService, never()).start(staleRunId);
+        verify(agentRunService).start(newRunId);
+    }
+
+    @Test
+    void queuedReviewReturnsTerminalResultWithoutStartingAgentRun() {
+        AiReviewResult existing = new AiReviewResult();
+        existing.setSubmissionId(SUBMISSION_ID);
+        existing.setEffectiveRunId(AGENT_RUN_ID);
+        existing.setStatus(AiReviewStatus.MANUAL_REQUIRED);
+        when(aiReviewResultMapper.selectBySubmissionId(SUBMISSION_ID)).thenReturn(existing);
+
+        AiReviewResultResponse response = service.executeQueuedReview(SUBMISSION_ID, AGENT_RUN_ID);
+
+        assertThat(response.status()).isEqualTo(AiReviewStatus.MANUAL_REQUIRED);
+        verify(agentRunService, never()).findPending(anyLong());
+        verify(agentRunService, never()).start(anyLong());
+        verify(llmGateway, never()).review(any());
+    }
+
     private Submission submission() {
         Submission submission = new Submission();
         submission.setId(SUBMISSION_ID);
@@ -471,8 +533,12 @@ class AiAutoReviewServiceTest {
     }
 
     private AgentRun agentRun() {
+        return agentRun(AGENT_RUN_ID);
+    }
+
+    private AgentRun agentRun(Long id) {
         AgentRun run = new AgentRun();
-        run.setId(AGENT_RUN_ID);
+        run.setId(id);
         return run;
     }
 

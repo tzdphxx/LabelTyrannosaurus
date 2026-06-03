@@ -41,4 +41,19 @@ class MarketTaskControllerTest {
         assertThat(response.data()).isEmpty();
         verify(taskMarketService).listMarketTasks(20L, new com.labelhub.modules.assignment.dto.MarketTaskQueryRequest(null, null, null));
     }
+
+    @Test
+    void readsCurrentUserWhenGettingMarketTaskDetail() {
+        CurrentUserContext.set(new CurrentUser(20L, "labeler", "test@labelhub.dev", Set.of(RoleCode.LABELER), 1));
+        MarketTaskResponse marketTask = new MarketTaskResponse(
+                10L, "QA task", null, null, null, null, null,
+                null, null, null, null, null, null, List.of());
+        when(taskMarketService.getMarketTaskDetail(20L, 10L, 2, 10)).thenReturn(marketTask);
+        MarketTaskController controller = new MarketTaskController(taskMarketService);
+
+        ApiResponse<MarketTaskResponse> response = controller.getMarketTaskDetail(10L, 2, 10);
+
+        assertThat(response.data()).isEqualTo(marketTask);
+        verify(taskMarketService).getMarketTaskDetail(20L, 10L, 2, 10);
+    }
 }

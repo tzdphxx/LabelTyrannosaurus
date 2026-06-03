@@ -144,6 +144,32 @@ class AgentRunServiceTest {
                 .hasMessageContaining("99");
     }
 
+    @Test
+    void findPendingReturnsRunOnlyWhenStatusIsPending() {
+        AgentRun pending = pendingRun();
+        when(agentRunMapper.selectById(1L)).thenReturn(pending);
+        when(agentRunMapper.selectById(2L)).thenReturn(runningRun());
+
+        assertThat(service.findPending(1L)).contains(pending);
+        assertThat(service.findPending(2L)).isEmpty();
+        assertThat(service.findPending(null)).isEmpty();
+    }
+
+    @Test
+    void findActiveReturnsPendingOrRunningRunOnly() {
+        AgentRun pending = pendingRun();
+        AgentRun running = runningRun();
+        AgentRun failed = pendingRun();
+        failed.setStatus(AgentRunStatus.FAILED);
+        when(agentRunMapper.selectById(1L)).thenReturn(pending);
+        when(agentRunMapper.selectById(2L)).thenReturn(running);
+        when(agentRunMapper.selectById(3L)).thenReturn(failed);
+
+        assertThat(service.findActive(1L)).contains(pending);
+        assertThat(service.findActive(2L)).contains(running);
+        assertThat(service.findActive(3L)).isEmpty();
+    }
+
     private AgentRun pendingRun() {
         AgentRun run = new AgentRun();
         run.setId(1L);

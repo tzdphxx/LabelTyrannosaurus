@@ -222,7 +222,7 @@ public class PreAnnotationService {
 
     public void executeQueuedPreAnnotation(Long preAnnotationId) {
         PreAnnotation record = preAnnotationMapper.selectById(preAnnotationId);
-        if (record == null || record.getStatus() == PreAnnotationStatus.SUCCESS) {
+        if (record == null || isTerminal(record.getStatus())) {
             return;
         }
         Assignment assignment = assignmentMapper.selectById(record.getAssignmentId());
@@ -248,6 +248,7 @@ public class PreAnnotationService {
                 config.getVisionDetail() != null ? config.getVisionDetail() : "auto",
                 config.getMaxImagesPerRequest() != null ? config.getMaxImagesPerRequest() : 5
         ));
+        ensureExecutablePreAnnotationRun(record, config, prompt.promptSnapshot(), assignment.getId());
 
         LlmGatewayResponse gatewayResponse;
         try {
@@ -300,6 +301,31 @@ public class PreAnnotationService {
             throw persistEx;
         }
         appendAudit(labelerId, task, record);
+    }
+
+    private boolean isTerminal(PreAnnotationStatus status) {
+        return status == PreAnnotationStatus.SUCCESS
+                || status == PreAnnotationStatus.FAILED
+                || status == PreAnnotationStatus.RATE_LIMITED
+                || status == PreAnnotationStatus.MANUAL_REQUIRED;
+    }
+
+    private void ensureExecutablePreAnnotationRun(PreAnnotation record, AiReviewConfig config,
+                                                  String promptSnapshot, Long assignmentId) {
+        java.util.Optional<AgentRun> activeRun = agentRunService.findActive(record.getAgentRunId());
+        if (activeRun.isPresent()) {
+            if (activeRun.get().getStatus() == AgentRunStatus.PENDING) {
+                agentRunService.start(activeRun.get().getId());
+            }
+            return;
+        }
+        AgentRun run = agentRunService.create(AGENT_TYPE, null, config.getProviderId(), config.getModelName(),
+                config.getPromptVersion(), promptSnapshot, assignmentId);
+        record.setAgentRunId(run.getId());
+        record.setStatus(PreAnnotationStatus.RUNNING);
+        record.setUpdatedAt(LocalDateTime.now());
+        preAnnotationMapper.updateById(record);
+        agentRunService.start(run.getId());
     }
 
     public PreAnnotationResponse latest(Long assignmentId, Long labelerId) {

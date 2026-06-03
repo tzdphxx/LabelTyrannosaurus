@@ -90,7 +90,7 @@ class AiReviewConfigServiceTest {
         Task task = draftTask();
         when(taskMapper.selectById(TASK_ID)).thenReturn(task);
         when(llmProviderService.findEnabledById(PROVIDER_ID)).thenReturn(Optional.of(provider()));
-        when(aiReviewConfigMapper.selectOne(any(Wrapper.class))).thenReturn(null);
+        when(aiReviewConfigMapper.selectList(any(Wrapper.class))).thenReturn(List.of());
         when(traceIdProvider.currentTraceId()).thenReturn("trace-1");
         when(aiReviewConfigMapper.insert(any(AiReviewConfig.class))).thenAnswer(invocation -> {
             AiReviewConfig config = invocation.getArgument(0);

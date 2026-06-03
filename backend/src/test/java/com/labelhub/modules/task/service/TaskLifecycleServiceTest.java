@@ -18,6 +18,7 @@ import com.labelhub.modules.dataset.dto.DatasetImportJobResponse;
 import com.labelhub.modules.dataset.dto.DatasetImportRequest;
 import com.labelhub.modules.dataset.service.DatasetImportService;
 import com.labelhub.modules.dataset.mapper.DatasetItemMapper;
+import com.labelhub.modules.assignment.mapper.AssignmentDispatchMapper;
 import com.labelhub.modules.ai.service.AiReviewConfigService;
 import com.labelhub.modules.reward.dto.RewardRuleRequest;
 import com.labelhub.modules.reward.dto.RewardRuleResponse;
@@ -78,6 +79,9 @@ class TaskLifecycleServiceTest {
     @Mock
     private RewardRuleService rewardRuleService;
 
+    @Mock
+    private AssignmentDispatchMapper dispatchMapper;
+
     private TaskLifecycleService taskLifecycleService;
 
     @BeforeEach
@@ -91,6 +95,7 @@ class TaskLifecycleServiceTest {
                 datasetImportService,
                 aiReviewConfigService,
                 rewardRuleService,
+                dispatchMapper,
                 applicationEventPublisher
         );
     }
@@ -416,6 +421,7 @@ class TaskLifecycleServiceTest {
                 100L,
                 200L,
                 null, null, null, null, null, null,
+                null, null,
                 1,
                 null,
                 null
@@ -434,6 +440,7 @@ class TaskLifecycleServiceTest {
                 100L,
                 200L,
                 null, null, null, null, null, null,
+                null, null,
                 1,
                 99L,
                 null
@@ -452,6 +459,7 @@ class TaskLifecycleServiceTest {
                 100L,
                 200L,
                 null, null, null, null, null, null,
+                null, null,
                 1,
                 null,
                 rewardRule
@@ -474,6 +482,8 @@ class TaskLifecycleServiceTest {
                 100L,
                 200L,
                 1,
+                null,
+                null,
                 null
         );
     }
@@ -490,6 +500,8 @@ class TaskLifecycleServiceTest {
                 100L,
                 200L,
                 1,
+                null,
+                null,
                 rewardRule
         );
     }

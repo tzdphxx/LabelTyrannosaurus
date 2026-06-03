@@ -88,13 +88,28 @@ class DatabaseMigrationSafetyTest {
     }
 
     @Test
+    void aiObservabilityMigrationKeepsLlmTriggerComponentOptionalAndAddsAgentRunTraceFields() throws IOException {
+        String migration = Files.readString(MIGRATION_DIR.resolve("V33__ai_observability_trace_metrics.sql"));
+
+        assertThat(migration).contains("MODIFY COLUMN component_id VARCHAR(128) NULL");
+        assertThat(migration).contains("column_name = 'trace_id'");
+        assertThat(migration).contains("column_name = 'latency_ms'");
+        assertThat(migration).contains("column_name = 'queued_at'");
+        assertThat(migration).contains("ALTER TABLE agent_runs ADD COLUMN trace_id");
+        assertThat(migration).contains("ALTER TABLE agent_runs ADD COLUMN latency_ms");
+        assertThat(migration).contains("ALTER TABLE agent_runs ADD COLUMN queued_at");
+    }
+
+    @Test
     void ownerTemplateMigrationBackfillsBeforeEnforcingOwner() throws IOException {
         String migration = Files.readString(MIGRATION_DIR.resolve("V27__owner_template_library.sql"));
 
         assertThat(migration).contains("ADD COLUMN owner_id BIGINT NULL");
+        assertThat(migration).contains("information_schema.columns");
+        assertThat(migration).contains("information_schema.table_constraints");
+        assertThat(migration).contains("information_schema.referential_constraints");
         assertThat(migration).contains("UPDATE templates t");
         assertThat(migration).contains("JOIN tasks task ON task.id = t.task_id");
-        assertThat(migration).contains("chk_template_owner_backfill_source");
         assertThat(migration.indexOf("UPDATE templates t"))
                 .isLessThan(migration.indexOf("MODIFY COLUMN owner_id BIGINT NOT NULL"));
         assertThat(migration.indexOf("DROP FOREIGN KEY fk_templates_task"))

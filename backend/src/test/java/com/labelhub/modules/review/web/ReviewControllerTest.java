@@ -22,7 +22,6 @@ import com.labelhub.modules.review.dto.ReviewerSubmissionListItem;
 import com.labelhub.modules.review.dto.SubmissionReviewItem;
 import com.labelhub.modules.review.mapper.ReviewerSubmissionListMapper;
 import com.labelhub.modules.review.service.BatchReviewService;
-import com.labelhub.modules.review.service.ReviewClaimService;
 import com.labelhub.modules.review.service.ReviewService;
 import com.labelhub.modules.review.service.ReviewerSubmissionQueryService;
 import com.labelhub.modules.submission.domain.SubmissionStatus;
@@ -42,14 +41,13 @@ class ReviewControllerTest {
     @Mock private BatchReviewService batchReviewService;
     @Mock private ReviewerSubmissionQueryService reviewerQueryService;
     @Mock private ReviewerSubmissionListMapper reviewerListMapper;
-    @Mock private ReviewClaimService reviewClaimService;
 
     private ReviewController controller;
 
     @BeforeEach
     void setUp() {
         controller = new ReviewController(reviewService, batchReviewService,
-                reviewerQueryService, reviewerListMapper, reviewClaimService);
+                reviewerQueryService, reviewerListMapper);
     }
 
     @AfterEach

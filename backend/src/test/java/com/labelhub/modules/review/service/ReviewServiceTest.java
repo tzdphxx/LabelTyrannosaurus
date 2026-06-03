@@ -58,7 +58,6 @@ class ReviewServiceTest {
     @BeforeEach
     void setUp() {
         lenient().when(escalationService.getMaxReviewLevel(any())).thenReturn(1);
-        lenient().when(reviewTaskMapper.countBySubmissionAndReviewer(any(), any())).thenReturn(1);
         lenient().when(submissionMapper.casUpdateStatus(any(), any(), any())).thenReturn(1);
         reviewService = new ReviewService(
                 submissionMapper, assignmentMapper, reviewRecordMapper,
@@ -247,6 +246,7 @@ class ReviewServiceTest {
         s.setId(SUBMISSION_ID);
         s.setAssignmentId(ASSIGNMENT_ID);
         s.setStatus(SubmissionStatus.PENDING_FINAL);
+        s.setAssignedReviewerId(REVIEWER_ID);
         return s;
     }
 

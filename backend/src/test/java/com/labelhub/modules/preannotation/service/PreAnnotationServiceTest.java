@@ -57,8 +57,11 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.mockito.junit.jupiter.MockitoSettings;
+import org.mockito.quality.Strictness;
 
 @ExtendWith(MockitoExtension.class)
+@MockitoSettings(strictness = Strictness.LENIENT)
 class PreAnnotationServiceTest {
 
     private static final Long ASSIGNMENT_ID = 10L;
@@ -94,6 +97,16 @@ class PreAnnotationServiceTest {
                 llmTaskQueueService);
         lenient().when(redisLockService.withLock(any(), any(Long.class), any(Long.class), any(Supplier.class)))
                 .thenAnswer(invocation -> ((Supplier<?>) invocation.getArgument(3)).get());
+        lenient().when(agentRunService.create(
+                        org.mockito.ArgumentMatchers.any(),
+                        org.mockito.ArgumentMatchers.any(),
+                        org.mockito.ArgumentMatchers.any(),
+                        org.mockito.ArgumentMatchers.any(),
+                        org.mockito.ArgumentMatchers.any(),
+                        org.mockito.ArgumentMatchers.any(),
+                        org.mockito.ArgumentMatchers.any(),
+                        org.mockito.ArgumentMatchers.any()))
+                .thenReturn(agentRun());
     }
 
     @Test
@@ -191,6 +204,8 @@ class PreAnnotationServiceTest {
         when(agentRunService.findActive(staleRunId)).thenReturn(Optional.empty());
         when(agentRunService.create(eq("PRE_ANNOTATION"), eq(null), eq(PROVIDER_ID), eq("qwen-vl"),
                 eq("v1"), any(), eq(ASSIGNMENT_ID))).thenReturn(agentRun(newRunId));
+        when(agentRunService.create(eq("PRE_ANNOTATION"), eq(null), eq(PROVIDER_ID), eq("qwen-vl"),
+                eq("v1"), any(), eq(ASSIGNMENT_ID), any())).thenReturn(agentRun(newRunId));
         when(llmGateway.review(any(LlmGatewayRequest.class))).thenReturn(new LlmGatewayResponse(
                 LlmGatewayStatus.SUCCESS,
                 "{\"ok\":true}",

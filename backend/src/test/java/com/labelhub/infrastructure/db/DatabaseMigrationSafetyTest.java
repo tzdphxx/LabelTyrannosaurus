@@ -72,6 +72,22 @@ class DatabaseMigrationSafetyTest {
     }
 
     @Test
+    void aiReviewResultErrorFieldMigrationAddsMissingColumnsSafely() throws IOException {
+        String baselineTable = tableDefinition(
+                Files.readString(MIGRATION_DIR.resolve("V1__baseline.sql")),
+                "ai_review_results");
+        String migration = Files.readString(MIGRATION_DIR.resolve("V30__ai_review_result_error_fields.sql"));
+
+        assertThat(baselineTable).doesNotContain("`error_code`");
+        assertThat(baselineTable).doesNotContain("`error_message`");
+        assertThat(migration).contains("information_schema.columns");
+        assertThat(migration).contains("column_name = 'error_code'");
+        assertThat(migration).contains("column_name = 'error_message'");
+        assertThat(migration).contains("ALTER TABLE ai_review_results ADD COLUMN error_code");
+        assertThat(migration).contains("ALTER TABLE ai_review_results ADD COLUMN error_message");
+    }
+
+    @Test
     void ownerTemplateMigrationBackfillsBeforeEnforcingOwner() throws IOException {
         String migration = Files.readString(MIGRATION_DIR.resolve("V27__owner_template_library.sql"));
 
@@ -83,5 +99,15 @@ class DatabaseMigrationSafetyTest {
                 .isLessThan(migration.indexOf("MODIFY COLUMN owner_id BIGINT NOT NULL"));
         assertThat(migration.indexOf("DROP FOREIGN KEY fk_templates_task"))
                 .isLessThan(migration.indexOf("MODIFY COLUMN task_id BIGINT NULL"));
+    }
+
+    private static String tableDefinition(String sql, String tableName) {
+        int start = sql.indexOf("CREATE TABLE `" + tableName + "`");
+        assertThat(start).isNotNegative();
+        int nextTable = sql.indexOf("CREATE TABLE `", start + 1);
+        if (nextTable < 0) {
+            return sql.substring(start);
+        }
+        return sql.substring(start, nextTable);
     }
 }

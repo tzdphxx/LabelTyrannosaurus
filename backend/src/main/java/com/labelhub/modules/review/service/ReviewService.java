@@ -160,8 +160,8 @@ public class ReviewService {
     }
 
     private void requireAssignedReviewer(Long submissionId, Long reviewerId) {
-        int count = reviewTaskMapper.countBySubmissionAndReviewer(submissionId, reviewerId);
-        if (count == 0) {
+        Submission submission = submissionMapper.selectById(submissionId);
+        if (submission == null || !reviewerId.equals(submission.getAssignedReviewerId())) {
             throw new BusinessException(REVIEWER_NOT_ASSIGNED,
                     "Reviewer is not assigned to this submission");
         }

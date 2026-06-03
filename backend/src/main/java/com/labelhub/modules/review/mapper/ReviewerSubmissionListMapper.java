@@ -77,9 +77,14 @@ public interface ReviewerSubmissionListMapper {
             SELECT s.task_id AS taskId,
                    t.title AS taskTitle,
                    COUNT(1) AS pendingCount,
-                   SUM(CASE WHEN s.assigned_reviewer_id = #{reviewerId} THEN 1 ELSE 0 END) AS myPendingCount
+                   SUM(CASE WHEN s.assigned_reviewer_id = #{reviewerId} THEN 1 ELSE 0 END) AS myPendingCount,
+                   0 AS totalReviewedCount,
+                   MAX(CASE WHEN rtc.reviewer_id IS NOT NULL THEN 1 ELSE 0 END) AS claimed,
+                   MAX(CASE WHEN rtc.reviewer_id = #{reviewerId} THEN 1 ELSE 0 END) AS claimedByMe
             FROM submissions s
             JOIN tasks t ON t.id = s.task_id
+            LEFT JOIN review_task_claims rtc ON rtc.task_id = s.task_id
+                   AND rtc.review_level = s.current_review_level
             WHERE s.status = 'PENDING_FINAL'
             GROUP BY s.task_id, t.title
             HAVING pendingCount > 0

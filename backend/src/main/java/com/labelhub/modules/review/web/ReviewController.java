@@ -6,19 +6,16 @@ import com.labelhub.common.security.CurrentUserContext;
 import com.labelhub.common.security.RoleCode;
 import com.labelhub.modules.review.dto.ApproveRequest;
 import com.labelhub.modules.review.dto.BatchApproveRequest;
-import com.labelhub.modules.review.dto.BatchAssignRequest;
 import com.labelhub.modules.review.dto.BatchMarkManualRequest;
 import com.labelhub.modules.review.dto.BatchRejectRequest;
 import com.labelhub.modules.review.dto.BatchReviewResponse;
 import com.labelhub.modules.review.dto.RejectRequest;
 import com.labelhub.modules.review.dto.ReviewActionResponse;
-import com.labelhub.modules.review.dto.ReviewClaimResponse;
 import com.labelhub.modules.review.dto.ReviewerSubmissionDetailResponse;
 import com.labelhub.modules.review.dto.ReviewerSubmissionListItem;
 import com.labelhub.modules.review.dto.SubmissionReviewItem;
 import com.labelhub.modules.review.mapper.ReviewerSubmissionListMapper;
 import com.labelhub.modules.review.service.BatchReviewService;
-import com.labelhub.modules.review.service.ReviewClaimService;
 import com.labelhub.modules.review.service.ReviewService;
 import com.labelhub.modules.review.service.ReviewerSubmissionQueryService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -43,27 +40,15 @@ public class ReviewController {
     private final BatchReviewService batchReviewService;
     private final ReviewerSubmissionQueryService reviewerQueryService;
     private final ReviewerSubmissionListMapper reviewerListMapper;
-    private final ReviewClaimService reviewClaimService;
 
     public ReviewController(ReviewService reviewService,
                             BatchReviewService batchReviewService,
                             ReviewerSubmissionQueryService reviewerQueryService,
-                            ReviewerSubmissionListMapper reviewerListMapper,
-                            ReviewClaimService reviewClaimService) {
+                            ReviewerSubmissionListMapper reviewerListMapper) {
         this.reviewService = reviewService;
         this.batchReviewService = batchReviewService;
         this.reviewerQueryService = reviewerQueryService;
         this.reviewerListMapper = reviewerListMapper;
-        this.reviewClaimService = reviewClaimService;
-    }
-
-    @PostMapping("/claim")
-    @Operation(summary = "领取待审提交", description = "审核员主动从未分配池中领取待审提交。支持按任务筛选，使用数据库行锁保证并发安全。")
-    public ApiResponse<ReviewClaimResponse> claim(
-            @Parameter(description = "领取数量，默认 10，最大 50") @RequestParam(defaultValue = "10") int count,
-            @Parameter(description = "按任务 ID 筛选") @RequestParam(required = false) Long taskId) {
-        CurrentUserContext.requireRole(RoleCode.REVIEWER);
-        return ApiResponse.ok(reviewClaimService.claim(CurrentUserContext.getUserId(), count, taskId));
     }
 
     @GetMapping
@@ -157,19 +142,5 @@ public class ReviewController {
     @Operation(summary = "批量转人工", description = "兼容契约路径，将提交批量标记为需要人工处理。")
     public ApiResponse<BatchReviewResponse> batchMarkManualAlias(@Valid @RequestBody BatchMarkManualRequest request) {
         return batchMarkManual(request);
-    }
-
-    @PostMapping("/batch/assign")
-    @Operation(summary = "批量分配审核", description = "批量分配提交给审核员。")
-    public ApiResponse<BatchReviewResponse> batchAssign(@Valid @RequestBody BatchAssignRequest request) {
-        CurrentUserContext.requireRole(RoleCode.REVIEWER);
-        return ApiResponse.ok(batchReviewService.batchAssign(
-                CurrentUserContext.getUserId(), request));
-    }
-
-    @PostMapping("/batch-assign")
-    @Operation(summary = "批量分配审核", description = "兼容契约路径，批量分配提交给审核员。")
-    public ApiResponse<BatchReviewResponse> batchAssignAlias(@Valid @RequestBody BatchAssignRequest request) {
-        return batchAssign(request);
     }
 }

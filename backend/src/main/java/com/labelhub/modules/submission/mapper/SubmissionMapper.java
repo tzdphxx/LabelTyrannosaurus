@@ -166,4 +166,30 @@ public interface SubmissionMapper extends BaseMapper<Submission> {
             """)
     int countByTaskIdAndStatus(@Param("taskId") Long taskId,
                                @Param("status") String status);
+
+    @Update("""
+            UPDATE submissions
+            SET assigned_reviewer_id = #{reviewerId},
+                updated_at = CURRENT_TIMESTAMP(3)
+            WHERE task_id = #{taskId}
+              AND current_review_level = #{reviewLevel}
+              AND status = 'PENDING_FINAL'
+              AND assigned_reviewer_id IS NULL
+            """)
+    int assignReviewerForTaskLevel(@Param("taskId") Long taskId,
+                                   @Param("reviewLevel") Integer reviewLevel,
+                                   @Param("reviewerId") Long reviewerId);
+
+    @Update("""
+            UPDATE submissions
+            SET assigned_reviewer_id = NULL,
+                updated_at = CURRENT_TIMESTAMP(3)
+            WHERE task_id = #{taskId}
+              AND current_review_level = #{reviewLevel}
+              AND status = 'PENDING_FINAL'
+              AND assigned_reviewer_id = #{reviewerId}
+            """)
+    int clearReviewerForTaskLevel(@Param("taskId") Long taskId,
+                                  @Param("reviewLevel") Integer reviewLevel,
+                                  @Param("reviewerId") Long reviewerId);
 }

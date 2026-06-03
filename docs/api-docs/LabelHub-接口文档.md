@@ -1,4 +1,4 @@
-﻿# LabelHub 数据标注平台 — 接口文档
+# LabelHub 数据标注平台 — 接口文档
 
 > 基于当前后端实现生成，版本日期：2026-06-01
 
@@ -28,6 +28,7 @@
 - [附录 A：状态机枚举](#附录-a状态机枚举)
 - [附录 B：统一错误码](#附录-b统一错误码)
 - [附录 C：缺失接口清单](#附录-c缺失接口清单)
+- [附录 E：AI 场景接入指导](#附录-eai-场景接入指导)
 
 ### D.11 环境变量联调注意事项
 
@@ -1955,11 +1956,11 @@ Authorization: Bearer <accessToken>
 
 ## 13. LlmTrigger（字段级 AI 辅助）
 
-LlmTrigger 是前端在标注作答过程中直接调用的 AI 辅助能力。前端全量传入模型参数和 prompt，后端不解析模板 schema。
+LlmTrigger 是标注员在作答过程中点击某个模板组件触发的 AI 辅助能力。前端只传点击的 `componentId`、当前草稿 `currentAnswerJson` 和可选 `userInstruction`；后端自动读取 assignment、任务、题目、模板组件、任务 AI 审核配置和评分维度，调用 LLM 后返回可直接合并到 `answerJson` 的结构化 `patch`。
 
 ### 13.1 POST /api/v1/assignments/{assignmentId}/llm-triggers（标注时触发）
 
-**作用**：标注员在作答过程中点击按钮，触发 LLM 为指定字段生成建议。后端从 assignment 自动获取 taskId、templateVersionId、datasetItemId 等上下文。
+**作用**：标注员在作答过程中点击组件 AI 按钮，触发 LLM 为该组件生成结构化建议。后端从 assignment 自动获取 taskId、templateVersionId、datasetItemId、template schema、AI 审核配置等上下文。
 
 **权限**：LABELER（必须是该 assignment 的持有者）
 
@@ -1967,26 +1968,29 @@ LlmTrigger 是前端在标注作答过程中直接调用的 AI 辅助能力。�
 
 | 字段 | 类型 | 必填 | 约束 | 说明 |
 |------|------|:--:|------|------|
-| providerId | Long | 是 | 非空 | Admin 启用的模型 ID |
-| modelName | String | 是 | 非空，最大 128 字符 | 模型名称 |
-| promptTemplate | String | 是 | 非空，最大 10000 字符 | 发给 LLM 的 prompt 模板 |
-| targetFields | List&lt;String&gt; | 是 | 非空列表 | AI 输出建议要填入的目标字段 |
-| currentAnswerJson | Map | 否 | - | 当前已填写的草稿答案（传入后 AI 可基于已有内容优化） |
+| componentId | String | 是 | 最大 128 字符 | 被点击的模板组件 ID，必须存在于当前 template schema |
+| currentAnswerJson | Map | 否 | - | 当前已填写的草稿答案，后端默认空对象 |
+| userInstruction | String | 否 | 最大 1000 字符 | 用户补充指令，仅作为附加要求 |
+| providerId | Long | 否 | - | 历史兼容字段，标注端主链路不再使用 |
+| modelName | String | 否 | 最大 128 字符 | 历史兼容字段，标注端主链路不再使用 |
+| promptTemplate | String | 否 | 最大 10000 字符 | 历史兼容字段，标注端主链路不再使用 |
+| targetFields | List&lt;String&gt; | 否 | - | 历史兼容字段，目标字段由后端从组件解析 |
 
 **示例**：
 ```json
 {
-  "providerId": 50,
-  "modelName": "qwen-plus",
-  "promptTemplate": "根据以下内容生成摘要：",
-  "targetFields": ["summary"],
-  "currentAnswerJson": { "summary": "草稿内容" }
+  "componentId": "summary",
+  "currentAnswerJson": {
+    "summary": "",
+    "label": "产品咨询"
+  },
+  "userInstruction": "请生成更简洁的摘要"
 }
 ```
 
 ### 13.2 POST /api/v1/tasks/{taskId}/llm-triggers/test（Owner 预览测试）
 
-**作用**：Owner 搭模板时用指定题目测试 prompt 效果。不创建 submission。
+**作用**：Owner 搭模板时用指定题目和组件测试 LlmTrigger 效果。不创建 submission，不写入标注员草稿。
 
 **权限**：OWNER（必须是该任务的 Owner）
 
@@ -1994,21 +1998,19 @@ LlmTrigger 是前端在标注作答过程中直接调用的 AI 辅助能力。�
 
 | 字段 | 类型 | 必填 | 说明 |
 |------|------|:--:|------|
-| providerId | Long | 是 | Admin 启用的模型 ID |
-| modelName | String | 是 | 模型名称 |
-| promptTemplate | String | 是 | 发给 LLM 的 prompt 模板 |
-| targetFields | List&lt;String&gt; | 是 | 目标字段列表 |
 | datasetItemId | Long | 是 | 测试用的题目 ID |
+| componentId | String | 是 | 测试的模板组件 ID |
 | currentAnswerJson | Map | 否 | 草稿答案 |
+| userInstruction | String | 否 | 用户补充指令 |
 
 **示例**：
 ```json
 {
-  "providerId": 50,
-  "modelName": "qwen-plus",
-  "promptTemplate": "根据以下内容生成摘要：",
-  "targetFields": ["summary"],
-  "datasetItemId": 70
+  "datasetItemId": 70,
+  "componentId": "summary",
+  "currentAnswerJson": {
+    "summary": ""
+  }
 }
 ```
 
@@ -2030,10 +2032,15 @@ LlmTrigger 是前端在标注作答过程中直接调用的 AI 辅助能力。�
 |------|------|------|
 | triggerRunId | Long | 运行记录 ID |
 | agentRunId | Long | 关联的 Agent 运行 ID |
-| suggestionJson | Map | AI 建议的字段值 |
+| componentId | String | 触发的组件 ID |
+| suggestionJson | Map | 完整结构化建议，包含 patch、confidence、warnings 等 |
+| patch | Map | 可直接合并到 answerJson 的字段补丁 |
 | displayText | String | 展示文本 |
 | targetFields | List&lt;String&gt; | 目标字段列表 |
 | rawModelSummary | String | 原始输出摘要 |
+| confidence | BigDecimal | AI 对建议的置信度 |
+| warnings | List&lt;String&gt; | 警告信息，如模型输出包含非目标字段 |
+| traceId | String | 本次 AI 调用链路 ID |
 | status | String | SUCCESS / FAILED / RUNNING |
 | latencyMs | Long | 耗时毫秒 |
 | errorCode | String | 错误码 |
@@ -3065,7 +3072,7 @@ POST /api/v1/reviewer/submissions/batch/assign
 
 #### 设计原则
 
-**前端全量传参，后端不解析模板**。LlmTrigger 不再依赖模板 schema 中定义的组件——前端直接在调用时传入 `providerId`、`modelName`、`promptTemplate`、`targetFields`。
+**标注员点击组件触发，后端自动聚合上下文**。LlmTrigger 现在依赖当前 assignment、任务、题目、模板组件、当前草稿和任务 AI 审核配置来构造 LLM 输入；前端只需要告诉后端点击了哪个组件，并传入当前草稿。
 
 #### 标注时触发
 
@@ -3073,7 +3080,41 @@ POST /api/v1/reviewer/submissions/batch/assign
 POST /api/v1/assignments/{assignmentId}/llm-triggers
 ```
 
-权限：LABELER（必须是 assignment 持有者）。后端从 assignment 自动获取 taskId、datasetItemId 等上下文。
+权限：LABELER（必须是 assignment 持有者）。后端从 assignment 自动获取 taskId、datasetItemId、templateVersionId、任务 AI 审核配置和组件 schema。
+
+请求示例：
+
+```json
+{
+  "componentId": "summary",
+  "currentAnswerJson": {
+    "summary": "",
+    "label": "产品咨询"
+  },
+  "userInstruction": "请生成更简洁的摘要"
+}
+```
+
+响应成功后关注：
+
+```json
+{
+  "triggerRunId": 500,
+  "agentRunId": 600,
+  "componentId": "summary",
+  "patch": {
+    "summary": "用户正在咨询产品使用方式。"
+  },
+  "displayText": "用户正在咨询产品使用方式。",
+  "targetFields": ["summary"],
+  "confidence": 0.87,
+  "warnings": [],
+  "traceId": "trace-id",
+  "status": "SUCCESS"
+}
+```
+
+前端点击“采纳”后，将 `patch` 合并到 `answerJson`，再调用草稿保存接口。
 
 #### Owner 预览测试
 
@@ -3081,7 +3122,7 @@ POST /api/v1/assignments/{assignmentId}/llm-triggers
 POST /api/v1/tasks/{taskId}/llm-triggers/test
 ```
 
-权限：OWNER（必须是任务所有者）。需传 `datasetItemId` 指定测试题目。
+权限：OWNER（必须是任务所有者）。需传 `datasetItemId` 指定测试题目，传 `componentId` 指定测试组件。模型和评分维度同样来自任务 AI 审核配置。
 
 #### 与 AI 审核、预标注的区别
 
@@ -3089,19 +3130,20 @@ POST /api/v1/tasks/{taskId}/llm-triggers/test
 |---|:--:|:--:|:--:|
 | 触发 | **手动点击** | 手动 | 提交后**自动** |
 | 粒度 | 字段级 | 整题 | submission |
-| 参数来源 | **前端全量传** | API 调用 | ai-review-configs |
+| 参数来源 | assignment + template component + ai-review-configs | API 调用 | ai-review-configs |
 | 结果影响 | 前端展示，标注员决定 | 前端展示 | 写入 ai_review_result |
 
 #### 数据流
 
 ```text
-前端点击按钮
+前端点击组件 AI 按钮
   ↓
 POST /api/v1/assignments/{id}/llm-triggers
-  { providerId, modelName, promptTemplate, targetFields, currentAnswerJson }
+  { componentId, currentAnswerJson, userInstruction }
   → 校验：assignment 属于当前 LABELER
-  → 校验：Provider 已启用
-  → 构造 inputSnapshot（itemJson + promptTemplate + currentAnswerJson）
+  → 读取：task + datasetItem + template component + ai-review-config
+  → 校验：Provider 已启用、componentId 存在
+  → 构造 inputSnapshot（task + itemJson + component + scoringDimensions + currentAnswerJson）
   → 进入异步队列
   ↓
 Worker 消费
@@ -3109,8 +3151,8 @@ Worker 消费
   → 写入 llm_trigger_runs
   ↓
 前端轮询 GET /api/v1/llm/triggers/runs/{id}
-  → 拿到 suggestionJson
-  → 标注员决定是否采纳
+  → 拿到 patch
+  → 标注员点击采纳后覆盖组件字段
 ```
 
 ### D.11 联调注意事项
@@ -3118,8 +3160,507 @@ Worker 消费
 - 普通注册只允许 `LABELER` 和 `OWNER`；`REVIEWER` 需由管理员创建或调整角色
 - 每个普通用户只能拥有一个角色；用户无角色或多角色时登录/刷新会返回 `400102`
 - 大模型供应商管理：`/api/v1/admin/llm-providers`（ADMIN）；OWNER 通过 `GET /api/v1/llm-providers` 查看
-- LlmTrigger 前端全量传参，不依赖模板解析
+- LlmTrigger 标注端只传 `componentId/currentAnswerJson/userInstruction`，模型、评分维度和组件上下文由后端聚合
 - 所有 LLM 调用均通过异步队列执行，前端需轮询结果
+
+---
+
+## 附录 E：AI 场景接入指导
+
+本节按真实业务场景说明 AI 能力如何接入。AI 结果默认都是辅助建议：AI 审核不直接通过提交，预标注和 LlmTrigger 不直接写入答案，前端必须由用户确认后再采纳。
+
+### E.1 AI 能力总览
+
+| 场景 | 触发角色 | 触发方式 | 粒度 | 结果入口 | 主要用途 |
+|------|------|------|------|------|------|
+| 模型供应商配置 | OWNER | 手动配置 | Provider | `/api/v1/llm-providers` | 接入 DashScope、OpenAI-compatible 等模型服务 |
+| AI 审核配置 | OWNER | 手动配置 | Task | `/api/v1/tasks/{taskId}/ai-review-configs` | 定义审核 prompt、评分维度、阈值和输出 schema |
+| AI Prompt 测试 | OWNER | 手动测试 | Config | `/api/v1/tasks/{taskId}/ai-review-configs/{configId}/test` | 发布前验证 prompt 和结构化输出 |
+| 预标注 | LABELER | 手动触发 | Assignment | `/api/v1/assignments/{assignmentId}/pre-annotations/latest` | 整题建议答案、字段建议、置信度和风险提示 |
+| LlmTrigger | LABELER / OWNER | 手动触发 | 字段级 | `/api/v1/llm/triggers/runs/{triggerRunId}` | 作答过程中的字段级 AI 辅助 |
+| AI 自动审核 | 系统 | 提交后异步触发 | Submission | `/api/v1/submissions/{submissionId}/ai-review` | 给 Reviewer 提供评分、结论和风险建议 |
+| AgentRun 追踪 | 有权访问业务对象的用户 | 查询 | 单次 AI 调用 | `/api/v1/agent-runs/{agentRunId}` | 查看输入快照、输出快照、traceId、耗时和错误 |
+| AI 指标 | 已认证用户，按 Actuator 权限 | 查询 | 服务指标 | `/actuator/metrics/labelhub.ai.requests` | 查看成功、失败、限流、超时、耗时等埋点 |
+
+### E.2 场景一：OWNER 接入模型供应商
+
+适用页面：Owner AI 配置页、任务创建页的模型选择器。
+
+调用链：
+
+```text
+1. POST /api/v1/llm-providers
+2. POST /api/v1/llm-providers/{id}/test
+3. POST /api/v1/llm-providers/{id}/enable
+4. GET  /api/v1/llm-providers
+```
+
+创建 Provider 示例：
+
+```json
+{
+  "providerCode": "dashscope",
+  "providerName": "DashScope",
+  "baseUrl": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+  "apiKey": "sk-xxx",
+  "defaultModel": "qwen-plus",
+  "customHeaders": {},
+  "platformRateLimitPerMinute": 60,
+  "taskRateLimitPerMinute": 30,
+  "userRateLimitPerMinute": 10
+}
+```
+
+前端接入要点：
+
+- `apiKey` 只在创建或更新时提交，后端永不返回明文。
+- 列表响应里的 `apiKeyConfigured=true` 表示密钥已配置。
+- `customHeaders` 中的敏感字段会脱敏返回。
+- 只有 `enabled=true` 的 provider 才应出现在 AI 审核、预标注、LlmTrigger 的可选模型列表中。
+
+### E.3 场景二：OWNER 配置 AI 审核并发布任务
+
+适用页面：任务创建/编辑页、AI 审核配置页、发布前校验页。
+
+调用链：
+
+```text
+1. GET  /api/v1/llm-providers
+2. POST /api/v1/tasks/{taskId}/ai-review-configs
+3. POST /api/v1/tasks/{taskId}/ai-review-configs/{configId}/test
+4. POST /api/v1/tasks/{taskId}/publish
+```
+
+保存 AI 审核配置示例：
+
+```json
+{
+  "providerId": 50,
+  "modelName": "qwen-plus",
+  "promptTemplate": "请根据题目、标注答案和任务说明进行审核，输出 JSON。",
+  "scoringDimensions": ["准确性", "完整性", "一致性"],
+  "passThreshold": 80.00,
+  "manualReviewThreshold": 60.00,
+  "outputSchema": {
+    "type": "object",
+    "required": ["decision", "averageScore", "dimensionScores", "suggestion"],
+    "properties": {
+      "decision": { "type": "string" },
+      "averageScore": { "type": "number" },
+      "dimensionScores": { "type": "object" },
+      "riskFlags": { "type": "array" },
+      "suggestion": { "type": "string" }
+    }
+  }
+}
+```
+
+Prompt 测试示例：
+
+```json
+{
+  "itemSnapshot": {
+    "text": "待标注文本或图片元数据"
+  },
+  "answerJson": {
+    "label": "正向",
+    "reason": "内容表达积极"
+  }
+}
+```
+
+前端接入要点：
+
+- `manualReviewThreshold` 不能大于 `passThreshold`。
+- Prompt 测试会创建 `agentRunId`，但不会创建 submission 或 AI 审核结果。
+- 发布任务前应确保数据集、模板、奖励规则、AI 审核配置都已完成。
+
+### E.4 场景三：LABELER 使用预标注
+
+适用页面：标注工作台进入单题后，点击“AI 预标注/生成建议”。
+
+调用链：
+
+```text
+1. GET  /api/v1/assignments/{assignmentId}
+2. POST /api/v1/assignments/{assignmentId}/pre-annotations/run
+3. GET  /api/v1/assignments/{assignmentId}/pre-annotations/latest
+4. GET  /api/v1/agent-runs/{agentRunId}
+```
+
+触发预标注：
+
+```text
+POST /api/v1/assignments/{assignmentId}/pre-annotations/run
+```
+
+响应示例：
+
+```json
+{
+  "preAnnotationId": 200,
+  "assignmentId": 100,
+  "agentRunId": 600,
+  "status": "RUNNING",
+  "suggestedAnswerJson": null,
+  "fieldSuggestions": [],
+  "riskFlags": [],
+  "overallConfidence": null,
+  "errorCode": null,
+  "errorMessage": null
+}
+```
+
+轮询最新结果：
+
+```text
+GET /api/v1/assignments/{assignmentId}/pre-annotations/latest
+```
+
+成功响应关注字段：
+
+| 字段 | 说明 |
+|------|------|
+| preAnnotationId | 预标注记录 ID |
+| agentRunId | 对应 AgentRun，可继续查链路详情 |
+| status | `RUNNING` / `SUCCESS` / `FAILED` / `RATE_LIMITED` 等 |
+| suggestedAnswerJson | 整题建议答案 |
+| fieldSuggestions | 字段级建议 |
+| overallConfidence | 整体置信度 |
+| riskFlags | 风险标记 |
+| limitations | 模型能力限制或降级说明 |
+| finalDiff | 当前草稿与建议答案的差异 |
+
+前端接入要点：
+
+- 只有当前 assignment 的 LABELER 能触发自己的预标注。
+- 同一个 assignment 同时只允许一个预标注运行。
+- `SUCCESS` 后也不要自动覆盖草稿，必须展示差异并让用户确认采纳。
+- 如果需要完整链路，取响应中的 `agentRunId` 调用 AgentRun 详情。
+
+### E.5 场景四：LABELER 作答时使用字段级 LlmTrigger
+
+适用页面：标注表单中的“AI 生成摘要”“AI 改写”“AI 推荐标签”等按钮。
+
+调用链：
+
+```text
+1. POST /api/v1/assignments/{assignmentId}/llm-triggers
+2. GET  /api/v1/llm/triggers/runs/{triggerRunId}
+3. PUT  /api/v1/assignments/{assignmentId}/draft
+```
+
+触发示例：
+
+```json
+{
+  "componentId": "summary",
+  "currentAnswerJson": {
+    "summary": "",
+    "label": "产品咨询"
+  },
+  "userInstruction": "生成一句更简洁的摘要"
+}
+```
+
+响应示例：
+
+```json
+{
+  "triggerRunId": 500,
+  "agentRunId": 601,
+  "componentId": "summary",
+  "suggestionJson": null,
+  "patch": {},
+  "displayText": null,
+  "targetFields": ["summary"],
+  "rawModelSummary": null,
+  "confidence": null,
+  "warnings": [],
+  "traceId": "trace-id",
+  "status": "RUNNING",
+  "latencyMs": null,
+  "errorCode": null,
+  "errorMessage": null
+}
+```
+
+轮询成功后：
+
+```json
+{
+  "triggerRunId": 500,
+  "agentRunId": 601,
+  "componentId": "summary",
+  "suggestionJson": {
+    "componentId": "summary",
+    "targetFields": ["summary"],
+    "patch": {
+      "summary": "用户正在咨询产品使用方式。"
+    },
+    "displayText": "用户正在咨询产品使用方式。",
+    "confidence": 0.87,
+    "warnings": []
+  },
+  "patch": {
+    "summary": "用户正在咨询产品使用方式。"
+  },
+  "displayText": "用户正在咨询产品使用方式。",
+  "targetFields": ["summary"],
+  "confidence": 0.87,
+  "warnings": [],
+  "traceId": "trace-id",
+  "status": "SUCCESS",
+  "latencyMs": 1280
+}
+```
+
+前端接入要点：
+
+- LlmTrigger 标注端只传 `componentId`、`currentAnswerJson` 和可选 `userInstruction`。
+- 后端自动读取 assignment、题目、模板组件、任务 AI 审核配置和评分维度。
+- `patch` 是可直接合并到 `answerJson` 的结构化结果，`targetFields` 用于告诉前端建议写入哪些字段。
+- 用户点击采纳后，再调用 `PUT /api/v1/assignments/{assignmentId}/draft` 保存草稿。
+- `RATE_LIMITED` 表示限流，不应继续高频轮询或立即重试。
+
+### E.6 场景五：OWNER 测试 LlmTrigger
+
+适用页面：模板设计器、任务配置页中的 LlmTrigger 调试面板。
+
+调用链：
+
+```text
+1. POST /api/v1/tasks/{taskId}/llm-triggers/test
+2. GET  /api/v1/llm/triggers/runs/{triggerRunId}
+3. GET  /api/v1/tasks/{taskId}/llm-trigger-runs
+```
+
+请求体与标注端 LlmTrigger 基本一致，但 OWNER 测试必须额外传 `datasetItemId` 指定测试题目；模型、prompt 基础信息和评分维度仍来自任务 AI 审核配置，不产生 submission，也不写入 labeler 草稿。
+
+前端接入要点：
+
+- 只允许任务 OWNER 测试自己的任务。
+- 请求体至少包含 `datasetItemId`、`componentId`、`currentAnswerJson`。
+- 测试结果用于调 prompt，不应展示给真实标注员作为正式建议。
+- 任务维度日志可用于查看某个 prompt 的运行效果和失败原因。
+
+### E.7 场景六：提交后自动 AI 审核
+
+适用页面：标注提交页、Reviewer 审核列表、Reviewer 提交详情页。
+
+调用链：
+
+```text
+1. POST /api/v1/assignments/{assignmentId}/submit
+2. GET  /api/v1/submissions/{submissionId}/ai-review
+3. GET  /api/v1/agent-runs/{agentRunId}
+4. POST /api/v1/submissions/{submissionId}/ai-review/retry
+```
+
+提交后响应通常会返回 submission 状态：
+
+```json
+{
+  "submissionId": 300,
+  "status": "AI_REVIEWING",
+  "versionNo": 1
+}
+```
+
+轮询 AI 审核：
+
+```text
+GET /api/v1/submissions/{submissionId}/ai-review
+```
+
+成功响应关注字段：
+
+| 字段 | 说明 |
+|------|------|
+| id | AI 审核结果 ID |
+| submissionId | 提交 ID |
+| agentRunId | 对应 AgentRun |
+| providerId | 使用的 provider |
+| modelName | 使用的模型 |
+| status | `PENDING` / `RUNNING` / `SUCCESS` / `FAILED` / `RATE_LIMITED` / `MANUAL_REQUIRED` |
+| decision | AI 结论，如 `PASS` / `REJECT` / `MANUAL_REVIEW` |
+| averageScore | 平均分 |
+| dimensionScores | 各维度评分 |
+| riskFlags | 风险标记 |
+| suggestion | 给 Reviewer 的审核建议 |
+| confidence | 置信度 |
+| flowAction | 建议流转动作 |
+| promptMode | Prompt 模式 |
+| degraded | 是否降级 |
+| limitations | 限制说明 |
+| errorCode | 错误码 |
+| errorMessage | 错误信息 |
+
+前端接入要点：
+
+- AI 审核完成后，submission 会进入人工终审路径。
+- AI 结论仅供 Reviewer 参考，不会自动把 submission 改成 `APPROVED`。
+- `FAILED`、`RATE_LIMITED`、`MANUAL_REQUIRED` 都应允许 Reviewer 继续人工处理。
+- Reviewer 可调用 `/retry` 触发重试，每次重试会产生新的 AgentRun。
+
+### E.8 场景七：任务级 AI 日志查询
+
+适用页面：Owner 任务监控页、Reviewer 质检页、AI 运维排查页。
+
+AI 审核日志：
+
+```text
+GET /api/v1/tasks/{taskId}/ai-review-logs?page=1&pageSize=20&status=SUCCESS&decision=PASS
+```
+
+LlmTrigger 日志：
+
+```text
+GET /api/v1/tasks/{taskId}/llm-trigger-runs?page=1&pageSize=20&status=SUCCESS&componentId=summary
+```
+
+筛选参数：
+
+| 参数 | 说明 |
+|------|------|
+| page | 页码 |
+| pageSize | 每页数量 |
+| status | 运行状态 |
+| decision | AI 审核结论，仅 AI 审核日志支持 |
+| componentId | LlmTrigger 组件/按钮标识，仅 LlmTrigger 日志支持 |
+| startTime | 开始时间，ISO_DATE_TIME |
+| endTime | 结束时间，ISO_DATE_TIME |
+
+前端接入要点：
+
+- OWNER/REVIEWER/ADMIN 可查看任务维度日志。
+- 日志列表用于定位批量失败、限流、模型异常和 prompt 效果。
+- 单条日志中的 `agentRunId` 可继续跳转到 AgentRun 详情。
+
+### E.9 场景八：AgentRun 完整链路追踪
+
+适用页面：AI 结果详情弹窗、运维排查页、Reviewer 详情页中的“查看 AI 调用详情”。
+
+调用：
+
+```text
+GET /api/v1/agent-runs/{agentRunId}
+```
+
+响应关注字段：
+
+| 字段 | 说明 |
+|------|------|
+| agentRunId | AgentRun ID |
+| agentType | `AI_REVIEW` / `PRE_ANNOTATION` / `LLM_TRIGGER` / `AI_REVIEW_CONFIG_TEST` 等 |
+| submissionId | 关联 submission，可为空 |
+| assignmentId | 关联 assignment，可为空 |
+| providerId | Provider ID |
+| modelName | 模型名 |
+| promptVersion | Prompt 版本 |
+| status | 运行状态 |
+| inputSnapshot | 输入快照，包括 prompt、题目、当前答案等 |
+| outputSnapshot | 输出快照，包括模型结构化结果或原始摘要 |
+| errorMessage | 错误信息 |
+| traceId | 本次链路追踪 ID |
+| queuedAt | 入队时间 |
+| startedAt | 开始执行时间 |
+| finishedAt | 结束时间 |
+| latencyMs | 调用耗时 |
+| redacted | 是否因为权限做了脱敏 |
+
+前端接入要点：
+
+- LABELER 只能查看自己 assignment 相关的 AgentRun。
+- OWNER/REVIEWER 按任务/提交权限查看。
+- `redacted=true` 时表示后端已对敏感输入或输出做权限脱敏。
+- Provider API Key 和敏感 header 不会出现在响应中。
+
+### E.10 场景九：AI 性能与可用性指标
+
+适用页面：运维监控、健康检查、AI 调用质量看板。
+
+指标入口：
+
+```text
+GET /actuator/metrics
+GET /actuator/metrics/labelhub.ai.requests
+GET /actuator/metrics/labelhub.ai.latency
+```
+
+指标含义：
+
+| 指标 | 类型 | 说明 |
+|------|------|------|
+| labelhub.ai.requests | Counter | AI 请求结果计数，覆盖成功、失败、限流、超时、无效 JSON、Provider 异常等 |
+| labelhub.ai.latency | Timer | AI 调用耗时，单位按 Actuator 返回 |
+
+标签：
+
+| 标签 | 示例 | 说明 |
+|------|------|------|
+| biz_type | `LLM_GATEWAY` / `AI_REVIEW` / `PRE_ANNOTATION` / `LLM_TRIGGER` | 业务类型 |
+| provider_id | `50` / `unknown` | Provider ID |
+| model_name | `qwen-plus` / `unknown` | 模型名 |
+| status | `SUCCESS` / `FAILED` / `RATE_LIMITED` / `TIMEOUT` | 结果状态 |
+| error_code | `none` / `PROVIDER_ERROR` | 错误码 |
+
+前端/运维接入要点：
+
+- 指标只有在当前应用进程发生过 AI 调用后才会出现在 `/actuator/metrics` 中。
+- 生产环境建议由 Prometheus 或监控平台抓取 Actuator 指标。
+- 可按 `biz_type + status` 统计 AI 成功率、失败率和限流率。
+- 可按 `provider_id + model_name` 统计不同模型的延迟和可用性。
+
+### E.11 AI 状态与轮询建议
+
+| 状态 | 含义 | 前端处理 |
+|------|------|------|
+| PENDING | 已创建，等待执行 | 展示排队中，短间隔轮询 |
+| RUNNING | 正在调用模型 | 展示生成中，继续轮询 |
+| SUCCESS | 成功 | 展示结果，允许用户采纳或 Reviewer 查看 |
+| FAILED | 调用失败 | 展示错误，允许人工处理或按权限重试 |
+| RATE_LIMITED | 被限流 | 展示稍后重试，降低轮询频率 |
+| MANUAL_REQUIRED | 需要人工处理 | 进入人工审核/人工判断流程 |
+| INVALID_JSON | 模型输出无法解析 | 展示结构化失败，建议重试或调整 prompt |
+| TIMEOUT | 模型调用超时 | 展示超时，允许重试 |
+
+轮询建议：
+
+```text
+前 10 秒：每 1~2 秒轮询一次
+10 秒后：每 3~5 秒轮询一次
+超过 60 秒：提示用户可稍后回来查看，保留后台任务
+遇到 SUCCESS / FAILED / RATE_LIMITED / MANUAL_REQUIRED：停止轮询
+```
+
+### E.12 AI 接入检查清单
+
+Owner 配置阶段：
+
+- 已创建并启用 LLM Provider。
+- Provider 测试通过，`apiKeyConfigured=true`。
+- 任务已配置 AI 审核 prompt、评分维度、阈值和 outputSchema。
+- 发布前完成 Prompt 测试。
+
+Labeler 作答阶段：
+
+- 预标注按钮只在 assignment 可编辑状态展示。
+- LlmTrigger 按钮传入 `componentId`、`currentAnswerJson` 和可选 `userInstruction`；Provider、模型、评分维度由后端从任务 AI 审核配置读取。
+- AI 建议不自动写草稿，必须由用户确认。
+
+Reviewer 审核阶段：
+
+- 审核列表展示 AI 状态、decision、averageScore 和风险标记。
+- 审核详情可跳转 AgentRun 查看调用链路。
+- AI 失败或限流时仍允许人工审核。
+- REVIEWER 可对异常 AI 审核执行 retry。
+
+可观测性阶段：
+
+- AgentRun 详情展示 `traceId`、`queuedAt`、`startedAt`、`finishedAt`、`latencyMs`。
+- Actuator 可查询 `labelhub.ai.requests` 和 `labelhub.ai.latency`。
+- 监控侧按 `biz_type`、`provider_id`、`model_name`、`status`、`error_code` 聚合。
 
 ---
 

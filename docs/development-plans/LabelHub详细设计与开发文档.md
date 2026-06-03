@@ -225,7 +225,7 @@ stateDiagram-v2
     PUBLISHED --> PAUSED: 暂停
     PAUSED --> PUBLISHED: 恢复
     PUBLISHED --> ENDED: 结束
-    PAUSED --> ENDED: 结束```
+    PAUSED --> ENDED: 结束
 
 状态规则：
 

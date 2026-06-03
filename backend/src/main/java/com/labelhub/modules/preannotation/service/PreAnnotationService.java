@@ -15,6 +15,7 @@ import com.labelhub.infrastructure.llm.LlmGatewayRequest;
 import com.labelhub.infrastructure.llm.LlmGatewayResponse;
 import com.labelhub.infrastructure.llm.LlmGatewayStatus;
 import com.labelhub.infrastructure.llm.LlmMessage;
+import com.labelhub.infrastructure.llm.AiMetrics;
 import com.labelhub.infrastructure.llmtask.LlmTaskClaimResult;
 import com.labelhub.infrastructure.llmtask.LlmTaskQueueMessage;
 import com.labelhub.infrastructure.llmtask.LlmTaskQueueRecord;
@@ -94,6 +95,8 @@ public class PreAnnotationService {
     private final ObjectMapper objectMapper = new ObjectMapper();
     @Autowired(required = false)
     private MediaContextResolver mediaContextResolver;
+    @Autowired(required = false)
+    private AiMetrics aiMetrics;
 
     @Autowired
     public PreAnnotationService(AssignmentMapper assignmentMapper,
@@ -196,8 +199,9 @@ public class PreAnnotationService {
         record.setStatus(PreAnnotationStatus.PENDING);
         preAnnotationMapper.insert(record);
 
+        String traceId = traceIdProvider.currentTraceId();
         AgentRun run = agentRunService.create(AGENT_TYPE, null, config.getProviderId(), config.getModelName(),
-                config.getPromptVersion(), prompt.promptSnapshot(), assignment.getId());
+                config.getPromptVersion(), prompt.promptSnapshot(), assignment.getId(), traceId);
         record.setAgentRunId(run.getId());
         record.setStatus(PreAnnotationStatus.RUNNING);
         record.setUpdatedAt(LocalDateTime.now());
@@ -212,7 +216,7 @@ public class PreAnnotationService {
                 record.getId(),
                 null,
                 run.getId(),
-                traceIdProvider.currentTraceId(),
+                traceId,
                 0,
                 Instant.now()
         ));
@@ -266,6 +270,7 @@ public class PreAnnotationService {
             record.setUpdatedAt(LocalDateTime.now());
             preAnnotationMapper.updateById(record);
             appendAudit(labelerId, task, record);
+            recordPreAnnotationMetric(config, record, null);
             return;
         }
         if (gatewayResponse.status() == LlmGatewayStatus.SUCCESS) {
@@ -300,6 +305,7 @@ public class PreAnnotationService {
             }
             throw persistEx;
         }
+        recordPreAnnotationMetric(config, record, gatewayResponse.latencyMs());
         appendAudit(labelerId, task, record);
     }
 
@@ -320,7 +326,7 @@ public class PreAnnotationService {
             return;
         }
         AgentRun run = agentRunService.create(AGENT_TYPE, null, config.getProviderId(), config.getModelName(),
-                config.getPromptVersion(), promptSnapshot, assignmentId);
+                config.getPromptVersion(), promptSnapshot, assignmentId, traceIdProvider.currentTraceId());
         record.setAgentRunId(run.getId());
         record.setStatus(PreAnnotationStatus.RUNNING);
         record.setUpdatedAt(LocalDateTime.now());
@@ -573,6 +579,14 @@ public class PreAnnotationService {
         auditAppender.append(new AuditCommand("USER", actorId, "PRE_ANNOTATION",
                 record.getId() != null ? record.getId() : record.getAssignmentId(),
                 "PRE_ANNOTATION_RUN", null, snapshot, traceIdProvider.currentTraceId(), record.getAgentRunId()));
+    }
+
+    private void recordPreAnnotationMetric(AiReviewConfig config, PreAnnotation record, Long latencyMs) {
+        if (aiMetrics != null && config != null && record != null) {
+            aiMetrics.record("PRE_ANNOTATION", config.getProviderId(), config.getModelName(),
+                    record.getStatus() == null ? "UNKNOWN" : record.getStatus().name(),
+                    record.getErrorCode(), latencyMs);
+        }
     }
 
     private PreAnnotationResponse toResponse(PreAnnotation record, boolean includeDiff) {

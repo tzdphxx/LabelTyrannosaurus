@@ -104,11 +104,21 @@ overlapCount
 deadlineAt
 publishedTemplateVersionId
 aiReviewConfigId
+aiProvider
+aiReviewConfig
 rewardVisible
 publishedAt
 endedAt
 createdAt
 updatedAt
+```
+
+Notes:
+
+```text
+aiProvider is the safe LLM provider response for the task's AI review config, or null when not configured or missing.
+aiReviewConfig is the desensitized AI review config response, or null when not configured or missing.
+Dataset items are not embedded in this response; use GET /api/v1/tasks/{taskId}/dataset/items.
 ```
 
 Errors:

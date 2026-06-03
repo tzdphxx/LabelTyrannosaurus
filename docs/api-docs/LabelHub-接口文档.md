@@ -417,12 +417,16 @@ Authorization: Bearer <accessToken>
 | deadlineAt | LocalDateTime | 截止时间 |
 | publishedTemplateVersionId | Long | 模板版本 ID |
 | aiReviewConfigId | Long | AI 审核配置 ID |
+| aiProvider | LlmProviderResponse | AI 审核配置关联的模型供应商安全信息；未配置或供应商不存在时为 null |
+| aiReviewConfig | AiReviewConfigResponse | AI 审核配置脱敏信息；未配置或配置不存在时为 null |
 | reviewLevelCount | Integer | 审核级别数（1=单级，2=初审+终审，3=初审+复审+终审） |
 | rewardVisible | Boolean | 奖励是否对标注员可见 |
 | publishedAt | LocalDateTime | 发布时间 |
 | endedAt | LocalDateTime | 结束时间 |
 | createdAt | LocalDateTime | 创建时间 |
 | updatedAt | LocalDateTime | 更新时间 |
+
+> 任务详情不内嵌题目列表；前端拿到 `taskId` 后调用 `GET /api/v1/tasks/{taskId}/dataset/items` 查询题目。
 
 ---
 

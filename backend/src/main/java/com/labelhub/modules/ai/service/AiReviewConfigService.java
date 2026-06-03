@@ -30,6 +30,7 @@ import java.math.BigDecimal;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -93,7 +94,7 @@ public class AiReviewConfigService {
         Task task = loadOwnedDraftTask(ownerId, taskId);
         LlmProvider provider = requireEnabledProvider(request.providerId());
         validateRequest(request, provider);
-        AiReviewConfig existing = findByTaskId(taskId);
+        AiReviewConfig existing = findConfigByTaskId(taskId);
         if (existing != null) {
             return updateExisting(ownerId, task, existing, request, "AI_REVIEW_CONFIG_UPDATED");
         }
@@ -121,11 +122,16 @@ public class AiReviewConfigService {
 
     public AiReviewConfigResponse get(Long ownerId, Long taskId) {
         loadOwnedTask(ownerId, taskId);
-        AiReviewConfig config = findByTaskId(taskId);
+        AiReviewConfig config = findConfigByTaskId(taskId);
         if (config == null) {
             throw new BusinessException(AI_REVIEW_CONFIG_NOT_FOUND, "AI review config not found");
         }
         return toResponse(config);
+    }
+
+    public Optional<AiReviewConfigResponse> findResponseByTaskId(Long taskId) {
+        AiReviewConfig config = findConfigByTaskId(taskId);
+        return config == null ? Optional.empty() : Optional.of(toResponse(config));
     }
 
     public boolean existsForTask(Long taskId, Long configId) {
@@ -263,7 +269,7 @@ public class AiReviewConfigService {
         return config;
     }
 
-    private AiReviewConfig findByTaskId(Long taskId) {
+    private AiReviewConfig findConfigByTaskId(Long taskId) {
         return aiReviewConfigMapper.selectOne(new QueryWrapper<AiReviewConfig>().eq("task_id", taskId));
     }
 

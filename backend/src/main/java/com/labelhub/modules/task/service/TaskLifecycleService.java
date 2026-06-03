@@ -5,8 +5,11 @@ import com.labelhub.common.audit.AuditAppender;
 import com.labelhub.common.audit.AuditCommand;
 import com.labelhub.common.exception.BusinessException;
 import com.labelhub.common.web.TraceIdProvider;
+import com.labelhub.modules.ai.dto.AiReviewConfigResponse;
+import com.labelhub.modules.ai.dto.LlmProviderResponse;
 import com.labelhub.modules.ai.dto.AiReviewConfigRequest;
 import com.labelhub.modules.ai.service.AiReviewConfigService;
+import com.labelhub.modules.ai.service.LlmProviderService;
 import com.labelhub.modules.dataset.dto.DatasetImportJobResponse;
 import com.labelhub.modules.dataset.dto.DatasetImportRequest;
 import com.labelhub.modules.dataset.service.DatasetImportService;
@@ -48,6 +51,7 @@ public class TaskLifecycleService {
     private final TraceIdProvider traceIdProvider;
     private final DatasetImportService datasetImportService;
     private final AiReviewConfigService aiReviewConfigService;
+    private final LlmProviderService llmProviderService;
     private final org.springframework.context.ApplicationEventPublisher applicationEventPublisher;
 
     public TaskLifecycleService(TaskMapper taskMapper,
@@ -57,6 +61,7 @@ public class TaskLifecycleService {
                                 TraceIdProvider traceIdProvider,
                                 DatasetImportService datasetImportService,
                                 AiReviewConfigService aiReviewConfigService,
+                                LlmProviderService llmProviderService,
                                 org.springframework.context.ApplicationEventPublisher applicationEventPublisher) {
         this.taskMapper = taskMapper;
         this.taskTagMapper = taskTagMapper;
@@ -65,6 +70,7 @@ public class TaskLifecycleService {
         this.traceIdProvider = traceIdProvider;
         this.datasetImportService = datasetImportService;
         this.aiReviewConfigService = aiReviewConfigService;
+        this.llmProviderService = llmProviderService;
         this.applicationEventPublisher = applicationEventPublisher;
     }
 
@@ -258,6 +264,8 @@ public class TaskLifecycleService {
     }
 
     private TaskDetailResponse toDetailResponse(Task task) {
+        AiReviewConfigResponse aiReviewConfig = findAiReviewConfig(task);
+        LlmProviderResponse aiProvider = findAiProvider(aiReviewConfig);
         return new TaskDetailResponse(
                 task.getId(),
                 task.getOwnerId(),
@@ -277,8 +285,24 @@ public class TaskLifecycleService {
                 task.getPublishedAt(),
                 task.getEndedAt(),
                 task.getCreatedAt(),
-                task.getUpdatedAt()
+                task.getUpdatedAt(),
+                aiProvider,
+                aiReviewConfig
         );
+    }
+
+    private AiReviewConfigResponse findAiReviewConfig(Task task) {
+        if (task.getAiReviewConfigId() == null) {
+            return null;
+        }
+        return aiReviewConfigService.findResponseByTaskId(task.getId()).orElse(null);
+    }
+
+    private LlmProviderResponse findAiProvider(AiReviewConfigResponse aiReviewConfig) {
+        if (aiReviewConfig == null || aiReviewConfig.providerId() == null) {
+            return null;
+        }
+        return llmProviderService.findResponseById(aiReviewConfig.providerId()).orElse(null);
     }
 
     private List<String> listTags(Long taskId) {

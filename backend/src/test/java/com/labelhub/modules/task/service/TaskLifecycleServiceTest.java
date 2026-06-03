@@ -14,11 +14,14 @@ import com.labelhub.common.audit.AuditCommand;
 import com.labelhub.common.exception.BusinessException;
 import com.labelhub.common.web.TraceIdProvider;
 import com.labelhub.modules.ai.mapper.AiReviewConfigMapper;
+import com.labelhub.modules.ai.dto.AiReviewConfigResponse;
+import com.labelhub.modules.ai.dto.LlmProviderResponse;
 import com.labelhub.modules.dataset.dto.DatasetImportJobResponse;
 import com.labelhub.modules.dataset.dto.DatasetImportRequest;
 import com.labelhub.modules.dataset.service.DatasetImportService;
 import com.labelhub.modules.dataset.mapper.DatasetItemMapper;
 import com.labelhub.modules.ai.service.AiReviewConfigService;
+import com.labelhub.modules.ai.service.LlmProviderService;
 import com.labelhub.modules.reward.repository.RewardRuleRepositoryMapper;
 import com.labelhub.modules.template.mapper.TemplateVersionMapper;
 import com.labelhub.modules.task.domain.Task;
@@ -32,8 +35,11 @@ import com.labelhub.modules.task.dto.TaskLifecycleResponse;
 import com.labelhub.modules.task.dto.UpdateTaskRequest;
 import com.labelhub.modules.task.mapper.TaskMapper;
 import com.labelhub.modules.task.mapper.TaskTagMapper;
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -72,6 +78,9 @@ class TaskLifecycleServiceTest {
     @Mock
     private AiReviewConfigService aiReviewConfigService;
 
+    @Mock
+    private LlmProviderService llmProviderService;
+
     private TaskLifecycleService taskLifecycleService;
 
     @BeforeEach
@@ -84,6 +93,7 @@ class TaskLifecycleServiceTest {
                 traceIdProvider,
                 datasetImportService,
                 aiReviewConfigService,
+                llmProviderService,
                 applicationEventPublisher
         );
     }
@@ -185,6 +195,8 @@ class TaskLifecycleServiceTest {
         Task task = publishableDraftTask();
         when(taskMapper.selectById(TASK_ID)).thenReturn(task);
         when(taskTagMapper.selectList(any(Wrapper.class))).thenReturn(List.of(taskTag("qa")));
+        when(aiReviewConfigService.findResponseByTaskId(TASK_ID)).thenReturn(Optional.of(aiConfigResponse()));
+        when(llmProviderService.findResponseById(50L)).thenReturn(Optional.of(providerResponse()));
 
         TaskDetailResponse response = taskLifecycleService.getOwnedTask(OWNER_ID, TASK_ID);
 
@@ -193,6 +205,45 @@ class TaskLifecycleServiceTest {
         assertThat(response.tags()).containsExactly("qa");
         assertThat(response.publishedTemplateVersionId()).isEqualTo(100L);
         assertThat(response.aiReviewConfigId()).isEqualTo(200L);
+        assertThat(response.aiReviewConfig()).isNotNull();
+        assertThat(response.aiReviewConfig().id()).isEqualTo(200L);
+        assertThat(response.aiReviewConfig().providerId()).isEqualTo(50L);
+        assertThat(response.aiReviewConfig().promptTemplate()).isEqualTo("prompt");
+        assertThat(response.aiProvider()).isNotNull();
+        assertThat(response.aiProvider().id()).isEqualTo(50L);
+        assertThat(response.aiProvider().providerCode()).isEqualTo("qwen");
+        assertThat(response.aiProvider().apiKeyConfigured()).isTrue();
+    }
+
+    @Test
+    void returnsOwnedTaskDetailWithoutAiProviderWhenConfigMissing() {
+        Task task = draftTask();
+        task.setAiReviewConfigId(null);
+        when(taskMapper.selectById(TASK_ID)).thenReturn(task);
+        when(taskTagMapper.selectList(any(Wrapper.class))).thenReturn(List.of());
+
+        TaskDetailResponse response = taskLifecycleService.getOwnedTask(OWNER_ID, TASK_ID);
+
+        assertThat(response.taskId()).isEqualTo(TASK_ID);
+        assertThat(response.aiReviewConfigId()).isNull();
+        assertThat(response.aiReviewConfig()).isNull();
+        assertThat(response.aiProvider()).isNull();
+    }
+
+    @Test
+    void returnsOwnedTaskDetailWithoutAiProviderWhenProviderMissing() {
+        Task task = publishableDraftTask();
+        when(taskMapper.selectById(TASK_ID)).thenReturn(task);
+        when(taskTagMapper.selectList(any(Wrapper.class))).thenReturn(List.of());
+        when(aiReviewConfigService.findResponseByTaskId(TASK_ID)).thenReturn(Optional.of(aiConfigResponse()));
+        when(llmProviderService.findResponseById(50L)).thenReturn(Optional.empty());
+
+        TaskDetailResponse response = taskLifecycleService.getOwnedTask(OWNER_ID, TASK_ID);
+
+        assertThat(response.aiReviewConfigId()).isEqualTo(200L);
+        assertThat(response.aiReviewConfig()).isNotNull();
+        assertThat(response.aiReviewConfig().id()).isEqualTo(200L);
+        assertThat(response.aiProvider()).isNull();
     }
 
     @Test
@@ -410,5 +461,51 @@ class TaskLifecycleServiceTest {
         task.setPublishedTemplateVersionId(100L);
         task.setAiReviewConfigId(200L);
         return task;
+    }
+
+    private AiReviewConfigResponse aiConfigResponse() {
+        return new AiReviewConfigResponse(
+                200L,
+                TASK_ID,
+                50L,
+                "qwen-plus",
+                "prompt",
+                List.of("accuracy"),
+                new BigDecimal("80.00"),
+                new BigDecimal("60.00"),
+                null,
+                "v1",
+                3,
+                "MANUAL_FIRST",
+                false,
+                false,
+                null,
+                null,
+                null
+        );
+    }
+
+    private LlmProviderResponse providerResponse() {
+        return new LlmProviderResponse(
+                50L,
+                "qwen",
+                "通义千问",
+                "https://dashscope.aliyuncs.com",
+                "qwen-plus",
+                Map.of("Authorization", "******"),
+                true,
+                100,
+                20,
+                10,
+                true,
+                true,
+                5,
+                "qwen-vl-plus",
+                "JSON_OBJECT",
+                true,
+                1L,
+                LocalDateTime.now().minusDays(1),
+                LocalDateTime.now()
+        );
     }
 }

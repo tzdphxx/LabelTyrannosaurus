@@ -12,6 +12,7 @@ import com.labelhub.infrastructure.llm.LlmGatewayRequest;
 import com.labelhub.infrastructure.llm.LlmGatewayResponse;
 import com.labelhub.infrastructure.llm.LlmGatewayStatus;
 import com.labelhub.infrastructure.llm.LlmMessage;
+import com.labelhub.infrastructure.llm.AiMetrics;
 import com.labelhub.modules.agent.domain.AgentRun;
 import com.labelhub.modules.agent.domain.AgentRunStatus;
 import com.labelhub.modules.agent.domain.SystemActorContext;
@@ -87,6 +88,8 @@ public class AiAutoReviewService {
     private com.labelhub.modules.assignment.mapper.AssignmentMapper assignmentMapper;
     @Autowired
     private com.labelhub.modules.review.mapper.ReviewRecordMapper reviewRecordMapper;
+    @Autowired
+    private com.labelhub.modules.review.service.ReviewOwnershipResolver reviewOwnershipResolver;
     @Autowired(required = false)
     private DatasetClaimService datasetClaimService;
     @Autowired(required = false)
@@ -97,6 +100,8 @@ public class AiAutoReviewService {
     private MediaContextResolver mediaContextResolver;
     @Autowired
     private com.labelhub.infrastructure.redis.RedisLockService redisLockService;
+    @Autowired(required = false)
+    private AiMetrics aiMetrics;
 
     @Autowired
     public AiAutoReviewService(SubmissionMapper submissionMapper,
@@ -226,6 +231,7 @@ public class AiAutoReviewService {
             aiReviewResultMapper.insert(result);
             applyFlowAction(prepared.submission(), result, prepared.config());
             appendAudit(result);
+            recordAiReviewMetric(prepared.config(), result, outcome.responseSnapshot());
             return toResponse(result);
         });
 
@@ -251,7 +257,7 @@ public class AiAutoReviewService {
         String promptSnapshot = prompt.promptSnapshot();
 
         AgentRun agentRun = agentRunService.create(AGENT_TYPE, submissionId, config.getProviderId(),
-                config.getModelName(), config.getPromptVersion(), promptSnapshot);
+                config.getModelName(), config.getPromptVersion(), promptSnapshot, null, resolveTraceId());
         agentRunService.start(agentRun.getId());
 
         AttemptOutcome outcome = executeAttempt(submission, config, agentRun, prompt);
@@ -282,6 +288,7 @@ public class AiAutoReviewService {
                         successResult.getDegraded(),
                         successResult.getLimitations());
                 applyFlowAction(submission, successResult, config);
+                recordAiReviewMetric(config, successResult, outcome.responseSnapshot());
                 appendAuditForRetrySuccess(submissionId, agentRun.getId());
             });
         } else {
@@ -572,6 +579,7 @@ public class AiAutoReviewService {
     private void moveSubmissionToPendingFinal(Submission submission) {
         submission.setStatus(SubmissionStatus.PENDING_FINAL);
         submissionMapper.updateById(submission);
+        reviewOwnershipResolver.assignToClaimant(submission);
     }
 
     private AiFlowAction normalizeFlowAction(Submission submission, AiFlowAction action) {
@@ -602,6 +610,32 @@ public class AiAutoReviewService {
         if (submission.getStatus() == SubmissionStatus.APPROVED) {
             eventPublisher.publishApproved(submission.getId(), null);
         }
+    }
+
+    /**
+     * Called by {@link AiReviewRecoveryRunner} at startup to replay the side effects
+     * of a terminal AI review whose submission was never moved past AI_REVIEWING.
+     * Mirrors {@link #applyFlowAction} but is package-private so the recovery runner
+     * can delegate instead of duplicating the side-effect logic.
+     */
+    void applyRecoveredFlowAction(Submission submission, AiReviewResult result) {
+        if (result.getFlowAction() == null || result.getStatus() != AiReviewStatus.SUCCESS) {
+            moveSubmissionToPendingFinal(submission);
+            return;
+        }
+        AiFlowAction action;
+        try {
+            action = AiFlowAction.valueOf(result.getFlowAction());
+        } catch (IllegalArgumentException ex) {
+            moveSubmissionToPendingFinal(submission);
+            return;
+        }
+        switch (action) {
+            case AI_DIRECT_APPROVE -> directApprove(submission);
+            case AI_DIRECT_REJECT -> directReject(submission, result);
+            default -> moveSubmissionToPendingFinal(submission);
+        }
+        publishPostTransactionEvents(submission);
     }
 
     private void directApprove(Submission submission) {
@@ -726,7 +760,20 @@ public class AiAutoReviewService {
             }
         }
         return agentRunService.create(AGENT_TYPE, submissionId, config.getProviderId(),
-                config.getModelName(), config.getPromptVersion(), prompt.promptSnapshot());
+                config.getModelName(), config.getPromptVersion(), prompt.promptSnapshot(), null, resolveTraceId());
+    }
+
+    private void recordAiReviewMetric(AiReviewConfig config, AiReviewResult result, Map<String, Object> responseSnapshot) {
+        if (aiMetrics == null || config == null || result == null) {
+            return;
+        }
+        Long latencyMs = null;
+        if (responseSnapshot != null && responseSnapshot.get("latencyMs") instanceof Number number) {
+            latencyMs = number.longValue();
+        }
+        aiMetrics.record("AI_REVIEW", config.getProviderId(), config.getModelName(),
+                result.getStatus() == null ? "UNKNOWN" : result.getStatus().name(),
+                result.getErrorCode(), latencyMs);
     }
 
     private Object parseJsonValue(String json) {

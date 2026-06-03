@@ -36,19 +36,22 @@ public class AiReviewRecoveryRunner implements ApplicationRunner {
     private final AiAutoReviewService aiAutoReviewService;
     private final SystemAgentProvider systemAgentProvider;
     private final AuditAppender auditAppender;
+    private final com.labelhub.modules.review.service.ReviewOwnershipResolver reviewOwnershipResolver;
 
     public AiReviewRecoveryRunner(SubmissionMapper submissionMapper,
                                   AiReviewResultMapper aiReviewResultMapper,
                                   AiReviewDispatcher dispatcher,
                                   AiAutoReviewService aiAutoReviewService,
                                   SystemAgentProvider systemAgentProvider,
-                                  AuditAppender auditAppender) {
+                                  AuditAppender auditAppender,
+                                  com.labelhub.modules.review.service.ReviewOwnershipResolver reviewOwnershipResolver) {
         this.submissionMapper = submissionMapper;
         this.aiReviewResultMapper = aiReviewResultMapper;
         this.dispatcher = dispatcher;
         this.aiAutoReviewService = aiAutoReviewService;
         this.systemAgentProvider = systemAgentProvider;
         this.auditAppender = auditAppender;
+        this.reviewOwnershipResolver = reviewOwnershipResolver;
     }
 
     @Override
@@ -96,30 +99,25 @@ public class AiReviewRecoveryRunner implements ApplicationRunner {
         if (result.getStatus() != AiReviewStatus.SUCCESS) {
             return;
         }
-        AiFlowAction action = parseFlowAction(result.getFlowAction());
-        if (action == AiFlowAction.AI_DIRECT_APPROVE) {
-            updateRecoveredStatus(submission, SubmissionStatus.APPROVED, "MOVED_TO_APPROVED");
-        } else if (action == AiFlowAction.AI_DIRECT_REJECT) {
-            updateRecoveredStatus(submission, SubmissionStatus.REJECTED, "MOVED_TO_REJECTED");
-        } else {
-            updateRecoveredStatus(submission, SubmissionStatus.PENDING_FINAL, "MOVED_TO_PENDING_FINAL");
-        }
-    }
-
-    private AiFlowAction parseFlowAction(String flowAction) {
-        if (flowAction == null || flowAction.isBlank()) {
-            return AiFlowAction.AI_ASSIGN_MANUAL_REVIEW;
-        }
         try {
-            return AiFlowAction.valueOf(flowAction);
-        } catch (IllegalArgumentException ex) {
-            return AiFlowAction.AI_ASSIGN_MANUAL_REVIEW;
+            aiAutoReviewService.applyRecoveredFlowAction(submission, result);
+        } catch (Exception e) {
+            log.error("Failed to apply recovered flow action for submission {} (action={}) — "
+                    + "falling back to PENDING_FINAL",
+                    submission.getId(), result.getFlowAction(), e);
+            updateRecoveredStatus(submission, SubmissionStatus.PENDING_FINAL,
+                    "FALLBACK_TO_PENDING_FINAL");
+            return;
         }
+        appendRecoveryAudit(submission.getId(), "RECOVERED_" + result.getFlowAction());
     }
 
     private void updateRecoveredStatus(Submission submission, SubmissionStatus status, String action) {
         submission.setStatus(status);
         submissionMapper.updateById(submission);
+        if (status == SubmissionStatus.PENDING_FINAL) {
+            reviewOwnershipResolver.assignToClaimant(submission);
+        }
         appendRecoveryAudit(submission.getId(), action);
     }
 

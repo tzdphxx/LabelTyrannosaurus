@@ -8,6 +8,9 @@ import com.labelhub.common.audit.AuditAppender;
 import com.labelhub.common.audit.AuditCommand;
 import com.labelhub.common.exception.BusinessException;
 import com.labelhub.common.web.TraceIdProvider;
+import java.util.List;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import com.labelhub.infrastructure.llm.LlmGateway;
 import com.labelhub.infrastructure.llm.LlmGatewayRequest;
 import com.labelhub.infrastructure.llm.LlmGatewayResponse;
@@ -36,6 +39,8 @@ import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class AiReviewConfigService {
+
+    private static final Logger log = LoggerFactory.getLogger(AiReviewConfigService.class);
 
     private static final int TASK_NOT_FOUND = 404001;
     private static final int AI_REVIEW_PROVIDER_DISABLED = 400401;
@@ -264,7 +269,16 @@ public class AiReviewConfigService {
     }
 
     private AiReviewConfig findByTaskId(Long taskId) {
-        return aiReviewConfigMapper.selectOne(new QueryWrapper<AiReviewConfig>().eq("task_id", taskId));
+        List<AiReviewConfig> configs = aiReviewConfigMapper.selectList(
+                new QueryWrapper<AiReviewConfig>().eq("task_id", taskId));
+        if (configs.isEmpty()) {
+            return null;
+        }
+        if (configs.size() > 1) {
+            log.warn("Multiple AiReviewConfig rows for task {} ({} rows); using id={}",
+                    taskId, configs.size(), configs.get(0).getId());
+        }
+        return configs.get(0);
     }
 
     private AiReviewConfigResponse toResponse(AiReviewConfig config) {

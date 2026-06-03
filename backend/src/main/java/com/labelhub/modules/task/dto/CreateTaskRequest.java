@@ -1,12 +1,14 @@
-package com.labelhub.modules.task.dto;
+﻿package com.labelhub.modules.task.dto;
 
 import io.swagger.v3.oas.annotations.media.Schema;
+import jakarta.validation.Valid;
 import jakarta.validation.constraints.Future;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
+import com.labelhub.modules.reward.dto.RewardRuleRequest;
 import java.time.LocalDateTime;
 import java.util.List;
 
@@ -57,6 +59,9 @@ public record CreateTaskRequest(
         @Min(1)
         Integer reviewLevelCount,
         @Schema(description = "Dataset file ID uploaded by /api/v1/files/upload", example = "99")
-        Long datasetFileId
+        Long datasetFileId,
+        @Schema(description = "任务奖励规则，可选，填写后自动创建初始奖励规则")
+        @Valid
+        RewardRuleRequest rewardRule
 ) {
 }

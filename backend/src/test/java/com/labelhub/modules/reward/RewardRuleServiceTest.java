@@ -88,6 +88,68 @@ class RewardRuleServiceTest {
     }
 
     @Test
+    void saveRuleDefaultsOptionalRewardFields() {
+        CurrentUserContext.set(new CurrentUser(10L, "owner", "owner@example.com", Set.of(RoleCode.OWNER), 1));
+        stubTask(10L);
+        when(rewardRuleMapper.selectMaxVersionByTaskId(1L)).thenReturn(0);
+        when(rewardRuleMapper.insert(any(RewardRuleEntity.class))).thenAnswer(invocation -> {
+            RewardRuleEntity entity = invocation.getArgument(0);
+            entity.setId(101L);
+            return 1;
+        });
+
+        RewardRuleResponse response = rewardRuleService.saveRule(1L,
+                new RewardRuleRequest(null, new BigDecimal("1.25"), null, null));
+
+        assertThat(response.ruleId()).isEqualTo(101L);
+        assertThat(response.effectiveVersion()).isEqualTo(1);
+        assertThat(response.rewardMode()).isEqualTo("APPROVED_ITEM");
+        assertThat(response.rewardCurrency()).isEqualTo("POINT");
+        assertThat(response.rewardVisible()).isTrue();
+        assertThat(response.createdBy()).isEqualTo(10L);
+    }
+
+    @Test
+    void getLatestRuleFailsWhenMissing() {
+        CurrentUserContext.set(new CurrentUser(10L, "owner", "owner@example.com", Set.of(RoleCode.OWNER), 1));
+        stubTask(10L);
+        when(rewardRuleMapper.selectLatestByTaskId(1L)).thenReturn(null);
+
+        assertThatThrownBy(() -> rewardRuleService.getLatestRule(1L))
+                .isInstanceOf(BusinessException.class)
+                .extracting("code")
+                .isEqualTo(400102);
+    }
+
+    @Test
+    void internalOwnerSaveDoesNotDependOnCurrentUserContext() {
+        stubTask(10L);
+        when(rewardRuleMapper.selectMaxVersionByTaskId(1L)).thenReturn(0);
+        when(rewardRuleMapper.insert(any(RewardRuleEntity.class))).thenAnswer(invocation -> {
+            RewardRuleEntity entity = invocation.getArgument(0);
+            entity.setId(102L);
+            return 1;
+        });
+
+        RewardRuleResponse response = rewardRuleService.saveRuleForTaskOwner(1L, 10L,
+                new RewardRuleRequest(null, new BigDecimal("1.25"), null, null));
+
+        assertThat(response.ruleId()).isEqualTo(102L);
+        assertThat(response.effectiveVersion()).isEqualTo(1);
+        assertThat(response.rewardMode()).isEqualTo("APPROVED_ITEM");
+        assertThat(response.rewardCurrency()).isEqualTo("POINT");
+        assertThat(response.rewardVisible()).isTrue();
+        assertThat(response.createdBy()).isEqualTo(10L);
+    }
+
+    @Test
+    void findLatestRuleReturnsNullWhenMissing() {
+        when(rewardRuleMapper.selectLatestByTaskId(1L)).thenReturn(null);
+
+        assertThat(rewardRuleService.findLatestRule(1L)).isNull();
+    }
+
+    @Test
     void unsupportedRewardModeFailsBeforeInsert() {
         CurrentUserContext.set(new CurrentUser(10L, "owner", "owner@example.com", Set.of(RoleCode.OWNER), 1));
         stubTask(10L);

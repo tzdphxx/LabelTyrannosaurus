@@ -10,6 +10,8 @@ import com.labelhub.modules.ai.service.AiReviewConfigService;
 import com.labelhub.modules.dataset.dto.DatasetImportJobResponse;
 import com.labelhub.modules.dataset.dto.DatasetImportRequest;
 import com.labelhub.modules.dataset.service.DatasetImportService;
+import com.labelhub.modules.reward.dto.RewardRuleResponse;
+import com.labelhub.modules.reward.service.RewardRuleService;
 import com.labelhub.modules.task.domain.Task;
 import com.labelhub.modules.task.domain.TaskStatus;
 import com.labelhub.modules.task.domain.TaskTag;
@@ -47,6 +49,7 @@ public class TaskLifecycleService {
     private final TraceIdProvider traceIdProvider;
     private final DatasetImportService datasetImportService;
     private final AiReviewConfigService aiReviewConfigService;
+    private final RewardRuleService rewardRuleService;
     private final org.springframework.context.ApplicationEventPublisher applicationEventPublisher;
 
     public TaskLifecycleService(TaskMapper taskMapper,
@@ -56,6 +59,7 @@ public class TaskLifecycleService {
                                 TraceIdProvider traceIdProvider,
                                 DatasetImportService datasetImportService,
                                 AiReviewConfigService aiReviewConfigService,
+                                RewardRuleService rewardRuleService,
                                 org.springframework.context.ApplicationEventPublisher applicationEventPublisher) {
         this.taskMapper = taskMapper;
         this.taskTagMapper = taskTagMapper;
@@ -64,6 +68,7 @@ public class TaskLifecycleService {
         this.traceIdProvider = traceIdProvider;
         this.datasetImportService = datasetImportService;
         this.aiReviewConfigService = aiReviewConfigService;
+        this.rewardRuleService = rewardRuleService;
         this.applicationEventPublisher = applicationEventPublisher;
     }
 
@@ -96,6 +101,38 @@ public class TaskLifecycleService {
 
     @Transactional
     public TaskLifecycleResponse create(Long ownerId, CreateTaskRequest request) {
+        return createTask(ownerId, request).lifecycleResponse();
+    }
+
+    /**
+     * 创建任务（含数据集导入和奖励规则）。
+     * controller 统一调用此方法，返回包含 taskId、status、datasetImportJob 和 rewardRule 的完整响应。
+     */
+    @Transactional
+    public CreateTaskResponse createWithDataset(Long ownerId, CreateTaskRequest request) {
+        CreatedTaskResult createdTask = createTask(ownerId, request);
+        DatasetImportJobResponse importJob = null;
+        if (request.datasetFileId() != null) {
+            importJob = datasetImportService.createAppendImport(
+                    createdTask.lifecycleResponse().taskId(),
+                    new DatasetImportRequest(request.datasetFileId())
+            );
+        }
+        return new CreateTaskResponse(
+                createdTask.lifecycleResponse().taskId(),
+                createdTask.lifecycleResponse().status(),
+                importJob,
+                createdTask.rewardRule()
+        );
+    }
+
+    /**
+     * 创建任务核心逻辑：
+     * 1. 插入任务（含内联 AI 配置子流程）
+     * 2. 如有 rewardRule 则创建奖励规则并回写 rewardVisible
+     * 3. 替换标签、记录审计快照
+     */
+    private CreatedTaskResult createTask(Long ownerId, CreateTaskRequest request) {
         Task task = new Task();
         task.setOwnerId(ownerId);
         task.setTitle(request.title());
@@ -109,7 +146,9 @@ public class TaskLifecycleService {
         task.setPublishedTemplateVersionId(request.publishedTemplateVersionId());
         task.setAiReviewConfigId(request.aiReviewConfigId());
         task.setReviewLevelCount(request.reviewLevelCount() != null ? request.reviewLevelCount() : 1);
-        task.setRewardVisible(true);
+        task.setRewardVisible(request.rewardRule() == null
+                || request.rewardRule().rewardVisible() == null
+                || request.rewardRule().rewardVisible());
         taskMapper.insert(task);
 
         if (hasAiInlineConfig(request)) {
@@ -126,22 +165,16 @@ public class TaskLifecycleService {
             taskMapper.updateById(task);
         }
 
+        RewardRuleResponse rewardRule = null;
+        if (request.rewardRule() != null) {
+            rewardRule = rewardRuleService.saveRuleForTaskOwner(task.getId(), ownerId, request.rewardRule());
+            task.setRewardVisible(rewardRule.rewardVisible());
+            taskMapper.updateById(task);
+        }
+
         replaceTags(task.getId(), request.tags());
         appendAudit(task, ownerId, "TASK_CREATED", null, snapshot(task));
-        return new TaskLifecycleResponse(task.getId(), task.getStatus());
-    }
-
-    @Transactional
-    public CreateTaskResponse createWithDataset(Long ownerId, CreateTaskRequest request) {
-        TaskLifecycleResponse task = create(ownerId, request);
-        DatasetImportJobResponse importJob = null;
-        if (request.datasetFileId() != null) {
-            importJob = datasetImportService.createAppendImport(
-                    task.taskId(),
-                    new DatasetImportRequest(request.datasetFileId())
-            );
-        }
-        return new CreateTaskResponse(task.taskId(), task.status(), importJob);
+        return new CreatedTaskResult(new TaskLifecycleResponse(task.getId(), task.getStatus()), rewardRule);
     }
 
     @Transactional
@@ -161,6 +194,10 @@ public class TaskLifecycleService {
         task.setAiReviewConfigId(request.aiReviewConfigId());
         if (request.reviewLevelCount() != null) {
             task.setReviewLevelCount(request.reviewLevelCount());
+        }
+        if (request.rewardRule() != null) {
+            RewardRuleResponse rewardRule = rewardRuleService.saveRuleForTaskOwner(taskId, ownerId, request.rewardRule());
+            task.setRewardVisible(rewardRule.rewardVisible());
         }
         taskMapper.updateById(task);
         taskTagMapper.delete(new QueryWrapper<TaskTag>().eq("task_id", taskId));
@@ -274,6 +311,7 @@ public class TaskLifecycleService {
                 task.getAiReviewConfigId(),
                 task.getReviewLevelCount(),
                 task.getRewardVisible(),
+                rewardRuleService.findLatestRule(task.getId()),
                 task.getPublishedAt(),
                 task.getEndedAt(),
                 task.getCreatedAt(),
@@ -350,5 +388,9 @@ public class TaskLifecycleService {
         taskTag.setTaskId(taskId);
         taskTag.setTagName(tagName);
         return taskTag;
+    }
+
+    /** 创建任务的结果封装，避免 createTask 返回多个裸值。 */
+    private record CreatedTaskResult(TaskLifecycleResponse lifecycleResponse, RewardRuleResponse rewardRule) {
     }
 }

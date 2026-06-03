@@ -19,7 +19,10 @@ import com.labelhub.modules.dataset.dto.DatasetImportRequest;
 import com.labelhub.modules.dataset.service.DatasetImportService;
 import com.labelhub.modules.dataset.mapper.DatasetItemMapper;
 import com.labelhub.modules.ai.service.AiReviewConfigService;
+import com.labelhub.modules.reward.dto.RewardRuleRequest;
+import com.labelhub.modules.reward.dto.RewardRuleResponse;
 import com.labelhub.modules.reward.repository.RewardRuleRepositoryMapper;
+import com.labelhub.modules.reward.service.RewardRuleService;
 import com.labelhub.modules.template.mapper.TemplateVersionMapper;
 import com.labelhub.modules.task.domain.Task;
 import com.labelhub.modules.task.domain.TaskStatus;
@@ -72,6 +75,9 @@ class TaskLifecycleServiceTest {
     @Mock
     private AiReviewConfigService aiReviewConfigService;
 
+    @Mock
+    private RewardRuleService rewardRuleService;
+
     private TaskLifecycleService taskLifecycleService;
 
     @BeforeEach
@@ -84,6 +90,7 @@ class TaskLifecycleServiceTest {
                 traceIdProvider,
                 datasetImportService,
                 aiReviewConfigService,
+                rewardRuleService,
                 applicationEventPublisher
         );
     }
@@ -166,6 +173,25 @@ class TaskLifecycleServiceTest {
     }
 
     @Test
+    void createsDraftTaskWithRewardRule() {
+        RewardRuleRequest rewardRule = rewardRuleRequest("2.50", true);
+        RewardRuleResponse rewardResponse = rewardRuleResponse(1, "2.50", true);
+        when(traceIdProvider.currentTraceId()).thenReturn("trace-1");
+        when(taskMapper.insert(any(Task.class))).thenAnswer(invocation -> {
+            Task task = invocation.getArgument(0);
+            task.setId(TASK_ID);
+            return 1;
+        });
+        when(rewardRuleService.saveRuleForTaskOwner(TASK_ID, OWNER_ID, rewardRule)).thenReturn(rewardResponse);
+
+        CreateTaskResponse response = taskLifecycleService.createWithDataset(OWNER_ID, createRequestWithRewardRule(rewardRule));
+
+        assertThat(response.taskId()).isEqualTo(TASK_ID);
+        assertThat(response.rewardRule()).isEqualTo(rewardResponse);
+        verify(rewardRuleService).saveRuleForTaskOwner(TASK_ID, OWNER_ID, rewardRule);
+    }
+
+    @Test
     void listsOwnerTasksWithTags() {
         Task task = draftTask();
         task.setClaimedCount(0);
@@ -182,8 +208,10 @@ class TaskLifecycleServiceTest {
     @Test
     void returnsOwnedTaskDetail() {
         Task task = publishableDraftTask();
+        RewardRuleResponse rewardRule = rewardRuleResponse(2, "3.00", false);
         when(taskMapper.selectById(TASK_ID)).thenReturn(task);
         when(taskTagMapper.selectList(any(Wrapper.class))).thenReturn(List.of(taskTag("qa")));
+        when(rewardRuleService.findLatestRule(TASK_ID)).thenReturn(rewardRule);
 
         TaskDetailResponse response = taskLifecycleService.getOwnedTask(OWNER_ID, TASK_ID);
 
@@ -192,6 +220,19 @@ class TaskLifecycleServiceTest {
         assertThat(response.tags()).containsExactly("qa");
         assertThat(response.publishedTemplateVersionId()).isEqualTo(100L);
         assertThat(response.aiReviewConfigId()).isEqualTo(200L);
+        assertThat(response.rewardRule()).isEqualTo(rewardRule);
+    }
+
+    @Test
+    void returnsOwnedTaskDetailWithoutRewardRule() {
+        Task task = publishableDraftTask();
+        when(taskMapper.selectById(TASK_ID)).thenReturn(task);
+        when(taskTagMapper.selectList(any(Wrapper.class))).thenReturn(List.of(taskTag("qa")));
+        when(rewardRuleService.findLatestRule(TASK_ID)).thenReturn(null);
+
+        TaskDetailResponse response = taskLifecycleService.getOwnedTask(OWNER_ID, TASK_ID);
+
+        assertThat(response.rewardRule()).isNull();
     }
 
     @Test
@@ -206,6 +247,23 @@ class TaskLifecycleServiceTest {
         assertThat(response.status()).isEqualTo(TaskStatus.DRAFT);
         assertThat(task.getTitle()).isEqualTo("Updated task");
         verify(auditAppender).append(any(AuditCommand.class));
+    }
+
+    @Test
+    void updatesDraftTaskWithRewardRule() {
+        Task task = draftTask();
+        RewardRuleRequest rewardRule = rewardRuleRequest("4.00", false);
+        RewardRuleResponse rewardResponse = rewardRuleResponse(3, "4.00", false);
+        when(taskMapper.selectById(TASK_ID)).thenReturn(task);
+        when(taskMapper.updateById(any(Task.class))).thenReturn(1);
+        when(taskTagMapper.delete(any(Wrapper.class))).thenReturn(1);
+        when(rewardRuleService.saveRuleForTaskOwner(TASK_ID, OWNER_ID, rewardRule)).thenReturn(rewardResponse);
+
+        TaskLifecycleResponse response = taskLifecycleService.updateDraft(OWNER_ID, TASK_ID, updateRequestWithRewardRule(rewardRule));
+
+        assertThat(response.status()).isEqualTo(TaskStatus.DRAFT);
+        assertThat(task.getRewardVisible()).isFalse();
+        verify(rewardRuleService).saveRuleForTaskOwner(TASK_ID, OWNER_ID, rewardRule);
     }
 
     @Test
@@ -359,6 +417,7 @@ class TaskLifecycleServiceTest {
                 200L,
                 null, null, null, null, null, null,
                 1,
+                null,
                 null
         );
     }
@@ -376,7 +435,26 @@ class TaskLifecycleServiceTest {
                 200L,
                 null, null, null, null, null, null,
                 1,
-                99L
+                99L,
+                null
+        );
+    }
+
+    private CreateTaskRequest createRequestWithRewardRule(RewardRuleRequest rewardRule) {
+        return new CreateTaskRequest(
+                "New task",
+                "Description",
+                "Instruction",
+                List.of("qa"),
+                10,
+                LocalDateTime.now().plusDays(1),
+                1,
+                100L,
+                200L,
+                null, null, null, null, null, null,
+                1,
+                null,
+                rewardRule
         );
     }
 
@@ -395,7 +473,43 @@ class TaskLifecycleServiceTest {
                 overlapCount,
                 100L,
                 200L,
-                1
+                1,
+                null
+        );
+    }
+
+    private UpdateTaskRequest updateRequestWithRewardRule(RewardRuleRequest rewardRule) {
+        return new UpdateTaskRequest(
+                "Updated task",
+                "Updated description",
+                "Updated instruction",
+                List.of("review"),
+                20,
+                LocalDateTime.now().plusDays(2),
+                1,
+                100L,
+                200L,
+                1,
+                rewardRule
+        );
+    }
+
+    private RewardRuleRequest rewardRuleRequest(String unitReward, boolean rewardVisible) {
+        return new RewardRuleRequest("APPROVED_ITEM", new java.math.BigDecimal(unitReward), "POINT", rewardVisible);
+    }
+
+    private RewardRuleResponse rewardRuleResponse(int version, String unitReward, boolean rewardVisible) {
+        return new RewardRuleResponse(
+                100L + version,
+                TASK_ID,
+                version,
+                "APPROVED_ITEM",
+                new java.math.BigDecimal(unitReward),
+                "POINT",
+                rewardVisible,
+                LocalDateTime.now(),
+                OWNER_ID,
+                LocalDateTime.now()
         );
     }
 

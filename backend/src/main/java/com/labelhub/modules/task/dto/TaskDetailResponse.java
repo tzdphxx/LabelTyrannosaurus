@@ -1,5 +1,6 @@
 package com.labelhub.modules.task.dto;
 
+import com.labelhub.modules.reward.dto.RewardRuleResponse;
 import com.labelhub.modules.task.domain.TaskStatus;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -20,6 +21,7 @@ public record TaskDetailResponse(
         Long aiReviewConfigId,
         Integer reviewLevelCount,
         Boolean rewardVisible,
+        RewardRuleResponse rewardRule,
         LocalDateTime publishedAt,
         LocalDateTime endedAt,
         LocalDateTime createdAt,

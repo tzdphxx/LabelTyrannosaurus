@@ -135,6 +135,7 @@ class PreAnnotationServiceTest {
         when(llmProviderService.findEnabledById(PROVIDER_ID)).thenReturn(Optional.of(provider()));
         when(llmProviderService.capability(any(LlmProvider.class))).thenReturn(
                 new ProviderCapability(true, true, 10, null));
+        when(agentRunService.findActive(AGENT_RUN_ID)).thenReturn(Optional.of(runningRun(AGENT_RUN_ID)));
         when(llmGateway.review(any(LlmGatewayRequest.class))).thenReturn(new LlmGatewayResponse(
                 LlmGatewayStatus.SUCCESS,
                 "{\"ok\":true}",
@@ -164,6 +165,54 @@ class PreAnnotationServiceTest {
         assertThat(record.getSuggestedAnswerJson()).contains("cat");
         assertThat(record.getIgnoredFieldsJson()).contains("showOnly");
         assertThat(record.getMediaUnderstandingJson()).contains("usedMedia");
+    }
+
+    @Test
+    void workerCreatesNewAgentRunWhenExistingRunIsNoLongerPendingOrRunning() {
+        Long staleRunId = 61L;
+        Long newRunId = 62L;
+        PreAnnotation record = new PreAnnotation();
+        record.setId(99L);
+        record.setAssignmentId(ASSIGNMENT_ID);
+        record.setTaskId(TASK_ID);
+        record.setDatasetItemId(70L);
+        record.setLabelerId(LABELER_ID);
+        record.setAgentRunId(staleRunId);
+        record.setStatus(PreAnnotationStatus.RUNNING);
+        when(preAnnotationMapper.selectById(99L)).thenReturn(record);
+        when(assignmentMapper.selectById(ASSIGNMENT_ID)).thenReturn(assignment());
+        when(taskMapper.selectById(TASK_ID)).thenReturn(task());
+        when(aiReviewConfigMapper.selectById(CONFIG_ID)).thenReturn(config());
+        when(datasetItemMapper.selectById(70L)).thenReturn(datasetItem());
+        when(templateVersionMapper.selectById(80L)).thenReturn(templateVersion());
+        when(llmProviderService.findEnabledById(PROVIDER_ID)).thenReturn(Optional.of(provider()));
+        when(llmProviderService.capability(any(LlmProvider.class))).thenReturn(
+                new ProviderCapability(true, true, 10, null));
+        when(agentRunService.findActive(staleRunId)).thenReturn(Optional.empty());
+        when(agentRunService.create(eq("PRE_ANNOTATION"), eq(null), eq(PROVIDER_ID), eq("qwen-vl"),
+                eq("v1"), any(), eq(ASSIGNMENT_ID))).thenReturn(agentRun(newRunId));
+        when(llmGateway.review(any(LlmGatewayRequest.class))).thenReturn(new LlmGatewayResponse(
+                LlmGatewayStatus.SUCCESS,
+                "{\"ok\":true}",
+                "{\"suggestedAnswerJson\":{\"label\":\"cat\"},\"fieldSuggestions\":[{\"field\":\"label\"}],\"riskFlags\":[],\"overallConfidence\":0.86,\"limitations\":[]}",
+                Map.of(
+                        "suggestedAnswerJson", Map.of("label", "cat"),
+                        "fieldSuggestions", List.of(Map.of("field", "label")),
+                        "riskFlags", List.of(),
+                        "overallConfidence", 0.86,
+                        "limitations", List.of()
+                ),
+                100L,
+                null,
+                null
+        ));
+
+        service.executeQueuedPreAnnotation(99L);
+
+        assertThat(record.getAgentRunId()).isEqualTo(newRunId);
+        verify(agentRunService).findActive(staleRunId);
+        verify(agentRunService).start(newRunId);
+        verify(agentRunService, never()).complete(eq(staleRunId), any());
     }
 
     @Test
@@ -238,8 +287,18 @@ class PreAnnotationServiceTest {
     }
 
     private AgentRun agentRun() {
+        return agentRun(AGENT_RUN_ID);
+    }
+
+    private AgentRun agentRun(Long id) {
         AgentRun run = new AgentRun();
-        run.setId(AGENT_RUN_ID);
+        run.setId(id);
+        return run;
+    }
+
+    private AgentRun runningRun(Long id) {
+        AgentRun run = agentRun(id);
+        run.setStatus(AgentRunStatus.RUNNING);
         return run;
     }
 }

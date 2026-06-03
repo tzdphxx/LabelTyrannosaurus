@@ -43,6 +43,16 @@ public interface TaskMapper extends BaseMapper<Task> {
                                           @Param("now") LocalDateTime now);
 
     @Select("""
+            SELECT t.*
+            FROM tasks t
+            WHERE t.id = #{taskId}
+              AND t.status = 'PUBLISHED'
+              AND t.deadline_at > #{now}
+            """)
+    Task selectPublishedMarketTaskById(@Param("taskId") Long taskId,
+                                       @Param("now") LocalDateTime now);
+
+    @Select("""
             <script>
             SELECT t.*
             FROM tasks t

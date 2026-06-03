@@ -1,4 +1,4 @@
-# LabelHub 数据标注平台 — 接口文档
+﻿# LabelHub 数据标注平台 — 接口文档
 
 > 基于当前后端实现生成，版本日期：2026-06-01
 
@@ -889,7 +889,7 @@ Authorization: Bearer <accessToken>
 
 ### 6.1 GET /api/v1/market/tasks
 
-**作用**：查询当前标注员可领取的已发布任务列表。只展示 PUBLISHED 状态且配额未满的任务。支持按关键词、标签和状态筛选。
+**作用**：查询当前标注员可领取的已发布任务列表。返回任务详情字段，并在每个任务下附带可领取题目预览 `itemsPreview`，用于任务大厅直接展示“任务 + 题目”。只展示 PUBLISHED 且未过截止时间的任务。
 
 **权限**：LABELER（通过 JWT 上下文获取用户 ID）
 
@@ -897,9 +897,9 @@ Authorization: Bearer <accessToken>
 
 | 参数 | 类型 | 必填 | 说明 |
 |------|------|------|------|
-| keyword | String | 否 | 按任务标题关键词搜索 |
+| keyword | String | 否 | 按任务标题或描述关键词搜索 |
 | tag | String | 否 | 按标签筛选 |
-| status | String | 否 | 按任务状态筛选（通常为 PUBLISHED） |
+| status | String | 否 | 按任务状态筛选；非 PUBLISHED 返回空列表 |
 
 **响应体** `List<MarketTaskResponse>`：
 
@@ -908,15 +908,55 @@ Authorization: Bearer <accessToken>
 | taskId | Long | 任务 ID |
 | title | String | 任务标题 |
 | description | String | 任务描述 |
+| instructionRichText | String | 富文本标注说明 |
+| status | String | 任务状态，通常为 PUBLISHED |
 | tags | List&lt;String&gt; | 标签列表 |
 | quota | Integer | 总配额 |
-| remainingQuota | Integer | 剩余可领取数 |
+| overlapCount | Integer | 重叠标注数 |
+| publishedTemplateVersionId | Long | 已发布模板版本 ID |
 | deadlineAt | LocalDateTime | 截止时间 |
-| rewardVisible | Boolean | 奖励是否可见 |
+| availableCount | Integer | 当前标注员可领取题目数 |
+| currentUserClaimedCount | Integer | 当前标注员已领取数量 |
+| rewardSummary | Object | 奖励摘要；任务未开放奖励时为 null |
+| itemsPreview | List&lt;MarketDatasetItemResponse&gt; | 当前标注员可领取题目预览 |
+
+`itemsPreview` 每项：
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| datasetItemId | Long | 题目/数据项 ID |
+| externalId | String | 外部题目 ID |
+| itemJson | String | 题目内容 JSON |
+| metadataJson | String | 题目元数据 JSON |
 
 ---
 
-### 6.2 POST /api/v1/tasks/{taskId}/assignments/claim
+### 6.2 GET /api/v1/market/tasks/{taskId}
+
+**作用**：查询任务大厅中某个任务的详情和可领取题目分页列表。用于进入任务大厅详情页后展示任务说明及其下面的题目。
+
+**权限**：LABELER
+
+**路径参数**：
+
+| 参数 | 类型 | 说明 |
+|------|------|------|
+| taskId | Long | 任务 ID |
+
+**查询参数**：
+
+| 参数 | 类型 | 必填 | 默认值 | 说明 |
+|------|------|------|--------|------|
+| itemPage | int | 否 | 1 | 题目页码，从 1 开始 |
+| itemSize | int | 否 | 20 | 每页题目数，最大 100 |
+
+**响应体**：同 `MarketTaskResponse`，其中 `itemsPreview` 为当前页可领取题目。
+
+**错误码**：404501（任务不存在、未发布或已过截止时间）
+
+---
+
+### 6.3 POST /api/v1/tasks/{taskId}/assignments/claim
 
 **作用**：标注员领取一个可标注的数据项。系统通过 Redis 分布式锁保证并发安全，同一标注员对同一数据项不可重复领取。领取后创建 assignment 记录，状态为 CLAIMED。
 
@@ -944,9 +984,80 @@ Authorization: Bearer <accessToken>
 
 ---
 
-### 6.3 GET /api/v1/assignments/{assignmentId}
+### 6.4 GET /api/v1/labeler/claimed-tasks
 
-**作用**：查询标注员已领取的 assignment 详情，包含题目数据、模板信息、当前草稿和提交状态。用于标注工作台页面渲染。
+**作用**：按任务聚合查询当前标注员已领取的内容。返回任务详情和当前标注员领取的题目预览，用于标注员页面展示“我领取的任务”。不会返回其他标注员领取的题目。
+
+**权限**：LABELER
+
+**查询参数**：
+
+| 参数 | 类型 | 必填 | 默认值 | 说明 |
+|------|------|------|--------|------|
+| page | int | 否 | 1 | 任务页码，从 1 开始 |
+| size | int | 否 | 20 | 每页任务数，最大 100 |
+
+**响应体** `List<LabelerClaimedTaskResponse>`：
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| taskId | Long | 任务 ID |
+| title | String | 任务标题 |
+| description | String | 任务描述 |
+| instructionRichText | String | 富文本标注说明 |
+| status | String | 任务状态 |
+| quota | Integer | 总配额 |
+| overlapCount | Integer | 重叠标注数 |
+| deadlineAt | LocalDateTime | 截止时间 |
+| publishedTemplateVersionId | Long | 已发布模板版本 ID |
+| claimedItemCount | Long | 当前标注员在该任务下领取的题目数 |
+| updatedAt | LocalDateTime | 当前标注员在该任务下最后活动时间 |
+| itemsPreview | List&lt;LabelerClaimedItemResponse&gt; | 当前标注员领取的题目预览 |
+
+---
+
+### 6.5 GET /api/v1/labeler/claimed-tasks/{taskId}
+
+**作用**：查询当前标注员在某个任务下已领取的题目分页列表，并返回任务详情。用于标注员进入某个已领取任务页面。
+
+**权限**：LABELER（仅能查看自己的领取记录）
+
+**路径参数**：
+
+| 参数 | 类型 | 说明 |
+|------|------|------|
+| taskId | Long | 任务 ID |
+
+**查询参数**：
+
+| 参数 | 类型 | 必填 | 默认值 | 说明 |
+|------|------|------|--------|------|
+| status | String | 否 | - | 按领取状态筛选：CLAIMED / DRAFTING / SUBMITTED / RETURNED / APPROVED / CANCELLED |
+| page | int | 否 | 1 | 题目页码，从 1 开始 |
+| size | int | 否 | 20 | 每页题目数，最大 100 |
+
+**响应体**：同 `LabelerClaimedTaskResponse`，其中 `itemsPreview` 为当前页已领取题目。
+
+`itemsPreview` 每项：
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| assignmentId | Long | 领取记录 ID |
+| datasetItemId | Long | 题目/数据项 ID |
+| assignmentStatus | String | 领取状态 |
+| itemJson | String | 题目内容 JSON |
+| metadataJson | String | 题目元数据 JSON |
+| draftVersion | Integer | 草稿版本号 |
+| latestSubmissionStatus | String | 最近一次有效提交状态；未提交时为 null |
+| updatedAt | LocalDateTime | 最后更新时间 |
+
+**错误码**：404402（当前标注员未领取该任务）
+
+---
+
+### 6.6 GET /api/v1/assignments/{assignmentId}
+
+**作用**：查询标注员已领取的单个 assignment 详情，包含题目数据、模板信息、当前草稿和提交状态。用于进入具体标注页。该接口是单题详情，不是任务聚合查询。
 
 **权限**：LABELER（仅能查看自己的 assignment）
 
@@ -966,15 +1077,17 @@ Authorization: Bearer <accessToken>
 | itemJson | String | 题目内容 JSON |
 | templateVersionId | Long | 模板版本 ID |
 | schemaJson | String | 模板 Schema JSON |
-| status | String | 当前状态 |
+| assignmentStatus | String | 当前领取状态 |
 | draftAnswerJson | String | 草稿答案 JSON |
 | draftVersion | Integer | 草稿版本号 |
+| latestSubmissionId | Long | 最近一次有效提交 ID |
+| latestSubmissionStatus | String | 最近一次有效提交状态 |
 
 ---
 
-### 6.4 GET /api/v1/labeler/assignments
+### 6.7 GET /api/v1/labeler/assignments
 
-**作用**：分页查询当前标注员的所有 assignment 记录，支持按任务和状态筛选。用于标注员工作台"我的任务"列表，解决已领取但未提交的 assignment 无法找回的问题。
+**作用**：分页查询当前标注员的所有 assignment 记录，支持按任务和状态筛选。该接口保留为兼容的“已领取题目扁平列表”，适合轻量工作台列表；如需任务详情 + 已领取题目，请使用 `GET /api/v1/labeler/claimed-tasks`。
 
 **权限**：LABELER
 
@@ -1003,7 +1116,7 @@ Authorization: Bearer <accessToken>
 
 ---
 
-### 6.5 POST /api/v1/labeler/assignments/{assignmentId}/cancel
+### 6.8 POST /api/v1/labeler/assignments/{assignmentId}/cancel
 
 **作用**：标注员放弃已领取的 assignment，释放数据项回市场池。仅 CLAIMED / DRAFTING / RETURNED 状态可放弃。放弃后 assignment 状态变为 CANCELLED，对应数据项的 assigned_count 减 1，其他标注员可重新领取。
 
@@ -1023,7 +1136,6 @@ Authorization: Bearer <accessToken>
 - 409401：当前状态不可放弃（已提交/已通过等终态）
 
 ---
-
 ## 7. 草稿与提交
 
 ### 7.1 PUT /api/v1/assignments/{assignmentId}/draft
@@ -2509,16 +2621,19 @@ LlmTrigger 是前端在标注作答过程中直接调用的 AI 辅助能力。�
 
 ### C.2 标注员工作流缺口（高优先级）
 
-| 建议接口 | 说明 | 优先级 |
+| 建议接口 | 说明 | 状态 |
 |------|------|------|
-| `GET /api/v1/labeler/assignments` | 标注员查看自己所有进行中的领取记录（CLAIMED / DRAFTING / RETURNED 状态）。当前 `/labeler/submissions` 只展示已提交的，标注员无法回到未完成的工作台 | ✅ 已实现（6.4） |
-| `POST /api/v1/assignments/{assignmentId}/cancel` | 标注员主动放弃已领取的任务。AssignmentStatus 枚举中有 CANCELLED 但无触发入口 | ✅ 已实现（6.5） |
+| `GET /api/v1/market/tasks` 响应增加任务详情和 `itemsPreview` | 任务大厅列表直接返回任务详情及其下面可领取题目预览 | ✅ 已实现（6.1） |
+| `GET /api/v1/market/tasks/{taskId}` | 任务大厅详情页查询任务详情及可领取题目分页列表 | ✅ 已实现（6.2） |
+| `GET /api/v1/labeler/claimed-tasks` | 标注员按任务聚合查看自己已领取的任务及题目预览 | ✅ 已实现（6.4） |
+| `GET /api/v1/labeler/claimed-tasks/{taskId}` | 标注员查看某个任务下自己领取的题目分页列表 | ✅ 已实现（6.5） |
+| `GET /api/v1/labeler/assignments` | 兼容的已领取题目扁平列表，可按 taskId/status/page/size 筛选 | ✅ 已实现（6.7） |
+| `POST /api/v1/labeler/assignments/{assignmentId}/cancel` | 标注员主动放弃已领取的 assignment | ✅ 已实现（6.8） |
 | AI 审核完成通知（轮询/WebSocket） | 提交后 AI 审核异步执行，前端只能轮询 `GET /submissions/{id}/ai-review-result`，无推送机制 | ❌ 中 |
 
-**说明**：`GET /api/v1/labeler/submissions` 支持按 `assignmentStatus` 筛选（CLAIMED/SUBMITTED/RETURNED/APPROVED），可部分覆盖"进行中领取"的需求，但语义上是"提交记录"视角而非"工作台"视角，且未提交的 CLAIMED 状态可能无 submission 记录。
+**说明**：`GET /api/v1/labeler/assignments` 是兼容保留的扁平 assignment 列表；标注员页面需要“任务详情 + 自己领取的题目”时，应优先使用 `GET /api/v1/labeler/claimed-tasks` 或 `GET /api/v1/labeler/claimed-tasks/{taskId}`。
 
 ---
-
 ### C.3 任务管理缺口（中优先级）
 
 | 建议接口 | 说明 | 优先级 |
@@ -2577,9 +2692,9 @@ LlmTrigger 是前端在标注作答过程中直接调用的 AI 辅助能力。�
 
 ```
 标注员完整工作流：
-  [✅] 浏览任务市场 → [✅] 领取任务 → [✅] 查看题目详情
-  → [✅] 保存草稿 → [✅] 提交答案 → [✅] 查看提交状态
-  → [✅] 查看进行中的领取列表（回到工作台）
+  [✅] 浏览任务市场（含任务详情和可领取题目） → [✅] 领取任务 → [✅] 查看单题详情
+  → [✅] 按任务聚合查看已领取题目 → [✅] 保存草稿 → [✅] 提交答案 → [✅] 查看提交状态
+  → [✅] 查看兼容的扁平领取列表（回到工作台）
   → [✅] 放弃已领取任务
   → [✅] 被驳回后重新提交（隐式，再次调用 submit）
   → [❌] 收到驳回通知
@@ -2717,16 +2832,32 @@ POST /api/v1/templates/10/fork
 
 ```text
 11. GET /api/v1/market/tasks
-    响应: [{ taskId: 1, title: "图像分类标注", remainingQuota: 97, ... }]
-    说明: 标注员浏览任务市场
+    响应: [{ taskId: 1, title: "图像分类标注", description: "...", itemsPreview: [{ datasetItemId: 70, itemJson: "{...}" }], ... }]
+    说明: 标注员浏览任务市场；列表已包含任务详情和可领取题目预览。
+
+11a. GET /api/v1/market/tasks/1?itemPage=1&itemSize=20
+     响应: { taskId: 1, title: "图像分类标注", instructionRichText: "...", itemsPreview: [...] }
+     说明: 进入任务大厅详情页，查看任务详情及该任务下可领取题目。
 
 12. POST /api/v1/tasks/1/assignments/claim
     响应: { assignmentId: 100, datasetItemId: 70, templateVersionId: 20, status: "CLAIMED" }
     说明: 领取一个题目（Redis 锁保证并发安全）
 
+12a. GET /api/v1/labeler/claimed-tasks
+     响应: [{ taskId: 1, title: "图像分类标注", claimedItemCount: 2, itemsPreview: [{ assignmentId: 100, datasetItemId: 70, assignmentStatus: "CLAIMED", itemJson: "{...}" }] }]
+     说明: 标注员页面按任务查看自己已领取的任务及题目；只返回当前标注员领取的题目。
+
+12b. GET /api/v1/labeler/claimed-tasks/1?status=CLAIMED&page=1&size=20
+     响应: { taskId: 1, title: "图像分类标注", itemsPreview: [{ assignmentId: 100, datasetItemId: 70, itemJson: "{...}", draftVersion: 1 }] }
+     说明: 查看某个任务下当前标注员领取的题目分页列表，可按状态筛选。
+
+12c. GET /api/v1/labeler/assignments?status=CLAIMED
+     响应: [{ assignmentId: 100, taskId: 1, taskTitle: "图像分类标注", datasetItemId: 70, status: "CLAIMED", draftVersion: 1, claimedAt: "...", updatedAt: "..." }]
+     说明: 兼容的扁平 assignment 列表；适合轻量工作台列表，也可按 taskId、status、page、size 过滤。
+
 13. GET /api/v1/assignments/100
-    响应: { itemJson: "{...}", schemaJson: "{...}", draftAnswerJson: null, status: "CLAIMED" }
-    说明: 进入工作台，获取题目数据和模板结构
+    响应: { itemJson: "{...}", schemaJson: "{...}", draftAnswerJson: null, assignmentStatus: "CLAIMED" }
+    说明: 进入具体标注页，获取单个已领取题目的完整详情和模板结构。
 
 14. PUT /api/v1/assignments/100/draft
     请求: { answerJson: "{\"label\":\"猫\"}", clientVersion: 0 }
@@ -2751,6 +2882,7 @@ POST /api/v1/templates/10/fork
     说明: 标注员参考 AI 建议，自行决定是否采纳
 
     ──（可选）AI 预标注辅助（整题级别）──
+```
 ```text
 15a. POST /api/v1/assignments/100/pre-annotations/run
      响应: { preAnnotationId: 200, status: "RUNNING" }
@@ -2761,7 +2893,6 @@ POST /api/v1/templates/10/fork
 ```
 
 ---
-
 ### D.5 提交 → AI 预审
 
 ```text

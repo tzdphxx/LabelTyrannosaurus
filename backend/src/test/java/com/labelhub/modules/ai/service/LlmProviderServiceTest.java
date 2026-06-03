@@ -131,11 +131,15 @@ class LlmProviderServiceTest {
         LlmProvider provider = persistedProvider();
         when(llmProviderMapper.selectList(any(Wrapper.class))).thenReturn(List.of(provider));
 
-        List<LlmProviderResponse> providers = service.list(ACTOR_ID);
+        List<LlmProviderResponse> providers = service.listEnabled();
 
         assertThat(providers).hasSize(1);
         assertThat(providers.get(0).apiKeyConfigured()).isTrue();
         assertThat(providers.get(0).customHeaders()).containsEntry("Authorization", "******");
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<Wrapper<LlmProvider>> wrapperCaptor = ArgumentCaptor.forClass(Wrapper.class);
+        verify(llmProviderMapper).selectList(wrapperCaptor.capture());
+        assertThat(wrapperCaptor.getValue().getSqlSegment()).contains("enabled").doesNotContain("owner_id");
     }
 
     @Test
@@ -210,7 +214,6 @@ class LlmProviderServiceTest {
         provider.setPlatformRateLimitPerMinute(60);
         provider.setTaskRateLimitPerMinute(30);
         provider.setUserRateLimitPerMinute(10);
-        provider.setOwnerId(ACTOR_ID);
         provider.setCreatedBy(ACTOR_ID);
         return provider;
     }

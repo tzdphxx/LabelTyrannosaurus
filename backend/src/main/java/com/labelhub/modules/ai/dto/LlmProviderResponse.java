@@ -20,7 +20,6 @@ public record LlmProviderResponse(
         String visionModel,
         String structuredOutputMode,
         Boolean apiKeyConfigured,
-        Long ownerId,
         Long createdBy,
         LocalDateTime createdAt,
         LocalDateTime updatedAt

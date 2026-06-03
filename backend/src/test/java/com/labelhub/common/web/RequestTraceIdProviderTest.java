@@ -1,6 +1,7 @@
 package com.labelhub.common.web;
 
 import jakarta.servlet.http.HttpServletRequest;
+import com.labelhub.infrastructure.llmtask.LlmTaskExecutionContext;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.mock.web.MockHttpServletRequest;
@@ -36,6 +37,16 @@ class RequestTraceIdProviderTest {
         RequestTraceIdProvider provider = new RequestTraceIdProvider(providerFor(request));
 
         assertThat(provider.currentTraceId()).isNotBlank();
+    }
+
+    @Test
+    void currentTraceIdUsesQueuedTaskContextBeforeRequestHeader() {
+        MockHttpServletRequest request = new MockHttpServletRequest();
+        request.addHeader("X-Trace-Id", "trace-from-request");
+        RequestTraceIdProvider provider = new RequestTraceIdProvider(providerFor(request));
+
+        LlmTaskExecutionContext.runWithTraceId("trace-from-queue", () ->
+                assertThat(provider.currentTraceId()).isEqualTo("trace-from-queue"));
     }
 
     private static ObjectProvider<HttpServletRequest> providerFor(HttpServletRequest request) {

@@ -4,6 +4,7 @@ import com.labelhub.modules.agent.domain.AgentRun;
 import com.labelhub.modules.agent.domain.AgentRunStatus;
 import com.labelhub.modules.agent.mapper.AgentRunMapper;
 import java.time.LocalDateTime;
+import java.util.Optional;
 import java.util.Set;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -53,6 +54,29 @@ public class AgentRunService {
         run.setStatus(AgentRunStatus.RUNNING);
         run.setStartedAt(LocalDateTime.now());
         agentRunMapper.updateById(run);
+    }
+
+    @Transactional(readOnly = true)
+    public Optional<AgentRun> findPending(Long agentRunId) {
+        if (agentRunId == null) {
+            return Optional.empty();
+        }
+        AgentRun run = agentRunMapper.selectById(agentRunId);
+        return run != null && run.getStatus() == AgentRunStatus.PENDING
+                ? Optional.of(run)
+                : Optional.empty();
+    }
+
+    @Transactional(readOnly = true)
+    public Optional<AgentRun> findActive(Long agentRunId) {
+        if (agentRunId == null) {
+            return Optional.empty();
+        }
+        AgentRun run = agentRunMapper.selectById(agentRunId);
+        return run != null
+                && (run.getStatus() == AgentRunStatus.PENDING || run.getStatus() == AgentRunStatus.RUNNING)
+                ? Optional.of(run)
+                : Optional.empty();
     }
 
     @Transactional

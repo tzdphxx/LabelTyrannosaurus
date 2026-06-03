@@ -56,6 +56,13 @@ public class AgentRunService {
         agentRunMapper.updateById(run);
     }
 
+    /**
+     * 按 ID 查询 AgentRun，仅当状态为 PENDING 时返回。
+     * 用于幂等性检查：若已有未启动的 AgentRun，复用而非创建新的。
+     *
+     * @param agentRunId AgentRun ID，可为 null
+     * @return PENDING 状态时返回该记录，否则返回 {@link Optional#empty()}
+     */
     @Transactional(readOnly = true)
     public Optional<AgentRun> findPending(Long agentRunId) {
         if (agentRunId == null) {
@@ -67,6 +74,13 @@ public class AgentRunService {
                 : Optional.empty();
     }
 
+    /**
+     * 按 ID 查询 AgentRun，仅当状态为 PENDING 或 RUNNING 时返回。
+     * 用于判断是否存在"活跃"的 AgentRun：若存在则复用；若不存在则需新建。
+     *
+     * @param agentRunId AgentRun ID，可为 null
+     * @return PENDING 或 RUNNING 状态时返回该记录，否则返回 {@link Optional#empty()}
+     */
     @Transactional(readOnly = true)
     public Optional<AgentRun> findActive(Long agentRunId) {
         if (agentRunId == null) {

@@ -65,10 +65,11 @@ public class AssignmentClaimService {
     }
 
     public AssignmentClaimResponse claim(Long taskId, Long labelerId) {
-        if (!CurrentUserContext.requireCurrentUser().roles().contains(RoleCode.LABELER)) {
+        var currentUser = CurrentUserContext.requireCurrentUser();
+        if (!currentUser.hasRole(RoleCode.LABELER)) {
             throw new BusinessException(PERMISSION_DENIED, "当前账号没有权限执行该操作");
         }
-        if (!CurrentUserContext.requireCurrentUser().userId().equals(labelerId)) {
+        if (!currentUser.isAdmin() && !currentUser.userId().equals(labelerId)) {
             throw new BusinessException(PERMISSION_DENIED, "不能代替其他用户领取任务");
         }
         Task task = loadClaimableTask(taskId);

@@ -12,6 +12,9 @@ import com.baomidou.mybatisplus.core.conditions.Wrapper;
 import com.labelhub.common.audit.AuditAppender;
 import com.labelhub.common.audit.AuditCommand;
 import com.labelhub.common.exception.BusinessException;
+import com.labelhub.common.security.CurrentUser;
+import com.labelhub.common.security.CurrentUserContext;
+import com.labelhub.common.security.RoleCode;
 import com.labelhub.common.web.TraceIdProvider;
 import com.labelhub.modules.ai.mapper.AiReviewConfigMapper;
 import com.labelhub.modules.ai.dto.AiReviewConfigResponse;
@@ -40,6 +43,8 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -96,6 +101,11 @@ class TaskLifecycleServiceTest {
                 llmProviderService,
                 applicationEventPublisher
         );
+    }
+
+    @AfterEach
+    void clearCurrentUser() {
+        CurrentUserContext.clear();
     }
 
     @Test
@@ -244,6 +254,22 @@ class TaskLifecycleServiceTest {
         assertThat(response.aiReviewConfig()).isNotNull();
         assertThat(response.aiReviewConfig().id()).isEqualTo(200L);
         assertThat(response.aiProvider()).isNull();
+    }
+
+    @Test
+    void adminCanReadTaskDetailOwnedByAnotherUser() {
+        Long adminId = 99L;
+        CurrentUserContext.set(new CurrentUser(adminId, "admin", "admin@example.com", Set.of(RoleCode.ADMIN), 1));
+        Task task = publishableDraftTask();
+        when(taskMapper.selectById(TASK_ID)).thenReturn(task);
+        when(taskTagMapper.selectList(any(Wrapper.class))).thenReturn(List.of(taskTag("qa")));
+        when(aiReviewConfigService.findResponseByTaskId(TASK_ID)).thenReturn(Optional.of(aiConfigResponse()));
+        when(llmProviderService.findResponseById(50L)).thenReturn(Optional.of(providerResponse()));
+
+        TaskDetailResponse response = taskLifecycleService.getOwnedTask(adminId, TASK_ID);
+
+        assertThat(response.taskId()).isEqualTo(TASK_ID);
+        assertThat(response.ownerId()).isEqualTo(OWNER_ID);
     }
 
     @Test

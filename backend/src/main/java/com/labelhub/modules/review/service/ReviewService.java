@@ -3,6 +3,7 @@ package com.labelhub.modules.review.service;
 import com.labelhub.common.audit.AuditAppender;
 import com.labelhub.common.audit.AuditCommand;
 import com.labelhub.common.exception.BusinessException;
+import com.labelhub.common.security.CurrentUserContext;
 import com.labelhub.modules.assignment.domain.Assignment;
 import com.labelhub.modules.assignment.domain.AssignmentStatus;
 import com.labelhub.modules.assignment.mapper.AssignmentMapper;
@@ -160,6 +161,9 @@ public class ReviewService {
     }
 
     private void requireAssignedReviewer(Long submissionId, Long reviewerId) {
+        if (CurrentUserContext.isAdmin()) {
+            return;
+        }
         int count = reviewTaskMapper.countBySubmissionAndReviewer(submissionId, reviewerId);
         if (count == 0) {
             throw new BusinessException(REVIEWER_NOT_ASSIGNED,

@@ -11,6 +11,9 @@ import static org.mockito.Mockito.when;
 import com.labelhub.common.audit.AuditAppender;
 import com.labelhub.common.audit.AuditCommand;
 import com.labelhub.common.exception.BusinessException;
+import com.labelhub.common.security.CurrentUser;
+import com.labelhub.common.security.CurrentUserContext;
+import com.labelhub.common.security.RoleCode;
 import com.labelhub.modules.assignment.domain.Assignment;
 import com.labelhub.modules.assignment.domain.AssignmentStatus;
 import com.labelhub.modules.assignment.mapper.AssignmentMapper;
@@ -29,6 +32,8 @@ import com.labelhub.modules.submission.domain.Submission;
 import com.labelhub.modules.submission.domain.SubmissionStatus;
 import com.labelhub.modules.submission.mapper.SubmissionMapper;
 import java.util.List;
+import java.util.Set;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -64,6 +69,11 @@ class ReviewServiceTest {
                 submissionMapper, assignmentMapper, reviewRecordMapper,
                 reviewSubmissionMapper, reviewTaskMapper, eventPublisher, auditAppender, datasetClaimService,
                 escalationService);
+    }
+
+    @AfterEach
+    void clearCurrentUser() {
+        CurrentUserContext.clear();
     }
 
     // --- approve ---
@@ -129,6 +139,19 @@ class ReviewServiceTest {
         reviewService.approve(SUBMISSION_ID, REVIEWER_ID, new ApproveRequest("ok", 1));
 
         verify(auditAppender).append(any(AuditCommand.class));
+    }
+
+    @Test
+    void adminCanApproveSubmissionWithoutReviewerAssignment() {
+        Long adminId = 9L;
+        CurrentUserContext.set(new CurrentUser(adminId, "admin", "admin@labelhub.dev", Set.of(RoleCode.ADMIN), 1));
+        when(submissionMapper.selectById(SUBMISSION_ID)).thenReturn(pendingFinalSubmission());
+        when(assignmentMapper.selectById(ASSIGNMENT_ID)).thenReturn(submittedAssignment());
+
+        ReviewActionResponse response = reviewService.approve(
+                SUBMISSION_ID, adminId, new ApproveRequest("admin approved", 1));
+
+        assertThat(response.submissionStatus()).isEqualTo(SubmissionStatus.APPROVED);
     }
 
     @Test

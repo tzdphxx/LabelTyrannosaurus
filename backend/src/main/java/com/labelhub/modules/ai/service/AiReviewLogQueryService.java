@@ -51,14 +51,14 @@ public class AiReviewLogQueryService {
     }
 
     private void requireAccess(CurrentUser currentUser, Task task) {
-        if (currentUser.roles().contains(RoleCode.ADMIN)) {
+        if (currentUser.isAdmin()) {
             return;
         }
-        if (currentUser.roles().contains(RoleCode.OWNER)
+        if (currentUser.hasRole(RoleCode.OWNER)
                 && currentUser.userId().equals(task.getOwnerId())) {
             return;
         }
-        if (currentUser.roles().contains(RoleCode.REVIEWER)) {
+        if (currentUser.hasRole(RoleCode.REVIEWER)) {
             return;
         }
         throw new BusinessException(FORBIDDEN, "无权查看 AI 审核日志");

@@ -1,6 +1,7 @@
 package com.labelhub.modules.review.service;
 
 import com.labelhub.common.exception.BusinessException;
+import com.labelhub.common.security.CurrentUserContext;
 import com.labelhub.modules.review.dto.ExportGoldenItem;
 import com.labelhub.modules.review.dto.ExportPageRequest;
 import com.labelhub.modules.review.dto.ExportPageResponse;
@@ -31,7 +32,7 @@ public class ExportSnapshotService {
         if (task == null) {
             throw new BusinessException(TASK_NOT_FOUND, "任务不存在");
         }
-        if (!task.getOwnerId().equals(ownerId)) {
+        if (!CurrentUserContext.isAdmin() && !task.getOwnerId().equals(ownerId)) {
             throw new BusinessException(TASK_NOT_OWNED, "当前账号不是任务负责人");
         }
 

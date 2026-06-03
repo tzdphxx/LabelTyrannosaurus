@@ -8,6 +8,7 @@ import com.labelhub.common.audit.AuditAppender;
 import com.labelhub.common.audit.AuditCommand;
 import com.labelhub.common.exception.BusinessException;
 import com.labelhub.common.security.CurrentUser;
+import com.labelhub.common.security.CurrentUserContext;
 import com.labelhub.common.security.RoleCode;
 import com.labelhub.common.web.TraceIdProvider;
 import com.labelhub.infrastructure.llm.LlmGateway;
@@ -153,7 +154,9 @@ public class PreAnnotationService {
     }
 
     public PreAnnotationResponse run(Long assignmentId, Long labelerId, PreAnnotationRunRequest request) {
-        Assignment assignment = assignmentMapper.selectOwnedAssignment(assignmentId, labelerId);
+        Assignment assignment = CurrentUserContext.isAdmin()
+                ? assignmentMapper.selectById(assignmentId)
+                : assignmentMapper.selectOwnedAssignment(assignmentId, labelerId);
         if (assignment == null) {
             throw new BusinessException(FORBIDDEN, "当前账号没有权限执行该操作");
         }
@@ -329,7 +332,9 @@ public class PreAnnotationService {
     }
 
     public PreAnnotationResponse latest(Long assignmentId, Long labelerId) {
-        Assignment assignment = assignmentMapper.selectOwnedAssignment(assignmentId, labelerId);
+        Assignment assignment = CurrentUserContext.isAdmin()
+                ? assignmentMapper.selectById(assignmentId)
+                : assignmentMapper.selectOwnedAssignment(assignmentId, labelerId);
         if (assignment == null) {
             throw new BusinessException(FORBIDDEN, "当前账号没有权限执行该操作");
         }
@@ -349,17 +354,20 @@ public class PreAnnotationService {
     }
 
     private boolean requireAccess(PreAnnotation record, Assignment assignment, Task task, CurrentUser currentUser) {
-        if (currentUser.roles().contains(RoleCode.LABELER)
+        if (currentUser.isAdmin()) {
+            return true;
+        }
+        if (currentUser.hasRole(RoleCode.LABELER)
                 && assignment != null
                 && currentUser.userId().equals(assignment.getLabelerId())) {
             return false;
         }
-        if (currentUser.roles().contains(RoleCode.OWNER)
+        if (currentUser.hasRole(RoleCode.OWNER)
                 && task != null
                 && currentUser.userId().equals(task.getOwnerId())) {
             return true;
         }
-        if (currentUser.roles().contains(RoleCode.REVIEWER)) {
+        if (currentUser.hasRole(RoleCode.REVIEWER)) {
             return true;
         }
         throw new BusinessException(FORBIDDEN, "当前账号没有权限执行该操作");

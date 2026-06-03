@@ -154,10 +154,12 @@ public class LlmTriggerService {
 
     public LlmTriggerRunResponse runForAssignment(CurrentUser currentUser, Long assignmentId,
                                                    LlmTriggerRunRequest request) {
-        if (!currentUser.roles().contains(RoleCode.LABELER)) {
+        if (!currentUser.hasRole(RoleCode.LABELER)) {
             throw new BusinessException(FORBIDDEN, "只有标注员可以在作答页触发 LLM 辅助");
         }
-        Assignment assignment = assignmentMapper.selectOwnedAssignment(assignmentId, currentUser.userId());
+        Assignment assignment = currentUser.isAdmin()
+                ? assignmentMapper.selectById(assignmentId)
+                : assignmentMapper.selectOwnedAssignment(assignmentId, currentUser.userId());
         if (assignment == null) {
             throw new BusinessException(ASSIGNMENT_NOT_FOUND, "领取记录不存在");
         }
@@ -173,11 +175,11 @@ public class LlmTriggerService {
 
     public LlmTriggerRunResponse testFromTask(CurrentUser currentUser, Long taskId,
                                                LlmTriggerRunRequest request) {
-        if (!currentUser.roles().contains(RoleCode.OWNER)) {
+        if (!currentUser.hasRole(RoleCode.OWNER)) {
             throw new BusinessException(FORBIDDEN, "只有任务负责人可以测试 LLM 触发器");
         }
         Task task = loadTask(taskId);
-        if (!currentUser.userId().equals(task.getOwnerId())) {
+        if (!currentUser.isAdmin() && !currentUser.userId().equals(task.getOwnerId())) {
             throw new BusinessException(FORBIDDEN, "当前账号不是任务负责人");
         }
         requireEnabledProvider(request.providerId());
@@ -249,10 +251,13 @@ public class LlmTriggerService {
             throw new BusinessException(RUN_NOT_FOUND, "LLM 触发运行记录不存在");
         }
         Task task = loadTask(run.getTaskId());
-        if (currentUser.roles().contains(RoleCode.OWNER) && currentUser.userId().equals(task.getOwnerId())) {
+        if (currentUser.isAdmin()) {
             return toRunResponse(run);
         }
-        if (run.getAssignmentId() != null && currentUser.roles().contains(RoleCode.LABELER)) {
+        if (currentUser.hasRole(RoleCode.OWNER) && currentUser.userId().equals(task.getOwnerId())) {
+            return toRunResponse(run);
+        }
+        if (run.getAssignmentId() != null && currentUser.hasRole(RoleCode.LABELER)) {
             Assignment assignment = assignmentMapper.selectOwnedAssignment(run.getAssignmentId(), currentUser.userId());
             if (assignment != null) {
                 return toRunResponse(run);

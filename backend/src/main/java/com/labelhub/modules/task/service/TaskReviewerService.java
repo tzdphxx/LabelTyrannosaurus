@@ -2,6 +2,7 @@ package com.labelhub.modules.task.service;
 
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.labelhub.common.exception.BusinessException;
+import com.labelhub.common.security.CurrentUserContext;
 import com.labelhub.modules.auth.repository.UserRoleMapper;
 import com.labelhub.modules.task.domain.Task;
 import com.labelhub.modules.task.domain.TaskReviewer;
@@ -67,7 +68,7 @@ public class TaskReviewerService {
 
     private Task loadOwnedTask(Long ownerId, Long taskId) {
         Task task = taskMapper.selectById(taskId);
-        if (task == null || !ownerId.equals(task.getOwnerId())) {
+        if (task == null || (!CurrentUserContext.isAdmin() && !ownerId.equals(task.getOwnerId()))) {
             throw new BusinessException(TASK_NOT_FOUND, "任务不存在");
         }
         return task;

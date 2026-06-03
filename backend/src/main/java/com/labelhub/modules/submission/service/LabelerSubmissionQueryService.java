@@ -3,6 +3,7 @@ package com.labelhub.modules.submission.service;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.labelhub.common.api.PageResponse;
 import com.labelhub.common.exception.BusinessException;
+import com.labelhub.common.security.CurrentUserContext;
 import com.labelhub.modules.assignment.domain.Assignment;
 import com.labelhub.modules.assignment.domain.AssignmentStatus;
 import com.labelhub.modules.assignment.mapper.AssignmentMapper;
@@ -61,14 +62,14 @@ public class LabelerSubmissionQueryService {
                                                            AssignmentStatus assignmentStatus,
                                                            int page, int size) {
         LambdaQueryWrapper<Submission> countWrapper = new LambdaQueryWrapper<Submission>()
-                .eq(Submission::getLabelerId, labelerId)
+                .eq(!CurrentUserContext.isAdmin(), Submission::getLabelerId, labelerId)
                 .ne(Submission::getStatus, SubmissionStatus.SUPERSEDED)
                 .eq(taskId != null, Submission::getTaskId, taskId)
                 .eq(submissionStatus != null, Submission::getStatus, submissionStatus);
         long total = submissionMapper.selectCount(countWrapper);
 
         LambdaQueryWrapper<Submission> wrapper = new LambdaQueryWrapper<Submission>()
-                .eq(Submission::getLabelerId, labelerId)
+                .eq(!CurrentUserContext.isAdmin(), Submission::getLabelerId, labelerId)
                 .ne(Submission::getStatus, SubmissionStatus.SUPERSEDED)
                 .eq(taskId != null, Submission::getTaskId, taskId)
                 .eq(submissionStatus != null, Submission::getStatus, submissionStatus)
@@ -122,7 +123,7 @@ public class LabelerSubmissionQueryService {
         if (submission == null) {
             throw new BusinessException(SUBMISSION_NOT_FOUND, "提交记录不存在");
         }
-        if (!submission.getLabelerId().equals(labelerId)) {
+        if (!CurrentUserContext.isAdmin() && !submission.getLabelerId().equals(labelerId)) {
             throw new BusinessException(FORBIDDEN, "当前账号没有权限执行该操作");
         }
 

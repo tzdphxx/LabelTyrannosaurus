@@ -32,9 +32,17 @@ public final class CurrentUserContext {
         return requireCurrentUser().roles();
     }
 
+    public static boolean hasRole(RoleCode role) {
+        return get().map(currentUser -> currentUser.hasRole(role)).orElse(false);
+    }
+
+    public static boolean isAdmin() {
+        return get().map(CurrentUser::isAdmin).orElse(false);
+    }
+
     public static CurrentUser requireRole(RoleCode role) {
         CurrentUser currentUser = requireCurrentUser();
-        if (!currentUser.roles().contains(role)) {
+        if (!currentUser.hasRole(role)) {
             throw new BusinessException(403001, "当前账号没有权限执行该操作");
         }
         return currentUser;
@@ -43,7 +51,7 @@ public final class CurrentUserContext {
     public static CurrentUser requireAnyRole(Set<RoleCode> roles) {
         CurrentUser currentUser = requireCurrentUser();
         boolean matched = currentUser.roles().stream().anyMatch(roles::contains);
-        if (!matched) {
+        if (!matched && !currentUser.isAdmin()) {
             throw new BusinessException(403001, "当前账号没有权限执行该操作");
         }
         return currentUser;

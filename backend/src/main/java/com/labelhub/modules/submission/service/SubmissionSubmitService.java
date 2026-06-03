@@ -6,6 +6,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.labelhub.common.audit.AuditAppender;
 import com.labelhub.common.audit.AuditCommand;
 import com.labelhub.common.exception.BusinessException;
+import com.labelhub.common.security.CurrentUserContext;
 import com.labelhub.common.web.TraceIdProvider;
 import com.labelhub.modules.agent.domain.AgentRun;
 import com.labelhub.modules.agent.domain.AgentRunStatus;
@@ -139,7 +140,9 @@ public class SubmissionSubmitService {
     }
 
     private Assignment loadOwnedAssignment(Long assignmentId, Long labelerId) {
-        Assignment assignment = assignmentMapper.selectOwnedAssignment(assignmentId, labelerId);
+        Assignment assignment = CurrentUserContext.isAdmin()
+                ? assignmentMapper.selectById(assignmentId)
+                : assignmentMapper.selectOwnedAssignment(assignmentId, labelerId);
         if (assignment == null) {
             throw new BusinessException(ASSIGNMENT_NOT_FOUND, "领取记录不存在");
         }

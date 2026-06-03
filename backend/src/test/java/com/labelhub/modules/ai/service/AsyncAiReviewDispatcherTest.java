@@ -74,6 +74,22 @@ class AsyncAiReviewDispatcherTest {
     }
 
     @Test
+    void enqueueDoesNotCarryNonPendingRunIdWhenMapperReturnsStaleRun() {
+        AsyncAiReviewDispatcher dispatcher = new AsyncAiReviewDispatcher(
+                queueService, submissionMapper, agentRunMapper, traceIdProvider);
+        AgentRun failedRun = new AgentRun();
+        failedRun.setId(301L);
+        failedRun.setStatus(AgentRunStatus.FAILED);
+        when(agentRunMapper.selectOne(any())).thenReturn(failedRun);
+
+        dispatcher.enqueue(100L);
+
+        ArgumentCaptor<LlmTaskQueueMessage> messageCaptor = ArgumentCaptor.forClass(LlmTaskQueueMessage.class);
+        verify(queueService).enqueue(messageCaptor.capture());
+        assertThat(messageCaptor.getValue().agentRunId()).isNull();
+    }
+
+    @Test
     void enqueueGeneratesTraceIdWhenNoRequestContextIsBound() {
         HttpServletRequest request = mock(HttpServletRequest.class);
         when(request.getHeader("X-Trace-Id"))

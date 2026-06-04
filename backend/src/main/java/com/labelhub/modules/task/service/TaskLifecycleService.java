@@ -168,7 +168,8 @@ public class TaskLifecycleService {
                     request.aiScoringDimensions(),
                     request.aiPassThreshold(),
                     request.aiManualReviewThreshold(),
-                    null, null, null, null, null, null, null);
+                    null, null, null, null, null, null, null,
+                    request.aiReviewStrategy());
             var aiConfig = aiReviewConfigService.save(ownerId, task.getId(), aiRequest);
             task.setAiReviewConfigId(aiConfig.id());
             taskMapper.updateById(task);

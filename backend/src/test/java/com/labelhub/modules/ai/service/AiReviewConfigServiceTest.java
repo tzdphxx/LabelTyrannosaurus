@@ -134,7 +134,7 @@ class AiReviewConfigServiceTest {
                 new BigDecimal("60.00"),
                 new BigDecimal("80.00"),
                 3,
-                null, null, null, null, null, null
+                null, null, null, null, null, null, null
         );
         when(taskMapper.selectById(TASK_ID)).thenReturn(draftTask());
         when(llmProviderService.findEnabledById(PROVIDER_ID)).thenReturn(Optional.of(provider()));
@@ -244,7 +244,7 @@ class AiReviewConfigServiceTest {
                 new BigDecimal("85.00"),
                 new BigDecimal("60.00"),
                 3,
-                null, null, null, null, null, null
+                null, null, null, null, null, null, null
         );
     }
 

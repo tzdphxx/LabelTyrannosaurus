@@ -81,7 +81,7 @@ class ReviewControllerTest {
                 .thenReturn(serviceResponse);
 
         ApiResponse<ReviewActionResponse> response = controller.approve(
-                100L, new ApproveRequest("Looks good", 1));
+                100L, new ApproveRequest("Looks good", 1, null));
 
         assertThat(response.data()).isEqualTo(serviceResponse);
         assertThat(response.data().submissionStatus()).isEqualTo(SubmissionStatus.APPROVED);
@@ -143,7 +143,7 @@ class ReviewControllerTest {
     void labelerCannotApproveSubmission() {
         CurrentUserContext.set(new CurrentUser(2L, "labeler", "test@labelhub.dev", Set.of(RoleCode.LABELER), 1));
 
-        assertThatThrownBy(() -> controller.approve(100L, new ApproveRequest("ok", 1)))
+        assertThatThrownBy(() -> controller.approve(100L, new ApproveRequest("ok", 1, null)))
                 .isInstanceOfSatisfying(BusinessException.class,
                         ex -> assertThat(ex.getCode()).isEqualTo(403001));
     }

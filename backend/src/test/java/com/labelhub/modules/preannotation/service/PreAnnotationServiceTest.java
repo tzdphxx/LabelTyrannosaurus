@@ -28,6 +28,7 @@ import com.labelhub.modules.ai.domain.LlmProvider;
 import com.labelhub.modules.ai.mapper.AiReviewConfigMapper;
 import com.labelhub.modules.ai.service.DefaultMediaPromptContextBuilder;
 import com.labelhub.modules.ai.service.LlmProviderService;
+import com.labelhub.modules.ai.service.PromptTemplateEngine;
 import com.labelhub.modules.ai.service.ProviderCapability;
 import com.labelhub.modules.assignment.domain.Assignment;
 import com.labelhub.modules.assignment.domain.AssignmentStatus;
@@ -85,6 +86,7 @@ class PreAnnotationServiceTest {
     @Mock private TraceIdProvider traceIdProvider;
     @Mock private RedisLockService redisLockService;
     @Mock private LlmTaskQueueService llmTaskQueueService;
+    @Mock private PromptTemplateEngine promptTemplateEngine;
 
     private PreAnnotationService service;
 
@@ -107,6 +109,13 @@ class PreAnnotationServiceTest {
                         org.mockito.ArgumentMatchers.any(),
                         org.mockito.ArgumentMatchers.any()))
                 .thenReturn(agentRun());
+        org.springframework.test.util.ReflectionTestUtils.setField(service, "promptTemplateEngine", promptTemplateEngine);
+        lenient().when(promptTemplateEngine.buildPreAnnotationPrompt(
+                        org.mockito.ArgumentMatchers.any(),
+                        org.mockito.ArgumentMatchers.any(),
+                        org.mockito.ArgumentMatchers.any(),
+                        org.mockito.ArgumentMatchers.any()))
+                .thenReturn("You are LabelHub pre-annotation assistant.");
     }
 
     @Test

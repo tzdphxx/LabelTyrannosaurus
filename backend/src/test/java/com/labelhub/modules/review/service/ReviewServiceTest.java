@@ -27,6 +27,7 @@ import com.labelhub.modules.review.mapper.ReviewTaskMapper;
 import com.labelhub.modules.review.port.SubmissionEventPublisher;
 import com.labelhub.modules.submission.domain.Submission;
 import com.labelhub.modules.submission.domain.SubmissionStatus;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.labelhub.modules.submission.mapper.SubmissionMapper;
 import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
@@ -52,6 +53,7 @@ class ReviewServiceTest {
     @Mock private AuditAppender auditAppender;
     @Mock private DatasetClaimService datasetClaimService;
     @Mock private ReviewLevelEscalationService escalationService;
+    @Mock private ObjectMapper objectMapper;
 
     private ReviewService reviewService;
 
@@ -62,7 +64,7 @@ class ReviewServiceTest {
         reviewService = new ReviewService(
                 submissionMapper, assignmentMapper, reviewRecordMapper,
                 reviewSubmissionMapper, reviewTaskMapper, eventPublisher, auditAppender, datasetClaimService,
-                escalationService);
+                escalationService, objectMapper);
     }
 
     // --- approve ---
@@ -74,7 +76,7 @@ class ReviewServiceTest {
         when(assignmentMapper.selectById(ASSIGNMENT_ID)).thenReturn(submittedAssignment());
 
         ReviewActionResponse response = reviewService.approve(
-                SUBMISSION_ID, REVIEWER_ID, new ApproveRequest("Looks good", 1));
+                SUBMISSION_ID, REVIEWER_ID, new ApproveRequest("Looks good", 1, null));
 
         assertThat(response.submissionId()).isEqualTo(SUBMISSION_ID);
         assertThat(response.submissionStatus()).isEqualTo(SubmissionStatus.APPROVED);
@@ -88,7 +90,7 @@ class ReviewServiceTest {
         when(submissionMapper.selectById(SUBMISSION_ID)).thenReturn(pendingFinalSubmission());
         when(assignmentMapper.selectById(ASSIGNMENT_ID)).thenReturn(assignment);
 
-        reviewService.approve(SUBMISSION_ID, REVIEWER_ID, new ApproveRequest("ok", 1));
+        reviewService.approve(SUBMISSION_ID, REVIEWER_ID, new ApproveRequest("ok", 1, null));
 
         assertThat(assignment.getStatus()).isEqualTo(AssignmentStatus.APPROVED);
         verify(assignmentMapper).updateById(assignment);
@@ -99,7 +101,7 @@ class ReviewServiceTest {
         when(submissionMapper.selectById(SUBMISSION_ID)).thenReturn(pendingFinalSubmission());
         when(assignmentMapper.selectById(ASSIGNMENT_ID)).thenReturn(submittedAssignment());
 
-        reviewService.approve(SUBMISSION_ID, REVIEWER_ID, new ApproveRequest("good", 1));
+        reviewService.approve(SUBMISSION_ID, REVIEWER_ID, new ApproveRequest("good", 1, null));
 
         ArgumentCaptor<ReviewRecord> captor = ArgumentCaptor.forClass(ReviewRecord.class);
         verify(reviewRecordMapper).insert(captor.capture());
@@ -115,7 +117,7 @@ class ReviewServiceTest {
         when(submissionMapper.selectById(SUBMISSION_ID)).thenReturn(pendingFinalSubmission());
         when(assignmentMapper.selectById(ASSIGNMENT_ID)).thenReturn(submittedAssignment());
 
-        reviewService.approve(SUBMISSION_ID, REVIEWER_ID, new ApproveRequest("ok", 1));
+        reviewService.approve(SUBMISSION_ID, REVIEWER_ID, new ApproveRequest("ok", 1, null));
 
         verify(eventPublisher).publishApproved(SUBMISSION_ID, REVIEWER_ID);
     }
@@ -125,7 +127,7 @@ class ReviewServiceTest {
         when(submissionMapper.selectById(SUBMISSION_ID)).thenReturn(pendingFinalSubmission());
         when(assignmentMapper.selectById(ASSIGNMENT_ID)).thenReturn(submittedAssignment());
 
-        reviewService.approve(SUBMISSION_ID, REVIEWER_ID, new ApproveRequest("ok", 1));
+        reviewService.approve(SUBMISSION_ID, REVIEWER_ID, new ApproveRequest("ok", 1, null));
 
         verify(auditAppender).append(any(AuditCommand.class));
     }
@@ -137,7 +139,7 @@ class ReviewServiceTest {
         when(submissionMapper.selectById(SUBMISSION_ID)).thenReturn(submission);
 
         assertThatThrownBy(() -> reviewService.approve(
-                SUBMISSION_ID, REVIEWER_ID, new ApproveRequest("ok", 1)))
+                SUBMISSION_ID, REVIEWER_ID, new ApproveRequest("ok", 1, null)))
                 .isInstanceOfSatisfying(BusinessException.class,
                         ex -> assertThat(ex.getCode()).isEqualTo(400601));
         verify(eventPublisher, never()).publishApproved(any(), any());
@@ -148,7 +150,7 @@ class ReviewServiceTest {
         when(submissionMapper.selectById(SUBMISSION_ID)).thenReturn(null);
 
         assertThatThrownBy(() -> reviewService.approve(
-                SUBMISSION_ID, REVIEWER_ID, new ApproveRequest("ok", 1)))
+                SUBMISSION_ID, REVIEWER_ID, new ApproveRequest("ok", 1, null)))
                 .isInstanceOfSatisfying(BusinessException.class,
                         ex -> assertThat(ex.getCode()).isEqualTo(404601));
     }

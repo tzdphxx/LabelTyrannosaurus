@@ -1,6 +1,7 @@
 package com.labelhub.modules.dataset.controller;
 
 import com.labelhub.common.api.ApiResponse;
+import com.labelhub.modules.dataset.dto.BatchAppendJsonItemsRequest;
 import com.labelhub.modules.dataset.dto.BatchAppendItemsRequest;
 import com.labelhub.modules.dataset.dto.BatchDeleteItemsRequest;
 import com.labelhub.modules.dataset.dto.BatchItemResult;
@@ -66,6 +67,17 @@ public class DatasetItemController {
     public ApiResponse<DatasetImportJobResponse> batchAppend(@PathVariable Long taskId,
                                                              @Valid @RequestBody BatchAppendItemsRequest request) {
         return ApiResponse.ok(datasetImportService.createAppendImport(taskId, new DatasetImportRequest(request.fileId())));
+    }
+
+    /**
+     * 鎵归噺杩藉姞 JSON 棰樼洰銆?
+     */
+    @PostMapping("/batch-append-json")
+    @Operation(summary = "Batch append JSON dataset items",
+            description = "Create an append import job from JSON content in the request body.")
+    public ApiResponse<DatasetImportJobResponse> batchAppendJson(@PathVariable Long taskId,
+                                                                 @Valid @RequestBody BatchAppendJsonItemsRequest request) {
+        return ApiResponse.ok(datasetImportService.createAppendImportFromJson(taskId, request));
     }
 
     /**

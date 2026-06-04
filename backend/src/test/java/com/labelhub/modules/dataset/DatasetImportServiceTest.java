@@ -11,7 +11,9 @@ import com.labelhub.infrastructure.storage.ObjectStorageService;
 import com.labelhub.modules.dataset.domain.DatasetFileEntity;
 import com.labelhub.modules.dataset.domain.DatasetImportJobEntity;
 import com.labelhub.modules.dataset.domain.DatasetItemEntity;
+import com.labelhub.modules.dataset.dto.BatchAppendJsonItemsRequest;
 import com.labelhub.modules.dataset.dto.DatasetImportRequest;
+import com.labelhub.modules.dataset.dto.DatasetItemAppendRequest;
 import com.labelhub.modules.dataset.repository.DatasetFileMapper;
 import com.labelhub.modules.dataset.repository.DatasetImportJobMapper;
 import com.labelhub.modules.dataset.repository.DatasetItemChangeLogMapper;
@@ -35,6 +37,7 @@ import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicLong;
 
@@ -174,6 +177,63 @@ class DatasetImportServiceTest {
 
         assertThat(response.jobId()).isEqualTo(300L);
         verify(datasetItemMapper).insert(any(DatasetItemEntity.class));
+    }
+
+    @Test
+    void appendImportFromJsonProcessesItemJsonAndMetadataJson() throws Exception {
+        CurrentUserContext.set(new CurrentUser(10L, "owner", "owner@example.com", Set.of(RoleCode.OWNER), 1));
+        stubTask(TaskStatus.DRAFT);
+        stubIds();
+        when(datasetItemMapper.countActiveByTaskIdAndExternalId(eq(1L), any())).thenReturn(0);
+
+        var response = service.createAppendImportFromJson(1L, new BatchAppendJsonItemsRequest(List.of(
+                new DatasetItemAppendRequest("q1", Map.of("question", "one"), Map.of("source", "manual")),
+                new DatasetItemAppendRequest("q2", Map.of("question", "two"), null)
+        )));
+
+        assertThat(response.jobId()).isEqualTo(300L);
+        ArgumentCaptor<ObjectFileEntity> sourceFileCaptor = ArgumentCaptor.forClass(ObjectFileEntity.class);
+        verify(objectFileMapper).insert(sourceFileCaptor.capture());
+        assertThat(sourceFileCaptor.getValue().getOriginalFilename()).isEqualTo("direct-append-1.json");
+        assertThat(sourceFileCaptor.getValue().getContentType()).isEqualTo("application/json");
+        assertThat(sourceFileCaptor.getValue().getChecksum()).isNotBlank();
+        verify(objectStorageService).upload(eq("labelhub-test"), org.mockito.Mockito.contains("direct-json"),
+                eq("application/json"), any(), anyLong());
+
+        ArgumentCaptor<DatasetItemEntity> itemCaptor = ArgumentCaptor.forClass(DatasetItemEntity.class);
+        verify(datasetItemMapper, org.mockito.Mockito.times(2)).insert(itemCaptor.capture());
+        assertThat(itemCaptor.getAllValues()).extracting("externalId").containsExactly("q1", "q2");
+        assertThat(objectMapper.readTree(itemCaptor.getAllValues().get(0).getItemJson()).get("question").asText())
+                .isEqualTo("one");
+        assertThat(objectMapper.readTree(itemCaptor.getAllValues().get(0).getMetadataJson()).get("source").asText())
+                .isEqualTo("manual");
+        assertThat(objectMapper.readTree(itemCaptor.getAllValues().get(1).getMetadataJson()).isEmpty()).isTrue();
+    }
+
+    @Test
+    void appendImportFromJsonCreatesErrorReportForDuplicateExternalId() throws Exception {
+        CurrentUserContext.set(new CurrentUser(10L, "owner", "owner@example.com", Set.of(RoleCode.OWNER), 1));
+        stubTask(TaskStatus.DRAFT);
+        stubIds();
+        when(datasetItemMapper.countActiveByTaskIdAndExternalId(1L, "q1")).thenReturn(0);
+        when(objectStorageService.generatePresignedDownloadUrl(eq("labelhub-test"), any(), eq("dataset-import-300-errors.jsonl"), any()))
+                .thenReturn(new URL("https://cos.example.com/errors"));
+
+        service.createAppendImportFromJson(1L, new BatchAppendJsonItemsRequest(List.of(
+                new DatasetItemAppendRequest("q1", Map.of("question", "one"), Map.of()),
+                new DatasetItemAppendRequest("q1", Map.of("question", "duplicate"), Map.of())
+        )));
+
+        verify(datasetItemMapper, org.mockito.Mockito.times(1)).insert(any(DatasetItemEntity.class));
+        verify(objectStorageService).upload(eq("labelhub-test"), org.mockito.Mockito.contains("dataset-import-300-errors.jsonl"),
+                eq("application/x-ndjson"), any(), anyLong());
+        ArgumentCaptor<DatasetImportJobEntity> jobCaptor = ArgumentCaptor.forClass(DatasetImportJobEntity.class);
+        verify(importJobMapper, org.mockito.Mockito.atLeastOnce()).updateById(jobCaptor.capture());
+        DatasetImportJobEntity finalJob = jobCaptor.getAllValues().get(jobCaptor.getAllValues().size() - 1);
+        assertThat(finalJob.getStatus()).isEqualTo("PARTIAL_SUCCESS");
+        assertThat(finalJob.getSuccessCount()).isEqualTo(1);
+        assertThat(finalJob.getFailedCount()).isEqualTo(1);
+        assertThat(finalJob.getErrorReportFileId()).isNotNull();
     }
 
     @Test

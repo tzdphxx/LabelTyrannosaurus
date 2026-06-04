@@ -1,12 +1,17 @@
 package com.labelhub.modules.dataset;
 
 import com.labelhub.modules.dataset.controller.DatasetItemController;
+import com.labelhub.modules.dataset.dto.BatchAppendJsonItemsRequest;
 import com.labelhub.modules.dataset.dto.BatchAppendItemsRequest;
 import com.labelhub.modules.dataset.dto.DatasetImportJobResponse;
 import com.labelhub.modules.dataset.dto.DatasetImportRequest;
+import com.labelhub.modules.dataset.dto.DatasetItemAppendRequest;
 import com.labelhub.modules.dataset.service.DatasetImportService;
 import com.labelhub.modules.dataset.service.DatasetItemService;
 import org.junit.jupiter.api.Test;
+
+import java.util.List;
+import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
@@ -30,5 +35,21 @@ class DatasetItemControllerTest {
 
         assertThat(response.data()).isEqualTo(job);
         verify(datasetImportService).createAppendImport(1L, new DatasetImportRequest(99L));
+    }
+
+    @Test
+    void batchAppendJsonDelegatesJsonItemsToAppendImport() {
+        DatasetImportJobResponse job = new DatasetImportJobResponse(
+                301L, 1L, "PENDING", "APPEND", 0, 0, 0,
+                null, null, null, null, null, null);
+        BatchAppendJsonItemsRequest request = new BatchAppendJsonItemsRequest(List.of(
+                new DatasetItemAppendRequest("q1", Map.of("question", "one"), Map.of("source", "manual"))
+        ));
+        when(datasetImportService.createAppendImportFromJson(1L, request)).thenReturn(job);
+
+        var response = controller.batchAppendJson(1L, request);
+
+        assertThat(response.data()).isEqualTo(job);
+        verify(datasetImportService).createAppendImportFromJson(1L, request);
     }
 }

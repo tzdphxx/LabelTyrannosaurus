@@ -1,7 +1,9 @@
 package com.labelhub.modules.dataset.service;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.labelhub.common.exception.BusinessException;
 import com.labelhub.common.security.CurrentUser;
 import com.labelhub.common.security.CurrentUserContext;
@@ -17,8 +19,10 @@ import com.labelhub.modules.dataset.domain.DatasetImportMode;
 import com.labelhub.modules.dataset.domain.DatasetImportStatus;
 import com.labelhub.modules.dataset.domain.DatasetItemChangeLogEntity;
 import com.labelhub.modules.dataset.domain.DatasetItemEntity;
+import com.labelhub.modules.dataset.dto.BatchAppendJsonItemsRequest;
 import com.labelhub.modules.dataset.dto.DatasetImportJobResponse;
 import com.labelhub.modules.dataset.dto.DatasetImportRequest;
+import com.labelhub.modules.dataset.dto.DatasetItemAppendRequest;
 import com.labelhub.modules.dataset.repository.DatasetFileMapper;
 import com.labelhub.modules.dataset.repository.DatasetImportJobMapper;
 import com.labelhub.modules.dataset.repository.DatasetItemChangeLogMapper;
@@ -42,11 +46,14 @@ import java.io.ByteArrayInputStream;
 import java.io.InputStream;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.ArrayList;
+import java.util.HexFormat;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -154,6 +161,26 @@ public class DatasetImportService {
     }
 
     /**
+     * Create an append import job from direct JSON request content.
+     */
+    @Transactional
+    public DatasetImportJobResponse createAppendImportFromJson(Long taskId, BatchAppendJsonItemsRequest request) {
+        TaskEntity task = requireWritableTask(taskId);
+        CurrentUser currentUser = CurrentUserContext.requireCurrentUser();
+        DatasetParseResult result = parseDirectAppendItems(request.items());
+        ObjectFileEntity sourceFile = createDirectJsonSourceFile(task.getId(), currentUser.userId(), request.items());
+        DatasetImportJobEntity job = createImportJob(task, sourceFile, DatasetFileFormat.JSON,
+                DatasetImportMode.APPEND, currentUser.userId());
+        asyncJobService.submit(new AsyncJobCommand(
+                AsyncJobType.DATASET_IMPORT,
+                job.getId(),
+                null,
+                () -> runParsedImport(job, DatasetImportMode.APPEND, result, currentUser.userId())
+        ));
+        return toResponse(job);
+    }
+
+    /**
      * 创建覆盖导入任务。
      *
      * <p>覆盖导入会软删除当前任务下已有题目，只允许在 DRAFT 状态下执行。</p>
@@ -189,11 +216,27 @@ public class DatasetImportService {
         }
 
         // 源文件和导入任务先落库，后台任务执行失败时仍可查询到失败状态。
+        DatasetImportJobEntity job = createImportJob(task, sourceFile, format, mode, currentUser.userId());
+
+        asyncJobService.submit(new AsyncJobCommand(
+                AsyncJobType.DATASET_IMPORT,
+                job.getId(),
+                null,
+                () -> runImport(job, sourceFile, mode, parser, currentUser.userId())
+        ));
+        return toResponse(job);
+    }
+
+    private DatasetImportJobEntity createImportJob(TaskEntity task,
+                                                   ObjectFileEntity sourceFile,
+                                                   DatasetFileFormat format,
+                                                   DatasetImportMode mode,
+                                                   Long actorId) {
         DatasetFileEntity datasetFile = new DatasetFileEntity();
         datasetFile.setTaskId(task.getId());
         datasetFile.setFileId(sourceFile.getId());
         datasetFile.setFileFormat(format.name());
-        datasetFile.setCreatedBy(currentUser.userId());
+        datasetFile.setCreatedBy(actorId);
         datasetFileMapper.insert(datasetFile);
 
         DatasetImportJobEntity job = new DatasetImportJobEntity();
@@ -204,16 +247,71 @@ public class DatasetImportService {
         job.setTotalCount(0);
         job.setSuccessCount(0);
         job.setFailedCount(0);
-        job.setCreatedBy(currentUser.userId());
+        job.setCreatedBy(actorId);
         importJobMapper.insert(job);
+        return job;
+    }
 
-        asyncJobService.submit(new AsyncJobCommand(
-                AsyncJobType.DATASET_IMPORT,
-                job.getId(),
-                null,
-                () -> runImport(job, sourceFile, request, mode, parser, currentUser.userId())
-        ));
-        return toResponse(job);
+    private DatasetParseResult parseDirectAppendItems(List<DatasetItemAppendRequest> requests) {
+        List<DatasetImportRow> rows = new ArrayList<>();
+        int rowNo = 0;
+        for (DatasetItemAppendRequest request : requests) {
+            rowNo++;
+            String externalId = request.externalId().trim();
+            JsonNode itemJson = objectMapper.valueToTree(request.itemJson());
+            JsonNode metadataJson = objectMapper.valueToTree(
+                    request.metadataJson() == null ? Map.of() : request.metadataJson());
+            ObjectNode rawRow = objectMapper.createObjectNode();
+            rawRow.put("externalId", externalId);
+            rawRow.set("itemJson", itemJson);
+            rawRow.set("metadataJson", metadataJson);
+            rows.add(new DatasetImportRow(rowNo, externalId, itemJson, metadataJson, rawRow));
+        }
+        return new DatasetParseResult(rows, List.of());
+    }
+
+    private ObjectFileEntity createDirectJsonSourceFile(Long taskId,
+                                                        Long actorId,
+                                                        List<DatasetItemAppendRequest> items) {
+        byte[] bytes = toDirectJsonBytes(items);
+        if (bytes.length > storageProperties.maxFileSizeBytes()) {
+            throw new BusinessException(400102, "JSON content size exceeds limit");
+        }
+        String originalFilename = "direct-append-%d.json".formatted(taskId);
+        String objectKey = buildDirectJsonObjectKey(originalFilename);
+        objectStorageService.upload(storageProperties.bucket(), objectKey, "application/json",
+                new ByteArrayInputStream(bytes), bytes.length);
+
+        ObjectFileEntity entity = new ObjectFileEntity();
+        entity.setOwnerId(actorId);
+        entity.setBucketName(storageProperties.bucket());
+        entity.setObjectKey(objectKey);
+        entity.setOriginalFilename(originalFilename);
+        entity.setContentType("application/json");
+        entity.setFileSize((long) bytes.length);
+        entity.setChecksum(sha256(bytes));
+        entity.setStorageProvider("COS");
+        objectFileMapper.insert(entity);
+        return entity;
+    }
+
+    private byte[] toDirectJsonBytes(List<DatasetItemAppendRequest> items) {
+        try {
+            return objectMapper.writeValueAsBytes(Map.of("items", items));
+        } catch (JsonProcessingException ex) {
+            throw new BusinessException(400102, "Invalid JSON request content");
+        }
+    }
+
+    private String buildDirectJsonObjectKey(String originalFilename) {
+        LocalDate today = LocalDate.now(ZoneId.systemDefault());
+        return "uploads/dataset/direct-json/%04d/%02d/%02d/%s-%s".formatted(
+                today.getYear(),
+                today.getMonthValue(),
+                today.getDayOfMonth(),
+                UUID.randomUUID(),
+                originalFilename.replaceAll("[^A-Za-z0-9._-]", "_")
+        );
     }
 
     private TaskEntity requireWritableTask(Long taskId) {
@@ -250,7 +348,6 @@ public class DatasetImportService {
 
     private void runImport(DatasetImportJobEntity job,
                            ObjectFileEntity sourceFile,
-                           DatasetImportRequest request,
                            DatasetImportMode mode,
                            DatasetParser parser,
                            Long actorId) {
@@ -261,7 +358,7 @@ public class DatasetImportService {
                 result = parser.parse(inputStream);
             }
 
-            ImportBatch batch = prepareBatch(job, request, mode, result);
+            ImportBatch batch = prepareBatch(job, mode, result);
             transactionOperations.execute(status -> {
                 applyBatch(job, mode, batch, actorId);
                 return null;
@@ -276,8 +373,27 @@ public class DatasetImportService {
         }
     }
 
+    private void runParsedImport(DatasetImportJobEntity job,
+                                 DatasetImportMode mode,
+                                 DatasetParseResult result,
+                                 Long actorId) {
+        try {
+            markRunning(job);
+            ImportBatch batch = prepareBatch(job, mode, result);
+            transactionOperations.execute(status -> {
+                applyBatch(job, mode, batch, actorId);
+                return null;
+            });
+        } catch (Throwable failure) {
+            Throwable effectiveFailure = unwrapImportFailure(failure);
+            job.setStatus(DatasetImportStatus.FAILED.name());
+            job.setErrorMessage(effectiveFailure.getMessage());
+            job.setFinishedAt(LocalDateTime.now());
+            importJobMapper.updateById(job);
+        }
+    }
+
     private ImportBatch prepareBatch(DatasetImportJobEntity job,
-                                     DatasetImportRequest request,
                                      DatasetImportMode mode,
                                      DatasetParseResult result) throws JsonProcessingException {
         List<DatasetImportError> errors = new ArrayList<>(result.errors());
@@ -428,6 +544,14 @@ public class DatasetImportService {
                 UUID.randomUUID(),
                 originalFilename.replaceAll("[^A-Za-z0-9._-]", "_")
         );
+    }
+
+    private String sha256(byte[] bytes) {
+        try {
+            return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(bytes));
+        } catch (NoSuchAlgorithmException ex) {
+            throw new IllegalStateException(ex);
+        }
     }
 
     private DatasetImportJobResponse toResponse(DatasetImportJobEntity job) {

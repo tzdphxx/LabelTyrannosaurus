@@ -46,6 +46,7 @@ class ApiContractMappingTest {
                 endpoint("GET", "/api/v1/tasks/{taskId}/dataset/import-jobs/{jobId}"),
                 endpoint("GET", "/api/v1/tasks/{taskId}/dataset/items"),
                 endpoint("POST", "/api/v1/tasks/{taskId}/dataset/items/batch-append"),
+                endpoint("POST", "/api/v1/tasks/{taskId}/dataset/items/batch-append-json"),
                 endpoint("POST", "/api/v1/tasks/{taskId}/dataset/items/batch-update"),
                 endpoint("POST", "/api/v1/tasks/{taskId}/dataset/items/batch-delete"),
                 endpoint("POST", "/api/v1/tasks/{taskId}/templates"),

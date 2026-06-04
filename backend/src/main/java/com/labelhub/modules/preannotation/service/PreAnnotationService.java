@@ -31,6 +31,7 @@ import com.labelhub.modules.ai.mapper.AiReviewConfigMapper;
 import com.labelhub.modules.ai.service.MediaPromptContextBuilder;
 import com.labelhub.modules.ai.service.MediaPromptInput;
 import com.labelhub.modules.ai.service.MediaPromptResult;
+import com.labelhub.modules.ai.service.PromptTemplateEngine;
 import com.labelhub.modules.ai.service.ProviderCapability;
 import com.labelhub.modules.ai.service.LlmProviderService;
 import com.labelhub.modules.assignment.domain.Assignment;
@@ -97,6 +98,8 @@ public class PreAnnotationService {
     private MediaContextResolver mediaContextResolver;
     @Autowired(required = false)
     private AiMetrics aiMetrics;
+    @Autowired
+    private PromptTemplateEngine promptTemplateEngine;
 
     @Autowired
     public PreAnnotationService(AssignmentMapper assignmentMapper,
@@ -189,7 +192,7 @@ public class PreAnnotationService {
         MediaPromptResult prompt = mediaPromptContextBuilder.build(new MediaPromptInput(
                 itemJson,
                 currentAnswerJson,
-                preAnnotationPrompt(config),
+                preAnnotationPrompt(config, task),
                 capability,
                 config.getMultimodalEnabled() == null || Boolean.TRUE.equals(config.getMultimodalEnabled()),
                 config.getVisionDetail() != null ? config.getVisionDetail() : "auto",
@@ -246,7 +249,7 @@ public class PreAnnotationService {
         MediaPromptResult prompt = mediaPromptContextBuilder.build(new MediaPromptInput(
                 itemJson,
                 currentAnswerJson,
-                preAnnotationPrompt(config),
+                preAnnotationPrompt(config, task),
                 capability,
                 config.getMultimodalEnabled() == null || Boolean.TRUE.equals(config.getMultimodalEnabled()),
                 config.getVisionDetail() != null ? config.getVisionDetail() : "auto",
@@ -408,10 +411,19 @@ public class PreAnnotationService {
         }
     }
 
-    private String preAnnotationPrompt(AiReviewConfig config) {
-        return "You are LabelHub pre-annotation assistant. Return valid JSON only with keys: "
-                + "suggestedAnswerJson, fieldSuggestions, riskFlags, overallConfidence, limitations. "
-                + "Task guidance: " + config.getPromptTemplate();
+    private String preAnnotationPrompt(AiReviewConfig config, Task task) {
+        PromptTemplateEngine.TaskPromptContext ctx = new PromptTemplateEngine.TaskPromptContext(
+                task.getTitle(),
+                task.getDescription(),
+                task.getInstructionRichText(),
+                config.getScoringDimensionsJson(),
+                config.getPassThreshold() != null ? config.getPassThreshold().toString() : "-",
+                config.getManualReviewThreshold() != null ? config.getManualReviewThreshold().toString() : "-",
+                config.getPromptVersion()
+        );
+        // 未来可从 templateVersion.schemaJson 提取 SchemaField 列表，传入非空字段列表
+        String userTemplate = config.getPromptTemplate() != null ? config.getPromptTemplate() : "";
+        return promptTemplateEngine.buildPreAnnotationPrompt(userTemplate, ctx, List.of(), null);
     }
 
     private List<LlmMessage> withSystemPrompt(List<LlmMessage> messages) {

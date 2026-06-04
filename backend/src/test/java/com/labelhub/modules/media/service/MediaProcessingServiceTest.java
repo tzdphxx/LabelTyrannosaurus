@@ -5,8 +5,8 @@ import com.labelhub.common.security.CurrentUser;
 import com.labelhub.common.security.CurrentUserContext;
 import com.labelhub.common.security.RoleCode;
 import com.labelhub.infrastructure.async.AsyncJobService;
-import com.labelhub.modules.dataset.domain.DatasetItemEntity;
-import com.labelhub.modules.dataset.repository.DatasetItemRepositoryMapper;
+import com.labelhub.modules.dataset.domain.DatasetItem;
+import com.labelhub.modules.dataset.mapper.DatasetItemMapper;
 import com.labelhub.modules.media.domain.DatasetItemMediaContextEntity;
 import com.labelhub.modules.media.domain.MediaAssetEntity;
 import com.labelhub.modules.media.domain.MediaProcessingJobEntity;
@@ -17,8 +17,8 @@ import com.labelhub.modules.media.mapper.MediaDerivativeMapper;
 import com.labelhub.modules.media.mapper.MediaProcessingJobMapper;
 import com.labelhub.modules.storage.domain.ObjectFileEntity;
 import com.labelhub.modules.storage.repository.ObjectFileMapper;
-import com.labelhub.modules.task.domain.TaskEntity;
-import com.labelhub.modules.task.repository.TaskRepositoryMapper;
+import com.labelhub.modules.task.domain.Task;
+import com.labelhub.modules.task.mapper.TaskMapper;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -34,8 +34,8 @@ import static org.mockito.Mockito.when;
 
 class MediaProcessingServiceTest {
 
-    private final TaskRepositoryMapper taskMapper = mock(TaskRepositoryMapper.class);
-    private final DatasetItemRepositoryMapper datasetItemMapper = mock(DatasetItemRepositoryMapper.class);
+    private final TaskMapper taskMapper = mock(TaskMapper.class);
+    private final DatasetItemMapper datasetItemMapper = mock(DatasetItemMapper.class);
     private final ObjectFileMapper objectFileMapper = mock(ObjectFileMapper.class);
     private final MediaAssetMapper mediaAssetMapper = mock(MediaAssetMapper.class);
     private final MediaDerivativeMapper mediaDerivativeMapper = mock(MediaDerivativeMapper.class);
@@ -100,11 +100,11 @@ class MediaProcessingServiceTest {
     @Test
     void triggerProcessingCreatesPendingJobAndSubmitsAsyncWork() {
         CurrentUserContext.set(new CurrentUser(10L, "owner", "owner@example.com", Set.of(RoleCode.OWNER), 1));
-        TaskEntity task = new TaskEntity();
+        Task task = new Task();
         task.setId(1L);
         task.setOwnerId(10L);
         when(taskMapper.selectById(1L)).thenReturn(task);
-        DatasetItemEntity item = new DatasetItemEntity();
+        DatasetItem item = new DatasetItem();
         item.setId(100L);
         item.setTaskId(1L);
         item.setItemJson("{\"media_type\":\"image\",\"media_file_id\":99}");

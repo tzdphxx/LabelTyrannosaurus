@@ -2,9 +2,9 @@ package com.labelhub.modules.assignment.service;
 
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.labelhub.common.exception.BusinessException;
-import com.labelhub.modules.assignment.dto.MarketDatasetItemResponse;
 import com.labelhub.modules.assignment.dto.MarketTaskQueryRequest;
-import com.labelhub.modules.assignment.dto.MarketTaskResponse;
+import com.labelhub.modules.assignment.dto.TaskMarketResponse;
+import com.labelhub.modules.dataset.dto.ItemSummaryResponse;
 import com.labelhub.modules.dataset.domain.DatasetItem;
 import com.labelhub.modules.dataset.mapper.DatasetItemMapper;
 import com.labelhub.modules.dataset.service.DatasetMarketStatsService;
@@ -12,6 +12,7 @@ import com.labelhub.modules.reward.service.RewardSummaryService;
 import com.labelhub.modules.task.domain.Task;
 import com.labelhub.modules.task.domain.TaskStatus;
 import com.labelhub.modules.task.domain.TaskTag;
+import com.labelhub.modules.task.dto.TaskSummaryResponse;
 import com.labelhub.modules.task.mapper.TaskMapper;
 import com.labelhub.modules.task.mapper.TaskTagMapper;
 import java.time.LocalDateTime;
@@ -45,7 +46,7 @@ public class TaskMarketService {
         this.rewardSummaryService = rewardSummaryService;
     }
 
-    public List<MarketTaskResponse> listMarketTasks(Long labelerId, MarketTaskQueryRequest request) {
+    public List<TaskMarketResponse> listMarketTasks(Long labelerId, MarketTaskQueryRequest request) {
         if (request != null && request.status() != null && request.status() != TaskStatus.PUBLISHED) {
             return List.of();
         }
@@ -58,7 +59,7 @@ public class TaskMarketService {
                 .toList();
     }
 
-    public MarketTaskResponse getMarketTaskDetail(Long labelerId, Long taskId, int itemPage, int itemSize) {
+    public TaskMarketResponse getMarketTaskDetail(Long labelerId, Long taskId, int itemPage, int itemSize) {
         Task task = taskMapper.selectPublishedMarketTaskById(taskId, LocalDateTime.now());
         if (task == null) {
             throw new BusinessException(MARKET_TASK_NOT_FOUND, "Market task not found");
@@ -66,44 +67,55 @@ public class TaskMarketService {
         return toResponse(labelerId, task, itemPage, itemSize);
     }
 
-    private MarketTaskResponse toResponse(Long labelerId, Task task) {
+    private TaskMarketResponse toResponse(Long labelerId, Task task) {
         return toResponse(labelerId, task, 1, DEFAULT_ITEM_PREVIEW_SIZE);
     }
 
-    private MarketTaskResponse toResponse(Long labelerId, Task task, int itemPage, int itemSize) {
+    private TaskMarketResponse toResponse(Long labelerId, Task task, int itemPage, int itemSize) {
         int normalizedPage = Math.max(1, itemPage);
         int normalizedSize = Math.min(Math.max(1, itemSize), 100);
         int offset = (normalizedPage - 1) * normalizedSize;
-        return new MarketTaskResponse(
-                task.getId(),
-                task.getTitle(),
-                listTags(task.getId()),
-                task.getDeadlineAt(),
+        return new TaskMarketResponse(
+                toSummary(task),
                 datasetMarketStatsService.countAvailableItems(task.getId(), labelerId, task.getOverlapCount()),
                 assignmentMarketStatsService.countClaimedByLabeler(task.getId(), labelerId),
                 rewardSummaryService.findRewardSummary(task.getId(), Boolean.TRUE.equals(task.getRewardVisible())),
                 task.getDescription(),
                 task.getInstructionRichText(),
-                task.getStatus(),
-                task.getQuota(),
-                task.getOverlapCount(),
-                task.getPublishedTemplateVersionId(),
                 listClaimableItems(task, labelerId, normalizedSize, offset)
         );
     }
 
-    private List<MarketDatasetItemResponse> listClaimableItems(Task task,
-                                                               Long labelerId,
-                                                               int limit,
-                                                               int offset) {
+    private TaskSummaryResponse toSummary(Task task) {
+        return new TaskSummaryResponse(
+                task.getId(),
+                task.getTitle(),
+                task.getStatus(),
+                listTags(task.getId()),
+                task.getQuota(),
+                task.getClaimedCount(),
+                task.getOverlapCount(),
+                task.getStrategy(),
+                task.getDeadlineAt(),
+                task.getPublishedAt(),
+                task.getEndedAt(),
+                task.getCreatedAt(),
+                task.getUpdatedAt()
+        );
+    }
+
+    private List<ItemSummaryResponse> listClaimableItems(Task task,
+                                                          Long labelerId,
+                                                          int limit,
+                                                          int offset) {
         return datasetItemMapper.selectClaimableItems(task.getId(), labelerId, task.getOverlapCount(), limit, offset)
                 .stream()
-                .map(this::toMarketDatasetItem)
+                .map(this::toItemSummary)
                 .toList();
     }
 
-    private MarketDatasetItemResponse toMarketDatasetItem(DatasetItem item) {
-        return new MarketDatasetItemResponse(
+    private ItemSummaryResponse toItemSummary(DatasetItem item) {
+        return new ItemSummaryResponse(
                 item.getId(),
                 item.getExternalId(),
                 item.getItemJson(),

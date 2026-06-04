@@ -4,7 +4,7 @@ import com.labelhub.common.api.ApiResponse;
 import com.labelhub.common.security.CurrentUserContext;
 import com.labelhub.common.security.RoleCode;
 import com.labelhub.modules.assignment.dto.MarketTaskQueryRequest;
-import com.labelhub.modules.assignment.dto.MarketTaskResponse;
+import com.labelhub.modules.assignment.dto.TaskMarketResponse;
 import com.labelhub.modules.assignment.service.TaskMarketService;
 import com.labelhub.modules.task.domain.TaskStatus;
 import io.swagger.v3.oas.annotations.Operation;
@@ -29,7 +29,7 @@ public class MarketTaskController {
 
     @GetMapping
     @Operation(summary = "List market tasks", description = "List published tasks available to the current labeler.")
-    public ApiResponse<List<MarketTaskResponse>> listMarketTasks(@RequestParam(required = false) String keyword,
+    public ApiResponse<List<TaskMarketResponse>> listMarketTasks(@RequestParam(required = false) String keyword,
                                                                  @RequestParam(required = false) String tag,
                                                                  @RequestParam(required = false) TaskStatus status) {
         return ApiResponse.ok(taskMarketService.listMarketTasks(
@@ -40,7 +40,7 @@ public class MarketTaskController {
 
     @GetMapping("/{taskId}")
     @Operation(summary = "Get market task detail", description = "Get a published task and its claimable dataset items.")
-    public ApiResponse<MarketTaskResponse> getMarketTaskDetail(@PathVariable Long taskId,
+    public ApiResponse<TaskMarketResponse> getMarketTaskDetail(@PathVariable Long taskId,
                                                                @RequestParam(defaultValue = "1") int itemPage,
                                                                @RequestParam(defaultValue = "20") int itemSize) {
         CurrentUserContext.requireRole(RoleCode.LABELER);

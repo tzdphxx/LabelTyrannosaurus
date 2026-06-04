@@ -33,7 +33,7 @@ public class DimensionAggregator {
      * @return 汇总结果
      */
     public Map<String, Object> aggregate(Map<String, List<Map<String, Object>>> dimensionResults,
-                                          int minAgreement) {
+                                          int minAgreement, double passThreshold, double manualReviewThreshold) {
         Map<String, Object> dimensionScores = new LinkedHashMap<>();
         Map<String, Double> dimensionConfidences = new LinkedHashMap<>();
         List<String> allRiskFlags = new ArrayList<>();
@@ -81,6 +81,17 @@ public class DimensionAggregator {
                 }
             }
 
+            // 维度 limitations 聚合
+            Object dimLimits = dimJson.get("limitations");
+            if (dimLimits instanceof List<?> dimLimitsList) {
+                for (Object item : dimLimitsList) {
+                    String s = String.valueOf(item);
+                    if (!s.isBlank() && !limitations.contains(s)) {
+                        limitations.add(s);
+                    }
+                }
+            }
+
             // 建议聚合
             String dimSuggestion = stringValue(dimJson.get("suggestion"), "");
             if (!dimSuggestion.isBlank()) {
@@ -98,8 +109,9 @@ public class DimensionAggregator {
                 .mapToDouble(Double::doubleValue)
                 .average().orElse(0);
 
-        // 整体决策
-        String decision = overallScore >= 80 ? "PASS" : overallScore >= 60 ? "UNCERTAIN" : "REJECT";
+        // 整体决策 — 使用任务配置的阈值
+        String decision = overallScore >= passThreshold ? "PASS"
+                : overallScore >= manualReviewThreshold ? "UNCERTAIN" : "REJECT";
 
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("decision", decision);

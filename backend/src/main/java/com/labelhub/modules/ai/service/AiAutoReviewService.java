@@ -46,6 +46,8 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -53,6 +55,8 @@ import org.springframework.transaction.support.TransactionTemplate;
 
 @Service
 public class AiAutoReviewService {
+
+    private static final Logger log = LoggerFactory.getLogger(AiAutoReviewService.class);
 
     private static final int SUBMISSION_NOT_FOUND = 404701;
     private static final int AI_REVIEW_CONFIG_NOT_FOUND = 404702;
@@ -402,6 +406,12 @@ public class AiAutoReviewService {
         }
 
         Map<String, List<VoteModel>> dimReviewers = parseDimensionReviewers(config, dimensions);
+        // 无可用 reviewer → 回退并行投票
+        boolean allEmpty = dimReviewers.values().stream().allMatch(List::isEmpty);
+        if (allEmpty) {
+            log.warn("No reviewers configured for any dimension; falling back to parallel vote");
+            return executeParallelVote(submission, config, agentRun, prompt);
+        }
         Map<String, List<Map<String, Object>>> dimResults = new LinkedHashMap<>();
 
         // 所有维度并行调用
@@ -413,12 +423,12 @@ public class AiAutoReviewService {
 
             for (VoteModel vm : reviewers) {
                 futures.add(java.util.concurrent.CompletableFuture.runAsync(() -> {
-                    String dimPrompt = "Focus only on the dimension '" + dim + "'. "
-                            + prompt.promptSnapshot();
+                    String dimContext = prompt.promptSnapshot();
                     List<LlmMessage> dimMessages = java.util.stream.Stream.concat(
                             java.util.stream.Stream.of(new LlmMessage("system",
                                     "You are LabelHub AI reviewer focused on dimension: " + dim
-                                            + ". Return valid JSON only.")),
+                                            + ". " + dimContext
+                                            + " Return valid JSON only.")),
                             prompt.messages().stream()).toList();
                     LlmGatewayResponse r = callLlm(submission.getTaskId(), vm.providerId(), vm.modelName(),
                             dimMessages);
@@ -433,7 +443,11 @@ public class AiAutoReviewService {
                 .join();
 
         int minAgreement = config.getVoteMinAgreement() != null ? config.getVoteMinAgreement() : 1;
-        Map<String, Object> aggregated = dimensionAggregator.aggregate(dimResults, minAgreement);
+        BigDecimal passThreshold = config.getPassThreshold();
+        BigDecimal manualThreshold = config.getManualReviewThreshold();
+        double passT = passThreshold != null ? passThreshold.doubleValue() : 80.0;
+        double manualT = manualThreshold != null ? manualThreshold.doubleValue() : 60.0;
+        Map<String, Object> aggregated = dimensionAggregator.aggregate(dimResults, minAgreement, passT, manualT);
 
         try {
             AiReviewResult result = successResultFromAggregated(submission, config, agentRun.getId(),
@@ -461,10 +475,14 @@ public class AiAutoReviewService {
             return new LlmGatewayResponse(LlmGatewayStatus.RATE_LIMITED, null, null, null,
                     null, "RATE_LIMITED", "AI review rate limited");
         }
+        List<LlmMessage> withSystem = java.util.stream.Stream.concat(
+                java.util.stream.Stream.of(new LlmMessage("system",
+                        "You are LabelHub AI reviewer. Return valid JSON only.")),
+                messages.stream()).toList();
         return llmGateway.review(new LlmGatewayRequest(
                 providerId,
                 modelName,
-                messages,
+                withSystem,
                 com.labelhub.infrastructure.llm.ResponseFormat.jsonSchema(AiReviewSchema.NAME, AiReviewSchema.SCHEMA)
         ));
     }

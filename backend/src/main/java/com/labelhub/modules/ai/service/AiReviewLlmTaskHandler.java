@@ -13,7 +13,10 @@ import org.springframework.stereotype.Component;
 public class AiReviewLlmTaskHandler implements LlmTaskHandler {
 
     private static final Set<AiReviewStatus> FINAL_STATUSES = Set.of(
-            AiReviewStatus.SUCCESS, AiReviewStatus.MANUAL_REQUIRED);
+            AiReviewStatus.SUCCESS,
+            AiReviewStatus.FAILED,
+            AiReviewStatus.RATE_LIMITED,
+            AiReviewStatus.MANUAL_REQUIRED);
 
     private final AiAutoReviewService aiAutoReviewService;
     private final AiReviewResultMapper aiReviewResultMapper;

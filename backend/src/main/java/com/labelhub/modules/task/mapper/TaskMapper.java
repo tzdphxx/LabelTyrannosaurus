@@ -7,6 +7,7 @@ import java.util.List;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 import org.apache.ibatis.annotations.Select;
+import org.apache.ibatis.annotations.Update;
 
 @Mapper
 public interface TaskMapper extends BaseMapper<Task> {
@@ -101,4 +102,19 @@ public interface TaskMapper extends BaseMapper<Task> {
     long countOwnerTasks(@Param("ownerId") Long ownerId,
                          @Param("status") String status,
                          @Param("keyword") String keyword);
+
+    @Update("""
+            UPDATE tasks
+            SET claimed_count = claimed_count + 1
+            WHERE id = #{taskId}
+              AND claimed_count < quota
+            """)
+    int tryIncrementClaimedCount(@Param("taskId") Long taskId);
+
+    @Update("""
+            UPDATE tasks
+            SET claimed_count = GREATEST(0, claimed_count - 1)
+            WHERE id = #{taskId}
+            """)
+    int decrementClaimedCount(@Param("taskId") Long taskId);
 }

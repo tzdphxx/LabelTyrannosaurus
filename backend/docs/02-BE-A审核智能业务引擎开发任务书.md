@@ -82,9 +82,13 @@ BE\-A 负责 LabelHub 的审核智能业务引擎：
 
     - overlapCount。
 
+    - rewardRule（可选）：传入后自动创建初始奖励规则，支持 rewardMode、unitReward、rewardCurrency、rewardVisible。
+
 2. 编辑任务
 
     - 仅 `DRAFT` 可编辑核心字段。
+
+    - rewardRule（可选）：传入后自动创建或更新奖励规则。
 
 3. 发布任务
 

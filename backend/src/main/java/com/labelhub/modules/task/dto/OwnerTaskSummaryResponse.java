@@ -1,5 +1,6 @@
 package com.labelhub.modules.task.dto;
 
+import com.labelhub.modules.task.domain.ClaimStrategy;
 import com.labelhub.modules.task.domain.TaskStatus;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -12,6 +13,7 @@ public record OwnerTaskSummaryResponse(
         Integer quota,
         Integer claimedCount,
         Integer overlapCount,
+        ClaimStrategy strategy,
         LocalDateTime deadlineAt,
         LocalDateTime publishedAt,
         LocalDateTime endedAt,

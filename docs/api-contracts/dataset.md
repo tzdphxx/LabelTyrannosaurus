@@ -142,52 +142,52 @@ Description: Paginates active dataset items under a task for owner-side data man
 - `labelerId` 为当前有效领取人；`UNCLAIMED` 时为 `null`。
 - BE-B 仅读取任务归属和题目计数，不修改 BE-A 的 assignment/submission 状态。
 
-## Batch append dataset items
+## 批量追加题目
 
-Description: Starts an asynchronous append import job from an uploaded dataset file. The frontend uploads the file first, then submits the returned `fileId` here.
+Description: Adds multiple dataset items directly from request JSON without uploading a source file.
 
 - URL: `/api/v1/tasks/{taskId}/dataset/items/batch-append`
 - Method: `POST`
-- Roles: `ADMIN`, task `OWNER`
-- Owner module: BE-B
+- 权限角色: `ADMIN`、任务 `OWNER`
+- Owner 模块: BE-B
 
-Request body:
+请求体：
 
 ```json
 {
-  "fileId": 99
+  "items": [
+    {
+      "externalId": "q1",
+      "itemJson": {"question": "示例问题"},
+      "metadataJson": {"source": "manual"}
+    }
+  ]
 }
 ```
 
-Response body: same shape as `DatasetImportJobResponse`. The frontend should poll `/api/v1/tasks/{taskId}/dataset/import-jobs/{jobId}` after receiving `jobId`.
+响应体：
 
 ```json
 {
   "code": 0,
   "message": "OK",
-  "data": {
-    "jobId": 300,
-    "taskId": 1,
-    "status": "PENDING",
-    "importMode": "APPEND",
-    "totalCount": 0,
-    "successCount": 0,
-    "failedCount": 0,
-    "errorReportFileId": null,
-    "errorReportUrl": null,
-    "errorMessage": null,
-    "startedAt": null,
-    "finishedAt": null,
-    "createdAt": "2026-06-02T15:30:00"
-  },
+  "data": [
+    {
+      "itemId": 100,
+      "externalId": "q1",
+      "success": true,
+      "errorCode": null,
+      "errorMessage": null
+    }
+  ],
   "traceId": null
 }
 ```
 
-Notes:
-- `fileId` comes from `/api/v1/files/upload`; upload requests only send the multipart `file` field.
-- Non-admin users can only import files they uploaded.
-- Parsing, duplicate `externalId`, error report, and media context refresh rules match `/api/v1/tasks/{taskId}/dataset/import`.
+说明：
+- 同一任务下活跃题目的 `externalId` 唯一。
+- 重复 `externalId` 只让该条失败，错误码 `400102`，不影响其他行。
+- 成功追加会写入 `dataset_item_change_logs`，`changeType=BATCH_APPEND`。
 
 ## 批量更新题目
 
@@ -212,7 +212,7 @@ Description: Updates mutable dataset item content and metadata before the items 
 }
 ```
 
-响应体逐条返回 `BatchItemResult`。
+响应体同批量追加，逐条返回 `BatchItemResult`。
 
 说明：
 - 只允许更新未删除、未领取、未提交的题目。
@@ -236,7 +236,7 @@ Description: Soft-deletes unclaimed and unsubmitted dataset items in batch.
 }
 ```
 
-响应体逐条返回 `BatchItemResult`。
+响应体同批量追加，逐条返回 `BatchItemResult`。
 
 说明：
 - 删除为软删除，只更新 `dataset_items.deleted=true`。

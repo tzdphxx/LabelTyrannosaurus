@@ -16,6 +16,7 @@ import com.labelhub.infrastructure.llm.LlmGatewayRequest;
 import com.labelhub.infrastructure.llm.LlmGatewayResponse;
 import com.labelhub.infrastructure.llm.LlmGatewayStatus;
 import com.labelhub.infrastructure.llm.LlmMessage;
+import com.labelhub.infrastructure.llm.AiMetrics;
 import com.labelhub.infrastructure.llmtask.LlmTaskClaimResult;
 import com.labelhub.infrastructure.llmtask.LlmTaskQueueMessage;
 import com.labelhub.infrastructure.llmtask.LlmTaskQueueRecord;
@@ -31,6 +32,7 @@ import com.labelhub.modules.ai.mapper.AiReviewConfigMapper;
 import com.labelhub.modules.ai.service.MediaPromptContextBuilder;
 import com.labelhub.modules.ai.service.MediaPromptInput;
 import com.labelhub.modules.ai.service.MediaPromptResult;
+import com.labelhub.modules.ai.service.PromptTemplateEngine;
 import com.labelhub.modules.ai.service.ProviderCapability;
 import com.labelhub.modules.ai.service.LlmProviderService;
 import com.labelhub.modules.assignment.domain.Assignment;
@@ -95,6 +97,10 @@ public class PreAnnotationService {
     private final ObjectMapper objectMapper = new ObjectMapper();
     @Autowired(required = false)
     private MediaContextResolver mediaContextResolver;
+    @Autowired(required = false)
+    private AiMetrics aiMetrics;
+    @Autowired
+    private PromptTemplateEngine promptTemplateEngine;
 
     @Autowired
     public PreAnnotationService(AssignmentMapper assignmentMapper,
@@ -189,7 +195,7 @@ public class PreAnnotationService {
         MediaPromptResult prompt = mediaPromptContextBuilder.build(new MediaPromptInput(
                 itemJson,
                 currentAnswerJson,
-                preAnnotationPrompt(config),
+                preAnnotationPrompt(config, task, currentAnswerJson),
                 capability,
                 config.getMultimodalEnabled() == null || Boolean.TRUE.equals(config.getMultimodalEnabled()),
                 config.getVisionDetail() != null ? config.getVisionDetail() : "auto",
@@ -199,8 +205,9 @@ public class PreAnnotationService {
         record.setStatus(PreAnnotationStatus.PENDING);
         preAnnotationMapper.insert(record);
 
+        String traceId = traceIdProvider.currentTraceId();
         AgentRun run = agentRunService.create(AGENT_TYPE, null, config.getProviderId(), config.getModelName(),
-                config.getPromptVersion(), prompt.promptSnapshot(), assignment.getId());
+                config.getPromptVersion(), prompt.promptSnapshot(), assignment.getId(), traceId);
         record.setAgentRunId(run.getId());
         record.setStatus(PreAnnotationStatus.RUNNING);
         record.setUpdatedAt(LocalDateTime.now());
@@ -215,7 +222,7 @@ public class PreAnnotationService {
                 record.getId(),
                 null,
                 run.getId(),
-                traceIdProvider.currentTraceId(),
+                traceId,
                 0,
                 Instant.now()
         ));
@@ -245,7 +252,7 @@ public class PreAnnotationService {
         MediaPromptResult prompt = mediaPromptContextBuilder.build(new MediaPromptInput(
                 itemJson,
                 currentAnswerJson,
-                preAnnotationPrompt(config),
+                preAnnotationPrompt(config, task, currentAnswerJson),
                 capability,
                 config.getMultimodalEnabled() == null || Boolean.TRUE.equals(config.getMultimodalEnabled()),
                 config.getVisionDetail() != null ? config.getVisionDetail() : "auto",
@@ -269,6 +276,7 @@ public class PreAnnotationService {
             record.setUpdatedAt(LocalDateTime.now());
             preAnnotationMapper.updateById(record);
             appendAudit(labelerId, task, record);
+            recordPreAnnotationMetric(config, record, null);
             return;
         }
         if (gatewayResponse.status() == LlmGatewayStatus.SUCCESS) {
@@ -303,6 +311,7 @@ public class PreAnnotationService {
             }
             throw persistEx;
         }
+        recordPreAnnotationMetric(config, record, gatewayResponse.latencyMs());
         appendAudit(labelerId, task, record);
     }
 
@@ -323,7 +332,7 @@ public class PreAnnotationService {
             return;
         }
         AgentRun run = agentRunService.create(AGENT_TYPE, null, config.getProviderId(), config.getModelName(),
-                config.getPromptVersion(), promptSnapshot, assignmentId);
+                config.getPromptVersion(), promptSnapshot, assignmentId, traceIdProvider.currentTraceId());
         record.setAgentRunId(run.getId());
         record.setStatus(PreAnnotationStatus.RUNNING);
         record.setUpdatedAt(LocalDateTime.now());
@@ -410,10 +419,18 @@ public class PreAnnotationService {
         }
     }
 
-    private String preAnnotationPrompt(AiReviewConfig config) {
-        return "You are LabelHub pre-annotation assistant. Return valid JSON only with keys: "
-                + "suggestedAnswerJson, fieldSuggestions, riskFlags, overallConfidence, limitations. "
-                + "Task guidance: " + config.getPromptTemplate();
+    private String preAnnotationPrompt(AiReviewConfig config, Task task, String currentAnswerJson) {
+        PromptTemplateEngine.TaskPromptContext ctx = new PromptTemplateEngine.TaskPromptContext(
+                task.getTitle(),
+                task.getDescription(),
+                task.getInstructionRichText(),
+                config.getScoringDimensionsJson(),
+                config.getPassThreshold() != null ? config.getPassThreshold().toString() : "-",
+                config.getManualReviewThreshold() != null ? config.getManualReviewThreshold().toString() : "-",
+                config.getPromptVersion()
+        );
+        String userTemplate = config.getPromptTemplate() != null ? config.getPromptTemplate() : "";
+        return promptTemplateEngine.buildPreAnnotationPrompt(userTemplate, ctx, List.of(), currentAnswerJson);
     }
 
     private List<LlmMessage> withSystemPrompt(List<LlmMessage> messages) {
@@ -581,6 +598,14 @@ public class PreAnnotationService {
         auditAppender.append(new AuditCommand("USER", actorId, "PRE_ANNOTATION",
                 record.getId() != null ? record.getId() : record.getAssignmentId(),
                 "PRE_ANNOTATION_RUN", null, snapshot, traceIdProvider.currentTraceId(), record.getAgentRunId()));
+    }
+
+    private void recordPreAnnotationMetric(AiReviewConfig config, PreAnnotation record, Long latencyMs) {
+        if (aiMetrics != null && config != null && record != null) {
+            aiMetrics.record("PRE_ANNOTATION", config.getProviderId(), config.getModelName(),
+                    record.getStatus() == null ? "UNKNOWN" : record.getStatus().name(),
+                    record.getErrorCode(), latencyMs);
+        }
     }
 
     private PreAnnotationResponse toResponse(PreAnnotation record, boolean includeDiff) {

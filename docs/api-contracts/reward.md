@@ -61,6 +61,51 @@ Description: Reads the current effective reward rule for a task.
 
 响应体同保存接口，返回任务最新规则。
 
+## GET /api/v1/labeler/contribution/overview
+
+Description: 查询当前标注员贡献总览（已领取、已提交、通过、驳回、累计奖励、通过率）。
+
+- 权限角色: `LABELER`、`ADMIN`
+- Owner 模块: BE-B
+
+说明: 待审核提交不进入通过率分母。
+
+## GET /api/v1/labeler/contribution/trend
+
+Description: 查询最近 N 天贡献趋势，缺失日期自动补零。
+
+- 权限角色: `LABELER`、`ADMIN`
+- 查询参数: `days`（可选，默认 7，最大值 365）
+
+## GET /api/v1/labeler/contribution/tasks
+
+Description: 按任务聚合查询当前标注员贡献统计，按最近活跃时间排序。
+
+- 权限角色: `LABELER`、`ADMIN`
+- 查询参数: `limit`（可选，默认 20）、`offset`（可选，默认 0）
+
+## GET /api/v1/labeler/rewards/ledger
+
+Description: 查询当前标注员奖励流水，包含正向奖励（CREDIT）和冲正记录（DEBIT），按时间倒序。
+
+- 权限角色: `LABELER`、`ADMIN`
+- 查询参数: `limit`（可选，默认 20）、`offset`（可选，默认 0）
+
+响应字段:
+
+```text
+ledgerId      流水 ID
+taskId        所属任务 ID
+submissionId  关联提交 ID
+assignmentId  关联分配 ID
+amount        奖励金额
+direction     资金方向: CREDIT（正向奖励）/ DEBIT（冲正扣除）
+reason        操作原因或备注
+sourceEventId 来源事件 ID（幂等去重用）
+rewardType    奖励类型: SUBMISSION_APPROVED / REWARD_REVERSED 等
+createdAt     创建时间
+```
+
 ## 内部奖励结算能力
 
 BE-B 提供 Java Service 供 BE-A 事件消费链路调用:

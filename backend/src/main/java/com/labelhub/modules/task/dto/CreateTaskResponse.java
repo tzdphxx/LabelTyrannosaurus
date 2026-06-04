@@ -1,6 +1,7 @@
 package com.labelhub.modules.task.dto;
 
 import com.labelhub.modules.dataset.dto.DatasetImportJobResponse;
+import com.labelhub.modules.reward.dto.RewardRuleResponse;
 import com.labelhub.modules.task.domain.TaskStatus;
 import io.swagger.v3.oas.annotations.media.Schema;
 
@@ -11,6 +12,8 @@ public record CreateTaskResponse(
         @Schema(description = "任务状态", example = "DRAFT")
         TaskStatus status,
         @Schema(description = "随任务创建的数据集导入任务；未上传数据集文件时为 null")
-        DatasetImportJobResponse datasetImportJob
+        DatasetImportJobResponse datasetImportJob,
+        @Schema(description = "Reward rule created with this task, or null when no reward rule was provided")
+        RewardRuleResponse rewardRule
 ) {
 }

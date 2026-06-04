@@ -31,6 +31,17 @@ class AiReviewLlmTaskHandlerTest {
     }
 
     @Test
+    void completedWhenFailedOrRateLimitedResultIsManagedByRetryScheduler() {
+        AiReviewLlmTaskHandler handler = new AiReviewLlmTaskHandler(aiAutoReviewService, aiReviewResultMapper);
+        when(aiReviewResultMapper.selectBySubmissionId(100L))
+                .thenReturn(result(AiReviewStatus.FAILED))
+                .thenReturn(result(AiReviewStatus.RATE_LIMITED));
+
+        assertThat(handler.isCompleted(message())).isTrue();
+        assertThat(handler.isCompleted(message())).isTrue();
+    }
+
+    @Test
     void handleExecutesQueuedReviewWhenResultIsMissing() {
         AiReviewLlmTaskHandler handler = new AiReviewLlmTaskHandler(aiAutoReviewService, aiReviewResultMapper);
         when(aiReviewResultMapper.selectBySubmissionId(100L)).thenReturn(null);

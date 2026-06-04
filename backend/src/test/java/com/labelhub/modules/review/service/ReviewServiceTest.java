@@ -3,11 +3,16 @@ package com.labelhub.modules.review.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.labelhub.common.audit.AuditAppender;
 import com.labelhub.common.audit.AuditCommand;
 import com.labelhub.common.exception.BusinessException;
@@ -57,18 +62,18 @@ class ReviewServiceTest {
     @Mock private AuditAppender auditAppender;
     @Mock private DatasetClaimService datasetClaimService;
     @Mock private ReviewLevelEscalationService escalationService;
+    @Mock private ObjectMapper objectMapper;
 
     private ReviewService reviewService;
 
     @BeforeEach
     void setUp() {
         lenient().when(escalationService.getMaxReviewLevel(any())).thenReturn(1);
-        lenient().when(reviewTaskMapper.countBySubmissionAndReviewer(any(), any())).thenReturn(1);
         lenient().when(submissionMapper.casUpdateStatus(any(), any(), any())).thenReturn(1);
         reviewService = new ReviewService(
                 submissionMapper, assignmentMapper, reviewRecordMapper,
                 reviewSubmissionMapper, reviewTaskMapper, eventPublisher, auditAppender, datasetClaimService,
-                escalationService);
+                escalationService, objectMapper);
     }
 
     @AfterEach
@@ -85,7 +90,7 @@ class ReviewServiceTest {
         when(assignmentMapper.selectById(ASSIGNMENT_ID)).thenReturn(submittedAssignment());
 
         ReviewActionResponse response = reviewService.approve(
-                SUBMISSION_ID, REVIEWER_ID, new ApproveRequest("Looks good", 1));
+                SUBMISSION_ID, REVIEWER_ID, new ApproveRequest("Looks good", 1, null));
 
         assertThat(response.submissionId()).isEqualTo(SUBMISSION_ID);
         assertThat(response.submissionStatus()).isEqualTo(SubmissionStatus.APPROVED);
@@ -99,7 +104,7 @@ class ReviewServiceTest {
         when(submissionMapper.selectById(SUBMISSION_ID)).thenReturn(pendingFinalSubmission());
         when(assignmentMapper.selectById(ASSIGNMENT_ID)).thenReturn(assignment);
 
-        reviewService.approve(SUBMISSION_ID, REVIEWER_ID, new ApproveRequest("ok", 1));
+        reviewService.approve(SUBMISSION_ID, REVIEWER_ID, new ApproveRequest("ok", 1, null));
 
         assertThat(assignment.getStatus()).isEqualTo(AssignmentStatus.APPROVED);
         verify(assignmentMapper).updateById(assignment);
@@ -110,7 +115,7 @@ class ReviewServiceTest {
         when(submissionMapper.selectById(SUBMISSION_ID)).thenReturn(pendingFinalSubmission());
         when(assignmentMapper.selectById(ASSIGNMENT_ID)).thenReturn(submittedAssignment());
 
-        reviewService.approve(SUBMISSION_ID, REVIEWER_ID, new ApproveRequest("good", 1));
+        reviewService.approve(SUBMISSION_ID, REVIEWER_ID, new ApproveRequest("good", 1, null));
 
         ArgumentCaptor<ReviewRecord> captor = ArgumentCaptor.forClass(ReviewRecord.class);
         verify(reviewRecordMapper).insert(captor.capture());
@@ -126,7 +131,7 @@ class ReviewServiceTest {
         when(submissionMapper.selectById(SUBMISSION_ID)).thenReturn(pendingFinalSubmission());
         when(assignmentMapper.selectById(ASSIGNMENT_ID)).thenReturn(submittedAssignment());
 
-        reviewService.approve(SUBMISSION_ID, REVIEWER_ID, new ApproveRequest("ok", 1));
+        reviewService.approve(SUBMISSION_ID, REVIEWER_ID, new ApproveRequest("ok", 1, null));
 
         verify(eventPublisher).publishApproved(SUBMISSION_ID, REVIEWER_ID);
     }
@@ -136,7 +141,7 @@ class ReviewServiceTest {
         when(submissionMapper.selectById(SUBMISSION_ID)).thenReturn(pendingFinalSubmission());
         when(assignmentMapper.selectById(ASSIGNMENT_ID)).thenReturn(submittedAssignment());
 
-        reviewService.approve(SUBMISSION_ID, REVIEWER_ID, new ApproveRequest("ok", 1));
+        reviewService.approve(SUBMISSION_ID, REVIEWER_ID, new ApproveRequest("ok", 1, null));
 
         verify(auditAppender).append(any(AuditCommand.class));
     }
@@ -161,7 +166,7 @@ class ReviewServiceTest {
         when(submissionMapper.selectById(SUBMISSION_ID)).thenReturn(submission);
 
         assertThatThrownBy(() -> reviewService.approve(
-                SUBMISSION_ID, REVIEWER_ID, new ApproveRequest("ok", 1)))
+                SUBMISSION_ID, REVIEWER_ID, new ApproveRequest("ok", 1, null)))
                 .isInstanceOfSatisfying(BusinessException.class,
                         ex -> assertThat(ex.getCode()).isEqualTo(400601));
         verify(eventPublisher, never()).publishApproved(any(), any());
@@ -172,9 +177,75 @@ class ReviewServiceTest {
         when(submissionMapper.selectById(SUBMISSION_ID)).thenReturn(null);
 
         assertThatThrownBy(() -> reviewService.approve(
-                SUBMISSION_ID, REVIEWER_ID, new ApproveRequest("ok", 1)))
+                SUBMISSION_ID, REVIEWER_ID, new ApproveRequest("ok", 1, null)))
                 .isInstanceOfSatisfying(BusinessException.class,
                         ex -> assertThat(ex.getCode()).isEqualTo(404601));
+    }
+
+    // --- approve with revision ---
+
+    @Test
+    void approveWithRevisionCreatesNewVersion() throws Exception {
+        Submission original = pendingFinalSubmission();
+        original.setAnswerHash("oldhash");
+        original.setVersionNo(1);
+        original.setReviewFlowStatus("ASSIGNED");
+        original.setCurrentReviewLevel(1);
+        when(submissionMapper.selectById(SUBMISSION_ID)).thenReturn(original);
+        when(assignmentMapper.selectById(ASSIGNMENT_ID)).thenReturn(submittedAssignment());
+
+        JsonNode mockNode = new com.fasterxml.jackson.databind.ObjectMapper().readTree("{\"x\":\"y\"}");
+        when(objectMapper.readTree("{\"x\":\"y\"}")).thenReturn(mockNode);
+        when(objectMapper.writeValueAsString(mockNode)).thenReturn("{\"x\":\"y\"}");
+
+        doAnswer(inv -> {
+            Submission s = inv.getArgument(0);
+            s.setId(200L);
+            return 1;
+        }).when(submissionMapper).insert(any(Submission.class));
+
+        ReviewActionResponse response = reviewService.approve(
+                SUBMISSION_ID, REVIEWER_ID, new ApproveRequest("revised", 1, "{\"x\":\"y\"}"));
+
+        verify(submissionMapper).supersedeActiveByAssignmentId(ASSIGNMENT_ID);
+        verify(submissionMapper).insert(any(Submission.class));
+        assertThat(response.submissionId()).isEqualTo(200L);
+        assertThat(response.submissionStatus()).isEqualTo(SubmissionStatus.APPROVED);
+    }
+
+    @Test
+    void approveWithRevisionSameHashSkipsNewVersion() throws Exception {
+        String answerJson = "{\"x\":\"y\"}";
+        String hash = com.labelhub.common.util.AnswerCanonicalizer.sha256(answerJson);
+        Submission original = pendingFinalSubmission();
+        original.setAnswerHash(hash);
+        when(submissionMapper.selectById(SUBMISSION_ID)).thenReturn(original);
+        when(assignmentMapper.selectById(ASSIGNMENT_ID)).thenReturn(submittedAssignment());
+
+        JsonNode mockNode = new com.fasterxml.jackson.databind.ObjectMapper().readTree(answerJson);
+        when(objectMapper.readTree(answerJson)).thenReturn(mockNode);
+        when(objectMapper.writeValueAsString(mockNode)).thenReturn(answerJson);
+
+        ReviewActionResponse response = reviewService.approve(
+                SUBMISSION_ID, REVIEWER_ID, new ApproveRequest("ok", 1, answerJson));
+
+        verify(submissionMapper, never()).supersedeActiveByAssignmentId(anyLong());
+        verify(submissionMapper, never()).insert(any(Submission.class));
+        assertThat(response.submissionId()).isEqualTo(SUBMISSION_ID);
+    }
+
+    @Test
+    void approveWithRevisionInvalidJsonThrows() throws Exception {
+        when(submissionMapper.selectById(SUBMISSION_ID)).thenReturn(pendingFinalSubmission());
+
+        com.fasterxml.jackson.core.JsonProcessingException jpe =
+                org.mockito.Mockito.mock(com.fasterxml.jackson.core.JsonProcessingException.class);
+        when(objectMapper.readTree(anyString())).thenThrow(jpe);
+
+        assertThatThrownBy(() -> reviewService.approve(
+                SUBMISSION_ID, REVIEWER_ID, new ApproveRequest("ok", 1, "not json")))
+                .isInstanceOfSatisfying(BusinessException.class,
+                        ex -> assertThat(ex.getCode()).isEqualTo(400603));
     }
 
     // --- reject ---
@@ -270,6 +341,7 @@ class ReviewServiceTest {
         s.setId(SUBMISSION_ID);
         s.setAssignmentId(ASSIGNMENT_ID);
         s.setStatus(SubmissionStatus.PENDING_FINAL);
+        s.setAssignedReviewerId(REVIEWER_ID);
         return s;
     }
 

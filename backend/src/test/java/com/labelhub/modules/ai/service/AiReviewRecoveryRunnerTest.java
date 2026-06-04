@@ -35,53 +35,59 @@ class AiReviewRecoveryRunnerTest {
     @Mock private AiAutoReviewService aiAutoReviewService;
     @Mock private SystemAgentProvider systemAgentProvider;
     @Mock private AuditAppender auditAppender;
+    @Mock private com.labelhub.modules.review.service.ReviewOwnershipResolver reviewOwnershipResolver;
 
     private AiReviewRecoveryRunner runner;
+    private final ArgumentCaptor<Submission> submissionCaptor = ArgumentCaptor.forClass(Submission.class);
+    private final ArgumentCaptor<AiReviewResult> aiReviewResultCaptor = ArgumentCaptor.forClass(AiReviewResult.class);
 
     @BeforeEach
     void setUp() {
         runner = new AiReviewRecoveryRunner(submissionMapper, aiReviewResultMapper, dispatcher,
-                aiAutoReviewService, systemAgentProvider, auditAppender);
+                aiAutoReviewService, systemAgentProvider, auditAppender, reviewOwnershipResolver);
         when(systemAgentProvider.get()).thenReturn(new SystemActorContext(900L));
     }
 
     @Test
-    void successWithDirectApproveRestoresApprovedStatus() {
+    void successWithDirectApproveDelegatesToAutoReviewService() {
         when(submissionMapper.selectList(any(LambdaQueryWrapper.class))).thenReturn(List.of(submission()));
-        when(aiReviewResultMapper.selectBySubmissionId(SUBMISSION_ID))
-                .thenReturn(result(AiFlowAction.AI_DIRECT_APPROVE));
+        AiReviewResult result = result(AiFlowAction.AI_DIRECT_APPROVE);
+        when(aiReviewResultMapper.selectBySubmissionId(SUBMISSION_ID)).thenReturn(result);
 
         runner.run(null);
 
-        ArgumentCaptor<Submission> captor = ArgumentCaptor.forClass(Submission.class);
-        verify(submissionMapper).updateById(captor.capture());
-        assertThat(captor.getValue().getStatus()).isEqualTo(SubmissionStatus.APPROVED);
+        verify(aiAutoReviewService).applyRecoveredFlowAction(submissionCaptor.capture(),
+                aiReviewResultCaptor.capture());
+        assertThat(submissionCaptor.getValue().getId()).isEqualTo(SUBMISSION_ID);
+        assertThat(aiReviewResultCaptor.getValue().getFlowAction()).isEqualTo(AiFlowAction.AI_DIRECT_APPROVE.name());
     }
 
     @Test
-    void successWithDirectRejectRestoresRejectedStatus() {
+    void successWithDirectRejectDelegatesToAutoReviewService() {
         when(submissionMapper.selectList(any(LambdaQueryWrapper.class))).thenReturn(List.of(submission()));
-        when(aiReviewResultMapper.selectBySubmissionId(SUBMISSION_ID))
-                .thenReturn(result(AiFlowAction.AI_DIRECT_REJECT));
+        AiReviewResult result = result(AiFlowAction.AI_DIRECT_REJECT);
+        when(aiReviewResultMapper.selectBySubmissionId(SUBMISSION_ID)).thenReturn(result);
 
         runner.run(null);
 
-        ArgumentCaptor<Submission> captor = ArgumentCaptor.forClass(Submission.class);
-        verify(submissionMapper).updateById(captor.capture());
-        assertThat(captor.getValue().getStatus()).isEqualTo(SubmissionStatus.REJECTED);
+        verify(aiAutoReviewService).applyRecoveredFlowAction(submissionCaptor.capture(),
+                aiReviewResultCaptor.capture());
+        assertThat(submissionCaptor.getValue().getId()).isEqualTo(SUBMISSION_ID);
+        assertThat(aiReviewResultCaptor.getValue().getFlowAction()).isEqualTo(AiFlowAction.AI_DIRECT_REJECT.name());
     }
 
     @Test
     void successWithManualFlowRestoresPendingFinalStatus() {
         when(submissionMapper.selectList(any(LambdaQueryWrapper.class))).thenReturn(List.of(submission()));
-        when(aiReviewResultMapper.selectBySubmissionId(SUBMISSION_ID))
-                .thenReturn(result(AiFlowAction.AI_ASSIGN_MANUAL_REVIEW));
+        AiReviewResult result = result(AiFlowAction.AI_ASSIGN_MANUAL_REVIEW);
+        when(aiReviewResultMapper.selectBySubmissionId(SUBMISSION_ID)).thenReturn(result);
 
         runner.run(null);
 
-        ArgumentCaptor<Submission> captor = ArgumentCaptor.forClass(Submission.class);
-        verify(submissionMapper).updateById(captor.capture());
-        assertThat(captor.getValue().getStatus()).isEqualTo(SubmissionStatus.PENDING_FINAL);
+        verify(aiAutoReviewService).applyRecoveredFlowAction(submissionCaptor.capture(),
+                aiReviewResultCaptor.capture());
+        assertThat(submissionCaptor.getValue().getId()).isEqualTo(SUBMISSION_ID);
+        assertThat(aiReviewResultCaptor.getValue().getFlowAction()).isEqualTo(AiFlowAction.AI_ASSIGN_MANUAL_REVIEW.name());
     }
 
     private Submission submission() {

@@ -52,9 +52,12 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.mockito.junit.jupiter.MockitoSettings;
+import org.mockito.quality.Strictness;
 import org.springframework.test.util.ReflectionTestUtils;
 
 @ExtendWith(MockitoExtension.class)
+@MockitoSettings(strictness = Strictness.LENIENT)
 class AiAutoReviewServiceTest {
 
     private static final Long SUBMISSION_ID = 100L;
@@ -82,6 +85,7 @@ class AiAutoReviewServiceTest {
     @Mock private ReviewRecordMapper reviewRecordMapper;
     @Mock private DatasetClaimService datasetClaimService;
     @Mock private com.labelhub.infrastructure.redis.RedisLockService redisLockService;
+    @Mock private com.labelhub.modules.review.service.ReviewOwnershipResolver reviewOwnershipResolver;
 
     private AiReviewRetryStrategy retryStrategy;
     private AiAutoReviewService service;
@@ -107,10 +111,22 @@ class AiAutoReviewServiceTest {
         ReflectionTestUtils.setField(service, "reviewRecordMapper", reviewRecordMapper);
         ReflectionTestUtils.setField(service, "datasetClaimService", datasetClaimService);
         ReflectionTestUtils.setField(service, "redisLockService", redisLockService);
+        ReflectionTestUtils.setField(service, "reviewOwnershipResolver", reviewOwnershipResolver);
         org.mockito.Mockito.lenient()
                 .when(redisLockService.tryLock(org.mockito.ArgumentMatchers.anyString(),
                         org.mockito.ArgumentMatchers.anyLong(), org.mockito.ArgumentMatchers.anyLong()))
                 .thenReturn(true);
+        org.mockito.Mockito.lenient()
+                .when(agentRunService.create(
+                        org.mockito.ArgumentMatchers.any(),
+                        org.mockito.ArgumentMatchers.any(),
+                        org.mockito.ArgumentMatchers.any(),
+                        org.mockito.ArgumentMatchers.any(),
+                        org.mockito.ArgumentMatchers.any(),
+                        org.mockito.ArgumentMatchers.any(),
+                        org.mockito.ArgumentMatchers.any(),
+                        org.mockito.ArgumentMatchers.any()))
+                .thenReturn(agentRun());
     }
 
     @Test
@@ -456,6 +472,8 @@ class AiAutoReviewServiceTest {
         when(agentRunService.findPending(staleRunId)).thenReturn(Optional.empty());
         when(agentRunService.create(eq("AI_REVIEW"), eq(SUBMISSION_ID), eq(PROVIDER_ID), eq("qwen-plus"),
                 eq("v2"), any())).thenReturn(agentRun(newRunId));
+        when(agentRunService.create(eq("AI_REVIEW"), eq(SUBMISSION_ID), eq(PROVIDER_ID), eq("qwen-plus"),
+                eq("v2"), any(), org.mockito.ArgumentMatchers.isNull(), any())).thenReturn(agentRun(newRunId));
         when(rateLimiter.acquire(TASK_ID, PROVIDER_ID)).thenReturn(true);
         when(llmGateway.review(any(LlmGatewayRequest.class))).thenReturn(successGateway("PASS", 91.0, 0.88));
         when(systemAgentProvider.get()).thenReturn(new SystemActorContext(900L));

@@ -1,12 +1,12 @@
 package com.labelhub.modules.submission.service;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.labelhub.common.audit.AuditAppender;
 import com.labelhub.common.audit.AuditCommand;
 import com.labelhub.common.exception.BusinessException;
 import com.labelhub.common.security.CurrentUserContext;
+import com.labelhub.common.util.AnswerCanonicalizer;
 import com.labelhub.common.web.TraceIdProvider;
 import com.labelhub.modules.agent.domain.AgentRun;
 import com.labelhub.modules.agent.domain.AgentRunStatus;
@@ -25,11 +25,7 @@ import com.labelhub.modules.task.domain.Task;
 import com.labelhub.modules.task.domain.TaskStatus;
 import com.labelhub.modules.task.mapper.TaskMapper;
 import com.labelhub.modules.template.service.AnswerSchemaValidator;
-import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
 import java.time.LocalDateTime;
-import java.util.HexFormat;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
@@ -172,20 +168,14 @@ public class SubmissionSubmitService {
 
     private String canonicalAnswerJson(String answerJson) {
         try {
-            JsonNode jsonNode = objectMapper.readTree(answerJson);
-            return objectMapper.writeValueAsString(jsonNode);
-        } catch (JsonProcessingException ex) {
-            throw new BusinessException(INVALID_ANSWER_JSON, "作答 JSON 格式不合法");
+            return AnswerCanonicalizer.canonicalize(answerJson, objectMapper);
+        } catch (IllegalArgumentException ex) {
+            throw new BusinessException(INVALID_ANSWER_JSON, ex.getMessage());
         }
     }
 
     private String sha256(String value) {
-        try {
-            return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256")
-                    .digest(value.getBytes(StandardCharsets.UTF_8)));
-        } catch (NoSuchAlgorithmException ex) {
-            throw new IllegalStateException(ex);
-        }
+        return AnswerCanonicalizer.sha256(value);
     }
 
     private Submission createSubmission(Assignment assignment,

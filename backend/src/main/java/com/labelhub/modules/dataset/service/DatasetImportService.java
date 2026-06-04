@@ -207,14 +207,14 @@ public class DatasetImportService {
         if (mode == DatasetImportMode.OVERWRITE && task.getStatus() != TaskStatus.DRAFT) {
             throw new BusinessException(409301, "只有草稿状态任务允许覆盖导入");
         }
-        CurrentUser currentUser = CurrentUserContext.requireCurrentUser();
-        ObjectFileEntity sourceFile = requireSourceFile(request.fileId(), currentUser);
+        ObjectFileEntity sourceFile = requireSourceFile(request.fileId());
         DatasetFileFormat format = resolveFormat(sourceFile);
         DatasetParser parser = parsers.get(format);
         if (parser == null || format == DatasetFileFormat.CSV) {
             throw new BusinessException(400102, "不支持的数据集文件格式");
         }
 
+        CurrentUser currentUser = CurrentUserContext.requireCurrentUser();
         // 源文件和导入任务先落库，后台任务执行失败时仍可查询到失败状态。
         DatasetImportJobEntity job = createImportJob(task, sourceFile, format, mode, currentUser.userId());
 
@@ -326,7 +326,8 @@ public class DatasetImportService {
         return task;
     }
 
-    private ObjectFileEntity requireSourceFile(Long fileId, CurrentUser currentUser) {
+    private ObjectFileEntity requireSourceFile(Long fileId) {
+        CurrentUser currentUser = CurrentUserContext.requireCurrentUser();
         ObjectFileEntity sourceFile = objectFileMapper.selectById(fileId);
         if (sourceFile == null) {
             throw new BusinessException(400102, "数据集源文件不存在");

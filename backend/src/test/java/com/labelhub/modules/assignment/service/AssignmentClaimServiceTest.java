@@ -17,11 +17,14 @@ import com.labelhub.common.security.RoleCode;
 import com.labelhub.common.web.TraceIdProvider;
 import com.labelhub.infrastructure.redis.RedisLockService;
 import com.labelhub.modules.assignment.domain.Assignment;
+import com.labelhub.modules.assignment.domain.AssignmentDispatch;
 import com.labelhub.modules.assignment.domain.AssignmentStatus;
 import com.labelhub.modules.assignment.dto.AssignmentClaimResponse;
+import com.labelhub.modules.assignment.mapper.AssignmentDispatchMapper;
 import com.labelhub.modules.assignment.mapper.AssignmentMapper;
 import com.labelhub.modules.dataset.service.DatasetClaimService;
 import com.labelhub.modules.dataset.service.DatasetItemSnapshot;
+import com.labelhub.modules.task.domain.ClaimStrategy;
 import com.labelhub.modules.task.domain.Task;
 import com.labelhub.modules.task.domain.TaskStatus;
 import com.labelhub.modules.task.mapper.TaskMapper;
@@ -64,6 +67,9 @@ class AssignmentClaimServiceTest {
     private AssignmentMapper assignmentMapper;
 
     @Mock
+    private AssignmentDispatchMapper dispatchMapper;
+
+    @Mock
     private RedisLockService redisLockService;
 
     @Mock
@@ -90,6 +96,7 @@ class AssignmentClaimServiceTest {
                 datasetClaimService,
                 templateSchemaService,
                 assignmentMapper,
+                dispatchMapper,
                 redisLockService,
                 auditAppender,
                 traceIdProvider,
@@ -107,7 +114,7 @@ class AssignmentClaimServiceTest {
     void claimsItemWithLockAssignmentAndAudit() {
         when(taskMapper.selectById(TASK_ID)).thenReturn(publishedTask(1));
         when(redisLockService.tryLock("lock:claim:task:10", 2000, 10000)).thenReturn(true);
-        when(datasetClaimService.reserveClaimableItem(TASK_ID, LABELER_ID))
+        when(datasetClaimService.reserveClaimableItem(TASK_ID, LABELER_ID, 1))
                 .thenReturn(Optional.of(new DatasetItemSnapshot(ITEM_ID, "{\"text\":\"hello\"}")));
         when(templateSchemaService.getTemplateSchema(TEMPLATE_VERSION_ID))
                 .thenReturn(new TemplateSchemaSnapshot(TEMPLATE_VERSION_ID, "{\"type\":\"object\"}"));
@@ -144,7 +151,7 @@ class AssignmentClaimServiceTest {
                 .isInstanceOfSatisfying(BusinessException.class,
                         ex -> assertThat(ex.getCode()).isEqualTo(409201));
 
-        verify(datasetClaimService, never()).reserveClaimableItem(any(), any());
+        verify(datasetClaimService, never()).reserveClaimableItem(any(), any(), any());
         verify(redisLockService, never()).unlock(any());
     }
 
@@ -152,7 +159,7 @@ class AssignmentClaimServiceTest {
     void rejectsWhenNoClaimableItemExists() {
         when(taskMapper.selectById(TASK_ID)).thenReturn(publishedTask(1));
         when(redisLockService.tryLock("lock:claim:task:10", 2000, 10000)).thenReturn(true);
-        when(datasetClaimService.reserveClaimableItem(TASK_ID, LABELER_ID)).thenReturn(Optional.empty());
+        when(datasetClaimService.reserveClaimableItem(TASK_ID, LABELER_ID, 1)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> assignmentClaimService.claim(TASK_ID, LABELER_ID))
                 .isInstanceOfSatisfying(BusinessException.class,
@@ -167,7 +174,7 @@ class AssignmentClaimServiceTest {
     void rejectsDuplicateClaimAndLetsTransactionRollbackReservation() {
         when(taskMapper.selectById(TASK_ID)).thenReturn(publishedTask(1));
         when(redisLockService.tryLock("lock:claim:task:10", 2000, 10000)).thenReturn(true);
-        when(datasetClaimService.reserveClaimableItem(TASK_ID, LABELER_ID))
+        when(datasetClaimService.reserveClaimableItem(TASK_ID, LABELER_ID, 1))
                 .thenReturn(Optional.of(new DatasetItemSnapshot(ITEM_ID, "{\"text\":\"hello\"}")));
         when(templateSchemaService.getTemplateSchema(TEMPLATE_VERSION_ID))
                 .thenReturn(new TemplateSchemaSnapshot(TEMPLATE_VERSION_ID, "{\"type\":\"object\"}"));
@@ -227,6 +234,7 @@ class AssignmentClaimServiceTest {
                 inMemoryDatasetClaimService,
                 templateSchemaService,
                 assignmentMapper,
+                dispatchMapper,
                 redisLockService,
                 auditAppender,
                 traceIdProvider,
@@ -268,6 +276,143 @@ class AssignmentClaimServiceTest {
         assertThat(inMemoryDatasetClaimService.assignedCount()).isEqualTo(1);
     }
 
+    @Test
+    void quotaGrabEnforcesTaskQuota() {
+        Task task = publishedTask(1);
+        task.setStrategy(ClaimStrategy.QUOTA_GRAB);
+        task.setQuota(5);
+        task.setClaimedCount(5);
+        when(taskMapper.selectById(TASK_ID)).thenReturn(task);
+        when(redisLockService.tryLock("lock:claim:task:10", 2000, 10000)).thenReturn(true);
+        when(taskMapper.tryIncrementClaimedCount(TASK_ID)).thenReturn(0);
+
+        assertThatThrownBy(() -> assignmentClaimService.claim(TASK_ID, LABELER_ID))
+                .isInstanceOfSatisfying(BusinessException.class,
+                        ex -> assertThat(ex.getCode()).isEqualTo(409202));
+
+        verify(datasetClaimService, never()).reserveClaimableItem(any(), any(), any());
+        verify(redisLockService).unlock("lock:claim:task:10");
+    }
+
+    @Test
+    void quotaGrabEnforcesPerLabelerLimit() {
+        Task task = publishedTask(1);
+        task.setStrategy(ClaimStrategy.QUOTA_GRAB);
+        task.setQuota(10);
+        task.setMaxClaimsPerLabeler(3);
+        when(taskMapper.selectById(TASK_ID)).thenReturn(task);
+        when(redisLockService.tryLock("lock:claim:task:10", 2000, 10000)).thenReturn(true);
+        when(taskMapper.tryIncrementClaimedCount(TASK_ID)).thenReturn(1);
+        when(assignmentMapper.countActiveByTaskAndLabeler(TASK_ID, LABELER_ID)).thenReturn(3);
+
+        assertThatThrownBy(() -> assignmentClaimService.claim(TASK_ID, LABELER_ID))
+                .isInstanceOfSatisfying(BusinessException.class,
+                        ex -> assertThat(ex.getCode()).isEqualTo(409203));
+
+        verify(taskMapper).decrementClaimedCount(TASK_ID);
+        verify(datasetClaimService, never()).reserveClaimableItem(any(), any(), any());
+        verify(redisLockService).unlock("lock:claim:task:10");
+    }
+
+    @Test
+    void quotaGrabClaimsSuccessfully() {
+        Task task = publishedTask(1);
+        task.setStrategy(ClaimStrategy.QUOTA_GRAB);
+        task.setQuota(10);
+        task.setMaxClaimsPerLabeler(5);
+        when(taskMapper.selectById(TASK_ID)).thenReturn(task);
+        when(redisLockService.tryLock("lock:claim:task:10", 2000, 10000)).thenReturn(true);
+        when(taskMapper.tryIncrementClaimedCount(TASK_ID)).thenReturn(1);
+        when(assignmentMapper.countActiveByTaskAndLabeler(TASK_ID, LABELER_ID)).thenReturn(2);
+        when(datasetClaimService.reserveClaimableItem(TASK_ID, LABELER_ID, 1))
+                .thenReturn(Optional.of(new DatasetItemSnapshot(ITEM_ID, "{\"text\":\"hello\"}")));
+        when(templateSchemaService.getTemplateSchema(TEMPLATE_VERSION_ID))
+                .thenReturn(new TemplateSchemaSnapshot(TEMPLATE_VERSION_ID, "{\"type\":\"object\"}"));
+        when(assignmentMapper.insert(any(Assignment.class))).thenAnswer(invocation -> {
+            Assignment a = invocation.getArgument(0);
+            a.setId(ASSIGNMENT_ID);
+            return 1;
+        });
+
+        AssignmentClaimResponse response = assignmentClaimService.claim(TASK_ID, LABELER_ID);
+
+        assertThat(response.assignmentId()).isEqualTo(ASSIGNMENT_ID);
+        verify(redisLockService).unlock("lock:claim:task:10");
+    }
+
+    @Test
+    void assignedClaimsFromDispatchQueue() {
+        Task task = publishedTask(1);
+        task.setStrategy(ClaimStrategy.ASSIGNED);
+        when(taskMapper.selectById(TASK_ID)).thenReturn(task);
+        when(redisLockService.tryLock("lock:claim:task:10", 2000, 10000)).thenReturn(true);
+
+        AssignmentDispatch dispatch = new AssignmentDispatch();
+        dispatch.setId(200L);
+        dispatch.setTaskId(TASK_ID);
+        dispatch.setDatasetItemId(ITEM_ID);
+        dispatch.setLabelerId(LABELER_ID);
+        dispatch.setStatus("PENDING");
+        when(dispatchMapper.selectPendingForLabeler(TASK_ID, LABELER_ID)).thenReturn(dispatch);
+        when(dispatchMapper.claimById(200L)).thenReturn(1);
+        when(datasetClaimService.reserveSpecificItem(TASK_ID, LABELER_ID, ITEM_ID))
+                .thenReturn(Optional.of(new DatasetItemSnapshot(ITEM_ID, "{\"text\":\"hello\"}")));
+        when(templateSchemaService.getTemplateSchema(TEMPLATE_VERSION_ID))
+                .thenReturn(new TemplateSchemaSnapshot(TEMPLATE_VERSION_ID, "{\"type\":\"object\"}"));
+        when(assignmentMapper.insert(any(Assignment.class))).thenAnswer(invocation -> {
+            Assignment a = invocation.getArgument(0);
+            a.setId(ASSIGNMENT_ID);
+            return 1;
+        });
+
+        AssignmentClaimResponse response = assignmentClaimService.claim(TASK_ID, LABELER_ID);
+
+        assertThat(response.assignmentId()).isEqualTo(ASSIGNMENT_ID);
+        assertThat(response.datasetItemId()).isEqualTo(ITEM_ID);
+        verify(dispatchMapper).claimById(200L);
+        verify(redisLockService).unlock("lock:claim:task:10");
+    }
+
+    @Test
+    void assignedRejectsWhenNoPendingDispatch() {
+        Task task = publishedTask(1);
+        task.setStrategy(ClaimStrategy.ASSIGNED);
+        when(taskMapper.selectById(TASK_ID)).thenReturn(task);
+        when(redisLockService.tryLock("lock:claim:task:10", 2000, 10000)).thenReturn(true);
+        when(dispatchMapper.selectPendingForLabeler(TASK_ID, LABELER_ID)).thenReturn(null);
+
+        assertThatThrownBy(() -> assignmentClaimService.claim(TASK_ID, LABELER_ID))
+                .isInstanceOfSatisfying(BusinessException.class,
+                        ex -> assertThat(ex.getCode()).isEqualTo(409201));
+
+        verify(dispatchMapper, never()).claimById(any());
+        verify(redisLockService).unlock("lock:claim:task:10");
+    }
+
+    @Test
+    void assignedRejectsWhenDispatchRaceLost() {
+        Task task = publishedTask(1);
+        task.setStrategy(ClaimStrategy.ASSIGNED);
+        when(taskMapper.selectById(TASK_ID)).thenReturn(task);
+        when(redisLockService.tryLock("lock:claim:task:10", 2000, 10000)).thenReturn(true);
+
+        AssignmentDispatch dispatch = new AssignmentDispatch();
+        dispatch.setId(200L);
+        dispatch.setTaskId(TASK_ID);
+        dispatch.setDatasetItemId(ITEM_ID);
+        dispatch.setLabelerId(LABELER_ID);
+        dispatch.setStatus("PENDING");
+        when(dispatchMapper.selectPendingForLabeler(TASK_ID, LABELER_ID)).thenReturn(dispatch);
+        when(dispatchMapper.claimById(200L)).thenReturn(0); // lost race
+
+        assertThatThrownBy(() -> assignmentClaimService.claim(TASK_ID, LABELER_ID))
+                .isInstanceOfSatisfying(BusinessException.class,
+                        ex -> assertThat(ex.getCode()).isEqualTo(409201));
+
+        verify(assignmentMapper, never()).insert(any(Assignment.class));
+        verify(redisLockService).unlock("lock:claim:task:10");
+    }
+
     private Task publishedTask(int overlapCount) {
         Task task = new Task();
         task.setId(TASK_ID);
@@ -283,10 +428,10 @@ class AssignmentClaimServiceTest {
         private final AtomicInteger assignedCount = new AtomicInteger();
 
         @Override
-        public Optional<DatasetItemSnapshot> reserveClaimableItem(Long taskId, Long labelerId) {
+        public Optional<DatasetItemSnapshot> reserveClaimableItem(Long taskId, Long labelerId, Integer overlapCount) {
             while (true) {
                 int current = assignedCount.get();
-                if (current >= 1) {
+                if (current >= overlapCount) {
                     return Optional.empty();
                 }
                 if (assignedCount.compareAndSet(current, current + 1)) {
@@ -305,6 +450,12 @@ class AssignmentClaimServiceTest {
 
         @Override
         public void increaseApprovedCount(Long itemId) {
+        }
+
+        @Override
+        public Optional<DatasetItemSnapshot> reserveSpecificItem(Long taskId, Long labelerId, Long datasetItemId) {
+            assignedCount.incrementAndGet();
+            return Optional.of(new DatasetItemSnapshot(datasetItemId, "{\"text\":\"hello\"}"));
         }
     }
 }

@@ -5,7 +5,6 @@ import com.labelhub.modules.review.domain.ReviewAction;
 import com.labelhub.modules.review.domain.ReviewRecord;
 import com.labelhub.modules.review.dto.ApproveRequest;
 import com.labelhub.modules.review.dto.BatchApproveRequest;
-import com.labelhub.modules.review.dto.BatchAssignRequest;
 import com.labelhub.modules.review.dto.BatchMarkManualRequest;
 import com.labelhub.modules.review.dto.BatchRejectRequest;
 import com.labelhub.modules.review.dto.BatchReviewItemResult;
@@ -66,15 +65,6 @@ public class BatchReviewService {
         return buildResponse(results);
     }
 
-    @Transactional
-    public BatchReviewResponse batchAssign(Long reviewerId, BatchAssignRequest request) {
-        List<BatchReviewItemResult> results = new ArrayList<>();
-        for (Long submissionId : request.submissionIds()) {
-            results.add(trySingleAssign(submissionId, reviewerId, request.targetReviewerId()));
-        }
-        return buildResponse(results);
-    }
-
     private BatchReviewItemResult trySingleApprove(Long submissionId, Long reviewerId,
                                                     BatchApproveRequest request) {
         try {
@@ -91,7 +81,7 @@ public class BatchReviewService {
                         "Submission is marked for manual review");
             }
             reviewService.approve(submissionId, reviewerId,
-                    new ApproveRequest(request.reviewComment(), request.reviewLevel()));
+                    new ApproveRequest(request.reviewComment(), request.reviewLevel(), null));
             return BatchReviewItemResult.ok(submissionId);
         } catch (BusinessException ex) {
             return BatchReviewItemResult.fail(submissionId, ex.getMessage());
@@ -127,32 +117,6 @@ public class BatchReviewService {
             record.setReviewerId(reviewerId);
             record.setAction(ReviewAction.MARK_MANUAL_REQUIRED);
             record.setReviewLevel(1);
-            record.setCreatedAt(java.time.LocalDateTime.now());
-            reviewRecordMapper.insert(record);
-            return BatchReviewItemResult.ok(submissionId);
-        } catch (BusinessException ex) {
-            return BatchReviewItemResult.fail(submissionId, ex.getMessage());
-        }
-    }
-
-    private BatchReviewItemResult trySingleAssign(Long submissionId, Long reviewerId,
-                                                   Long targetReviewerId) {
-        try {
-            Submission submission = submissionMapper.selectById(submissionId);
-            if (submission == null) {
-                return BatchReviewItemResult.fail(submissionId, "提交记录不存在");
-            }
-            if (submission.getStatus() != SubmissionStatus.PENDING_FINAL) {
-                return BatchReviewItemResult.fail(submissionId, "Not in PENDING_FINAL status");
-            }
-            submission.setAssignedReviewerId(targetReviewerId);
-            submissionMapper.updateById(submission);
-            ReviewRecord record = new ReviewRecord();
-            record.setSubmissionId(submissionId);
-            record.setReviewerId(reviewerId);
-            record.setAction(ReviewAction.ASSIGN_REVIEWER);
-            record.setReviewLevel(1);
-            record.setReason("Assigned to reviewer " + targetReviewerId);
             record.setCreatedAt(java.time.LocalDateTime.now());
             reviewRecordMapper.insert(record);
             return BatchReviewItemResult.ok(submissionId);

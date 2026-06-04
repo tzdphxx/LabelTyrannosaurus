@@ -6,14 +6,15 @@ import com.labelhub.common.audit.AuditCommand;
 import com.labelhub.common.exception.BusinessException;
 import com.labelhub.common.security.CurrentUserContext;
 import com.labelhub.common.web.TraceIdProvider;
-import com.labelhub.modules.ai.dto.AiReviewConfigResponse;
-import com.labelhub.modules.ai.dto.LlmProviderResponse;
 import com.labelhub.modules.ai.dto.AiReviewConfigRequest;
 import com.labelhub.modules.ai.service.AiReviewConfigService;
-import com.labelhub.modules.ai.service.LlmProviderService;
+import com.labelhub.modules.assignment.mapper.AssignmentDispatchMapper;
 import com.labelhub.modules.dataset.dto.DatasetImportJobResponse;
 import com.labelhub.modules.dataset.dto.DatasetImportRequest;
 import com.labelhub.modules.dataset.service.DatasetImportService;
+import com.labelhub.modules.reward.dto.RewardRuleResponse;
+import com.labelhub.modules.reward.service.RewardRuleService;
+import com.labelhub.modules.task.domain.ClaimStrategy;
 import com.labelhub.modules.task.domain.Task;
 import com.labelhub.modules.task.domain.TaskStatus;
 import com.labelhub.modules.task.domain.TaskTag;
@@ -41,7 +42,7 @@ public class TaskLifecycleService {
     private static final int TASK_NOT_FOUND = 404001;
     private static final int TASK_STATUS_NOT_ALLOWED = 400101;
     private static final int TASK_PUBLISH_REQUIREMENT_MISSING = 400102;
-    private static final int SINGLE_LABELER_OVERLAP_COUNT = 1;
+    private static final int INVALID_STRATEGY = 400103;
     private static final String TASK_BIZ_TYPE = "TASK";
     private static final String USER_ACTOR_TYPE = "USER";
 
@@ -52,7 +53,8 @@ public class TaskLifecycleService {
     private final TraceIdProvider traceIdProvider;
     private final DatasetImportService datasetImportService;
     private final AiReviewConfigService aiReviewConfigService;
-    private final LlmProviderService llmProviderService;
+    private final RewardRuleService rewardRuleService;
+    private final AssignmentDispatchMapper dispatchMapper;
     private final org.springframework.context.ApplicationEventPublisher applicationEventPublisher;
 
     public TaskLifecycleService(TaskMapper taskMapper,
@@ -62,7 +64,8 @@ public class TaskLifecycleService {
                                 TraceIdProvider traceIdProvider,
                                 DatasetImportService datasetImportService,
                                 AiReviewConfigService aiReviewConfigService,
-                                LlmProviderService llmProviderService,
+                                RewardRuleService rewardRuleService,
+                                AssignmentDispatchMapper dispatchMapper,
                                 org.springframework.context.ApplicationEventPublisher applicationEventPublisher) {
         this.taskMapper = taskMapper;
         this.taskTagMapper = taskTagMapper;
@@ -71,7 +74,8 @@ public class TaskLifecycleService {
         this.traceIdProvider = traceIdProvider;
         this.datasetImportService = datasetImportService;
         this.aiReviewConfigService = aiReviewConfigService;
-        this.llmProviderService = llmProviderService;
+        this.rewardRuleService = rewardRuleService;
+        this.dispatchMapper = dispatchMapper;
         this.applicationEventPublisher = applicationEventPublisher;
     }
 
@@ -89,6 +93,7 @@ public class TaskLifecycleService {
                         task.getQuota(),
                         task.getClaimedCount(),
                         task.getOverlapCount(),
+                        task.getStrategy(),
                         task.getDeadlineAt(),
                         task.getPublishedAt(),
                         task.getEndedAt(),
@@ -104,20 +109,56 @@ public class TaskLifecycleService {
 
     @Transactional
     public TaskLifecycleResponse create(Long ownerId, CreateTaskRequest request) {
+        return createTask(ownerId, request).lifecycleResponse();
+    }
+
+    /**
+     * 创建任务（含数据集导入和奖励规则）。
+     * controller 统一调用此方法，返回包含 taskId、status、datasetImportJob 和 rewardRule 的完整响应。
+     */
+    @Transactional
+    public CreateTaskResponse createWithDataset(Long ownerId, CreateTaskRequest request) {
+        CreatedTaskResult createdTask = createTask(ownerId, request);
+        DatasetImportJobResponse importJob = null;
+        if (request.datasetFileId() != null) {
+            importJob = datasetImportService.createAppendImport(
+                    createdTask.lifecycleResponse().taskId(),
+                    new DatasetImportRequest(request.datasetFileId())
+            );
+        }
+        return new CreateTaskResponse(
+                createdTask.lifecycleResponse().taskId(),
+                createdTask.lifecycleResponse().status(),
+                importJob,
+                createdTask.rewardRule()
+        );
+    }
+
+    /**
+     * 创建任务核心逻辑：
+     * 1. 插入任务（含内联 AI 配置子流程）
+     * 2. 如有 rewardRule 则创建奖励规则并回写 rewardVisible
+     * 3. 替换标签、记录审计快照
+     */
+    private CreatedTaskResult createTask(Long ownerId, CreateTaskRequest request) {
         Task task = new Task();
         task.setOwnerId(ownerId);
         task.setTitle(request.title());
         task.setDescription(request.description());
         task.setInstructionRichText(request.instructionRichText());
         task.setStatus(TaskStatus.DRAFT);
-        task.setQuota(request.quota());
+        task.setQuota(resolveQuota(request.strategy(), request.quota()));
         task.setClaimedCount(0);
-        task.setOverlapCount(SINGLE_LABELER_OVERLAP_COUNT);
+        task.setOverlapCount(request.overlapCount());
+        task.setStrategy(parseStrategy(request.strategy()));
+        task.setMaxClaimsPerLabeler(request.maxClaimsPerLabeler());
         task.setDeadlineAt(request.deadlineAt());
         task.setPublishedTemplateVersionId(request.publishedTemplateVersionId());
         task.setAiReviewConfigId(request.aiReviewConfigId());
         task.setReviewLevelCount(request.reviewLevelCount() != null ? request.reviewLevelCount() : 1);
-        task.setRewardVisible(true);
+        task.setRewardVisible(request.rewardRule() == null
+                || request.rewardRule().rewardVisible() == null
+                || request.rewardRule().rewardVisible());
         taskMapper.insert(task);
 
         if (hasAiInlineConfig(request)) {
@@ -134,22 +175,16 @@ public class TaskLifecycleService {
             taskMapper.updateById(task);
         }
 
+        RewardRuleResponse rewardRule = null;
+        if (request.rewardRule() != null) {
+            rewardRule = rewardRuleService.saveRuleForTaskOwner(task.getId(), ownerId, request.rewardRule());
+            task.setRewardVisible(rewardRule.rewardVisible());
+            taskMapper.updateById(task);
+        }
+
         replaceTags(task.getId(), request.tags());
         appendAudit(task, ownerId, "TASK_CREATED", null, snapshot(task));
-        return new TaskLifecycleResponse(task.getId(), task.getStatus());
-    }
-
-    @Transactional
-    public CreateTaskResponse createWithDataset(Long ownerId, CreateTaskRequest request) {
-        TaskLifecycleResponse task = create(ownerId, request);
-        DatasetImportJobResponse importJob = null;
-        if (request.datasetFileId() != null) {
-            importJob = datasetImportService.createAppendImport(
-                    task.taskId(),
-                    new DatasetImportRequest(request.datasetFileId())
-            );
-        }
-        return new CreateTaskResponse(task.taskId(), task.status(), importJob);
+        return new CreatedTaskResult(new TaskLifecycleResponse(task.getId(), task.getStatus()), rewardRule);
     }
 
     @Transactional
@@ -162,12 +197,23 @@ public class TaskLifecycleService {
         task.setTitle(request.title());
         task.setDescription(request.description());
         task.setInstructionRichText(request.instructionRichText());
-        task.setQuota(request.quota());
+        task.setQuota(resolveQuota(request.strategy(), request.quota()));
+        task.setOverlapCount(request.overlapCount());
+        if (request.strategy() != null) {
+            task.setStrategy(parseStrategy(request.strategy()));
+        }
+        if (request.maxClaimsPerLabeler() != null) {
+            task.setMaxClaimsPerLabeler(request.maxClaimsPerLabeler());
+        }
         task.setDeadlineAt(request.deadlineAt());
         task.setPublishedTemplateVersionId(request.publishedTemplateVersionId());
         task.setAiReviewConfigId(request.aiReviewConfigId());
         if (request.reviewLevelCount() != null) {
             task.setReviewLevelCount(request.reviewLevelCount());
+        }
+        if (request.rewardRule() != null) {
+            RewardRuleResponse rewardRule = rewardRuleService.saveRuleForTaskOwner(taskId, ownerId, request.rewardRule());
+            task.setRewardVisible(rewardRule.rewardVisible());
         }
         taskMapper.updateById(task);
         taskTagMapper.delete(new QueryWrapper<TaskTag>().eq("task_id", taskId));
@@ -240,8 +286,8 @@ public class TaskLifecycleService {
         if (task.getQuota() == null || task.getQuota() <= 0) {
             throw missingPublishRequirement("任务配额不能为空");
         }
-        if (!Integer.valueOf(SINGLE_LABELER_OVERLAP_COUNT).equals(task.getOverlapCount())) {
-            throw missingPublishRequirement("任务重叠标注数量必须为 1");
+        if (task.getOverlapCount() == null || task.getOverlapCount() < 1) {
+            throw missingPublishRequirement("Task overlap count is required");
         }
         if (task.getDeadlineAt() == null || !task.getDeadlineAt().isAfter(LocalDateTime.now())) {
             throw missingPublishRequirement("任务截止时间必须晚于当前时间");
@@ -249,14 +295,30 @@ public class TaskLifecycleService {
         if (!publishDependencyChecker.datasetReady(task.getId())) {
             throw missingPublishRequirement("任务数据集不能为空");
         }
-//        if (!publishDependencyChecker.templateVersionExists(task.getPublishedTemplateVersionId())) {
-//            throw missingPublishRequirement("任务模板版本不能为空");
-//        }
+        if (!publishDependencyChecker.templateVersionExists(task.getPublishedTemplateVersionId())) {
+            throw missingPublishRequirement("Task template version is required");
+        }
         if (!publishDependencyChecker.aiReviewConfigExists(task.getId(), task.getAiReviewConfigId())) {
             throw missingPublishRequirement("任务 AI 审核配置不能为空");
         }
         if (!publishDependencyChecker.rewardRuleExists(task.getId())) {
             throw missingPublishRequirement("任务奖励规则不能为空");
+        }
+        ClaimStrategy strategy = task.getStrategy();
+        if (strategy == null) {
+            strategy = ClaimStrategy.FCFS;
+        }
+        if (strategy != ClaimStrategy.ASSIGNED
+                && (task.getQuota() == null || task.getQuota() <= 0)) {
+            throw missingPublishRequirement("Task quota is required");
+        }
+        if (strategy == ClaimStrategy.ASSIGNED) {
+            int dispatchCount = dispatchMapper.countByTaskId(task.getId());
+            if (dispatchCount == 0) {
+                throw missingPublishRequirement(
+                        "At least one dispatch is required for ASSIGNED strategy");
+            }
+            task.setQuota(dispatchCount);
         }
     }
 
@@ -265,8 +327,6 @@ public class TaskLifecycleService {
     }
 
     private TaskDetailResponse toDetailResponse(Task task) {
-        AiReviewConfigResponse aiReviewConfig = findAiReviewConfig(task);
-        LlmProviderResponse aiProvider = findAiProvider(aiReviewConfig);
         return new TaskDetailResponse(
                 task.getId(),
                 task.getOwnerId(),
@@ -278,32 +338,19 @@ public class TaskLifecycleService {
                 task.getQuota(),
                 task.getClaimedCount(),
                 task.getOverlapCount(),
+                task.getStrategy(),
+                task.getMaxClaimsPerLabeler(),
                 task.getDeadlineAt(),
                 task.getPublishedTemplateVersionId(),
                 task.getAiReviewConfigId(),
                 task.getReviewLevelCount(),
                 task.getRewardVisible(),
+                rewardRuleService.findLatestRule(task.getId()),
                 task.getPublishedAt(),
                 task.getEndedAt(),
                 task.getCreatedAt(),
-                task.getUpdatedAt(),
-                aiProvider,
-                aiReviewConfig
+                task.getUpdatedAt()
         );
-    }
-
-    private AiReviewConfigResponse findAiReviewConfig(Task task) {
-        if (task.getAiReviewConfigId() == null) {
-            return null;
-        }
-        return aiReviewConfigService.findResponseByTaskId(task.getId()).orElse(null);
-    }
-
-    private LlmProviderResponse findAiProvider(AiReviewConfigResponse aiReviewConfig) {
-        if (aiReviewConfig == null || aiReviewConfig.providerId() == null) {
-            return null;
-        }
-        return llmProviderService.findResponseById(aiReviewConfig.providerId()).orElse(null);
     }
 
     private List<String> listTags(Long taskId) {
@@ -332,6 +379,8 @@ public class TaskLifecycleService {
         snapshot.put("status", task.getStatus());
         snapshot.put("quota", task.getQuota());
         snapshot.put("overlapCount", task.getOverlapCount());
+        snapshot.put("strategy", task.getStrategy());
+        snapshot.put("maxClaimsPerLabeler", task.getMaxClaimsPerLabeler());
         snapshot.put("deadlineAt", task.getDeadlineAt());
         snapshot.put("publishedTemplateVersionId", task.getPublishedTemplateVersionId());
         snapshot.put("aiReviewConfigId", task.getAiReviewConfigId());
@@ -375,5 +424,32 @@ public class TaskLifecycleService {
         taskTag.setTaskId(taskId);
         taskTag.setTagName(tagName);
         return taskTag;
+    }
+
+    private ClaimStrategy parseStrategy(String strategy) {
+        if (strategy == null || strategy.isBlank()) {
+            return ClaimStrategy.FCFS;
+        }
+        try {
+            return ClaimStrategy.valueOf(strategy.trim().toUpperCase());
+        } catch (IllegalArgumentException e) {
+            throw new BusinessException(INVALID_STRATEGY, "Invalid claim strategy: " + strategy);
+        }
+    }
+
+    private int resolveQuota(String strategy, Integer requestQuota) {
+        ClaimStrategy parsed = parseStrategy(strategy);
+        if (parsed == ClaimStrategy.ASSIGNED) {
+            return 0;
+        }
+        if (requestQuota == null || requestQuota <= 0) {
+            throw new BusinessException(TASK_PUBLISH_REQUIREMENT_MISSING,
+                    "Quota is required for " + parsed.name());
+        }
+        return requestQuota;
+    }
+
+    /** 创建任务的结果封装，避免 createTask 返回多个裸值。 */
+    private record CreatedTaskResult(TaskLifecycleResponse lifecycleResponse, RewardRuleResponse rewardRule) {
     }
 }

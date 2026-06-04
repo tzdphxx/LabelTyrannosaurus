@@ -221,4 +221,14 @@ public interface AssignmentMapper extends BaseMapper<Assignment> {
               AND status <> 'CANCELLED'
             """)
     java.util.List<Long> selectDistinctLabelersByTask(@Param("taskId") Long taskId);
+
+    @Select("""
+            SELECT COUNT(1)
+            FROM assignments
+            WHERE task_id = #{taskId}
+              AND labeler_id = #{labelerId}
+              AND status IN ('CLAIMED', 'DRAFTING', 'RETURNED')
+            """)
+    int countActiveByTaskAndLabeler(@Param("taskId") Long taskId,
+                                    @Param("labelerId") Long labelerId);
 }

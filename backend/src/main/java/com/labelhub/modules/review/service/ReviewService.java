@@ -3,7 +3,9 @@ package com.labelhub.modules.review.service;
 import com.labelhub.common.audit.AuditAppender;
 import com.labelhub.common.audit.AuditCommand;
 import com.labelhub.common.exception.BusinessException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.labelhub.common.security.CurrentUserContext;
+import com.labelhub.common.util.AnswerCanonicalizer;
 import com.labelhub.modules.assignment.domain.Assignment;
 import com.labelhub.modules.assignment.domain.AssignmentStatus;
 import com.labelhub.modules.assignment.mapper.AssignmentMapper;
@@ -25,6 +27,7 @@ import java.time.LocalDateTime;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -36,6 +39,7 @@ public class ReviewService {
     private static final int REJECT_REASON_REQUIRED = 400602;
     private static final int ASSIGNMENT_NOT_FOUND = 404602;
     private static final int REVIEWER_NOT_ASSIGNED = 403601;
+    private static final int INVALID_ANSWER_JSON = 400603;
     private static final String SUBMISSION_BIZ_TYPE = "SUBMISSION";
     private static final String USER_ACTOR_TYPE = "USER";
 
@@ -48,6 +52,7 @@ public class ReviewService {
     private final AuditAppender auditAppender;
     private final DatasetClaimService datasetClaimService;
     private final ReviewLevelEscalationService escalationService;
+    private final ObjectMapper objectMapper;
 
     public ReviewService(SubmissionMapper submissionMapper,
                          AssignmentMapper assignmentMapper,
@@ -57,7 +62,8 @@ public class ReviewService {
                          SubmissionEventPublisher eventPublisher,
                          AuditAppender auditAppender,
                          DatasetClaimService datasetClaimService,
-                         ReviewLevelEscalationService escalationService) {
+                         ReviewLevelEscalationService escalationService,
+                         ObjectMapper objectMapper) {
         this.submissionMapper = submissionMapper;
         this.assignmentMapper = assignmentMapper;
         this.reviewRecordMapper = reviewRecordMapper;
@@ -67,6 +73,7 @@ public class ReviewService {
         this.auditAppender = auditAppender;
         this.datasetClaimService = datasetClaimService;
         this.escalationService = escalationService;
+        this.objectMapper = objectMapper;
     }
 
     public List<SubmissionReviewItem> listPendingFinal() {
@@ -80,6 +87,11 @@ public class ReviewService {
         int currentLevel = request.reviewLevel();
         int maxLevel = escalationService.getMaxReviewLevel(submission.getTaskId());
         requireNotReviewedAtOtherLevel(submissionId, reviewerId, currentLevel);
+
+        if (request.revisedAnswerJson() != null) {
+            submission = applyRevision(submission, request.revisedAnswerJson(), reviewerId);
+            submissionId = submission.getId();
+        }
 
         ReviewRecord record = createReviewRecord(
                 submissionId, reviewerId, ReviewAction.APPROVE,
@@ -115,6 +127,40 @@ public class ReviewService {
         appendAudit(submission, reviewerId, "SUBMISSION_APPROVED", record.getId());
 
         return new ReviewActionResponse(submissionId, SubmissionStatus.APPROVED, record.getId());
+    }
+
+    private Submission applyRevision(Submission original, String revisedAnswerJson, Long reviewerId) {
+        String canonical;
+        try {
+            canonical = AnswerCanonicalizer.canonicalize(revisedAnswerJson, objectMapper);
+        } catch (IllegalArgumentException ex) {
+            throw new BusinessException(INVALID_ANSWER_JSON, ex.getMessage());
+        }
+        String newHash = AnswerCanonicalizer.sha256(canonical);
+        if (Objects.equals(original.getAnswerHash(), newHash)) {
+            return original;
+        }
+        submissionMapper.supersedeActiveByAssignmentId(original.getAssignmentId());
+        Submission latest = submissionMapper.selectLatestByAssignmentId(original.getAssignmentId());
+        int nextVersionNo = latest == null ? 1 : latest.getVersionNo() + 1;
+
+        Submission revised = new Submission();
+        revised.setAssignmentId(original.getAssignmentId());
+        revised.setTaskId(original.getTaskId());
+        revised.setDatasetItemId(original.getDatasetItemId());
+        revised.setLabelerId(original.getLabelerId());
+        revised.setCreatedBy(reviewerId);
+        revised.setTemplateVersionId(original.getTemplateVersionId());
+        revised.setVersionNo(nextVersionNo);
+        revised.setAnswerJson(canonical);
+        revised.setAnswerHash(newHash);
+        revised.setStatus(SubmissionStatus.PENDING_FINAL);
+        revised.setCurrentReviewLevel(original.getCurrentReviewLevel());
+        revised.setReviewFlowStatus(original.getReviewFlowStatus());
+        revised.setAssignedReviewerId(original.getAssignedReviewerId());
+        revised.setReviewVersion(1);
+        submissionMapper.insert(revised);
+        return revised;
     }
 
     @Transactional
@@ -164,8 +210,8 @@ public class ReviewService {
         if (CurrentUserContext.isAdmin()) {
             return;
         }
-        int count = reviewTaskMapper.countBySubmissionAndReviewer(submissionId, reviewerId);
-        if (count == 0) {
+        Submission submission = submissionMapper.selectById(submissionId);
+        if (submission == null || !reviewerId.equals(submission.getAssignedReviewerId())) {
             throw new BusinessException(REVIEWER_NOT_ASSIGNED,
                     "Reviewer is not assigned to this submission");
         }

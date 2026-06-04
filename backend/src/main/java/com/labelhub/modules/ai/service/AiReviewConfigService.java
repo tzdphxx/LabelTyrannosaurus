@@ -9,6 +9,9 @@ import com.labelhub.common.audit.AuditCommand;
 import com.labelhub.common.exception.BusinessException;
 import com.labelhub.common.security.CurrentUserContext;
 import com.labelhub.common.web.TraceIdProvider;
+import java.util.List;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import com.labelhub.infrastructure.llm.LlmGateway;
 import com.labelhub.infrastructure.llm.LlmGatewayRequest;
 import com.labelhub.infrastructure.llm.LlmGatewayResponse;
@@ -31,13 +34,14 @@ import java.math.BigDecimal;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class AiReviewConfigService {
+
+    private static final Logger log = LoggerFactory.getLogger(AiReviewConfigService.class);
 
     private static final int TASK_NOT_FOUND = 404001;
     private static final int AI_REVIEW_PROVIDER_DISABLED = 400401;
@@ -95,7 +99,7 @@ public class AiReviewConfigService {
         Task task = loadOwnedDraftTask(ownerId, taskId);
         LlmProvider provider = requireEnabledProvider(request.providerId());
         validateRequest(request, provider);
-        AiReviewConfig existing = findConfigByTaskId(taskId);
+        AiReviewConfig existing = findByTaskId(taskId);
         if (existing != null) {
             return updateExisting(ownerId, task, existing, request, "AI_REVIEW_CONFIG_UPDATED");
         }
@@ -123,16 +127,11 @@ public class AiReviewConfigService {
 
     public AiReviewConfigResponse get(Long ownerId, Long taskId) {
         loadOwnedTask(ownerId, taskId);
-        AiReviewConfig config = findConfigByTaskId(taskId);
+        AiReviewConfig config = findByTaskId(taskId);
         if (config == null) {
             throw new BusinessException(AI_REVIEW_CONFIG_NOT_FOUND, "AI 审核配置不存在");
         }
         return toResponse(config);
-    }
-
-    public Optional<AiReviewConfigResponse> findResponseByTaskId(Long taskId) {
-        AiReviewConfig config = findConfigByTaskId(taskId);
-        return config == null ? Optional.empty() : Optional.of(toResponse(config));
     }
 
     public boolean existsForTask(Long taskId, Long configId) {
@@ -216,6 +215,12 @@ public class AiReviewConfigService {
                 ? request.visionDetail().trim() : "auto");
         config.setMaxImagesPerRequest(request.maxImagesPerRequest() != null ? request.maxImagesPerRequest() : 5);
         config.setAllowAiDirectApproveWhenDegraded(Boolean.TRUE.equals(request.allowAiDirectApproveWhenDegraded()));
+        config.setReviewStrategy(request.reviewStrategy() != null && !request.reviewStrategy().isBlank()
+                ? request.reviewStrategy() : "LIGHTWEIGHT");
+        config.setVoteModelsJson(request.voteModels() != null ? toJson(request.voteModels()) : null);
+        config.setVoteMinAgreement(request.voteMinAgreement() != null ? request.voteMinAgreement() : 2);
+        config.setDimensionReviewersJson(request.dimensionReviewers() != null
+                ? toJson(request.dimensionReviewers()) : null);
     }
 
     private void validateRequest(AiReviewConfigRequest request, LlmProvider provider) {
@@ -270,8 +275,17 @@ public class AiReviewConfigService {
         return config;
     }
 
-    private AiReviewConfig findConfigByTaskId(Long taskId) {
-        return aiReviewConfigMapper.selectOne(new QueryWrapper<AiReviewConfig>().eq("task_id", taskId));
+    private AiReviewConfig findByTaskId(Long taskId) {
+        List<AiReviewConfig> configs = aiReviewConfigMapper.selectList(
+                new QueryWrapper<AiReviewConfig>().eq("task_id", taskId));
+        if (configs.isEmpty()) {
+            return null;
+        }
+        if (configs.size() > 1) {
+            log.warn("Multiple AiReviewConfig rows for task {} ({} rows); using id={}",
+                    taskId, configs.size(), configs.get(0).getId());
+        }
+        return configs.get(0);
     }
 
     private AiReviewConfigResponse toResponse(AiReviewConfig config) {
@@ -297,7 +311,12 @@ public class AiReviewConfigService {
                 config.getDegradationPenalty() != null ? config.getDegradationPenalty() : new BigDecimal("0.20"),
                 config.getVisionDetail() != null ? config.getVisionDetail() : "auto",
                 config.getMaxImagesPerRequest() != null ? config.getMaxImagesPerRequest() : 5,
-                Boolean.TRUE.equals(config.getAllowAiDirectApproveWhenDegraded())
+                Boolean.TRUE.equals(config.getAllowAiDirectApproveWhenDegraded()),
+                config.getReviewStrategy() != null ? config.getReviewStrategy() : "LIGHTWEIGHT",
+                config.getVoteModelsJson() != null ? parseListMap(config.getVoteModelsJson()) : null,
+                config.getVoteMinAgreement() != null ? config.getVoteMinAgreement() : 2,
+                config.getDimensionReviewersJson() != null
+                        ? parseStringListOfMapMap(config.getDimensionReviewersJson()) : null
         );
     }
 
@@ -408,6 +427,26 @@ public class AiReviewConfigService {
             return objectMapper.writeValueAsString(value);
         } catch (JsonProcessingException ex) {
             throw new BusinessException(AI_REVIEW_CONFIG_INVALID, "AI 审核配置 JSON 格式不合法");
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    private List<Map<String, Object>> parseListMap(String json) {
+        if (json == null || json.isBlank()) return null;
+        try {
+            return objectMapper.readValue(json, new TypeReference<>() {});
+        } catch (JsonProcessingException ex) {
+            return null;
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    private Map<String, List<Map<String, Object>>> parseStringListOfMapMap(String json) {
+        if (json == null || json.isBlank()) return null;
+        try {
+            return objectMapper.readValue(json, new TypeReference<>() {});
+        } catch (JsonProcessingException ex) {
+            return null;
         }
     }
 }

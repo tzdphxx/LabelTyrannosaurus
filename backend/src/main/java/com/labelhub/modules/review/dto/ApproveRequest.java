@@ -4,6 +4,7 @@ import jakarta.validation.constraints.Min;
 
 public record ApproveRequest(
         String reviewComment,
-        @Min(1) int reviewLevel
+        @Min(1) int reviewLevel,
+        String revisedAnswerJson
 ) {
 }

@@ -60,13 +60,13 @@ class ReviewControllerTest {
         CurrentUserContext.set(new CurrentUser(1L, "reviewer", "test@labelhub.dev", Set.of(RoleCode.REVIEWER), 1));
         ReviewerSubmissionListItem item = new ReviewerSubmissionListItem(
                 100L, 1L, 1L, 1L, SubmissionStatus.PENDING_FINAL, null, null, null, 1, null, null, null);
-        when(reviewerListMapper.countWithFilters(null, null, null, null, null, null, null))
+        when(reviewerListMapper.countWithFilters(null, null, null, null, null, null, null, 1L, null))
                 .thenReturn(1L);
-        when(reviewerListMapper.selectWithFilters(null, null, null, null, null, null, null, 0, 20))
+        when(reviewerListMapper.selectWithFilters(null, null, null, null, null, null, null, 1L, null, 0, 20))
                 .thenReturn(List.of(item));
 
         ApiResponse<PageResponse<ReviewerSubmissionListItem>> response = controller.list(
-                null, null, null, null, null, null, null, 1, 20);
+                null, null, null, null, null, null, null, null, 1, 20);
 
         assertThat(response.data().items()).containsExactly(item);
         assertThat(response.data().total()).isEqualTo(1L);
@@ -134,7 +134,7 @@ class ReviewControllerTest {
     void labelerCannotList() {
         CurrentUserContext.set(new CurrentUser(2L, "labeler", "test@labelhub.dev", Set.of(RoleCode.LABELER), 1));
 
-        assertThatThrownBy(() -> controller.list(null, null, null, null, null, null, null, 1, 20))
+        assertThatThrownBy(() -> controller.list(null, null, null, null, null, null, null, null, 1, 20))
                 .isInstanceOfSatisfying(BusinessException.class,
                         ex -> assertThat(ex.getCode()).isEqualTo(403001));
     }

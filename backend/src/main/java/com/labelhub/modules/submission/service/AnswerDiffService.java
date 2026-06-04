@@ -6,26 +6,39 @@ import com.labelhub.common.exception.BusinessException;
 import com.labelhub.modules.submission.domain.Submission;
 import com.labelhub.modules.submission.dto.AnswerDiffResponse;
 import com.labelhub.modules.submission.dto.FieldDiff;
+import com.labelhub.modules.submission.dto.MultiVersionCompareResponse;
+import com.labelhub.modules.submission.dto.MultiVersionCompareResponse.FieldComparison;
+import com.labelhub.modules.submission.dto.MultiVersionCompareResponse.VersionInfo;
 import com.labelhub.modules.submission.mapper.SubmissionMapper;
 import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 @Service
 public class AnswerDiffService {
 
+    private static final Logger log = LoggerFactory.getLogger(AnswerDiffService.class);
     private static final int NOT_FOUND = 404801;
+    private static final int DIFFERENT_ASSIGNMENT = 400801;
+    private static final int DUPLICATE_IDS = 400802;
     private static final TypeReference<Map<String, Object>> MAP_TYPE = new TypeReference<>() {};
     private final SubmissionMapper submissionMapper;
     private final ObjectMapper objectMapper;
+    private final SubmissionUserResolver userResolver;
 
-    public AnswerDiffService(SubmissionMapper submissionMapper, ObjectMapper objectMapper) {
+    public AnswerDiffService(SubmissionMapper submissionMapper, ObjectMapper objectMapper,
+                             SubmissionUserResolver userResolver) {
         this.submissionMapper = submissionMapper;
         this.objectMapper = objectMapper;
+        this.userResolver = userResolver;
     }
 
     public AnswerDiffResponse diff(Long submissionId, Integer baseVersionNo) {
@@ -81,11 +94,102 @@ public class AnswerDiffService {
         return diffs;
     }
 
+    public MultiVersionCompareResponse multiCompare(List<Long> submissionIds) {
+        if (submissionIds == null || submissionIds.size() < 2) {
+            throw new BusinessException(400801, "At least 2 submission IDs required");
+        }
+        if (new HashSet<>(submissionIds).size() < submissionIds.size()) {
+            throw new BusinessException(DUPLICATE_IDS, "Duplicate submission IDs are not allowed");
+        }
+        List<Submission> submissions = submissionMapper.selectBatchIds(submissionIds);
+        if (submissions.size() != submissionIds.size()) {
+            throw new BusinessException(NOT_FOUND, "One or more submissions not found");
+        }
+        Long assignmentId = submissions.get(0).getAssignmentId();
+        for (Submission s : submissions) {
+            if (!Objects.equals(s.getAssignmentId(), assignmentId)) {
+                throw new BusinessException(DIFFERENT_ASSIGNMENT,
+                        "All submissions must belong to the same assignment");
+            }
+        }
+        submissions.sort((a, b) -> Integer.compare(a.getVersionNo(), b.getVersionNo()));
+
+        Map<Long, String> userNames = userResolver.resolveCreatorNames(submissions);
+        List<VersionInfo> versions = submissions.stream()
+                .map(s -> {
+                    Long creatorId = userResolver.effectiveCreatorId(s);
+                    return new VersionInfo(
+                            s.getId(),
+                            s.getVersionNo(),
+                            s.getSubmittedAt(),
+                            creatorId,
+                            userNames.get(creatorId));
+                })
+                .toList();
+
+        List<Map<String, Object>> parsedAnswers = submissions.stream()
+                .map(s -> parseAnswer(s.getAnswerJson()))
+                .toList();
+
+        Set<String> allFieldPaths = new LinkedHashSet<>();
+        for (Map<String, Object> answer : parsedAnswers) {
+            collectFieldPaths("", answer, allFieldPaths);
+        }
+
+        List<FieldComparison> fields = new ArrayList<>();
+        for (String fieldPath : allFieldPaths) {
+            String[] parts = fieldPath.split("\\.");
+            Map<Integer, Object> valuesByVersion = new LinkedHashMap<>();
+            Object firstValue = null;
+            boolean hasDifference = false;
+            for (int i = 0; i < submissions.size(); i++) {
+                Submission s = submissions.get(i);
+                Map<String, Object> answer = parsedAnswers.get(i);
+                Object value = getFieldValue(parts, answer);
+                valuesByVersion.put(s.getVersionNo(), value);
+                if (i == 0) {
+                    firstValue = value;
+                } else if (!Objects.equals(firstValue, value)) {
+                    hasDifference = true;
+                }
+            }
+            fields.add(new FieldComparison(fieldPath, valuesByVersion, hasDifference));
+        }
+
+        return new MultiVersionCompareResponse(versions, fields);
+    }
+
+    private void collectFieldPaths(String prefix, Map<String, Object> map, Set<String> paths) {
+        for (Map.Entry<String, Object> entry : map.entrySet()) {
+            String path = prefix.isEmpty() ? entry.getKey() : prefix + "." + entry.getKey();
+            paths.add(path);
+            if (entry.getValue() instanceof Map) {
+                @SuppressWarnings("unchecked")
+                Map<String, Object> nested = (Map<String, Object>) entry.getValue();
+                collectFieldPaths(path, nested, paths);
+            }
+        }
+    }
+
+    private Object getFieldValue(String[] parts, Map<String, Object> answer) {
+        Object current = answer;
+        for (String part : parts) {
+            if (!(current instanceof Map)) {
+                return null;
+            }
+            @SuppressWarnings("unchecked")
+            Map<String, Object> map = (Map<String, Object>) current;
+            current = map.get(part);
+        }
+        return current;
+    }
+
     private Map<String, Object> parseAnswer(String json) {
         if (json == null || json.isBlank()) return Map.of();
         try {
             return objectMapper.readValue(json, MAP_TYPE);
         } catch (Exception e) {
+            log.warn("Failed to parse answer JSON: {}", e.getMessage());
             return Map.of();
         }
     }

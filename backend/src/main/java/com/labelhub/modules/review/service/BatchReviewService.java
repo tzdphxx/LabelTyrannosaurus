@@ -81,7 +81,7 @@ public class BatchReviewService {
                         "Submission is marked for manual review");
             }
             reviewService.approve(submissionId, reviewerId,
-                    new ApproveRequest(request.reviewComment(), request.reviewLevel()));
+                    new ApproveRequest(request.reviewComment(), request.reviewLevel(), null));
             return BatchReviewItemResult.ok(submissionId);
         } catch (BusinessException ex) {
             return BatchReviewItemResult.fail(submissionId, ex.getMessage());

@@ -56,38 +56,60 @@ Permission: OWNER.
 
 Request fields:
 ```Plaintext
-providerId
-modelName
-promptTemplate
-scoringDimensions[]
-passThreshold
-manualReviewThreshold
-outputSchema
+providerId            (required) LLM 供应商 ID
+modelName             (optional, ≤128 chars) 模型名称
+promptTemplate        (required, ≤10000 chars) 标注规则说明，用于拼装 AI 审核和预标注的 System Prompt
+scoringDimensions[]   (required) 评分维度列表，如 ["准确性","完整性","安全性"]
+passThreshold         (required, 0.00-100.00) 通过阈值
+manualReviewThreshold (required, 0.00-100.00) 人工复核阈值，低于此值打回
+maxRetry              (optional, 0-10, default 3) 失败最大重试次数
+aiFlowPolicy          (optional, default MANUAL_FIRST) 流转策略
+allowAiDirectApprove  (optional) 是否允许 AI 直接通过
+allowAiDirectReject   (optional) 是否允许 AI 直接打回
+rejectThreshold       (optional, 0.00-100.00) 打回阈值
+confidenceThreshold   (optional, 0.00-1.00) 置信度阈值，低于此值转人工
+riskFlagsForceManual[] (optional) 遇这些风险标记则强制转人工
+multimodalEnabled     (optional, default true) 是否启用多模态（图片/视频输入）
+degradationPenalty    (optional, 0.00-1.00, default 0.20) 降级时 confidence 惩罚系数
+visionDetail          (optional, "auto"|"low"|"high") 视觉精度
+maxImagesPerRequest   (optional, 0-20, default 5) 单次请求最大图片数
+allowAiDirectApproveWhenDegraded (optional) 降级模式下是否仍允许 AI 直接通过
+
+-- v3.6 多策略审核配置 --
+reviewStrategy        (optional, default LIGHTWEIGHT) 审核策略
+                      LIGHTWEIGHT: 单路 LLM（默认）
+                      PARALLEL_VOTE: 多模型并行投票
+                      DEEP_DIMENSION: 维度专项模型 + 维度内投票
+                      AGENT_DEBATE: 多 Agent 辩论
+voteModels[]          (optional) 投票模型列表 [{"providerId":1,"modelName":"qwen-plus"}]
+                      仅配 1 个模型时系统自动复制到满足最少票数
+voteMinAgreement      (optional, 1-10, default 2) 最少一致票数
+dimensionReviewers    (optional) 深度模式维度→模型映射
+                      {"accuracy":[{"providerId":1,"modelName":"qwen-plus"}]}
 ```
 
-Response fields:
+Response fields (same as request plus):
 ```Plaintext
-id
-taskId
-providerId
-modelName
-promptTemplate
-scoringDimensions[]
-passThreshold
-manualReviewThreshold
-outputSchema
-promptVersion
+id                    (auto) 配置 ID
+taskId                (auto) 任务 ID
+outputSchema          (auto) 输出 JSON Schema
+promptVersion         (auto) Prompt 版本号，每次更新递增
+voteModels[]          (auto) 投票模型列表（含系统自动扩展后的结果）
+voteMinAgreement      (auto) 最少一致票数
+dimensionReviewers    (auto) 深度模式维度→模型映射
 ```
 
 Rules:
 ```Plaintext
-Only the task owner can save AI review config.
+Only the task owner can save/update AI review config.
 Only DRAFT tasks can be configured.
 Provider must exist and be enabled.
-promptTemplate, scoringDimensions, and outputSchema are required.
+promptTemplate, scoringDimensions are required.
 Thresholds must be between 0.00 and 100.00.
 manualReviewThreshold must not be greater than passThreshold.
 Saving config backfills tasks.aiReviewConfigId for publish validation.
+reviewStrategy defaults to LIGHTWEIGHT for backward compatibility.
+Single-model voteModels auto-duplicated to meet voteMinAgreement.
 ```
 
 ## PUT /api/v1/tasks/{taskId}/ai-review-configs/{configId}

@@ -214,6 +214,12 @@ public class AiReviewConfigService {
                 ? request.visionDetail().trim() : "auto");
         config.setMaxImagesPerRequest(request.maxImagesPerRequest() != null ? request.maxImagesPerRequest() : 5);
         config.setAllowAiDirectApproveWhenDegraded(Boolean.TRUE.equals(request.allowAiDirectApproveWhenDegraded()));
+        config.setReviewStrategy(request.reviewStrategy() != null && !request.reviewStrategy().isBlank()
+                ? request.reviewStrategy() : "LIGHTWEIGHT");
+        config.setVoteModelsJson(request.voteModels() != null ? toJson(request.voteModels()) : null);
+        config.setVoteMinAgreement(request.voteMinAgreement() != null ? request.voteMinAgreement() : 2);
+        config.setDimensionReviewersJson(request.dimensionReviewers() != null
+                ? toJson(request.dimensionReviewers()) : null);
     }
 
     private void validateRequest(AiReviewConfigRequest request, LlmProvider provider) {
@@ -304,7 +310,12 @@ public class AiReviewConfigService {
                 config.getDegradationPenalty() != null ? config.getDegradationPenalty() : new BigDecimal("0.20"),
                 config.getVisionDetail() != null ? config.getVisionDetail() : "auto",
                 config.getMaxImagesPerRequest() != null ? config.getMaxImagesPerRequest() : 5,
-                Boolean.TRUE.equals(config.getAllowAiDirectApproveWhenDegraded())
+                Boolean.TRUE.equals(config.getAllowAiDirectApproveWhenDegraded()),
+                config.getReviewStrategy() != null ? config.getReviewStrategy() : "LIGHTWEIGHT",
+                config.getVoteModelsJson() != null ? parseListMap(config.getVoteModelsJson()) : null,
+                config.getVoteMinAgreement() != null ? config.getVoteMinAgreement() : 2,
+                config.getDimensionReviewersJson() != null
+                        ? parseStringListOfMapMap(config.getDimensionReviewersJson()) : null
         );
     }
 
@@ -415,6 +426,26 @@ public class AiReviewConfigService {
             return objectMapper.writeValueAsString(value);
         } catch (JsonProcessingException ex) {
             throw new BusinessException(AI_REVIEW_CONFIG_INVALID, "AI review config JSON is invalid");
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    private List<Map<String, Object>> parseListMap(String json) {
+        if (json == null || json.isBlank()) return null;
+        try {
+            return objectMapper.readValue(json, new TypeReference<>() {});
+        } catch (JsonProcessingException ex) {
+            return null;
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    private Map<String, List<Map<String, Object>>> parseStringListOfMapMap(String json) {
+        if (json == null || json.isBlank()) return null;
+        try {
+            return objectMapper.readValue(json, new TypeReference<>() {});
+        } catch (JsonProcessingException ex) {
+            return null;
         }
     }
 }

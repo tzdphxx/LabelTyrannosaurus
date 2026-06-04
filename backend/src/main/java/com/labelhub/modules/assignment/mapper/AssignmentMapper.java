@@ -108,16 +108,24 @@ public interface AssignmentMapper extends BaseMapper<Assignment> {
                    t.instruction_rich_text,
                    t.status,
                    t.quota,
+                   t.claimed_count,
                    t.overlap_count,
+                   t.strategy,
                    t.deadline_at,
+                   t.published_at,
+                   t.ended_at,
+                   t.created_at,
                    t.published_template_version_id,
                    COUNT(a.id) AS claimed_item_count,
+                   SUM(CASE WHEN a.status = 'SUBMITTED' THEN 1 ELSE 0 END) AS submitted_count,
+                   SUM(CASE WHEN a.status = 'APPROVED' THEN 1 ELSE 0 END) AS approved_count,
                    MAX(a.updated_at) AS updated_at
             FROM assignments a
             INNER JOIN tasks t ON t.id = a.task_id
             WHERE a.labeler_id = #{labelerId}
             GROUP BY t.id, t.title, t.description, t.instruction_rich_text, t.status, t.quota,
-                     t.overlap_count, t.deadline_at, t.published_template_version_id
+                     t.claimed_count, t.overlap_count, t.strategy, t.deadline_at, t.published_at,
+                     t.ended_at, t.created_at, t.published_template_version_id
             ORDER BY updated_at DESC
             LIMIT #{limit} OFFSET #{offset}
             """)
@@ -133,17 +141,25 @@ public interface AssignmentMapper extends BaseMapper<Assignment> {
                    t.instruction_rich_text,
                    t.status,
                    t.quota,
+                   t.claimed_count,
                    t.overlap_count,
+                   t.strategy,
                    t.deadline_at,
+                   t.published_at,
+                   t.ended_at,
+                   t.created_at,
                    t.published_template_version_id,
                    COUNT(a.id) AS claimed_item_count,
+                   SUM(CASE WHEN a.status = 'SUBMITTED' THEN 1 ELSE 0 END) AS submitted_count,
+                   SUM(CASE WHEN a.status = 'APPROVED' THEN 1 ELSE 0 END) AS approved_count,
                    MAX(a.updated_at) AS updated_at
             FROM assignments a
             INNER JOIN tasks t ON t.id = a.task_id
             WHERE a.labeler_id = #{labelerId}
               AND a.task_id = #{taskId}
             GROUP BY t.id, t.title, t.description, t.instruction_rich_text, t.status, t.quota,
-                     t.overlap_count, t.deadline_at, t.published_template_version_id
+                     t.claimed_count, t.overlap_count, t.strategy, t.deadline_at, t.published_at,
+                     t.ended_at, t.created_at, t.published_template_version_id
             """)
     java.util.Map<String, Object> selectLabelerClaimedTask(@Param("labelerId") Long labelerId,
                                                            @Param("taskId") Long taskId);

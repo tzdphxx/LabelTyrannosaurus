@@ -54,11 +54,12 @@ public record AiReviewConfigRequest(
                                  BigDecimal manualReviewThreshold,
                                  Integer maxRetry, String aiFlowPolicy, Boolean allowAiDirectApprove,
                                  Boolean allowAiDirectReject, BigDecimal rejectThreshold,
-                                 BigDecimal confidenceThreshold, List<String> riskFlagsForceManual) {
+                                 BigDecimal confidenceThreshold, List<String> riskFlagsForceManual,
+                                 String reviewStrategy) {
         this(providerId, modelName, promptTemplate, scoringDimensions, passThreshold, manualReviewThreshold,
                 maxRetry, aiFlowPolicy, allowAiDirectApprove, allowAiDirectReject,
                 rejectThreshold, confidenceThreshold, riskFlagsForceManual,
                 true, new BigDecimal("0.20"), "auto", 5, false,
-                null, null, null, null);
+                reviewStrategy, null, null, null);
     }
 }

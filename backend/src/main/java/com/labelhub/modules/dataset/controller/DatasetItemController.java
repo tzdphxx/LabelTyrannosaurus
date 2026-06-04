@@ -2,6 +2,7 @@ package com.labelhub.modules.dataset.controller;
 
 import com.labelhub.common.api.ApiResponse;
 import com.labelhub.modules.dataset.dto.*;
+import com.labelhub.common.api.PageResponse;
 import com.labelhub.modules.dataset.service.DatasetItemService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -39,7 +40,7 @@ public class DatasetItemController {
      */
     @GetMapping
     @Operation(summary = "数据项列表", description = "分页查询任务下未删除的数据项。")
-    public ApiResponse<DatasetItemPageResponse> listItems(@PathVariable Long taskId,
+    public ApiResponse<PageResponse<ItemResponse>> listItems(@PathVariable Long taskId,
                                                           @RequestParam(required = false) Integer page,
                                                           @RequestParam(required = false) Integer pageSize,
                                                           @RequestParam(required = false) String externalId) {

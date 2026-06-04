@@ -14,7 +14,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/api/v1/llm-providers")
-@Tag(name = "LLM 模型供应商", description = "Owner 查询可用于 AI 审核和 LLM 辅助的模型供应商")
+@Tag(name = "LLM 厂商", description = "OWNER 查询自己可用的 LLM 厂商和模型列表")
 public class LlmProviderController {
 
     private final LlmProviderService llmProviderService;
@@ -24,7 +24,7 @@ public class LlmProviderController {
     }
 
     @GetMapping
-    @Operation(summary = "可用模型供应商列表", description = "Owner 查询管理员已启用的 LLM Provider，仅返回前端可展示的安全配置信息。")
+    @Operation(summary = "可用模型供应商列表", description = "Owner 查询 ADMIN 已启用的 LLM Provider，仅返回前端可展示的安全配置信息。")
     public ApiResponse<List<LlmProviderResponse>> list() {
         CurrentUserContext.requireRole(RoleCode.OWNER);
         return ApiResponse.ok(llmProviderService.listEnabled());

@@ -10,8 +10,8 @@ import com.labelhub.modules.reward.domain.RewardRuleEntity;
 import com.labelhub.modules.reward.dto.RewardRuleRequest;
 import com.labelhub.modules.reward.dto.RewardRuleResponse;
 import com.labelhub.modules.reward.repository.RewardRuleRepositoryMapper;
-import com.labelhub.modules.task.domain.TaskEntity;
-import com.labelhub.modules.task.repository.TaskRepositoryMapper;
+import com.labelhub.modules.task.domain.Task;
+import com.labelhub.modules.task.mapper.TaskMapper;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -30,16 +30,16 @@ public class RewardRuleService {
     private static final long RULE_LOCK_WAIT_MILLIS = 1000L;
     private static final long RULE_LOCK_LEASE_MILLIS = 5000L;
 
-    private final TaskRepositoryMapper taskMapper;
+    private final TaskMapper taskMapper;
     private final RewardRuleRepositoryMapper rewardRuleMapper;
     private final RedisLockService redisLockService;
 
-    public RewardRuleService(TaskRepositoryMapper taskMapper, RewardRuleRepositoryMapper rewardRuleMapper) {
+    public RewardRuleService(TaskMapper taskMapper, RewardRuleRepositoryMapper rewardRuleMapper) {
         this(taskMapper, rewardRuleMapper, new NoopRedisLockService());
     }
 
     @Autowired
-    public RewardRuleService(TaskRepositoryMapper taskMapper,
+    public RewardRuleService(TaskMapper taskMapper,
                              RewardRuleRepositoryMapper rewardRuleMapper,
                              RedisLockService redisLockService) {
         this.taskMapper = taskMapper;
@@ -52,7 +52,7 @@ public class RewardRuleService {
      */
     @Transactional
     public RewardRuleResponse saveRule(Long taskId, RewardRuleRequest request) {
-        TaskEntity task = requireOwnedTask(taskId);
+        Task task = requireOwnedTask(taskId);
         validateRule(request);
         CurrentUser actor = CurrentUserContext.requireCurrentUser();
         return redisLockService.withLock(
@@ -74,7 +74,7 @@ public class RewardRuleService {
      */
     @Transactional
     public RewardRuleResponse saveRuleForTaskOwner(Long taskId, Long ownerId, RewardRuleRequest request) {
-        TaskEntity task = requireTaskOwnedBy(taskId, ownerId);
+        Task task = requireTaskOwnedBy(taskId, ownerId);
         validateRule(request);
         return redisLockService.withLock(
                 RedisKeyBuilder.rewardRule(task.getId()),
@@ -84,7 +84,7 @@ public class RewardRuleService {
         );
     }
 
-    private RewardRuleResponse saveRuleLocked(TaskEntity task, RewardRuleRequest request, Long actorId) {
+    private RewardRuleResponse saveRuleLocked(Task task, RewardRuleRequest request, Long actorId) {
         int nextVersion = rewardRuleMapper.selectMaxVersionByTaskId(task.getId()) + 1;
         LocalDateTime now = LocalDateTime.now();
 
@@ -136,9 +136,9 @@ public class RewardRuleService {
         }
     }
 
-    private TaskEntity requireOwnedTask(Long taskId) {
+    private Task requireOwnedTask(Long taskId) {
         CurrentUser currentUser = CurrentUserContext.requireCurrentUser();
-        TaskEntity task = taskMapper.selectById(taskId);
+        Task task = taskMapper.selectById(taskId);
         if (task == null) {
             throw new BusinessException(400102, "任务不存在");
         }
@@ -148,8 +148,8 @@ public class RewardRuleService {
         return task;
     }
 
-    private TaskEntity requireTaskOwnedBy(Long taskId, Long ownerId) {
-        TaskEntity task = taskMapper.selectById(taskId);
+    private Task requireTaskOwnedBy(Long taskId, Long ownerId) {
+        Task task = taskMapper.selectById(taskId);
         if (task == null) {
             throw new BusinessException(400102, "Task not found");
         }

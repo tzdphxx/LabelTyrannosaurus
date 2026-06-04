@@ -208,7 +208,7 @@ public class AiAutoReviewService {
             MediaPromptResult prompt = buildPrompt(submission, datasetItem, config);
             AgentRun agentRun = resolveReviewAgentRun(queuedAgentRunId, submissionId, config, prompt);
             agentRunService.start(agentRun.getId());
-            return ReviewPrepareResult.ready(submission, config, agentRun, prompt);
+            return ReviewPrepareResult.ready(submission, config, agentRun, prompt, task);
         });
 
         if (prepared.existing() != null) {
@@ -219,7 +219,7 @@ public class AiAutoReviewService {
         AttemptOutcome outcome;
         try {
             outcome = executeAttempt(prepared.submission(), prepared.config(),
-                    prepared.agentRun(), prepared.prompt());
+                    prepared.agentRun(), prepared.prompt(), prepared.task());
         } catch (Exception ex) {
             transactionTemplate.executeWithoutResult(s ->
                     agentRunService.fail(prepared.agentRun().getId(), AgentRunStatus.FAILED, ex.getMessage()));
@@ -272,7 +272,7 @@ public class AiAutoReviewService {
                 config.getModelName(), config.getPromptVersion(), promptSnapshot, null, resolveTraceId());
         agentRunService.start(agentRun.getId());
 
-        AttemptOutcome outcome = executeAttempt(submission, config, agentRun, prompt);
+        AttemptOutcome outcome = executeAttempt(submission, config, agentRun, prompt, task);
         int currentRetryCount = existing.getRetryCount();
 
         if (outcome.success()) {
@@ -309,16 +309,16 @@ public class AiAutoReviewService {
     }
 
     private AttemptOutcome executeAttempt(Submission submission, AiReviewConfig config,
-                                          AgentRun agentRun, MediaPromptResult prompt) {
+                                          AgentRun agentRun, MediaPromptResult prompt, Task task) {
         if ("SUPERVISOR".equals(config.getAgentMode())) {
             return executeSupervisor(submission, config, agentRun, prompt.promptSnapshot());
         }
-        // 多策略分发
+        String systemPrompt = buildReviewSystemPrompt(config, task, List.of());
         ReviewStrategy strategy = resolveReviewStrategy(config);
         return switch (strategy) {
-            case LIGHTWEIGHT -> executeDirect(submission, config, agentRun, prompt);
-            case PARALLEL_VOTE -> executeParallelVote(submission, config, agentRun, prompt);
-            case DEEP_DIMENSION -> executeDeepDimension(submission, config, agentRun, prompt);
+            case LIGHTWEIGHT -> executeDirect(submission, config, agentRun, prompt, systemPrompt);
+            case PARALLEL_VOTE -> executeParallelVote(submission, config, agentRun, prompt, systemPrompt);
+            case DEEP_DIMENSION -> executeDeepDimension(submission, config, agentRun, prompt, systemPrompt);
             case AGENT_DEBATE -> executeAgentDebate(submission, config, agentRun, prompt.promptSnapshot());
         };
     }
@@ -334,20 +334,35 @@ public class AiAutoReviewService {
         }
     }
 
-    // ── PARALLEL_VOTE ──
+    // ── 统一系统 Prompt 构建 ──
+
+    private String buildReviewSystemPrompt(AiReviewConfig config, Task task, List<PromptTemplateEngine.SchemaField> schemaFields) {
+        PromptTemplateEngine.TaskPromptContext ctx = new PromptTemplateEngine.TaskPromptContext(
+                task.getTitle(),
+                task.getDescription(),
+                task.getInstructionRichText(),
+                config.getScoringDimensionsJson(),
+                config.getPassThreshold() != null ? config.getPassThreshold().toString() : "-",
+                config.getManualReviewThreshold() != null ? config.getManualReviewThreshold().toString() : "-",
+                config.getPromptVersion()
+        );
+        String userTemplate = config.getPromptTemplate() != null ? config.getPromptTemplate() : "";
+        return promptTemplateEngine.buildReviewPrompt(userTemplate, ctx, schemaFields);
+    }
 
     private AttemptOutcome executeParallelVote(Submission submission, AiReviewConfig config,
-                                               AgentRun agentRun, MediaPromptResult prompt) {
+                                               AgentRun agentRun, MediaPromptResult prompt, String systemPrompt) {
         List<VoteModel> voteModels = parseVoteModels(config);
         if (voteModels.isEmpty()) {
-            // 回退：没有配置投票模型 → 用主配置单路
-            return executeDirect(submission, config, agentRun, prompt);
+            return executeDirect(submission, config, agentRun, prompt, systemPrompt);
         }
         if (voteModels.size() == 1) {
-            // 单路 → 用投票模型中的 provider/model 调用
             VoteModel vm = voteModels.get(0);
+            List<LlmMessage> singleMessages = java.util.stream.Stream.concat(
+                    java.util.stream.Stream.of(new LlmMessage("system", systemPrompt)),
+                    prompt.messages().stream()).toList();
             LlmGatewayResponse response = callLlm(submission.getTaskId(), vm.providerId(), vm.modelName(),
-                    prompt.messages());
+                    singleMessages);
             if (response.status() != LlmGatewayStatus.SUCCESS) {
                 agentRunService.fail(agentRun.getId(), AgentRunStatus.FAILED, response.errorMessage());
                 return AttemptOutcome.failure(response.errorCode(), response.errorMessage(), response.rawResponse());
@@ -361,10 +376,13 @@ public class AiAutoReviewService {
         }
 
         // 2+ 路并行
+        List<LlmMessage> votingMessages = java.util.stream.Stream.concat(
+                java.util.stream.Stream.of(new LlmMessage("system", systemPrompt)),
+                prompt.messages().stream()).toList();
         List<java.util.concurrent.CompletableFuture<Map<String, Object>>> futures = voteModels.stream()
                 .map(vm -> java.util.concurrent.CompletableFuture.supplyAsync(() -> {
                     LlmGatewayResponse r = callLlm(submission.getTaskId(), vm.providerId(), vm.modelName(),
-                            prompt.messages());
+                            votingMessages);
                     if (r.status() == LlmGatewayStatus.SUCCESS && r.structuredJson() != null) {
                         return new java.util.LinkedHashMap<>(r.structuredJson());
                     }
@@ -399,10 +417,10 @@ public class AiAutoReviewService {
     // ── DEEP_DIMENSION ──
 
     private AttemptOutcome executeDeepDimension(Submission submission, AiReviewConfig config,
-                                                 AgentRun agentRun, MediaPromptResult prompt) {
+                                                 AgentRun agentRun, MediaPromptResult prompt, String systemPrompt) {
         List<String> dimensions = parseStringList(config.getScoringDimensionsJson());
         if (dimensions.isEmpty()) {
-            return executeParallelVote(submission, config, agentRun, prompt);
+            return executeParallelVote(submission, config, agentRun, prompt, systemPrompt);
         }
 
         Map<String, List<VoteModel>> dimReviewers = parseDimensionReviewers(config, dimensions);
@@ -410,7 +428,7 @@ public class AiAutoReviewService {
         boolean allEmpty = dimReviewers.values().stream().allMatch(List::isEmpty);
         if (allEmpty) {
             log.warn("No reviewers configured for any dimension; falling back to parallel vote");
-            return executeParallelVote(submission, config, agentRun, prompt);
+            return executeParallelVote(submission, config, agentRun, prompt, systemPrompt);
         }
         Map<String, List<Map<String, Object>>> dimResults = new LinkedHashMap<>();
 
@@ -423,12 +441,9 @@ public class AiAutoReviewService {
 
             for (VoteModel vm : reviewers) {
                 futures.add(java.util.concurrent.CompletableFuture.runAsync(() -> {
-                    String dimContext = prompt.promptSnapshot();
                     List<LlmMessage> dimMessages = java.util.stream.Stream.concat(
                             java.util.stream.Stream.of(new LlmMessage("system",
-                                    "You are LabelHub AI reviewer focused on dimension: " + dim
-                                            + ". " + dimContext
-                                            + " Return valid JSON only.")),
+                                    systemPrompt + "\n当前专注维度: " + dim)),
                             prompt.messages().stream()).toList();
                     LlmGatewayResponse r = callLlm(submission.getTaskId(), vm.providerId(), vm.modelName(),
                             dimMessages);
@@ -475,14 +490,10 @@ public class AiAutoReviewService {
             return new LlmGatewayResponse(LlmGatewayStatus.RATE_LIMITED, null, null, null,
                     null, "RATE_LIMITED", "AI review rate limited");
         }
-        List<LlmMessage> withSystem = java.util.stream.Stream.concat(
-                java.util.stream.Stream.of(new LlmMessage("system",
-                        "You are LabelHub AI reviewer. Return valid JSON only.")),
-                messages.stream()).toList();
         return llmGateway.review(new LlmGatewayRequest(
                 providerId,
                 modelName,
-                withSystem,
+                messages,
                 com.labelhub.infrastructure.llm.ResponseFormat.jsonSchema(AiReviewSchema.NAME, AiReviewSchema.SCHEMA)
         ));
     }
@@ -589,20 +600,17 @@ public class AiAutoReviewService {
     }
 
     private AttemptOutcome executeDirect(Submission submission, AiReviewConfig config,
-                                         AgentRun agentRun, MediaPromptResult prompt) {
+                                         AgentRun agentRun, MediaPromptResult prompt, String systemPrompt) {
         if (!rateLimiter.acquire(submission.getTaskId(), config.getProviderId())) {
             agentRunService.fail(agentRun.getId(), AgentRunStatus.RATE_LIMITED, "AI review rate limited");
             return AttemptOutcome.failure("RATE_LIMITED", "AI 审核触发过于频繁，请稍后重试", null);
         }
 
-        LlmGatewayResponse response = llmGateway.review(new LlmGatewayRequest(
-                config.getProviderId(),
-                config.getModelName(),
-                java.util.stream.Stream.concat(
-                        java.util.stream.Stream.of(new LlmMessage("system", "You are LabelHub AI reviewer. Return valid JSON only.")),
-                        prompt.messages().stream()).toList(),
-                com.labelhub.infrastructure.llm.ResponseFormat.jsonSchema(AiReviewSchema.NAME, AiReviewSchema.SCHEMA)
-        ));
+        List<LlmMessage> messages = java.util.stream.Stream.concat(
+                java.util.stream.Stream.of(new LlmMessage("system", systemPrompt)),
+                prompt.messages().stream()).toList();
+        LlmGatewayResponse response = callLlm(submission.getTaskId(), config.getProviderId(),
+                config.getModelName(), messages);
         if (response.status() != LlmGatewayStatus.SUCCESS) {
             agentRunService.fail(agentRun.getId(), AgentRunStatus.FAILED, response.errorMessage());
             return AttemptOutcome.failure(response.errorCode(), response.errorMessage(), response.rawResponse());
@@ -1173,15 +1181,16 @@ public class AiAutoReviewService {
             Submission submission,
             AiReviewConfig config,
             AgentRun agentRun,
-            MediaPromptResult prompt) {
+            MediaPromptResult prompt,
+            Task task) {
 
         static ReviewPrepareResult alreadyExists(AiReviewResult existing) {
-            return new ReviewPrepareResult(existing, null, null, null, null);
+            return new ReviewPrepareResult(existing, null, null, null, null, null);
         }
 
         static ReviewPrepareResult ready(Submission submission, AiReviewConfig config,
-                                         AgentRun agentRun, MediaPromptResult prompt) {
-            return new ReviewPrepareResult(null, submission, config, agentRun, prompt);
+                                         AgentRun agentRun, MediaPromptResult prompt, Task task) {
+            return new ReviewPrepareResult(null, submission, config, agentRun, prompt, task);
         }
     }
 }

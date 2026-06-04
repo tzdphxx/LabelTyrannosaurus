@@ -5,9 +5,9 @@ import com.labelhub.common.exception.BusinessException;
 import com.labelhub.common.security.CurrentUser;
 import com.labelhub.common.security.CurrentUserContext;
 import com.labelhub.common.security.RoleCode;
-import com.labelhub.modules.task.domain.TaskEntity;
+import com.labelhub.modules.task.domain.Task;
 import com.labelhub.modules.task.domain.TaskStatus;
-import com.labelhub.modules.task.repository.TaskRepositoryMapper;
+import com.labelhub.modules.task.mapper.TaskMapper;
 import com.labelhub.modules.template.domain.TemplateEntity;
 import com.labelhub.modules.template.domain.TemplateVersionEntity;
 import com.labelhub.modules.template.dto.CreateTemplateRequest;
@@ -36,7 +36,7 @@ import static org.mockito.Mockito.when;
 
 class TemplateVersionServiceTest {
 
-    private final TaskRepositoryMapper taskMapper = mock(TaskRepositoryMapper.class);
+    private final TaskMapper taskMapper = mock(TaskMapper.class);
     private final TemplateMapper templateMapper = mock(TemplateMapper.class);
     private final TemplateVersionRepositoryMapper templateVersionMapper = mock(TemplateVersionRepositoryMapper.class);
     private final TemplateSchemaValidator schemaValidator = mock(TemplateSchemaValidator.class);
@@ -249,7 +249,7 @@ class TemplateVersionServiceTest {
     }
 
     private void stubTask(Long ownerId) {
-        TaskEntity task = new TaskEntity();
+        Task task = new Task();
         task.setId(1L);
         task.setOwnerId(ownerId);
         task.setStatus(TaskStatus.DRAFT);

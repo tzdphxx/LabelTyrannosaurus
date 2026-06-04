@@ -22,9 +22,9 @@ import org.springframework.web.bind.annotation.RestController;
  * Controller 只负责 HTTP 契约，任务归属、状态限制和逐行导入规则统一放在 Service 层。</p>
  */
 @RestController
-@RequestMapping("/api/v1/tasks/{taskId}/dataset")
+@RequestMapping("/api/v1/tasks/{taskId}/imports")
 @PreAuthorize("hasAnyRole('ADMIN','OWNER')")
-@Tag(name = "数据集", description = "数据集导入任务")
+@Tag(name = "导入", description = "数据集导入任务")
 public class DatasetImportController {
 
     private final DatasetImportService datasetImportService;
@@ -38,7 +38,7 @@ public class DatasetImportController {
      *
      * <p>追加导入不会覆盖已有题目，同任务重复 {@code externalId} 会进入错误报告。</p>
      */
-    @PostMapping("/import")
+    @PostMapping
     @Operation(summary = "追加导入数据集", description = "从已上传文件创建追加导入任务。")
     public ApiResponse<DatasetImportJobResponse> appendImport(@PathVariable Long taskId,
                                                               @Valid @RequestBody DatasetImportRequest request) {
@@ -50,7 +50,7 @@ public class DatasetImportController {
      *
      * <p>覆盖导入只允许任务处于 DRAFT 状态，避免修改已发布、已领取或已提交的题目内容。</p>
      */
-    @PostMapping("/import/overwrite")
+    @PostMapping("/overwrite")
     @Operation(summary = "覆盖导入数据集", description = "从已上传文件创建覆盖导入任务，仅允许草稿任务。")
     public ApiResponse<DatasetImportJobResponse> overwriteImport(@PathVariable Long taskId,
                                                                  @Valid @RequestBody DatasetImportRequest request) {
@@ -62,7 +62,7 @@ public class DatasetImportController {
      *
      * <p>如果任务已生成错误报告，响应中会包含短期签名下载地址。</p>
      */
-    @GetMapping("/import-jobs/{jobId}")
+    @GetMapping("/{jobId}")
     @Operation(summary = "导入任务详情", description = "查询导入任务状态和错误报告下载地址。")
     public ApiResponse<DatasetImportJobResponse> getImportJob(@PathVariable Long taskId, @PathVariable Long jobId) {
         return ApiResponse.ok(datasetImportService.getImportJob(taskId, jobId));

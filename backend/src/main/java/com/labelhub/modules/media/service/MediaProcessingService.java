@@ -9,8 +9,8 @@ import com.labelhub.common.security.RoleCode;
 import com.labelhub.infrastructure.async.AsyncJobCommand;
 import com.labelhub.infrastructure.async.AsyncJobService;
 import com.labelhub.infrastructure.async.AsyncJobType;
-import com.labelhub.modules.dataset.domain.DatasetItemEntity;
-import com.labelhub.modules.dataset.repository.DatasetItemRepositoryMapper;
+import com.labelhub.modules.dataset.domain.DatasetItem;
+import com.labelhub.modules.dataset.mapper.DatasetItemMapper;
 import com.labelhub.modules.media.domain.DatasetItemMediaContextEntity;
 import com.labelhub.modules.media.domain.MediaAssetEntity;
 import com.labelhub.modules.media.domain.MediaProcessingJobEntity;
@@ -23,8 +23,8 @@ import com.labelhub.modules.media.mapper.MediaDerivativeMapper;
 import com.labelhub.modules.media.mapper.MediaProcessingJobMapper;
 import com.labelhub.modules.storage.domain.ObjectFileEntity;
 import com.labelhub.modules.storage.repository.ObjectFileMapper;
-import com.labelhub.modules.task.domain.TaskEntity;
-import com.labelhub.modules.task.repository.TaskRepositoryMapper;
+import com.labelhub.modules.task.domain.Task;
+import com.labelhub.modules.task.mapper.TaskMapper;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -38,8 +38,8 @@ import java.util.Map;
 @Service
 public class MediaProcessingService {
 
-    private final TaskRepositoryMapper taskMapper;
-    private final DatasetItemRepositoryMapper datasetItemMapper;
+    private final TaskMapper taskMapper;
+    private final DatasetItemMapper datasetItemMapper;
     private final ObjectFileMapper objectFileMapper;
     private final MediaAssetMapper mediaAssetMapper;
     private final MediaDerivativeMapper mediaDerivativeMapper;
@@ -48,8 +48,8 @@ public class MediaProcessingService {
     private final AsyncJobService asyncJobService;
     private final ObjectMapper objectMapper;
 
-    public MediaProcessingService(TaskRepositoryMapper taskMapper,
-                                  DatasetItemRepositoryMapper datasetItemMapper,
+    public MediaProcessingService(TaskMapper taskMapper,
+                                  DatasetItemMapper datasetItemMapper,
                                   ObjectFileMapper objectFileMapper,
                                   MediaAssetMapper mediaAssetMapper,
                                   MediaDerivativeMapper mediaDerivativeMapper,
@@ -95,8 +95,8 @@ public class MediaProcessingService {
     @Transactional
     public MediaProcessingJobResponse triggerProcessing(Long datasetItemId) {
         CurrentUser currentUser = CurrentUserContext.requireCurrentUser();
-        DatasetItemEntity item = requireDatasetItem(datasetItemId);
-        TaskEntity task = requireReadableTask(item.getTaskId(), currentUser);
+        DatasetItem item = requireDatasetItem(datasetItemId);
+        Task task = requireReadableTask(item.getTaskId(), currentUser);
 
         MediaProcessingJobEntity job = new MediaProcessingJobEntity();
         job.setDatasetItemId(item.getId());
@@ -120,7 +120,7 @@ public class MediaProcessingService {
 
     public MediaContextResponse getContext(Long datasetItemId) {
         CurrentUser currentUser = CurrentUserContext.requireCurrentUser();
-        DatasetItemEntity item = requireDatasetItem(datasetItemId);
+        DatasetItem item = requireDatasetItem(datasetItemId);
         requireReadableTask(item.getTaskId(), currentUser);
         DatasetItemMediaContextEntity context = contextMapper.selectLatestByDatasetItemId(datasetItemId);
         if (context == null) {
@@ -146,7 +146,7 @@ public class MediaProcessingService {
         if (job == null) {
             return;
         }
-        DatasetItemEntity item = requireDatasetItem(job.getDatasetItemId());
+        DatasetItem item = requireDatasetItem(job.getDatasetItemId());
         try {
             job.setStatus(MediaProcessingStatus.RUNNING.name());
             job.setStartedAt(LocalDateTime.now());
@@ -240,16 +240,16 @@ public class MediaProcessingService {
         };
     }
 
-    private DatasetItemEntity requireDatasetItem(Long datasetItemId) {
-        DatasetItemEntity item = datasetItemMapper.selectById(datasetItemId);
+    private DatasetItem requireDatasetItem(Long datasetItemId) {
+        DatasetItem item = datasetItemMapper.selectById(datasetItemId);
         if (item == null || Boolean.TRUE.equals(item.getDeleted())) {
             throw new BusinessException(400102, "数据项不存在");
         }
         return item;
     }
 
-    private TaskEntity requireReadableTask(Long taskId, CurrentUser currentUser) {
-        TaskEntity task = taskMapper.selectById(taskId);
+    private Task requireReadableTask(Long taskId, CurrentUser currentUser) {
+        Task task = taskMapper.selectById(taskId);
         if (task == null) {
             throw new BusinessException(400102, "任务不存在");
         }

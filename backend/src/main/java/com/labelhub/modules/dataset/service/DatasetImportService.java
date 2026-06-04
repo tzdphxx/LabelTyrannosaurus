@@ -17,23 +17,24 @@ import com.labelhub.modules.dataset.domain.DatasetFileFormat;
 import com.labelhub.modules.dataset.domain.DatasetImportJobEntity;
 import com.labelhub.modules.dataset.domain.DatasetImportMode;
 import com.labelhub.modules.dataset.domain.DatasetImportStatus;
+import com.labelhub.modules.dataset.domain.DatasetItem;
 import com.labelhub.modules.dataset.domain.DatasetItemChangeLogEntity;
 import com.labelhub.modules.dataset.domain.DatasetItemEntity;
 import com.labelhub.modules.dataset.dto.BatchAppendJsonItemsRequest;
 import com.labelhub.modules.dataset.dto.DatasetImportJobResponse;
 import com.labelhub.modules.dataset.dto.DatasetImportRequest;
 import com.labelhub.modules.dataset.dto.DatasetItemAppendRequest;
+import com.labelhub.modules.dataset.mapper.DatasetItemMapper;
 import com.labelhub.modules.dataset.repository.DatasetFileMapper;
 import com.labelhub.modules.dataset.repository.DatasetImportJobMapper;
 import com.labelhub.modules.dataset.repository.DatasetItemChangeLogMapper;
-import com.labelhub.modules.dataset.repository.DatasetItemRepositoryMapper;
 import com.labelhub.modules.media.service.MediaProcessingService;
 import com.labelhub.modules.storage.domain.ObjectFileEntity;
 import com.labelhub.modules.storage.repository.ObjectFileMapper;
 import com.labelhub.modules.storage.service.FileStorageProperties;
-import com.labelhub.modules.task.domain.TaskEntity;
+import com.labelhub.modules.task.domain.Task;
 import com.labelhub.modules.task.domain.TaskStatus;
-import com.labelhub.modules.task.repository.TaskRepositoryMapper;
+import com.labelhub.modules.task.mapper.TaskMapper;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -73,11 +74,11 @@ import java.util.stream.Collectors;
 @Service
 public class DatasetImportService {
 
-    private final TaskRepositoryMapper taskMapper;
+    private final TaskMapper taskMapper;
     private final ObjectFileMapper objectFileMapper;
     private final DatasetFileMapper datasetFileMapper;
     private final DatasetImportJobMapper importJobMapper;
-    private final DatasetItemRepositoryMapper datasetItemMapper;
+    private final DatasetItemMapper datasetItemMapper;
     private final DatasetItemChangeLogMapper changeLogMapper;
     private final ObjectStorageService objectStorageService;
     private final FileStorageProperties storageProperties;
@@ -88,11 +89,11 @@ public class DatasetImportService {
     private final MediaProcessingService mediaProcessingService;
 
     @Autowired
-    public DatasetImportService(TaskRepositoryMapper taskMapper,
+    public DatasetImportService(TaskMapper taskMapper,
                                 ObjectFileMapper objectFileMapper,
                                 DatasetFileMapper datasetFileMapper,
                                 DatasetImportJobMapper importJobMapper,
-                                DatasetItemRepositoryMapper datasetItemMapper,
+                                DatasetItemMapper datasetItemMapper,
                                 DatasetItemChangeLogMapper changeLogMapper,
                                 ObjectStorageService objectStorageService,
                                 FileStorageProperties storageProperties,
@@ -106,11 +107,11 @@ public class DatasetImportService {
                 objectMapper, parsers, mediaProcessingService);
     }
 
-    public DatasetImportService(TaskRepositoryMapper taskMapper,
+    public DatasetImportService(TaskMapper taskMapper,
                                 ObjectFileMapper objectFileMapper,
                                 DatasetFileMapper datasetFileMapper,
                                 DatasetImportJobMapper importJobMapper,
-                                DatasetItemRepositoryMapper datasetItemMapper,
+                                DatasetItemMapper datasetItemMapper,
                                 DatasetItemChangeLogMapper changeLogMapper,
                                 ObjectStorageService objectStorageService,
                                 FileStorageProperties storageProperties,
@@ -122,11 +123,11 @@ public class DatasetImportService {
                 objectMapper, parsers, null);
     }
 
-    private DatasetImportService(TaskRepositoryMapper taskMapper,
+    private DatasetImportService(TaskMapper taskMapper,
                                  ObjectFileMapper objectFileMapper,
                                  DatasetFileMapper datasetFileMapper,
                                  DatasetImportJobMapper importJobMapper,
-                                 DatasetItemRepositoryMapper datasetItemMapper,
+                                 DatasetItemMapper datasetItemMapper,
                                  DatasetItemChangeLogMapper changeLogMapper,
                                  ObjectStorageService objectStorageService,
                                  FileStorageProperties storageProperties,
@@ -194,7 +195,7 @@ public class DatasetImportService {
      * 查询导入任务详情，并在存在错误报告时补充签名下载地址。
      */
     public DatasetImportJobResponse getImportJob(Long taskId, Long jobId) {
-        TaskEntity task = requireWritableTask(taskId);
+        Task task = requireWritableTask(taskId);
         DatasetImportJobEntity job = importJobMapper.selectByTaskAndJob(task.getId(), jobId);
         if (job == null) {
             throw new BusinessException(400102, "导入任务不存在");
@@ -203,7 +204,7 @@ public class DatasetImportService {
     }
 
     private DatasetImportJobResponse createImport(Long taskId, DatasetImportRequest request, DatasetImportMode mode) {
-        TaskEntity task = requireWritableTask(taskId);
+        Task task = requireWritableTask(taskId);
         if (mode == DatasetImportMode.OVERWRITE && task.getStatus() != TaskStatus.DRAFT) {
             throw new BusinessException(409301, "只有草稿状态任务允许覆盖导入");
         }
@@ -314,9 +315,9 @@ public class DatasetImportService {
         );
     }
 
-    private TaskEntity requireWritableTask(Long taskId) {
+    private Task requireWritableTask(Long taskId) {
         CurrentUser currentUser = CurrentUserContext.requireCurrentUser();
-        TaskEntity task = taskMapper.selectById(taskId);
+        Task task = taskMapper.selectById(taskId);
         if (task == null) {
             throw new BusinessException(400102, "任务不存在");
         }
@@ -398,7 +399,7 @@ public class DatasetImportService {
                                      DatasetImportMode mode,
                                      DatasetParseResult result) throws JsonProcessingException {
         List<DatasetImportError> errors = new ArrayList<>(result.errors());
-        List<DatasetItemEntity> items = new ArrayList<>();
+        List<DatasetItem> items = new ArrayList<>();
         Set<String> seenExternalIds = new HashSet<>();
         for (DatasetImportRow row : result.rows()) {
             if (!seenExternalIds.add(row.externalId())) {
@@ -424,7 +425,7 @@ public class DatasetImportService {
                 // 新文件已成功解析并完成行级校验后再覆盖，避免失败任务提前删除旧题目。
                 datasetItemMapper.softDeleteActiveByTaskId(job.getTaskId());
             }
-            for (DatasetItemEntity item : batch.items()) {
+            for (DatasetItem item : batch.items()) {
                 datasetItemMapper.insert(item);
                 refreshMediaContext(job.getTaskId(), item, actorId);
                 appendChangeLog(job.getTaskId(), item, actorId, mode);
@@ -448,8 +449,8 @@ public class DatasetImportService {
         importJobMapper.updateById(job);
     }
 
-    private DatasetItemEntity toEntity(Long taskId, DatasetImportRow row) throws JsonProcessingException {
-        DatasetItemEntity item = new DatasetItemEntity();
+    private DatasetItem toEntity(Long taskId, DatasetImportRow row) throws JsonProcessingException {
+        DatasetItem item = new DatasetItem();
         item.setTaskId(taskId);
         item.setExternalId(row.externalId());
         item.setItemJson(objectMapper.writeValueAsString(row.itemJson()));
@@ -461,7 +462,7 @@ public class DatasetImportService {
         return item;
     }
 
-    private void appendChangeLog(Long taskId, DatasetItemEntity item, Long actorId, DatasetImportMode mode) {
+    private void appendChangeLog(Long taskId, DatasetItem item, Long actorId, DatasetImportMode mode) {
         DatasetItemChangeLogEntity changeLog = new DatasetItemChangeLogEntity();
         changeLog.setTaskId(taskId);
         changeLog.setItemId(item.getId());
@@ -471,7 +472,7 @@ public class DatasetImportService {
         changeLogMapper.insert(changeLog);
     }
 
-    private void refreshMediaContext(Long taskId, DatasetItemEntity item, Long actorId) {
+    private void refreshMediaContext(Long taskId, DatasetItem item, Long actorId) {
         if (mediaProcessingService != null) {
             mediaProcessingService.refreshContext(taskId, item.getId(), item.getItemJson(), actorId);
         }
@@ -582,7 +583,7 @@ public class DatasetImportService {
         );
     }
 
-    private record ImportBatch(int totalCount, List<DatasetItemEntity> items, List<DatasetImportError> errors) {
+    private record ImportBatch(int totalCount, List<DatasetItem> items, List<DatasetImportError> errors) {
     }
 
     private static class ImportExecutionException extends RuntimeException {

@@ -4,7 +4,7 @@ import com.labelhub.common.api.ApiResponse;
 import com.labelhub.common.security.CurrentUserContext;
 import com.labelhub.common.security.RoleCode;
 import com.labelhub.modules.assignment.dto.MarketTaskQueryRequest;
-import com.labelhub.modules.assignment.dto.MarketTaskResponse;
+import com.labelhub.modules.assignment.dto.TaskMarketResponse;
 import com.labelhub.modules.assignment.service.TaskMarketService;
 import com.labelhub.modules.task.domain.TaskStatus;
 import io.swagger.v3.oas.annotations.Operation;
@@ -18,7 +18,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/api/v1/market/tasks")
-@Tag(name = "标注员任务广场", description = "标注员浏览可领取任务、查看任务详情和可领取题目")
+@Tag(name = "任务市场", description = "标注员可浏览和筛选的已发布任务市场")
 public class MarketTaskController {
 
     private final TaskMarketService taskMarketService;
@@ -28,8 +28,8 @@ public class MarketTaskController {
     }
 
     @GetMapping
-    @Operation(summary = "任务广场列表", description = "查询当前标注员可领取的已发布任务，支持关键词、标签和任务状态筛选。")
-    public ApiResponse<List<MarketTaskResponse>> listMarketTasks(@RequestParam(required = false) String keyword,
+    @Operation(summary = "任务市场列表", description = "分页查询当前标注员可领取的已发布任务列表，支持按关键词和标签筛选。")
+    public ApiResponse<List<TaskMarketResponse>> listMarketTasks(@RequestParam(required = false) String keyword,
                                                                  @RequestParam(required = false) String tag,
                                                                  @RequestParam(required = false) TaskStatus status) {
         return ApiResponse.ok(taskMarketService.listMarketTasks(
@@ -39,8 +39,8 @@ public class MarketTaskController {
     }
 
     @GetMapping("/{taskId}")
-    @Operation(summary = "任务广场详情", description = "查询已发布任务详情，以及当前标注员可领取的数据项分页预览。")
-    public ApiResponse<MarketTaskResponse> getMarketTaskDetail(@PathVariable Long taskId,
+    @Operation(summary = "市场任务详情", description = "查看已发布任务的详情和可领取题目预览列表。")
+    public ApiResponse<TaskMarketResponse> getMarketTaskDetail(@PathVariable Long taskId,
                                                                @RequestParam(defaultValue = "1") int itemPage,
                                                                @RequestParam(defaultValue = "20") int itemSize) {
         CurrentUserContext.requireRole(RoleCode.LABELER);

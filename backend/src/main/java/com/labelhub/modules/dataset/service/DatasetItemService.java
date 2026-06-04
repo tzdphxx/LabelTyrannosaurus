@@ -7,23 +7,23 @@ import com.labelhub.common.exception.BusinessException;
 import com.labelhub.common.security.CurrentUser;
 import com.labelhub.common.security.CurrentUserContext;
 import com.labelhub.common.security.RoleCode;
+import com.labelhub.modules.dataset.domain.DatasetItem;
 import com.labelhub.modules.dataset.domain.DatasetItemChangeLogEntity;
-import com.labelhub.modules.dataset.domain.DatasetItemEntity;
+import com.labelhub.common.api.PageResponse;
 import com.labelhub.modules.dataset.dto.BatchAppendItemsRequest;
 import com.labelhub.modules.dataset.dto.BatchDeleteItemsRequest;
 import com.labelhub.modules.dataset.dto.BatchItemResult;
 import com.labelhub.modules.dataset.dto.BatchUpdateItemsRequest;
 import com.labelhub.modules.dataset.dto.DatasetItemAppendRequest;
-import com.labelhub.modules.dataset.dto.DatasetItemPageResponse;
 import com.labelhub.modules.dataset.dto.DatasetItemQuery;
-import com.labelhub.modules.dataset.dto.DatasetItemResponse;
-import com.labelhub.modules.dataset.dto.DatasetItemStatus;
 import com.labelhub.modules.dataset.dto.DatasetItemUpdateRequest;
+import com.labelhub.modules.dataset.dto.ItemResponse;
+import com.labelhub.modules.dataset.dto.ItemStatus;
+import com.labelhub.modules.dataset.mapper.DatasetItemMapper;
 import com.labelhub.modules.dataset.repository.DatasetItemChangeLogMapper;
-import com.labelhub.modules.dataset.repository.DatasetItemRepositoryMapper;
 import com.labelhub.modules.media.service.MediaProcessingService;
-import com.labelhub.modules.task.domain.TaskEntity;
-import com.labelhub.modules.task.repository.TaskRepositoryMapper;
+import com.labelhub.modules.task.domain.Task;
+import com.labelhub.modules.task.mapper.TaskMapper;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -43,15 +43,15 @@ import java.util.Set;
 @Service
 public class DatasetItemService {
 
-    private final TaskRepositoryMapper taskMapper;
-    private final DatasetItemRepositoryMapper datasetItemMapper;
+    private final TaskMapper taskMapper;
+    private final DatasetItemMapper datasetItemMapper;
     private final DatasetItemChangeLogMapper changeLogMapper;
     private final ObjectMapper objectMapper;
     private final MediaProcessingService mediaProcessingService;
 
     @Autowired
-    public DatasetItemService(TaskRepositoryMapper taskMapper,
-                              DatasetItemRepositoryMapper datasetItemMapper,
+    public DatasetItemService(TaskMapper taskMapper,
+                              DatasetItemMapper datasetItemMapper,
                               DatasetItemChangeLogMapper changeLogMapper,
                               ObjectMapper objectMapper,
                               MediaProcessingService mediaProcessingService) {
@@ -62,8 +62,8 @@ public class DatasetItemService {
         this.mediaProcessingService = mediaProcessingService;
     }
 
-    public DatasetItemService(TaskRepositoryMapper taskMapper,
-                              DatasetItemRepositoryMapper datasetItemMapper,
+    public DatasetItemService(TaskMapper taskMapper,
+                              DatasetItemMapper datasetItemMapper,
                               DatasetItemChangeLogMapper changeLogMapper,
                               ObjectMapper objectMapper) {
         this(taskMapper, datasetItemMapper, changeLogMapper, objectMapper, null);
@@ -72,17 +72,17 @@ public class DatasetItemService {
     /**
      * 查询任务下未删除题目列表。
      */
-    public DatasetItemPageResponse listItems(Long taskId, DatasetItemQuery query) {
+    public PageResponse<ItemResponse> listItems(Long taskId, DatasetItemQuery query) {
         requireOwnedTask(taskId);
         DatasetItemQuery effectiveQuery = query == null ? new DatasetItemQuery(null, null, null) : query;
-        List<DatasetItemEntity> entities = datasetItemMapper.selectActivePage(
+        List<DatasetItem> entities = datasetItemMapper.selectActivePage(
                 taskId,
                 effectiveQuery.externalId(),
                 effectiveQuery.normalizedPageSize(),
                 effectiveQuery.offset()
         );
         long total = datasetItemMapper.countActivePage(taskId, effectiveQuery.externalId());
-        return new DatasetItemPageResponse(
+        return new PageResponse<ItemResponse>(
                 entities.stream().map(this::toResponse).toList(),
                 effectiveQuery.normalizedPage(),
                 effectiveQuery.normalizedPageSize(),
@@ -95,7 +95,7 @@ public class DatasetItemService {
      */
     @Transactional
     public List<BatchItemResult> batchAppend(Long taskId, BatchAppendItemsRequest request) {
-        TaskEntity task = requireOwnedTask(taskId);
+        Task task = requireOwnedTask(taskId);
         CurrentUser actor = CurrentUserContext.requireCurrentUser();
         List<BatchItemResult> results = new ArrayList<>();
         Set<String> seenExternalIds = new HashSet<>();
@@ -110,7 +110,7 @@ public class DatasetItemService {
      */
     @Transactional
     public List<BatchItemResult> batchUpdate(Long taskId, BatchUpdateItemsRequest request) {
-        TaskEntity task = requireOwnedTask(taskId);
+        Task task = requireOwnedTask(taskId);
         CurrentUser actor = CurrentUserContext.requireCurrentUser();
         List<BatchItemResult> results = new ArrayList<>();
         for (DatasetItemUpdateRequest itemRequest : request.items()) {
@@ -124,7 +124,7 @@ public class DatasetItemService {
      */
     @Transactional
     public List<BatchItemResult> batchDelete(Long taskId, BatchDeleteItemsRequest request) {
-        TaskEntity task = requireOwnedTask(taskId);
+        Task task = requireOwnedTask(taskId);
         CurrentUser actor = CurrentUserContext.requireCurrentUser();
         List<BatchItemResult> results = new ArrayList<>();
         for (Long itemId : request.itemIds()) {
@@ -133,7 +133,7 @@ public class DatasetItemService {
         return results;
     }
 
-    private BatchItemResult appendOne(TaskEntity task,
+    private BatchItemResult appendOne(Task task,
                                       Long actorId,
                                       DatasetItemAppendRequest request,
                                       Set<String> seenExternalIds) {
@@ -143,7 +143,7 @@ public class DatasetItemService {
                     || datasetItemMapper.selectActiveByTaskIdAndExternalId(task.getId(), externalId) != null) {
                 return BatchItemResult.failure(null, externalId, 400102, "externalId already exists in this task");
             }
-            DatasetItemEntity entity = new DatasetItemEntity();
+            DatasetItem entity = new DatasetItem();
             entity.setTaskId(task.getId());
             entity.setExternalId(externalId);
             entity.setItemJson(writeJson(request.itemJson()));
@@ -161,8 +161,8 @@ public class DatasetItemService {
         }
     }
 
-    private BatchItemResult updateOne(TaskEntity task, Long actorId, DatasetItemUpdateRequest request) {
-        DatasetItemEntity entity = datasetItemMapper.selectById(request.itemId());
+    private BatchItemResult updateOne(Task task, Long actorId, DatasetItemUpdateRequest request) {
+        DatasetItem entity = datasetItemMapper.selectById(request.itemId());
         BatchItemResult validation = validateEditableItem(task, entity, request.itemId());
         if (validation != null) {
             return validation;
@@ -184,8 +184,8 @@ public class DatasetItemService {
         }
     }
 
-    private BatchItemResult deleteOne(TaskEntity task, Long actorId, Long itemId) {
-        DatasetItemEntity entity = datasetItemMapper.selectById(itemId);
+    private BatchItemResult deleteOne(Task task, Long actorId, Long itemId) {
+        DatasetItem entity = datasetItemMapper.selectById(itemId);
         BatchItemResult validation = validateEditableItem(task, entity, itemId);
         if (validation != null) {
             return validation;
@@ -199,7 +199,7 @@ public class DatasetItemService {
         return BatchItemResult.success(entity.getId(), entity.getExternalId());
     }
 
-    private BatchItemResult validateEditableItem(TaskEntity task, DatasetItemEntity entity, Long itemId) {
+    private BatchItemResult validateEditableItem(Task task, DatasetItem entity, Long itemId) {
         if (entity == null || Boolean.TRUE.equals(entity.getDeleted()) || !task.getId().equals(entity.getTaskId())) {
             return BatchItemResult.failure(itemId, null, 400102, "数据项不存在");
         }
@@ -210,9 +210,9 @@ public class DatasetItemService {
         return null;
     }
 
-    private TaskEntity requireOwnedTask(Long taskId) {
+    private Task requireOwnedTask(Long taskId) {
         CurrentUser currentUser = CurrentUserContext.requireCurrentUser();
-        TaskEntity task = taskMapper.selectById(taskId);
+        Task task = taskMapper.selectById(taskId);
         if (task == null) {
             throw new BusinessException(400102, "任务不存在");
         }
@@ -244,8 +244,8 @@ public class DatasetItemService {
         }
     }
 
-    private DatasetItemResponse toResponse(DatasetItemEntity entity) {
-        return new DatasetItemResponse(
+    private ItemResponse toResponse(DatasetItem entity) {
+        return new ItemResponse(
                 entity.getId(),
                 entity.getTaskId(),
                 entity.getExternalId(),
@@ -261,18 +261,18 @@ public class DatasetItemService {
         );
     }
 
-    private DatasetItemStatus toItemStatus(String assignmentStatus) {
+    private ItemStatus toItemStatus(String assignmentStatus) {
         if (assignmentStatus == null || assignmentStatus.isBlank()) {
-            return DatasetItemStatus.UNCLAIMED;
+            return ItemStatus.UNCLAIMED;
         }
         return switch (assignmentStatus) {
-            case "CLAIMED" -> DatasetItemStatus.CLAIMED;
-            case "DRAFTING" -> DatasetItemStatus.DRAFT;
-            case "SUBMITTED" -> DatasetItemStatus.SUBMITTED;
-            case "AI_RETURNED", "RETURNED" -> DatasetItemStatus.RETURNED;
-            case "APPROVED" -> DatasetItemStatus.APPROVED;
-            case "CANCELLED" -> DatasetItemStatus.UNCLAIMED;
-            default -> throw new BusinessException(500001, "数据项的领取状态未知");
+            case "CLAIMED" -> ItemStatus.CLAIMED;
+            case "DRAFTING" -> ItemStatus.DRAFT;
+            case "SUBMITTED" -> ItemStatus.SUBMITTED;
+            case "AI_RETURNED", "RETURNED" -> ItemStatus.RETURNED;
+            case "APPROVED" -> ItemStatus.APPROVED;
+            case "CANCELLED" -> ItemStatus.UNCLAIMED;
+            default -> throw new BusinessException(500001, "Unknown assignment status for dataset item");
         };
     }
 

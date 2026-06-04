@@ -11,9 +11,9 @@ public record CreateTaskResponse(
         Long taskId,
         @Schema(description = "任务状态", example = "DRAFT")
         TaskStatus status,
-        @Schema(description = "随任务创建的数据集导入任务；未上传数据集文件时为 null")
+        @Schema(description = "随任务创建的导入作业（未传 datasetFileId 时为 null）")
         DatasetImportJobResponse datasetImportJob,
-        @Schema(description = "Reward rule created with this task, or null when no reward rule was provided")
+        @Schema(description = "随任务创建的奖励规则（未传 rewardRule 时为 null）")
         RewardRuleResponse rewardRule
 ) {
 }

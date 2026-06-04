@@ -4,12 +4,12 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.labelhub.common.exception.BusinessException;
-import com.labelhub.modules.dataset.domain.DatasetItemEntity;
+import com.labelhub.modules.dataset.domain.DatasetItem;
 import com.labelhub.modules.dataset.dto.DatasetItemSnapshot;
-import com.labelhub.modules.dataset.repository.DatasetItemRepositoryMapper;
-import com.labelhub.modules.task.domain.TaskEntity;
+import com.labelhub.modules.dataset.mapper.DatasetItemMapper;
+import com.labelhub.modules.task.domain.Task;
 import com.labelhub.modules.task.domain.TaskStatus;
-import com.labelhub.modules.task.repository.TaskRepositoryMapper;
+import com.labelhub.modules.task.mapper.TaskMapper;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -24,12 +24,12 @@ public class DatasetSnapshotService {
 
     private static final int MAX_RESERVE_RETRY = 5;
 
-    private final TaskRepositoryMapper taskMapper;
-    private final DatasetItemRepositoryMapper datasetItemMapper;
+    private final TaskMapper taskMapper;
+    private final DatasetItemMapper datasetItemMapper;
     private final ObjectMapper objectMapper;
 
-    public DatasetSnapshotService(TaskRepositoryMapper taskMapper,
-                                  DatasetItemRepositoryMapper datasetItemMapper,
+    public DatasetSnapshotService(TaskMapper taskMapper,
+                                  DatasetItemMapper datasetItemMapper,
                                   ObjectMapper objectMapper) {
         this.taskMapper = taskMapper;
         this.datasetItemMapper = datasetItemMapper;
@@ -40,7 +40,7 @@ public class DatasetSnapshotService {
      * 获取题目快照，供 BE-A 领取详情、提交和渲染链路使用。
      */
     public DatasetItemSnapshot getDatasetItemSnapshot(Long itemId) {
-        DatasetItemEntity item = datasetItemMapper.selectById(itemId);
+        DatasetItem item = datasetItemMapper.selectById(itemId);
         if (item == null || Boolean.TRUE.equals(item.getDeleted())) {
             throw new BusinessException(400102, "数据项不存在");
         }
@@ -55,7 +55,7 @@ public class DatasetSnapshotService {
      */
     @Transactional
     public DatasetItemSnapshot reserveClaimableItem(Long taskId, Long labelerId) {
-        TaskEntity task = taskMapper.selectById(taskId);
+        Task task = taskMapper.selectById(taskId);
         if (task == null) {
             throw new BusinessException(400102, "任务不存在");
         }
@@ -63,7 +63,7 @@ public class DatasetSnapshotService {
             throw new BusinessException(400101, "当前任务不可领取");
         }
         for (int i = 0; i < MAX_RESERVE_RETRY; i++) {
-            DatasetItemEntity item = datasetItemMapper.selectClaimableItem(taskId);
+            DatasetItem item = datasetItemMapper.selectClaimableItem(taskId);
             if (item == null) {
                 throw new BusinessException(409201, "没有可领取的数据项");
             }
@@ -92,7 +92,7 @@ public class DatasetSnapshotService {
         }
     }
 
-    private DatasetItemSnapshot toSnapshot(DatasetItemEntity item) {
+    private DatasetItemSnapshot toSnapshot(DatasetItem item) {
         return new DatasetItemSnapshot(
                 item.getId(),
                 item.getTaskId(),

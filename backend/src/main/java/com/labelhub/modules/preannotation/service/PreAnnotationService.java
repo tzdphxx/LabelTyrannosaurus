@@ -62,12 +62,16 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
-import org.springframework.stereotype.Service;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class PreAnnotationService {
+
+    private static final Logger log = LoggerFactory.getLogger(PreAnnotationService.class);
 
     private static final int FORBIDDEN = 403801;
     private static final int NOT_FOUND = 404801;
@@ -190,12 +194,13 @@ public class PreAnnotationService {
                 ? request.currentAnswerJson() : assignment.getDraftAnswerJson();
         DatasetItem item = datasetItemMapper.selectById(datasetItemId);
         String itemJson = resolveItemJson(datasetItemId, item);
+        List<PromptTemplateEngine.SchemaField> schemaFields = extractSchemaFields(templateVersionId);
         LlmProvider provider = loadProvider(config.getProviderId());
         ProviderCapability capability = llmProviderService.capability(provider);
         MediaPromptResult prompt = mediaPromptContextBuilder.build(new MediaPromptInput(
                 itemJson,
                 currentAnswerJson,
-                preAnnotationPrompt(config, task, currentAnswerJson),
+                preAnnotationPrompt(config, task, currentAnswerJson, schemaFields),
                 capability,
                 config.getMultimodalEnabled() == null || Boolean.TRUE.equals(config.getMultimodalEnabled()),
                 config.getVisionDetail() != null ? config.getVisionDetail() : "auto",
@@ -247,12 +252,13 @@ public class PreAnnotationService {
         String currentAnswerJson = assignment.getDraftAnswerJson();
         DatasetItem item = datasetItemMapper.selectById(datasetItemId);
         String itemJson = resolveItemJson(datasetItemId, item);
+        List<PromptTemplateEngine.SchemaField> schemaFields = extractSchemaFields(templateVersionId);
         LlmProvider provider = loadProvider(config.getProviderId());
         ProviderCapability capability = llmProviderService.capability(provider);
         MediaPromptResult prompt = mediaPromptContextBuilder.build(new MediaPromptInput(
                 itemJson,
                 currentAnswerJson,
-                preAnnotationPrompt(config, task, currentAnswerJson),
+                preAnnotationPrompt(config, task, currentAnswerJson, schemaFields),
                 capability,
                 config.getMultimodalEnabled() == null || Boolean.TRUE.equals(config.getMultimodalEnabled()),
                 config.getVisionDetail() != null ? config.getVisionDetail() : "auto",
@@ -419,7 +425,8 @@ public class PreAnnotationService {
         }
     }
 
-    private String preAnnotationPrompt(AiReviewConfig config, Task task, String currentAnswerJson) {
+    private String preAnnotationPrompt(AiReviewConfig config, Task task, String currentAnswerJson,
+                                        List<PromptTemplateEngine.SchemaField> schemaFields) {
         PromptTemplateEngine.TaskPromptContext ctx = new PromptTemplateEngine.TaskPromptContext(
                 task.getTitle(),
                 task.getDescription(),
@@ -430,7 +437,50 @@ public class PreAnnotationService {
                 config.getPromptVersion()
         );
         String userTemplate = config.getPromptTemplate() != null ? config.getPromptTemplate() : "";
-        return promptTemplateEngine.buildPreAnnotationPrompt(userTemplate, ctx, List.of(), currentAnswerJson);
+        return promptTemplateEngine.buildPreAnnotationPrompt(userTemplate, ctx,
+                schemaFields != null ? schemaFields : List.of(), currentAnswerJson);
+    }
+
+    @SuppressWarnings("unchecked")
+    private List<PromptTemplateEngine.SchemaField> extractSchemaFields(Long templateVersionId) {
+        if (templateVersionId == null || templateVersionMapper == null) return List.of();
+        TemplateVersion tv = templateVersionMapper.selectById(templateVersionId);
+        if (tv == null || tv.getSchemaJson() == null || tv.getSchemaJson().isBlank()) return List.of();
+        try {
+            Object schema = objectMapper.readValue(tv.getSchemaJson(), Object.class);
+            if (!(schema instanceof Map<?, ?> root)) return List.of();
+            Object components = root.get("components");
+            if (!(components instanceof List<?> list)) return List.of();
+            List<PromptTemplateEngine.SchemaField> fields = new ArrayList<>();
+            for (Object comp : list) {
+                if (!(comp instanceof Map<?, ?> c)) continue;
+                String type = stringValue(c.get("type"), "");
+                if ("ShowItem".equals(type)) continue;
+                String field = stringValue(c.get("field"), stringValue(c.get("id"), ""));
+                if (field.isBlank()) continue;
+                List<String> options = null;
+                Object opts = c.get("options");
+                if (opts instanceof List<?> ol) {
+                    options = ol.stream().map(Object::toString).toList();
+                }
+                boolean required = Boolean.TRUE.equals(c.get("required"));
+                String description = stringValue(c.get("description"), stringValue(c.get("label"), ""));
+                fields.add(new PromptTemplateEngine.SchemaField(
+                        field, type, stringValue(c.get("label"), field),
+                        options, required, false, description));
+            }
+            return fields;
+        } catch (Exception e) {
+            log.warn("Failed to extract schema fields from template version {}: {}",
+                    templateVersionId, e.getMessage());
+            return List.of();
+        }
+    }
+
+    private String stringValue(Object value, String fallback) {
+        if (value == null) return fallback;
+        String s = String.valueOf(value);
+        return s.isBlank() ? fallback : s;
     }
 
     private List<LlmMessage> withSystemPrompt(List<LlmMessage> messages) {

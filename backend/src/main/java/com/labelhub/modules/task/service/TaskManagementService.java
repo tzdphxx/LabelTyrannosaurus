@@ -12,10 +12,10 @@ import com.labelhub.modules.submission.mapper.SubmissionMapper;
 import com.labelhub.modules.task.domain.Task;
 import com.labelhub.modules.task.domain.TaskStatus;
 import com.labelhub.modules.task.domain.TaskTag;
-import com.labelhub.modules.task.dto.OwnerTaskPageResponse;
-import com.labelhub.modules.task.dto.OwnerTaskSummaryResponse;
+import com.labelhub.common.api.PageResponse;
 import com.labelhub.modules.task.dto.TaskLabelerResponse;
 import com.labelhub.modules.task.dto.TaskStatisticsResponse;
+import com.labelhub.modules.task.dto.TaskSummaryResponse;
 import com.labelhub.modules.task.mapper.TaskMapper;
 import com.labelhub.modules.task.mapper.TaskTagMapper;
 import java.math.BigDecimal;
@@ -55,7 +55,7 @@ public class TaskManagementService {
         this.traceIdProvider = traceIdProvider;
     }
 
-    public OwnerTaskPageResponse listOwnerTasksPage(Long ownerId,
+    public PageResponse<TaskSummaryResponse> listOwnerTasksPage(Long ownerId,
                                                     String status,
                                                     String keyword,
                                                     int page,
@@ -69,7 +69,7 @@ public class TaskManagementService {
         List<OwnerTaskSummaryResponse> items = taskMapper
                 .selectOwnerTasksPage(effectiveOwnerId, status, keyword, normalizedSize, offset)
                 .stream()
-                .map(task -> new OwnerTaskSummaryResponse(
+                .map(task -> new TaskSummaryResponse(
                         task.getId(), task.getTitle(), task.getStatus(),
                         listTags(task.getId()), task.getQuota(),
                         task.getClaimedCount(), task.getOverlapCount(),
@@ -78,7 +78,7 @@ public class TaskManagementService {
                         task.getEndedAt(), task.getCreatedAt(), task.getUpdatedAt()))
                 .toList();
 
-        return new OwnerTaskPageResponse(items, normalizedPage, normalizedSize, total);
+        return new PageResponse<TaskSummaryResponse>(items, normalizedPage, normalizedSize, total);
     }
 
     public TaskStatisticsResponse getStatistics(Long ownerId, Long taskId) {

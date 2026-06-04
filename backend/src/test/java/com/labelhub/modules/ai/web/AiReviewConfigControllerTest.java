@@ -81,7 +81,7 @@ class AiReviewConfigControllerTest {
                 new BigDecimal("90.00"),
                 new BigDecimal("60.00"),
                 3,
-                null, null, null, null, null, null
+                null, null, null, null, null, null, null
         );
     }
 
@@ -98,7 +98,7 @@ class AiReviewConfigControllerTest {
                 Map.of("type", "object"),
                 "v1",
                 3,
-                null, null, null, null, null, null
+                null, null, null, null, null, null, null, null, null, null, null, null, null, null, null
         );
     }
 }

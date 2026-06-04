@@ -16,7 +16,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
-@Tag(name = "LLM 触发器", description = "字段级 AI 辅助：标注作答时触发，或 Owner 搭建模板时预览测试")
+@Tag(name = "LLM 字段触发", description = "字段级 AI 辅助：标注员作答时触发 AI 生成建议 / Owner 设计模板时预览测试效果")
 public class LlmTriggerController {
 
     private final LlmTriggerService llmTriggerService;
@@ -26,7 +26,7 @@ public class LlmTriggerController {
     }
 
     @PostMapping("/api/v1/assignments/{assignmentId}/llm-triggers")
-    @Operation(summary = "标注时触发 LLM 辅助", description = "标注员在作答过程中点击按钮，前端全量传入模型和 Prompt 参数。")
+    @Operation(summary = "标注时触发 LlmTrigger", description = "标注员在作答过程中点击按钮，前端全量传入模型和 prompt 参数。")
     @ApiResponses({@io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200"), @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "请求参数校验失败"), @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "未认证"), @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "权限不足")})
     public ApiResponse<LlmTriggerRunResponse> runForAssignment(
             @PathVariable Long assignmentId,
@@ -36,7 +36,7 @@ public class LlmTriggerController {
     }
 
     @PostMapping("/api/v1/tasks/{taskId}/llm-triggers/test")
-    @Operation(summary = "Owner 预览测试 LLM 辅助", description = "Owner 搭模板时使用指定题目测试 LLM 触发器的 Prompt 效果。")
+    @Operation(summary = "Owner 预览测试 LlmTrigger", description = "Owner 搭模板时用指定题目测试 LlmTrigger prompt 效果。")
     @ApiResponses({@io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200"), @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "请求参数校验失败"), @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "未认证"), @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "权限不足")})
     public ApiResponse<LlmTriggerRunResponse> testFromTask(
             @PathVariable Long taskId,
@@ -46,7 +46,7 @@ public class LlmTriggerController {
     }
 
     @GetMapping("/api/v1/llm/triggers/runs/{triggerRunId}")
-    @Operation(summary = "查询 LLM 辅助运行结果", description = "轮询异步 LLM 触发器的运行状态、建议内容和失败原因。")
+    @Operation(summary = "查询 LlmTrigger 运行结果", description = "轮询异步 LlmTrigger 的运行状态和建议内容。")
     @ApiResponses({@io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200"), @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "请求参数校验失败"), @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "未认证"), @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "权限不足")})
     public ApiResponse<LlmTriggerRunResponse> getRun(@PathVariable Long triggerRunId) {
         return ApiResponse.ok(llmTriggerService.getRun(

@@ -10,8 +10,8 @@ import com.labelhub.modules.reward.dto.RewardRuleRequest;
 import com.labelhub.modules.reward.dto.RewardRuleResponse;
 import com.labelhub.modules.reward.repository.RewardRuleRepositoryMapper;
 import com.labelhub.modules.reward.service.RewardRuleService;
-import com.labelhub.modules.task.domain.TaskEntity;
-import com.labelhub.modules.task.repository.TaskRepositoryMapper;
+import com.labelhub.modules.task.domain.Task;
+import com.labelhub.modules.task.mapper.TaskMapper;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -31,7 +31,7 @@ import static org.mockito.Mockito.when;
 
 class RewardRuleServiceTest {
 
-    private final TaskRepositoryMapper taskMapper = mock(TaskRepositoryMapper.class);
+    private final TaskMapper taskMapper = mock(TaskMapper.class);
     private final RewardRuleRepositoryMapper rewardRuleMapper = mock(RewardRuleRepositoryMapper.class);
     private final CapturingRedisLockService redisLockService = new CapturingRedisLockService();
     private final RewardRuleService rewardRuleService = newService(taskMapper, rewardRuleMapper, redisLockService);
@@ -162,13 +162,13 @@ class RewardRuleServiceTest {
     }
 
     private void stubTask(Long ownerId) {
-        TaskEntity task = new TaskEntity();
+        Task task = new Task();
         task.setId(1L);
         task.setOwnerId(ownerId);
         when(taskMapper.selectById(1L)).thenReturn(task);
     }
 
-    private static RewardRuleService newService(TaskRepositoryMapper taskMapper,
+    private static RewardRuleService newService(TaskMapper taskMapper,
                                                 RewardRuleRepositoryMapper rewardRuleMapper,
                                                 RedisLockService redisLockService) {
         for (Constructor<?> constructor : RewardRuleService.class.getConstructors()) {

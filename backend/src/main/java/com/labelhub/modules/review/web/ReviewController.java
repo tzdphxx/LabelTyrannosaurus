@@ -52,7 +52,8 @@ public class ReviewController {
     }
 
     @GetMapping
-    @Operation(summary = "待审提交列表", description = "查询审核员可处理的提交列表，支持按任务、提交状态、AI 结论、冲突状态、审核级别和分配审核员筛选。")
+    @Operation(summary = "待审提交列表", description = "查询审核员可处理的提交列表，支持按任务、提交状态、AI 结论、冲突状态、审核级别筛选。"
+            + " scope=CLAIMED 查询已领取的提交，scope=AVAILABLE 查询可领取的提交（任务广场），不传则查询全部。")
     public ApiResponse<PageResponse<ReviewerSubmissionListItem>> list(
             @Parameter(description = "按任务 ID 筛选") @RequestParam(required = false) Long taskId,
             @Parameter(description = "按提交状态筛选") @RequestParam(required = false) String submissionStatus,
@@ -60,19 +61,20 @@ public class ReviewController {
             @Parameter(description = "按 AI 审核状态筛选") @RequestParam(required = false) String aiReviewStatus,
             @Parameter(description = "按冲突状态筛选") @RequestParam(required = false) String conflictStatus,
             @Parameter(description = "按审核级别筛选") @RequestParam(required = false) Integer reviewLevel,
-            @Parameter(description = "按分配的审核员 ID 筛选") @RequestParam(required = false) Long assignedReviewerId,
+            @Parameter(description = "查询范围：CLAIMED-已领取，AVAILABLE-可领取（任务广场），不传查全部") @RequestParam(required = false) String scope,
             @Parameter(description = "页码，从 1 开始") @RequestParam(defaultValue = "1") int page,
             @Parameter(description = "每页条数，默认 20，最大 100") @RequestParam(defaultValue = "20") int size) {
         CurrentUserContext.requireRole(RoleCode.REVIEWER);
+        Long reviewerId = CurrentUserContext.getUserId();
         int safePage = Math.max(1, page);
         int safeSize = Math.max(1, Math.min(size, 100));
         int offset = (safePage - 1) * safeSize;
         long total = reviewerListMapper.countWithFilters(
                 taskId, submissionStatus, aiDecision, aiReviewStatus,
-                conflictStatus, reviewLevel, assignedReviewerId);
+                conflictStatus, reviewLevel, null, reviewerId, scope);
         List<ReviewerSubmissionListItem> items = reviewerListMapper.selectWithFilters(
                 taskId, submissionStatus, aiDecision, aiReviewStatus,
-                conflictStatus, reviewLevel, assignedReviewerId, offset, safeSize);
+                conflictStatus, reviewLevel, null, reviewerId, scope, offset, safeSize);
         return ApiResponse.ok(new PageResponse<>(items, safePage, safeSize, total));
     }
 

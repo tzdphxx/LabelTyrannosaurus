@@ -32,6 +32,13 @@ public interface ReviewerSubmissionListMapper {
             <if test="conflictStatus != null"> AND cg.status = #{conflictStatus}</if>
             <if test="reviewLevel != null"> AND s.current_review_level = #{reviewLevel}</if>
             <if test="assignedReviewerId != null"> AND s.assigned_reviewer_id = #{assignedReviewerId}</if>
+            <if test="scope != null and scope == 'CLAIMED'.toString()"> AND s.assigned_reviewer_id = #{reviewerId}</if>
+            <if test="scope != null and scope == 'AVAILABLE'.toString()">
+                AND s.assigned_reviewer_id IS NULL
+                AND NOT EXISTS (SELECT 1 FROM review_task_claims rtc
+                                WHERE rtc.task_id = s.task_id
+                                  AND rtc.review_level = s.current_review_level)
+            </if>
             ORDER BY s.submitted_at DESC
             LIMIT #{limit} OFFSET #{offset}
             </script>
@@ -44,6 +51,8 @@ public interface ReviewerSubmissionListMapper {
             @Param("conflictStatus") String conflictStatus,
             @Param("reviewLevel") Integer reviewLevel,
             @Param("assignedReviewerId") Long assignedReviewerId,
+            @Param("reviewerId") Long reviewerId,
+            @Param("scope") String scope,
             @Param("offset") int offset,
             @Param("limit") int limit);
 
@@ -62,6 +71,13 @@ public interface ReviewerSubmissionListMapper {
             <if test="conflictStatus != null"> AND cg.status = #{conflictStatus}</if>
             <if test="reviewLevel != null"> AND s.current_review_level = #{reviewLevel}</if>
             <if test="assignedReviewerId != null"> AND s.assigned_reviewer_id = #{assignedReviewerId}</if>
+            <if test="scope != null and scope == 'CLAIMED'.toString()"> AND s.assigned_reviewer_id = #{reviewerId}</if>
+            <if test="scope != null and scope == 'AVAILABLE'.toString()">
+                AND s.assigned_reviewer_id IS NULL
+                AND NOT EXISTS (SELECT 1 FROM review_task_claims rtc
+                                WHERE rtc.task_id = s.task_id
+                                  AND rtc.review_level = s.current_review_level)
+            </if>
             </script>
             """)
     long countWithFilters(
@@ -71,7 +87,9 @@ public interface ReviewerSubmissionListMapper {
             @Param("aiReviewStatus") String aiReviewStatus,
             @Param("conflictStatus") String conflictStatus,
             @Param("reviewLevel") Integer reviewLevel,
-            @Param("assignedReviewerId") Long assignedReviewerId);
+            @Param("assignedReviewerId") Long assignedReviewerId,
+            @Param("reviewerId") Long reviewerId,
+            @Param("scope") String scope);
 
     @Select("""
             SELECT s.task_id AS taskId,

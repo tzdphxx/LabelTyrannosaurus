@@ -1,12 +1,10 @@
 package com.labelhub.modules.dataset;
 
 import com.labelhub.modules.dataset.controller.DatasetItemController;
-import com.labelhub.modules.dataset.dto.BatchAppendJsonItemsRequest;
 import com.labelhub.modules.dataset.dto.BatchAppendItemsRequest;
-import com.labelhub.modules.dataset.dto.DatasetImportJobResponse;
-import com.labelhub.modules.dataset.dto.DatasetImportRequest;
+import com.labelhub.modules.dataset.dto.BatchAppendJsonItemsRequest;
+import com.labelhub.modules.dataset.dto.BatchItemResult;
 import com.labelhub.modules.dataset.dto.DatasetItemAppendRequest;
-import com.labelhub.modules.dataset.service.DatasetImportService;
 import com.labelhub.modules.dataset.service.DatasetItemService;
 import org.junit.jupiter.api.Test;
 
@@ -21,35 +19,35 @@ import static org.mockito.Mockito.when;
 class DatasetItemControllerTest {
 
     private final DatasetItemService datasetItemService = mock(DatasetItemService.class);
-    private final DatasetImportService datasetImportService = mock(DatasetImportService.class);
-    private final DatasetItemController controller = new DatasetItemController(datasetItemService, datasetImportService);
+    private final DatasetItemController controller = new DatasetItemController(datasetItemService);
 
     @Test
-    void batchAppendDelegatesUploadedFileToAppendImport() {
-        DatasetImportJobResponse job = new DatasetImportJobResponse(
-                300L, 1L, "PENDING", "APPEND", 0, 0, 0,
-                null, null, null, null, null, null);
-        when(datasetImportService.createAppendImport(1L, new DatasetImportRequest(99L))).thenReturn(job);
+    void batchAppendDelegatesItemsToService() {
+        BatchAppendItemsRequest request = new BatchAppendItemsRequest(List.of(
+                new DatasetItemAppendRequest("q1", Map.of("question", "one"), Map.of("source", "manual"))
+        ));
+        List<BatchItemResult> results = List.of(BatchItemResult.success(100L, "q1"));
+        when(datasetItemService.batchAppend(1L, request)).thenReturn(results);
 
-        var response = controller.batchAppend(1L, new BatchAppendItemsRequest(99L));
+        var response = controller.batchAppend(1L, request);
 
-        assertThat(response.data()).isEqualTo(job);
-        verify(datasetImportService).createAppendImport(1L, new DatasetImportRequest(99L));
+        assertThat(response.data()).isEqualTo(results);
+        verify(datasetItemService).batchAppend(1L, request);
     }
 
     @Test
-    void batchAppendJsonDelegatesJsonItemsToAppendImport() {
-        DatasetImportJobResponse job = new DatasetImportJobResponse(
-                301L, 1L, "PENDING", "APPEND", 0, 0, 0,
-                null, null, null, null, null, null);
-        BatchAppendJsonItemsRequest request = new BatchAppendJsonItemsRequest(List.of(
+    void batchAppendJsonDelegatesItemsToService() {
+        List<DatasetItemAppendRequest> items = List.of(
                 new DatasetItemAppendRequest("q1", Map.of("question", "one"), Map.of("source", "manual"))
-        ));
-        when(datasetImportService.createAppendImportFromJson(1L, request)).thenReturn(job);
+        );
+        BatchAppendJsonItemsRequest request = new BatchAppendJsonItemsRequest(items);
+        BatchAppendItemsRequest delegatedRequest = new BatchAppendItemsRequest(items);
+        List<BatchItemResult> results = List.of(BatchItemResult.success(100L, "q1"));
+        when(datasetItemService.batchAppend(1L, delegatedRequest)).thenReturn(results);
 
         var response = controller.batchAppendJson(1L, request);
 
-        assertThat(response.data()).isEqualTo(job);
-        verify(datasetImportService).createAppendImportFromJson(1L, request);
+        assertThat(response.data()).isEqualTo(results);
+        verify(datasetItemService).batchAppend(1L, delegatedRequest);
     }
 }

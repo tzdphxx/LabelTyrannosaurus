@@ -289,9 +289,13 @@ class DatasetImportServiceTest {
     }
 
     private void stubSourceFile(String filename) {
+        stubSourceFile(filename, 10L);
+    }
+
+    private void stubSourceFile(String filename, Long ownerId) {
         ObjectFileEntity file = new ObjectFileEntity();
         file.setId(99L);
-        file.setOwnerId(10L);
+        file.setOwnerId(ownerId);
         file.setBucketName("labelhub-test");
         file.setObjectKey("uploads/dataset/" + filename);
         file.setOriginalFilename(filename);

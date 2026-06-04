@@ -154,7 +154,7 @@ class ReviewServiceTest {
         when(assignmentMapper.selectById(ASSIGNMENT_ID)).thenReturn(submittedAssignment());
 
         ReviewActionResponse response = reviewService.approve(
-                SUBMISSION_ID, adminId, new ApproveRequest("admin approved", 1));
+                SUBMISSION_ID, adminId, new ApproveRequest("admin approved", 1, null));
 
         assertThat(response.submissionStatus()).isEqualTo(SubmissionStatus.APPROVED);
     }

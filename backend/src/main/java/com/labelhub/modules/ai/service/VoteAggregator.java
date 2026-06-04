@@ -43,8 +43,9 @@ public class VoteAggregator {
                 .collect(Collectors.groupingBy(Function.identity(), Collectors.counting()));
 
         String winningDecision = decisionVotes.entrySet().stream()
-                .max(Map.Entry.comparingByValue())
+                .sorted(Map.Entry.<String, Long>comparingByValue().reversed())
                 .map(Map.Entry::getKey)
+                .findFirst()
                 .orElse("UNCERTAIN");
 
         long topVotes = decisionVotes.getOrDefault(winningDecision, 0L);

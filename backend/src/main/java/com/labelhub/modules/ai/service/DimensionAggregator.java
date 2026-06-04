@@ -100,6 +100,9 @@ public class DimensionAggregator {
         }
 
         // 整体平均分数（各维度等权平均）
+        if (dimensionScores.isEmpty()) {
+            log.warn("All {} dimensions returned empty results; decision will be REJECT", dimensionResults.size());
+        }
         double overallScore = dimensionScores.values().stream()
                 .mapToDouble(v -> v instanceof Number n ? n.doubleValue() : 0)
                 .average().orElse(0);

@@ -568,7 +568,7 @@ public class AiAutoReviewService {
         }
         if (prompt.degraded() && result.getConfidence() != null) {
             BigDecimal penalty = config.getDegradationPenalty() != null
-                    ? config.getDegradationPenalty() : BigDecimal.valueOf(0.20);
+                    ? config.getDegradationPenalty() : new BigDecimal("0.20");
             result.setConfidence(result.getConfidence().subtract(penalty).max(BigDecimal.ZERO));
         }
         return result;
@@ -1072,6 +1072,7 @@ public class AiAutoReviewService {
     }
 
     private List<String> parseStringList(String json) {
+        if (json == null || json.isBlank()) return List.of();
         try {
             return objectMapper.readValue(json, STRING_LIST);
         } catch (JsonProcessingException ex) {
@@ -1080,6 +1081,7 @@ public class AiAutoReviewService {
     }
 
     private Map<String, Object> parseObjectMap(String json) {
+        if (json == null || json.isBlank()) return Map.of();
         try {
             return objectMapper.readValue(json, OBJECT_MAP);
         } catch (JsonProcessingException ex) {

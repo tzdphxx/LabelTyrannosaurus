@@ -192,7 +192,7 @@ public class PreAnnotationService {
         MediaPromptResult prompt = mediaPromptContextBuilder.build(new MediaPromptInput(
                 itemJson,
                 currentAnswerJson,
-                preAnnotationPrompt(config, task),
+                preAnnotationPrompt(config, task, currentAnswerJson),
                 capability,
                 config.getMultimodalEnabled() == null || Boolean.TRUE.equals(config.getMultimodalEnabled()),
                 config.getVisionDetail() != null ? config.getVisionDetail() : "auto",
@@ -249,7 +249,7 @@ public class PreAnnotationService {
         MediaPromptResult prompt = mediaPromptContextBuilder.build(new MediaPromptInput(
                 itemJson,
                 currentAnswerJson,
-                preAnnotationPrompt(config, task),
+                preAnnotationPrompt(config, task, currentAnswerJson),
                 capability,
                 config.getMultimodalEnabled() == null || Boolean.TRUE.equals(config.getMultimodalEnabled()),
                 config.getVisionDetail() != null ? config.getVisionDetail() : "auto",
@@ -411,7 +411,7 @@ public class PreAnnotationService {
         }
     }
 
-    private String preAnnotationPrompt(AiReviewConfig config, Task task) {
+    private String preAnnotationPrompt(AiReviewConfig config, Task task, String currentAnswerJson) {
         PromptTemplateEngine.TaskPromptContext ctx = new PromptTemplateEngine.TaskPromptContext(
                 task.getTitle(),
                 task.getDescription(),
@@ -421,9 +421,8 @@ public class PreAnnotationService {
                 config.getManualReviewThreshold() != null ? config.getManualReviewThreshold().toString() : "-",
                 config.getPromptVersion()
         );
-        // 未来可从 templateVersion.schemaJson 提取 SchemaField 列表，传入非空字段列表
         String userTemplate = config.getPromptTemplate() != null ? config.getPromptTemplate() : "";
-        return promptTemplateEngine.buildPreAnnotationPrompt(userTemplate, ctx, List.of(), null);
+        return promptTemplateEngine.buildPreAnnotationPrompt(userTemplate, ctx, List.of(), currentAnswerJson);
     }
 
     private List<LlmMessage> withSystemPrompt(List<LlmMessage> messages) {

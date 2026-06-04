@@ -18,10 +18,6 @@ public class VideoKeyFrameService {
 
     /** CI 截帧参数模板：每5秒一帧，JPG格式，宽1280 */
     private static final String CI_SNAPSHOT = "?ci-process=snapshot&format=jpg&width=1280&time=%d";
-    /** COS 域名标识 */
-    private static final String COS_DOMAIN = ".cos.";
-    /** CI 域名标识 */
-    private static final String CI_DOMAIN = ".ci.";
 
     @Value("${labelhub.media.keyframe.max-frames:5}")
     private int maxFrames;
@@ -45,7 +41,7 @@ public class VideoKeyFrameService {
             durationSeconds = 60;
         }
 
-        String ciUrl = cosUrl.replace(COS_DOMAIN, CI_DOMAIN);
+        String ciUrl = cosUrl.replaceFirst("\\.cos\\.", ".ci.");
 
         List<String> urls = new ArrayList<>();
         int effectiveInterval = Math.max(1, intervalSeconds);

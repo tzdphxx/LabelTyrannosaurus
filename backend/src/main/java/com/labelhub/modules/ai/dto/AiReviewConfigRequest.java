@@ -16,7 +16,7 @@ import java.util.Map;
 @Schema(description = "AI 审核配置请求")
 public record AiReviewConfigRequest(
         @Schema(description = "LLM 供应商 ID", example = "1") @NotNull Long providerId,
-        @Schema(description = "模型名称", example = "qwen-plus") @Size(max = 128) String modelName,
+        @Schema(description = "模型名称", example = "qwen-plus") @NotBlank @Size(max = 128) String modelName,
         @Schema(description = "审核 Prompt 模板（标注规则说明）", example = "请评估标注结果的准确性和完整性")
         @NotBlank @Size(max = 10000) String promptTemplate,
         @Schema(description = "评分维度列表", example = "[\"准确性\",\"完整性\",\"安全性\"]")

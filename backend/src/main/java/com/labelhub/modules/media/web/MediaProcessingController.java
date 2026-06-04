@@ -13,7 +13,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
-@Tag(name = "Media Processing", description = "BE-A multimodal media context processing")
+@Tag(name = "媒体处理", description = "多模态媒体上下文处理：对题目中的图片/视频/音频进行预处理和上下文提取")
 public class MediaProcessingController {
 
     private final MediaProcessingService mediaProcessingService;

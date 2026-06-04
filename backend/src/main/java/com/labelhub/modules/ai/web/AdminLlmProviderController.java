@@ -21,7 +21,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/api/v1/admin/llm-providers")
-@Tag(name = "LLM Provider Admin", description = "ADMIN 管理全局 LLM Provider")
+@Tag(name = "LLM 厂商管理", description = "管理员管理全局 LLM 厂商配置，包括创建、编辑、启用、停用和测试连接")
 public class AdminLlmProviderController {
 
     private final LlmProviderService llmProviderService;

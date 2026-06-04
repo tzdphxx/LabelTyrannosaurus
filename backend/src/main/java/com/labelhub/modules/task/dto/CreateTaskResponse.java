@@ -5,15 +5,15 @@ import com.labelhub.modules.reward.dto.RewardRuleResponse;
 import com.labelhub.modules.task.domain.TaskStatus;
 import io.swagger.v3.oas.annotations.media.Schema;
 
-@Schema(description = "Create task response")
+@Schema(description = "创建任务响应")
 public record CreateTaskResponse(
-        @Schema(description = "Task ID", example = "100")
+        @Schema(description = "任务 ID", example = "100")
         Long taskId,
-        @Schema(description = "Task status", example = "DRAFT")
+        @Schema(description = "任务状态", example = "DRAFT")
         TaskStatus status,
-        @Schema(description = "Dataset import job created with this task, or null when no dataset file was provided")
+        @Schema(description = "随任务创建的导入作业（未传 datasetFileId 时为 null）")
         DatasetImportJobResponse datasetImportJob,
-        @Schema(description = "Reward rule created with this task, or null when no reward rule was provided")
+        @Schema(description = "随任务创建的奖励规则（未传 rewardRule 时为 null）")
         RewardRuleResponse rewardRule
 ) {
 }

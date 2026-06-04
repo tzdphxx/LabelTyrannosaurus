@@ -14,7 +14,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/api/v1/llm-providers")
-@Tag(name = "LLM Provider", description = "OWNER 查询可用模型")
+@Tag(name = "LLM 厂商", description = "OWNER 查询自己可用的 LLM 厂商和模型列表")
 public class LlmProviderController {
 
     private final LlmProviderService llmProviderService;

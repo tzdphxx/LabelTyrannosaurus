@@ -5,23 +5,23 @@ import jakarta.validation.constraints.Size;
 import java.util.List;
 import java.util.Map;
 
-@Schema(description = "LlmTrigger run request. Labeler clicks a component and backend builds LLM context.")
+@Schema(description = "LLM 字段触发请求。标注员点击组件后后端构建 LLM 上下文并发起调用。")
 public record LlmTriggerRunRequest(
-        @Schema(description = "Legacy provider id. Ignored by labeler run; kept for old clients.")
+        @Schema(description = "旧版厂商 ID（标注员触发时忽略，保留用于旧客户端兼容）")
         Long providerId,
-        @Schema(description = "Legacy model name. Ignored by labeler run; kept for old clients.")
+        @Schema(description = "旧版模型名称（标注员触发时忽略，保留用于旧客户端兼容）")
         @Size(max = 128) String modelName,
-        @Schema(description = "Legacy prompt template. Ignored by labeler run; kept for old clients.")
+        @Schema(description = "旧版 Prompt 模板（标注员触发时忽略，保留用于旧客户端兼容）")
         @Size(max = 10000) String promptTemplate,
-        @Schema(description = "Legacy target fields. Ignored by labeler run; kept for old clients.")
+        @Schema(description = "旧版目标字段（标注员触发时忽略，保留用于旧客户端兼容）")
         List<@Size(max = 64) String> targetFields,
-        @Schema(description = "Dataset item id for owner preview.")
+        @Schema(description = "题目 ID，Owner 预览测试时指定要测试的题目")
         Long datasetItemId,
-        @Schema(description = "Clicked template component id.", example = "summary")
+        @Schema(description = "被点击的模板组件 ID", example = "summary")
         @Size(max = 128) String componentId,
-        @Schema(description = "Current draft answer JSON.")
+        @Schema(description = "当前草稿答案 JSON")
         Map<String, Object> currentAnswerJson,
-        @Schema(description = "Optional extra instruction from the labeler/owner.")
+        @Schema(description = "标注员或 Owner 的额外补充指令")
         @Size(max = 1000) String userInstruction
 ) {
 }

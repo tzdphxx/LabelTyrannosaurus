@@ -19,7 +19,7 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/api/v1/labeler")
 @PreAuthorize("hasAnyRole('LABELER','ADMIN')")
-@Tag(name = "Rewards", description = "Labeler contribution stats and reward ledger")
+@Tag(name = "贡献与奖励", description = "标注员贡献统计和奖励流水查询")
 public class ContributionController {
 
     private final ContributionStatsService contributionStatsService;
@@ -29,13 +29,13 @@ public class ContributionController {
     }
 
     @GetMapping("/contribution/overview")
-    @Operation(summary = "Contribution overview")
+    @Operation(summary = "贡献总览", description = "查询当前标注员的贡献统计数据总览。")
     public ApiResponse<ContributionOverviewResponse> overview() {
         return ApiResponse.ok(contributionStatsService.getOverview());
     }
 
     @GetMapping("/contribution/trend")
-    @Operation(summary = "Contribution trend")
+    @Operation(summary = "贡献趋势", description = "查询当前标注员的每日贡献趋势数据。")
     public ApiResponse<List<DailyContributionPoint>> trend(
             @Parameter(description = "Number of days to query, default 7", example = "7")
             @RequestParam(required = false) Integer days) {
@@ -43,7 +43,7 @@ public class ContributionController {
     }
 
     @GetMapping("/contribution/tasks")
-    @Operation(summary = "Task contribution stats")
+    @Operation(summary = "任务贡献统计", description = "按任务查看当前标注员的贡献统计明细。")
     public ApiResponse<List<TaskContributionResponse>> tasks(
             @Parameter(description = "Maximum number of rows, default 20", example = "20")
             @RequestParam(required = false) Integer limit,
@@ -53,7 +53,7 @@ public class ContributionController {
     }
 
     @GetMapping("/rewards/ledger")
-    @Operation(summary = "Reward ledger")
+    @Operation(summary = "奖励流水", description = "查询当前标注员的奖励收支明细。")
     public ApiResponse<List<RewardLedgerResponse>> ledger(
             @Parameter(description = "Maximum number of rows, default 20", example = "20")
             @RequestParam(required = false) Integer limit,

@@ -70,6 +70,9 @@ class AiReviewConfigServiceTest {
     @Mock
     private TraceIdProvider traceIdProvider;
 
+    @Mock
+    private PromptTemplateEngine promptTemplateEngine;
+
     private AiReviewConfigService service;
 
     @BeforeEach
@@ -83,6 +86,14 @@ class AiReviewConfigServiceTest {
                 auditAppender,
                 traceIdProvider
         );
+        org.springframework.test.util.ReflectionTestUtils.setField(service, "promptTemplateEngine",
+                promptTemplateEngine);
+        org.mockito.Mockito.lenient()
+                .when(promptTemplateEngine.buildReviewPrompt(
+                        org.mockito.ArgumentMatchers.any(),
+                        org.mockito.ArgumentMatchers.any(),
+                        org.mockito.ArgumentMatchers.any()))
+                .thenReturn("You are LabelHub AI reviewer. Return valid JSON only.");
     }
 
     @Test

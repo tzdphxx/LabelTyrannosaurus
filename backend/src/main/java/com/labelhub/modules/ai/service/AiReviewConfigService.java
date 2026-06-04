@@ -62,6 +62,8 @@ public class AiReviewConfigService {
     private final AuditAppender auditAppender;
     private final TraceIdProvider traceIdProvider;
     private final ObjectMapper objectMapper;
+    @Autowired
+    private PromptTemplateEngine promptTemplateEngine;
 
     @Autowired
     public AiReviewConfigService(AiReviewConfigMapper aiReviewConfigMapper,
@@ -144,18 +146,22 @@ public class AiReviewConfigService {
     @Transactional
     public AiReviewPromptTestResponse testPrompt(Long ownerId, Long taskId, Long configId,
                                                  AiReviewPromptTestRequest request) {
-        loadOwnedTask(ownerId, taskId);
+        Task task = taskMapper.selectById(taskId);
+        if (task == null || !ownerId.equals(task.getOwnerId())) {
+            throw new BusinessException(TASK_NOT_FOUND, "Task not found");
+        }
         AiReviewConfig config = loadTaskConfig(taskId, configId);
         String inputSnapshot = toJson(promptTestSnapshot(config, request));
         AgentRun run = agentRunService.create(TEST_AGENT_TYPE, null, config.getProviderId(), config.getModelName(),
                 config.getPromptVersion(), inputSnapshot);
         agentRunService.start(run.getId());
 
+        String systemPrompt = buildTestSystemPrompt(config, task);
         LlmGatewayResponse gatewayResponse = llmGateway.review(new LlmGatewayRequest(
                 config.getProviderId(),
                 config.getModelName(),
                 List.of(
-                        new LlmMessage("system", "You are LabelHub AI review config tester. Return valid JSON only."),
+                        new LlmMessage("system", systemPrompt),
                         new LlmMessage("user", buildPrompt(config, request))
                 )
         ));
@@ -174,6 +180,20 @@ public class AiReviewConfigService {
                 gatewayResponse.errorCode(),
                 gatewayResponse.errorMessage()
         );
+    }
+
+    private String buildTestSystemPrompt(AiReviewConfig config, Task task) {
+        PromptTemplateEngine.TaskPromptContext ctx = new PromptTemplateEngine.TaskPromptContext(
+                task.getTitle(),
+                task.getDescription(),
+                task.getInstructionRichText(),
+                config.getScoringDimensionsJson(),
+                config.getPassThreshold() != null ? config.getPassThreshold().toString() : "-",
+                config.getManualReviewThreshold() != null ? config.getManualReviewThreshold().toString() : "-",
+                config.getPromptVersion()
+        );
+        String userTemplate = config.getPromptTemplate() != null ? config.getPromptTemplate() : "";
+        return promptTemplateEngine.buildReviewPrompt(userTemplate, ctx, List.of());
     }
 
     private AiReviewConfigResponse updateExisting(Long ownerId, Task task, AiReviewConfig config,

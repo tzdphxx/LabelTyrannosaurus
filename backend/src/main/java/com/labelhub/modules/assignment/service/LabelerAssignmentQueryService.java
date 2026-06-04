@@ -2,11 +2,13 @@ package com.labelhub.modules.assignment.service;
 
 import com.labelhub.common.exception.BusinessException;
 import com.labelhub.modules.assignment.domain.AssignmentStatus;
-import com.labelhub.modules.assignment.dto.LabelerClaimedItemResponse;
-import com.labelhub.modules.assignment.dto.LabelerClaimedTaskResponse;
+import com.labelhub.modules.assignment.dto.ClaimedItemResponse;
+import com.labelhub.modules.assignment.dto.ClaimedTaskResponse;
 import com.labelhub.modules.assignment.dto.LabelerAssignmentListItem;
 import com.labelhub.modules.assignment.mapper.AssignmentMapper;
+import com.labelhub.modules.task.domain.ClaimStrategy;
 import com.labelhub.modules.task.domain.TaskStatus;
+import com.labelhub.modules.task.dto.TaskSummaryResponse;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
@@ -44,7 +46,7 @@ public class LabelerAssignmentQueryService {
         return assignmentMapper.countLabelerAssignments(labelerId, taskId, status);
     }
 
-    public List<LabelerClaimedTaskResponse> listClaimedTasks(Long labelerId, int page, int size) {
+    public List<ClaimedTaskResponse> listClaimedTasks(Long labelerId, int page, int size) {
         int normalizedPage = Math.max(1, page);
         int normalizedSize = Math.min(Math.max(1, size), 100);
         int offset = (normalizedPage - 1) * normalizedSize;
@@ -55,7 +57,7 @@ public class LabelerAssignmentQueryService {
                 .toList();
     }
 
-    public LabelerClaimedTaskResponse getClaimedTaskDetail(Long labelerId,
+    public ClaimedTaskResponse getClaimedTaskDetail(Long labelerId,
                                                            Long taskId,
                                                            String status,
                                                            int page,
@@ -81,7 +83,7 @@ public class LabelerAssignmentQueryService {
         );
     }
 
-    private LabelerClaimedTaskResponse toClaimedTask(Long labelerId,
+    private ClaimedTaskResponse toClaimedTask(Long labelerId,
                                                      Map<String, Object> row,
                                                      String status,
                                                      int itemPage,
@@ -90,23 +92,34 @@ public class LabelerAssignmentQueryService {
         int normalizedPage = Math.max(1, itemPage);
         int normalizedSize = Math.min(Math.max(1, itemSize), 100);
         int offset = (normalizedPage - 1) * normalizedSize;
-        return new LabelerClaimedTaskResponse(
-                taskId,
-                (String) row.get("title"),
-                (String) row.get("description"),
-                (String) row.get("instruction_rich_text"),
-                TaskStatus.valueOf((String) row.get("status")),
-                toInt(row.get("quota")),
-                toInt(row.get("overlap_count")),
-                toLocalDateTime(row.get("deadline_at")),
-                toLong(row.get("published_template_version_id")),
-                toLong(row.get("claimed_item_count")),
-                toLocalDateTime(row.get("updated_at")),
+        return new ClaimedTaskResponse(
+                toTaskSummary(row),
+                toInt(row.get("claimed_item_count")),
+                toInt(row.get("submitted_count")),
+                toInt(row.get("approved_count")),
                 listClaimedItems(labelerId, taskId, status, normalizedSize, offset)
         );
     }
 
-    private List<LabelerClaimedItemResponse> listClaimedItems(Long labelerId,
+    private TaskSummaryResponse toTaskSummary(Map<String, Object> row) {
+        return new TaskSummaryResponse(
+                toLong(row.get("task_id")),
+                (String) row.get("title"),
+                TaskStatus.valueOf((String) row.get("status")),
+                List.of(),
+                toInt(row.get("quota")),
+                0,
+                toInt(row.get("overlap_count")),
+                ClaimStrategy.FCFS,
+                toLocalDateTime(row.get("deadline_at")),
+                null,
+                null,
+                null,
+                toLocalDateTime(row.get("updated_at"))
+        );
+    }
+
+    private List<ClaimedItemResponse> listClaimedItems(Long labelerId,
                                                               Long taskId,
                                                               String status,
                                                               int limit,
@@ -117,11 +130,12 @@ public class LabelerAssignmentQueryService {
                 .toList();
     }
 
-    private LabelerClaimedItemResponse toClaimedItem(Map<String, Object> row) {
-        return new LabelerClaimedItemResponse(
+    private ClaimedItemResponse toClaimedItem(Map<String, Object> row) {
+        return new ClaimedItemResponse(
                 toLong(row.get("assignment_id")),
                 toLong(row.get("dataset_item_id")),
-                AssignmentStatus.valueOf((String) row.get("assignment_status")),
+                (String) row.get("external_id"),
+                ((String) row.get("assignment_status")),
                 (String) row.get("item_json"),
                 (String) row.get("metadata_json"),
                 toInt(row.get("draft_version")),

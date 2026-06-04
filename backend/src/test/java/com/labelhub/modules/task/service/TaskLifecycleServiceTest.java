@@ -28,11 +28,11 @@ import com.labelhub.modules.template.mapper.TemplateVersionMapper;
 import com.labelhub.modules.task.domain.Task;
 import com.labelhub.modules.task.domain.TaskStatus;
 import com.labelhub.modules.task.domain.TaskTag;
-import com.labelhub.modules.task.dto.CreateTaskResponse;
 import com.labelhub.modules.task.dto.CreateTaskRequest;
-import com.labelhub.modules.task.dto.OwnerTaskSummaryResponse;
-import com.labelhub.modules.task.dto.TaskDetailResponse;
-import com.labelhub.modules.task.dto.TaskLifecycleResponse;
+import com.labelhub.modules.task.dto.CreateTaskResponse;
+import com.labelhub.modules.task.dto.TaskResponse;
+import com.labelhub.modules.task.dto.TaskStatusResponse;
+import com.labelhub.modules.task.dto.TaskSummaryResponse;
 import com.labelhub.modules.task.dto.UpdateTaskRequest;
 import com.labelhub.modules.task.mapper.TaskMapper;
 import com.labelhub.modules.task.mapper.TaskTagMapper;
@@ -109,7 +109,7 @@ class TaskLifecycleServiceTest {
             return 1;
         });
 
-        TaskLifecycleResponse response = taskLifecycleService.create(OWNER_ID, createRequest());
+        TaskStatusResponse response = taskLifecycleService.create(OWNER_ID, createRequest());
 
         assertThat(response.taskId()).isEqualTo(TASK_ID);
         assertThat(response.status()).isEqualTo(TaskStatus.DRAFT);
@@ -130,7 +130,7 @@ class TaskLifecycleServiceTest {
             return 1;
         });
 
-        TaskLifecycleResponse response = taskLifecycleService.create(OWNER_ID, createRequestWithOverlapCount(2));
+        TaskStatusResponse response = taskLifecycleService.create(OWNER_ID, createRequestWithOverlapCount(2));
 
         assertThat(response.taskId()).isEqualTo(TASK_ID);
         verify(taskMapper).insert(any(Task.class));
@@ -171,7 +171,7 @@ class TaskLifecycleServiceTest {
             return 1;
         });
 
-        TaskLifecycleResponse response = taskLifecycleService.create(OWNER_ID, createRequest());
+        TaskStatusResponse response = taskLifecycleService.create(OWNER_ID, createRequest());
 
         assertThat(response.taskId()).isEqualTo(TASK_ID);
         verify(taskMapper).insert(any(Task.class));
@@ -203,7 +203,7 @@ class TaskLifecycleServiceTest {
         when(taskMapper.selectList(any(Wrapper.class))).thenReturn(List.of(task));
         when(taskTagMapper.selectList(any(Wrapper.class))).thenReturn(List.of(taskTag("qa")));
 
-        List<OwnerTaskSummaryResponse> responses = taskLifecycleService.listOwnerTasks(OWNER_ID);
+        List<TaskSummaryResponse> responses = taskLifecycleService.listOwnerTasks(OWNER_ID);
 
         assertThat(responses).hasSize(1);
         assertThat(responses.get(0).taskId()).isEqualTo(TASK_ID);
@@ -218,7 +218,7 @@ class TaskLifecycleServiceTest {
         when(taskTagMapper.selectList(any(Wrapper.class))).thenReturn(List.of(taskTag("qa")));
         when(rewardRuleService.findLatestRule(TASK_ID)).thenReturn(rewardRule);
 
-        TaskDetailResponse response = taskLifecycleService.getOwnedTask(OWNER_ID, TASK_ID);
+        TaskResponse response = taskLifecycleService.getOwnedTask(OWNER_ID, TASK_ID);
 
         assertThat(response.taskId()).isEqualTo(TASK_ID);
         assertThat(response.ownerId()).isEqualTo(OWNER_ID);
@@ -235,7 +235,7 @@ class TaskLifecycleServiceTest {
         when(taskTagMapper.selectList(any(Wrapper.class))).thenReturn(List.of(taskTag("qa")));
         when(rewardRuleService.findLatestRule(TASK_ID)).thenReturn(null);
 
-        TaskDetailResponse response = taskLifecycleService.getOwnedTask(OWNER_ID, TASK_ID);
+        TaskResponse response = taskLifecycleService.getOwnedTask(OWNER_ID, TASK_ID);
 
         assertThat(response.rewardRule()).isNull();
     }
@@ -247,7 +247,7 @@ class TaskLifecycleServiceTest {
         when(taskMapper.updateById(any(Task.class))).thenReturn(1);
         when(taskTagMapper.delete(any(Wrapper.class))).thenReturn(1);
 
-        TaskLifecycleResponse response = taskLifecycleService.updateDraft(OWNER_ID, TASK_ID, updateRequest());
+        TaskStatusResponse response = taskLifecycleService.updateDraft(OWNER_ID, TASK_ID, updateRequest());
 
         assertThat(response.status()).isEqualTo(TaskStatus.DRAFT);
         assertThat(task.getTitle()).isEqualTo("Updated task");
@@ -264,7 +264,7 @@ class TaskLifecycleServiceTest {
         when(taskTagMapper.delete(any(Wrapper.class))).thenReturn(1);
         when(rewardRuleService.saveRuleForTaskOwner(TASK_ID, OWNER_ID, rewardRule)).thenReturn(rewardResponse);
 
-        TaskLifecycleResponse response = taskLifecycleService.updateDraft(OWNER_ID, TASK_ID, updateRequestWithRewardRule(rewardRule));
+        TaskStatusResponse response = taskLifecycleService.updateDraft(OWNER_ID, TASK_ID, updateRequestWithRewardRule(rewardRule));
 
         assertThat(response.status()).isEqualTo(TaskStatus.DRAFT);
         assertThat(task.getRewardVisible()).isFalse();
@@ -279,7 +279,7 @@ class TaskLifecycleServiceTest {
         when(taskMapper.updateById(any(Task.class))).thenReturn(1);
         when(taskTagMapper.delete(any(Wrapper.class))).thenReturn(1);
 
-        TaskLifecycleResponse response = taskLifecycleService.updateDraft(OWNER_ID, TASK_ID, updateRequestWithOverlapCount(2));
+        TaskStatusResponse response = taskLifecycleService.updateDraft(OWNER_ID, TASK_ID, updateRequestWithOverlapCount(2));
 
         assertThat(response.status()).isEqualTo(TaskStatus.DRAFT);
         verify(taskMapper).updateById(any(Task.class));
@@ -293,7 +293,7 @@ class TaskLifecycleServiceTest {
         when(taskMapper.updateById(any(Task.class))).thenReturn(1);
         when(taskTagMapper.delete(any(Wrapper.class))).thenReturn(1);
 
-        TaskLifecycleResponse response = taskLifecycleService.updateDraft(OWNER_ID, TASK_ID, updateRequest());
+        TaskStatusResponse response = taskLifecycleService.updateDraft(OWNER_ID, TASK_ID, updateRequest());
 
         assertThat(response.status()).isEqualTo(TaskStatus.DRAFT);
         verify(taskMapper).updateById(any(Task.class));
@@ -421,6 +421,7 @@ class TaskLifecycleServiceTest {
                 100L,
                 200L,
                 null, null, null, null, null, null,
+                null,
                 null, null,
                 1,
                 null,
@@ -440,6 +441,7 @@ class TaskLifecycleServiceTest {
                 100L,
                 200L,
                 null, null, null, null, null, null,
+                null,
                 null, null,
                 1,
                 99L,
@@ -459,6 +461,7 @@ class TaskLifecycleServiceTest {
                 100L,
                 200L,
                 null, null, null, null, null, null,
+                null,
                 null, null,
                 1,
                 null,

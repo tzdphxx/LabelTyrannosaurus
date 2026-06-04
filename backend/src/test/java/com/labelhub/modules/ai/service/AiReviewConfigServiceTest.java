@@ -70,6 +70,9 @@ class AiReviewConfigServiceTest {
     @Mock
     private TraceIdProvider traceIdProvider;
 
+    @Mock
+    private PromptTemplateEngine promptTemplateEngine;
+
     private AiReviewConfigService service;
 
     @BeforeEach
@@ -83,6 +86,14 @@ class AiReviewConfigServiceTest {
                 auditAppender,
                 traceIdProvider
         );
+        org.springframework.test.util.ReflectionTestUtils.setField(service, "promptTemplateEngine",
+                promptTemplateEngine);
+        org.mockito.Mockito.lenient()
+                .when(promptTemplateEngine.buildReviewPrompt(
+                        org.mockito.ArgumentMatchers.any(),
+                        org.mockito.ArgumentMatchers.any(),
+                        org.mockito.ArgumentMatchers.any()))
+                .thenReturn("You are LabelHub AI reviewer. Return valid JSON only.");
     }
 
     @Test
@@ -134,7 +145,7 @@ class AiReviewConfigServiceTest {
                 new BigDecimal("60.00"),
                 new BigDecimal("80.00"),
                 3,
-                null, null, null, null, null, null
+                null, null, null, null, null, null, null
         );
         when(taskMapper.selectById(TASK_ID)).thenReturn(draftTask());
         when(llmProviderService.findEnabledById(PROVIDER_ID)).thenReturn(Optional.of(provider()));
@@ -244,7 +255,7 @@ class AiReviewConfigServiceTest {
                 new BigDecimal("85.00"),
                 new BigDecimal("60.00"),
                 3,
-                null, null, null, null, null, null
+                null, null, null, null, null, null, null
         );
     }
 

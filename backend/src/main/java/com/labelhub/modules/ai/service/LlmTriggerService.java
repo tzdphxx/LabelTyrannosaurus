@@ -91,6 +91,8 @@ public class LlmTriggerService {
     private MediaContextResolver mediaContextResolver;
     @Autowired(required = false)
     private AiMetrics aiMetrics;
+    @Autowired
+    private PromptTemplateEngine promptTemplateEngine;
 
     @Autowired
     public LlmTriggerService(TaskMapper taskMapper,
@@ -312,14 +314,26 @@ public class LlmTriggerService {
             return;
         }
 
+        AiReviewConfig config = loadTaskAiReviewConfig(task);
+        PromptTemplateEngine.TaskPromptContext ctx = new PromptTemplateEngine.TaskPromptContext(
+                task.getTitle(),
+                task.getDescription(),
+                task.getInstructionRichText(),
+                config.getScoringDimensionsJson(),
+                config.getPassThreshold() != null ? config.getPassThreshold().toString() : "-",
+                config.getManualReviewThreshold() != null ? config.getManualReviewThreshold().toString() : "-",
+                config.getPromptVersion()
+        );
+        String userTemplate = config.getPromptTemplate() != null ? config.getPromptTemplate() : "";
+        String systemPrompt = promptTemplateEngine.buildLlmTriggerPrompt(userTemplate, ctx,
+                run.getComponentId(), parseStringList(run.getTargetFieldsJson()),
+                run.getInputSnapshotJson());
+
         LlmGatewayResponse gatewayResponse = llmGateway.review(new LlmGatewayRequest(
                 providerId,
                 modelName,
                 List.of(
-                        new LlmMessage("system", "You are a LabelHub field-level LlmTrigger assistant. "
-                                + "Return valid JSON with componentId, targetFields, patch, displayText, "
-                                + "confidence, reasoningSummary and warnings. The patch must only contain "
-                                + "the requested target fields."),
+                        new LlmMessage("system", systemPrompt),
                         new LlmMessage("user", run.getInputSnapshotJson())
                 )
         ));

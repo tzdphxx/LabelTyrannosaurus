@@ -54,6 +54,13 @@ public record CreateTaskRequest(
         java.math.BigDecimal aiPassThreshold,
         @Schema(description = "AI 人工复核阈值（0-100）", example = "60.00")
         java.math.BigDecimal aiManualReviewThreshold,
+        @Schema(description = """
+                AI 审核策略:
+                LIGHTWEIGHT — 单路 LLM（默认，兼容存量）
+                PARALLEL_VOTE — 多模型并行投票（系统自动用当前模型复制满足票数）
+                DEEP_DIMENSION — 维度专项模型 + 维度内投票
+                AGENT_DEBATE — 多 Agent 辩论""",
+                example = "LIGHTWEIGHT") String aiReviewStrategy,
         @Schema(description = "领取策略", example = "FCFS", allowableValues = {"FCFS", "QUOTA_GRAB", "ASSIGNED"})
         String strategy,
         @Schema(description = "单人并发未完成上限（仅 QUOTA_GRAB 有效）", example = "10")

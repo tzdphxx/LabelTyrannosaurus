@@ -1,21 +1,18 @@
 package com.labelhub.modules.task.web;
 
 import com.labelhub.common.api.ApiResponse;
+import com.labelhub.common.api.PageResponse;
 import com.labelhub.common.security.CurrentUserContext;
-import com.labelhub.modules.task.dto.AssignTaskReviewersRequest;
 import com.labelhub.modules.task.dto.CreateTaskRequest;
 import com.labelhub.modules.task.dto.CreateTaskResponse;
-import com.labelhub.modules.task.dto.OwnerTaskPageResponse;
-import com.labelhub.modules.task.dto.OwnerTaskSummaryResponse;
-import com.labelhub.modules.task.dto.TaskDetailResponse;
 import com.labelhub.modules.task.dto.TaskLabelerResponse;
-import com.labelhub.modules.task.dto.TaskLifecycleResponse;
-import com.labelhub.modules.task.dto.TaskReviewerResponse;
+import com.labelhub.modules.task.dto.TaskResponse;
 import com.labelhub.modules.task.dto.TaskStatisticsResponse;
+import com.labelhub.modules.task.dto.TaskStatusResponse;
+import com.labelhub.modules.task.dto.TaskSummaryResponse;
 import com.labelhub.modules.task.dto.UpdateTaskRequest;
 import com.labelhub.modules.task.service.TaskLifecycleService;
 import com.labelhub.modules.task.service.TaskManagementService;
-import com.labelhub.modules.task.service.TaskReviewerService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -37,14 +34,11 @@ public class TaskController {
 
     private final TaskLifecycleService taskLifecycleService;
     private final TaskManagementService taskManagementService;
-    private final TaskReviewerService taskReviewerService;
 
     public TaskController(TaskLifecycleService taskLifecycleService,
-                          TaskManagementService taskManagementService,
-                          TaskReviewerService taskReviewerService) {
+                          TaskManagementService taskManagementService) {
         this.taskLifecycleService = taskLifecycleService;
         this.taskManagementService = taskManagementService;
-        this.taskReviewerService = taskReviewerService;
     }
 
     @PostMapping
@@ -56,14 +50,14 @@ public class TaskController {
 
     @GetMapping("/{taskId}")
     @Operation(summary = "任务详情", description = "查询当前用户拥有的任务详情。")
-    public ApiResponse<TaskDetailResponse> detail(@PathVariable Long taskId) {
+    public ApiResponse<TaskResponse> detail(@PathVariable Long taskId) {
         return ApiResponse.ok(taskLifecycleService.getOwnedTask(
                 CurrentUserContext.getUserId(), taskId));
     }
 
     @PutMapping("/{taskId}")
     @Operation(summary = "编辑草稿任务", description = "仅允许编辑 DRAFT 状态任务。")
-    public ApiResponse<TaskLifecycleResponse> updateDraft(
+    public ApiResponse<TaskStatusResponse> updateDraft(
             @PathVariable Long taskId,
             @Valid @RequestBody UpdateTaskRequest request) {
         return ApiResponse.ok(taskLifecycleService.updateDraft(
@@ -91,74 +85,31 @@ public class TaskController {
                 CurrentUserContext.getUserId(), taskId));
     }
 
-    @PostMapping("/{taskId}/reviewers")
-    @Operation(summary = "预分配审核员", description = "Owner 将审核员预分配到任务级别，替换已有分配。")
-    public ApiResponse<Void> assignReviewers(@PathVariable Long taskId,
-                                             @Valid @RequestBody AssignTaskReviewersRequest request) {
-        taskReviewerService.assignReviewers(
-                CurrentUserContext.getUserId(), taskId, request.reviewerIds());
-        return ApiResponse.ok(null);
-    }
-
-    @GetMapping("/{taskId}/reviewers")
-    @Operation(summary = "查看任务审核员", description = "查询任务预分配的审核员列表。")
-    public ApiResponse<java.util.List<TaskReviewerResponse>> reviewers(@PathVariable Long taskId) {
-        return ApiResponse.ok(taskReviewerService.getReviewers(
-                CurrentUserContext.getUserId(), taskId));
-    }
-
     @PostMapping("/{taskId}/publish")
     @Operation(summary = "发布任务", description = "发布草稿任务。校验所有前置条件（数据集、模板、AI配置、奖励规则）后，将任务状态从 DRAFT 转为 PUBLISHED。策略和配额发布后即冻结不可更改。")
-    public ApiResponse<TaskLifecycleResponse> publish(@PathVariable Long taskId) {
+    public ApiResponse<TaskStatusResponse> publish(@PathVariable Long taskId) {
         return ApiResponse.ok(taskLifecycleService.publish(
                 CurrentUserContext.getUserId(), taskId));
     }
 
     @PostMapping("/{taskId}/pause")
     @Operation(summary = "暂停任务", description = "暂停已发布的任务，标注员暂时无法继续领取新的标注工作。")
-    public ApiResponse<TaskLifecycleResponse> pause(@PathVariable Long taskId) {
+    public ApiResponse<TaskStatusResponse> pause(@PathVariable Long taskId) {
         return ApiResponse.ok(taskLifecycleService.pause(
                 CurrentUserContext.getUserId(), taskId));
     }
 
     @PostMapping("/{taskId}/resume")
     @Operation(summary = "恢复任务", description = "恢复已暂停的任务，标注员可重新领取标注工作。")
-    public ApiResponse<TaskLifecycleResponse> resume(@PathVariable Long taskId) {
+    public ApiResponse<TaskStatusResponse> resume(@PathVariable Long taskId) {
         return ApiResponse.ok(taskLifecycleService.resume(
                 CurrentUserContext.getUserId(), taskId));
     }
 
     @PostMapping("/{taskId}/end")
     @Operation(summary = "结束任务", description = "永久结束任务，从活跃分发和审核流程中移除。结束后标注员无法继续领取或提交。")
-    public ApiResponse<TaskLifecycleResponse> end(@PathVariable Long taskId) {
+    public ApiResponse<TaskStatusResponse> end(@PathVariable Long taskId) {
         return ApiResponse.ok(taskLifecycleService.end(
                 CurrentUserContext.getUserId(), taskId));
-    }
-}
-
-@RestController
-@RequestMapping("/api/v1/owner/tasks")
-@Tag(name = "任务", description = "任务创建者视角的任务列表")
-class OwnerTaskController {
-
-    private final TaskLifecycleService taskLifecycleService;
-    private final TaskManagementService taskManagementService;
-
-    OwnerTaskController(TaskLifecycleService taskLifecycleService,
-                        TaskManagementService taskManagementService) {
-        this.taskLifecycleService = taskLifecycleService;
-        this.taskManagementService = taskManagementService;
-    }
-
-    @GetMapping
-    @Operation(summary = "我的任务列表（分页）",
-            description = "分页查询当前 OWNER 用户创建的任务，支持按状态和关键词筛选。")
-    public ApiResponse<OwnerTaskPageResponse> listOwnerTasks(
-            @RequestParam(required = false) String status,
-            @RequestParam(required = false) String keyword,
-            @RequestParam(defaultValue = "1") int page,
-            @RequestParam(defaultValue = "20") int size) {
-        return ApiResponse.ok(taskManagementService.listOwnerTasksPage(
-                CurrentUserContext.getUserId(), status, keyword, page, size));
     }
 }

@@ -86,6 +86,7 @@ class AiAutoReviewServiceTest {
     @Mock private DatasetClaimService datasetClaimService;
     @Mock private com.labelhub.infrastructure.redis.RedisLockService redisLockService;
     @Mock private com.labelhub.modules.review.service.ReviewOwnershipResolver reviewOwnershipResolver;
+    @Mock private PromptTemplateEngine promptTemplateEngine;
 
     private AiReviewRetryStrategy retryStrategy;
     private AiAutoReviewService service;
@@ -112,6 +113,13 @@ class AiAutoReviewServiceTest {
         ReflectionTestUtils.setField(service, "datasetClaimService", datasetClaimService);
         ReflectionTestUtils.setField(service, "redisLockService", redisLockService);
         ReflectionTestUtils.setField(service, "reviewOwnershipResolver", reviewOwnershipResolver);
+        ReflectionTestUtils.setField(service, "promptTemplateEngine", promptTemplateEngine);
+        org.mockito.Mockito.lenient()
+                .when(promptTemplateEngine.buildReviewPrompt(
+                        org.mockito.ArgumentMatchers.any(),
+                        org.mockito.ArgumentMatchers.any(),
+                        org.mockito.ArgumentMatchers.any()))
+                .thenReturn("You are LabelHub AI reviewer. Return valid JSON only.");
         org.mockito.Mockito.lenient()
                 .when(redisLockService.tryLock(org.mockito.ArgumentMatchers.anyString(),
                         org.mockito.ArgumentMatchers.anyLong(), org.mockito.ArgumentMatchers.anyLong()))

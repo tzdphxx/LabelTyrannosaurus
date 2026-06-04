@@ -17,11 +17,11 @@ import com.labelhub.modules.task.domain.ClaimStrategy;
 import com.labelhub.modules.task.domain.Task;
 import com.labelhub.modules.task.domain.TaskStatus;
 import com.labelhub.modules.task.domain.TaskTag;
-import com.labelhub.modules.task.dto.CreateTaskResponse;
 import com.labelhub.modules.task.dto.CreateTaskRequest;
-import com.labelhub.modules.task.dto.OwnerTaskSummaryResponse;
-import com.labelhub.modules.task.dto.TaskDetailResponse;
-import com.labelhub.modules.task.dto.TaskLifecycleResponse;
+import com.labelhub.modules.task.dto.CreateTaskResponse;
+import com.labelhub.modules.task.dto.TaskResponse;
+import com.labelhub.modules.task.dto.TaskStatusResponse;
+import com.labelhub.modules.task.dto.TaskSummaryResponse;
 import com.labelhub.modules.task.dto.UpdateTaskRequest;
 import com.labelhub.modules.task.mapper.TaskMapper;
 import com.labelhub.modules.task.mapper.TaskTagMapper;
@@ -78,13 +78,13 @@ public class TaskLifecycleService {
         this.applicationEventPublisher = applicationEventPublisher;
     }
 
-    public List<OwnerTaskSummaryResponse> listOwnerTasks(Long ownerId) {
+    public List<TaskSummaryResponse> listOwnerTasks(Long ownerId) {
         return taskMapper.selectList(new QueryWrapper<Task>()
                         .eq("owner_id", ownerId)
                         .orderByDesc("updated_at")
                         .orderByDesc("id"))
                 .stream()
-                .map(task -> new OwnerTaskSummaryResponse(
+                .map(task -> new TaskSummaryResponse(
                         task.getId(),
                         task.getTitle(),
                         task.getStatus(),
@@ -102,12 +102,12 @@ public class TaskLifecycleService {
                 .toList();
     }
 
-    public TaskDetailResponse getOwnedTask(Long ownerId, Long taskId) {
+    public TaskResponse getOwnedTask(Long ownerId, Long taskId) {
         return toDetailResponse(loadOwnedTask(ownerId, taskId));
     }
 
     @Transactional
-    public TaskLifecycleResponse create(Long ownerId, CreateTaskRequest request) {
+    public TaskStatusResponse create(Long ownerId, CreateTaskRequest request) {
         return createTask(ownerId, request).lifecycleResponse();
     }
 
@@ -168,7 +168,8 @@ public class TaskLifecycleService {
                     request.aiScoringDimensions(),
                     request.aiPassThreshold(),
                     request.aiManualReviewThreshold(),
-                    null, null, null, null, null, null, null);
+                    null, null, null, null, null, null, null,
+                    request.aiReviewStrategy());
             var aiConfig = aiReviewConfigService.save(ownerId, task.getId(), aiRequest);
             task.setAiReviewConfigId(aiConfig.id());
             taskMapper.updateById(task);
@@ -183,11 +184,11 @@ public class TaskLifecycleService {
 
         replaceTags(task.getId(), request.tags());
         appendAudit(task, ownerId, "TASK_CREATED", null, snapshot(task));
-        return new CreatedTaskResult(new TaskLifecycleResponse(task.getId(), task.getStatus()), rewardRule);
+        return new CreatedTaskResult(new TaskStatusResponse(task.getId(), task.getStatus()), rewardRule);
     }
 
     @Transactional
-    public TaskLifecycleResponse updateDraft(Long ownerId, Long taskId, UpdateTaskRequest request) {
+    public TaskStatusResponse updateDraft(Long ownerId, Long taskId, UpdateTaskRequest request) {
         Task task = loadOwnedTask(ownerId, taskId);
         if (task.getStatus() != TaskStatus.DRAFT) {
             throw new BusinessException(TASK_STATUS_NOT_ALLOWED, "Only draft tasks can be edited");
@@ -218,11 +219,11 @@ public class TaskLifecycleService {
         taskTagMapper.delete(new QueryWrapper<TaskTag>().eq("task_id", taskId));
         replaceTags(taskId, request.tags());
         appendAudit(task, ownerId, "TASK_UPDATED", beforeJson, snapshot(task));
-        return new TaskLifecycleResponse(task.getId(), task.getStatus());
+        return new TaskStatusResponse(task.getId(), task.getStatus());
     }
 
     @Transactional
-    public TaskLifecycleResponse publish(Long ownerId, Long taskId) {
+    public TaskStatusResponse publish(Long ownerId, Long taskId) {
         Task task = loadOwnedTask(ownerId, taskId);
         requireStatus(task, Set.of(TaskStatus.DRAFT));
         validatePublishRequirements(task);
@@ -232,7 +233,7 @@ public class TaskLifecycleService {
     }
 
     @Transactional
-    public TaskLifecycleResponse pause(Long ownerId, Long taskId) {
+    public TaskStatusResponse pause(Long ownerId, Long taskId) {
         Task task = loadOwnedTask(ownerId, taskId);
         requireStatus(task, Set.of(TaskStatus.PUBLISHED));
         task.setStatus(TaskStatus.PAUSED);
@@ -240,7 +241,7 @@ public class TaskLifecycleService {
     }
 
     @Transactional
-    public TaskLifecycleResponse resume(Long ownerId, Long taskId) {
+    public TaskStatusResponse resume(Long ownerId, Long taskId) {
         Task task = loadOwnedTask(ownerId, taskId);
         requireStatus(task, Set.of(TaskStatus.PAUSED));
         task.setStatus(TaskStatus.PUBLISHED);
@@ -248,7 +249,7 @@ public class TaskLifecycleService {
     }
 
     @Transactional
-    public TaskLifecycleResponse end(Long ownerId, Long taskId) {
+    public TaskStatusResponse end(Long ownerId, Long taskId) {
         Task task = loadOwnedTask(ownerId, taskId);
         requireStatus(task, Set.of(TaskStatus.PUBLISHED, TaskStatus.PAUSED));
         TaskStatus beforeStatus = task.getStatus();
@@ -257,12 +258,12 @@ public class TaskLifecycleService {
         return updateStatus(task, ownerId, "TASK_ENDED", beforeStatus);
     }
 
-    private TaskLifecycleResponse updateStatus(Task task, Long ownerId, String action, TaskStatus beforeStatus) {
+    private TaskStatusResponse updateStatus(Task task, Long ownerId, String action, TaskStatus beforeStatus) {
         Map<String, Object> beforeJson = Map.of("status", beforeStatus);
         taskMapper.updateById(task);
         appendAudit(task, ownerId, action, beforeJson, Map.of("status", task.getStatus()));
         publishTaskStatusChanged(task, beforeStatus);
-        return new TaskLifecycleResponse(task.getId(), task.getStatus());
+        return new TaskStatusResponse(task.getId(), task.getStatus());
     }
 
     private void publishTaskStatusChanged(Task task, TaskStatus beforeStatus) {
@@ -325,30 +326,30 @@ public class TaskLifecycleService {
         return new BusinessException(TASK_PUBLISH_REQUIREMENT_MISSING, message);
     }
 
-    private TaskDetailResponse toDetailResponse(Task task) {
-        return new TaskDetailResponse(
+    private TaskResponse toDetailResponse(Task task) {
+        return new TaskResponse(
                 task.getId(),
-                task.getOwnerId(),
                 task.getTitle(),
-                task.getDescription(),
-                task.getInstructionRichText(),
                 task.getStatus(),
                 listTags(task.getId()),
                 task.getQuota(),
                 task.getClaimedCount(),
                 task.getOverlapCount(),
                 task.getStrategy(),
-                task.getMaxClaimsPerLabeler(),
                 task.getDeadlineAt(),
+                task.getPublishedAt(),
+                task.getEndedAt(),
+                task.getCreatedAt(),
+                task.getUpdatedAt(),
+                task.getOwnerId(),
+                task.getDescription(),
+                task.getInstructionRichText(),
+                task.getMaxClaimsPerLabeler(),
                 task.getPublishedTemplateVersionId(),
                 task.getAiReviewConfigId(),
                 task.getReviewLevelCount(),
                 task.getRewardVisible(),
-                rewardRuleService.findLatestRule(task.getId()),
-                task.getPublishedAt(),
-                task.getEndedAt(),
-                task.getCreatedAt(),
-                task.getUpdatedAt()
+                rewardRuleService.findLatestRule(task.getId())
         );
     }
 
@@ -449,6 +450,6 @@ public class TaskLifecycleService {
     }
 
     /** 创建任务的结果封装，避免 createTask 返回多个裸值。 */
-    private record CreatedTaskResult(TaskLifecycleResponse lifecycleResponse, RewardRuleResponse rewardRule) {
+    private record CreatedTaskResult(TaskStatusResponse lifecycleResponse, RewardRuleResponse rewardRule) {
     }
 }

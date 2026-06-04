@@ -1,6 +1,6 @@
 package com.labelhub.modules.dataset.dto;
 
-public enum DatasetItemStatus {
+public enum ItemStatus {
     UNCLAIMED,
     CLAIMED,
     DRAFT,

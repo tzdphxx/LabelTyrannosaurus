@@ -6,8 +6,8 @@ import com.labelhub.common.exception.BusinessException;
 import com.labelhub.common.security.CurrentUser;
 import com.labelhub.common.security.CurrentUserContext;
 import com.labelhub.common.security.RoleCode;
-import com.labelhub.modules.task.domain.TaskEntity;
-import com.labelhub.modules.task.repository.TaskRepositoryMapper;
+import com.labelhub.modules.task.domain.Task;
+import com.labelhub.modules.task.mapper.TaskMapper;
 import com.labelhub.modules.template.domain.TemplateEntity;
 import com.labelhub.modules.template.domain.TemplateVersionEntity;
 import com.labelhub.modules.template.dto.CreateTemplateRequest;
@@ -31,14 +31,14 @@ import java.util.Map;
 @Service
 public class TemplateService {
 
-    private final TaskRepositoryMapper taskMapper;
+    private final TaskMapper taskMapper;
     private final TemplateMapper templateMapper;
     private final TemplateVersionRepositoryMapper templateVersionMapper;
     private final TemplateSchemaValidator schemaValidator;
     private final TemplateVersionService templateVersionService;
     private final ObjectMapper objectMapper;
 
-    public TemplateService(TaskRepositoryMapper taskMapper,
+    public TemplateService(TaskMapper taskMapper,
                            TemplateMapper templateMapper,
                            TemplateVersionRepositoryMapper templateVersionMapper,
                            TemplateSchemaValidator schemaValidator,
@@ -57,7 +57,7 @@ public class TemplateService {
      */
     @Transactional
     public TemplateResponse createTemplate(Long taskId, CreateTemplateRequest request) {
-        TaskEntity task = requireOwnedTask(taskId);
+        Task task = requireOwnedTask(taskId);
         CurrentUser actor = CurrentUserContext.requireCurrentUser();
         String schemaJson = writeJson(request.schemaJson());
         schemaValidator.validateSchema(schemaJson);
@@ -175,9 +175,9 @@ public class TemplateService {
         return template;
     }
 
-    private TaskEntity requireOwnedTask(Long taskId) {
+    private Task requireOwnedTask(Long taskId) {
         CurrentUser currentUser = CurrentUserContext.requireCurrentUser();
-        TaskEntity task = taskMapper.selectById(taskId);
+        Task task = taskMapper.selectById(taskId);
         if (task == null) {
             throw new BusinessException(400102, "Task not found");
         }

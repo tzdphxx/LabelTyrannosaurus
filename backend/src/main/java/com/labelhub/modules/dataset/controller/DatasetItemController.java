@@ -5,8 +5,9 @@ import com.labelhub.modules.dataset.dto.BatchAppendItemsRequest;
 import com.labelhub.modules.dataset.dto.BatchDeleteItemsRequest;
 import com.labelhub.modules.dataset.dto.BatchItemResult;
 import com.labelhub.modules.dataset.dto.BatchUpdateItemsRequest;
-import com.labelhub.modules.dataset.dto.DatasetItemPageResponse;
+import com.labelhub.common.api.PageResponse;
 import com.labelhub.modules.dataset.dto.DatasetItemQuery;
+import com.labelhub.modules.dataset.dto.ItemResponse;
 import com.labelhub.modules.dataset.service.DatasetItemService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -28,7 +29,7 @@ import java.util.List;
  * <p>Controller 只声明 HTTP 契约和角色入口，任务归属、已领取题不可改等业务边界由 Service 层统一执行。</p>
  */
 @RestController
-@RequestMapping("/api/v1/tasks/{taskId}/dataset/items")
+@RequestMapping("/api/v1/tasks/{taskId}/items")
 @PreAuthorize("hasAnyRole('ADMIN','OWNER')")
 @Tag(name = "数据集", description = "任务数据项查询和批量编辑")
 public class DatasetItemController {
@@ -44,7 +45,7 @@ public class DatasetItemController {
      */
     @GetMapping
     @Operation(summary = "数据项列表", description = "分页查询任务下未删除的数据项。")
-    public ApiResponse<DatasetItemPageResponse> listItems(@PathVariable Long taskId,
+    public ApiResponse<PageResponse<ItemResponse>> listItems(@PathVariable Long taskId,
                                                           @RequestParam(required = false) Integer page,
                                                           @RequestParam(required = false) Integer pageSize,
                                                           @RequestParam(required = false) String externalId) {

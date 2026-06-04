@@ -22,9 +22,9 @@ import com.labelhub.modules.storage.service.FileStorageProperties;
 import com.labelhub.modules.submission.dto.ExportPageRequest;
 import com.labelhub.modules.submission.dto.ExportableSubmissionSnapshot;
 import com.labelhub.modules.submission.service.SubmissionExportQueryService;
-import com.labelhub.modules.task.domain.TaskEntity;
+import com.labelhub.modules.task.domain.Task;
 import com.labelhub.modules.task.domain.TaskStatus;
-import com.labelhub.modules.task.repository.TaskRepositoryMapper;
+import com.labelhub.modules.task.mapper.TaskMapper;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -50,7 +50,7 @@ import static org.mockito.Mockito.when;
 
 class ExportJobServiceTest {
 
-    private final TaskRepositoryMapper taskMapper = mock(TaskRepositoryMapper.class);
+    private final TaskMapper taskMapper = mock(TaskMapper.class);
     private final ExportJobMapper exportJobMapper = mock(ExportJobMapper.class);
     private final ObjectFileMapper objectFileMapper = mock(ObjectFileMapper.class);
     private final ObjectStorageService objectStorageService = mock(ObjectStorageService.class);
@@ -148,7 +148,7 @@ class ExportJobServiceTest {
     }
 
     private void stubTask(Long ownerId) {
-        TaskEntity task = new TaskEntity();
+        Task task = new Task();
         task.setId(1L);
         task.setOwnerId(ownerId);
         task.setStatus(TaskStatus.PUBLISHED);

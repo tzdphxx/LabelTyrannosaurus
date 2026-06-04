@@ -26,9 +26,9 @@ import com.labelhub.modules.storage.service.FileStorageProperties;
 import com.labelhub.modules.submission.dto.ExportPageRequest;
 import com.labelhub.modules.submission.dto.ExportableSubmissionSnapshot;
 import com.labelhub.modules.submission.service.SubmissionExportQueryService;
-import com.labelhub.modules.task.domain.TaskEntity;
+import com.labelhub.modules.task.domain.Task;
 import com.labelhub.modules.task.domain.TaskStatus;
-import com.labelhub.modules.task.repository.TaskRepositoryMapper;
+import com.labelhub.modules.task.mapper.TaskMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -58,7 +58,7 @@ public class ExportJobService {
     private static final Logger log = LoggerFactory.getLogger(ExportJobService.class);
     private static final int DEFAULT_PAGE_SIZE = 500;
 
-    private final TaskRepositoryMapper taskMapper;
+    private final TaskMapper taskMapper;
     private final ExportJobMapper exportJobMapper;
     private final ObjectFileMapper objectFileMapper;
     private final ObjectStorageService objectStorageService;
@@ -69,7 +69,7 @@ public class ExportJobService {
     private final ObjectMapper objectMapper;
     private final Map<String, ExportFileWriter> writerMap;
 
-    public ExportJobService(TaskRepositoryMapper taskMapper,
+    public ExportJobService(TaskMapper taskMapper,
                             ExportJobMapper exportJobMapper,
                             ObjectFileMapper objectFileMapper,
                             ObjectStorageService objectStorageService,
@@ -96,7 +96,7 @@ public class ExportJobService {
      */
     @Transactional
     public ExportJobResponse createExport(Long taskId, CreateExportRequest request, String traceId) {
-        TaskEntity task = requireOwnedTask(taskId);
+        Task task = requireOwnedTask(taskId);
         ExportFormat format = request.exportFormat() == null ? ExportFormat.JSONL : request.exportFormat();
         ExportFileWriter writer = requireWriter(format);
         CurrentUser actor = CurrentUserContext.requireCurrentUser();
@@ -248,9 +248,9 @@ public class ExportJobService {
         }
     }
 
-    private TaskEntity requireOwnedTask(Long taskId) {
+    private Task requireOwnedTask(Long taskId) {
         CurrentUser currentUser = CurrentUserContext.requireCurrentUser();
-        TaskEntity task = taskMapper.selectById(taskId);
+        Task task = taskMapper.selectById(taskId);
         if (task == null) {
             throw new BusinessException(400102, "Task not found");
         }

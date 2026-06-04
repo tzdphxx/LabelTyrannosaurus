@@ -105,6 +105,9 @@ class LlmTriggerServiceTest {
     @Mock
     private AiReviewConfigMapper aiReviewConfigMapper;
 
+    @Mock
+    private PromptTemplateEngine promptTemplateEngine;
+
     private LlmTriggerService service;
 
     @BeforeEach
@@ -123,6 +126,16 @@ class LlmTriggerServiceTest {
                         org.mockito.ArgumentMatchers.any(),
                         org.mockito.ArgumentMatchers.any()))
                 .thenReturn(agentRun());
+        org.springframework.test.util.ReflectionTestUtils.setField(service, "promptTemplateEngine",
+                promptTemplateEngine);
+        org.mockito.Mockito.lenient()
+                .when(promptTemplateEngine.buildLlmTriggerPrompt(
+                        org.mockito.ArgumentMatchers.any(),
+                        org.mockito.ArgumentMatchers.any(),
+                        org.mockito.ArgumentMatchers.any(),
+                        org.mockito.ArgumentMatchers.any(),
+                        org.mockito.ArgumentMatchers.any()))
+                .thenReturn("You are a LabelHub field-level LlmTrigger assistant.");
     }
 
     @Test
@@ -269,6 +282,7 @@ class LlmTriggerServiceTest {
         LlmTriggerRun run = triggerRun();
         when(llmTriggerRunMapper.selectById(TRIGGER_RUN_ID)).thenReturn(run);
         when(taskMapper.selectById(TASK_ID)).thenReturn(task());
+        when(aiReviewConfigMapper.selectById(AI_REVIEW_CONFIG_ID)).thenReturn(aiReviewConfig());
         when(rateLimiter.acquire(TASK_ID, OWNER_ID, PROVIDER_ID)).thenReturn(true);
         when(llmGateway.review(any(LlmGatewayRequest.class))).thenReturn(new LlmGatewayResponse(
                 LlmGatewayStatus.TIMEOUT, null, null, Map.of(), 3000L, "TIMEOUT", "Provider timed out"));
@@ -284,6 +298,7 @@ class LlmTriggerServiceTest {
         LlmTriggerRun run = triggerRun();
         when(llmTriggerRunMapper.selectById(TRIGGER_RUN_ID)).thenReturn(run);
         when(taskMapper.selectById(TASK_ID)).thenReturn(task());
+        when(aiReviewConfigMapper.selectById(AI_REVIEW_CONFIG_ID)).thenReturn(aiReviewConfig());
         when(rateLimiter.acquire(TASK_ID, OWNER_ID, PROVIDER_ID)).thenReturn(true);
         when(llmGateway.review(any(LlmGatewayRequest.class))).thenReturn(new LlmGatewayResponse(
                 LlmGatewayStatus.SUCCESS,

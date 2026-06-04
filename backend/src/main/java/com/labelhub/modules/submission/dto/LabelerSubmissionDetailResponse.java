@@ -37,6 +37,8 @@ public record LabelerSubmissionDetailResponse(
             Long submissionId,
             Integer versionNo,
             SubmissionStatus status,
-            LocalDateTime createdAt
+            LocalDateTime createdAt,
+            Long createdBy,
+            String creatorName
     ) {}
 }

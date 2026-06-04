@@ -12,6 +12,7 @@ import com.labelhub.infrastructure.llm.LlmGatewayRequest;
 import com.labelhub.infrastructure.llm.LlmGatewayResponse;
 import com.labelhub.infrastructure.llm.LlmGatewayStatus;
 import com.labelhub.infrastructure.llm.LlmMessage;
+import com.labelhub.infrastructure.llm.AiMetrics;
 import com.labelhub.modules.agent.domain.AgentRun;
 import com.labelhub.modules.agent.domain.AgentRunStatus;
 import com.labelhub.modules.agent.domain.SystemActorContext;
@@ -21,6 +22,7 @@ import com.labelhub.modules.ai.domain.AiReviewConfig;
 import com.labelhub.modules.ai.domain.AiReviewResult;
 import com.labelhub.modules.ai.domain.AiReviewStatus;
 import com.labelhub.modules.ai.domain.AiFlowAction;
+import com.labelhub.modules.ai.domain.ReviewStrategy;
 import com.labelhub.modules.ai.dto.AiReviewResultResponse;
 import com.labelhub.modules.ai.mapper.AiReviewConfigMapper;
 import com.labelhub.modules.ai.mapper.AiReviewResultMapper;
@@ -39,6 +41,7 @@ import com.labelhub.modules.task.mapper.TaskMapper;
 import java.math.BigDecimal;
 import java.time.Duration;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -87,6 +90,8 @@ public class AiAutoReviewService {
     private com.labelhub.modules.assignment.mapper.AssignmentMapper assignmentMapper;
     @Autowired
     private com.labelhub.modules.review.mapper.ReviewRecordMapper reviewRecordMapper;
+    @Autowired
+    private com.labelhub.modules.review.service.ReviewOwnershipResolver reviewOwnershipResolver;
     @Autowired(required = false)
     private DatasetClaimService datasetClaimService;
     @Autowired(required = false)
@@ -97,6 +102,14 @@ public class AiAutoReviewService {
     private MediaContextResolver mediaContextResolver;
     @Autowired
     private com.labelhub.infrastructure.redis.RedisLockService redisLockService;
+    @Autowired(required = false)
+    private AiMetrics aiMetrics;
+    @Autowired
+    private VoteAggregator voteAggregator;
+    @Autowired
+    private DimensionAggregator dimensionAggregator;
+    @Autowired
+    private PromptTemplateEngine promptTemplateEngine;
 
     @Autowired
     public AiAutoReviewService(SubmissionMapper submissionMapper,
@@ -226,6 +239,7 @@ public class AiAutoReviewService {
             aiReviewResultMapper.insert(result);
             applyFlowAction(prepared.submission(), result, prepared.config());
             appendAudit(result);
+            recordAiReviewMetric(prepared.config(), result, outcome.responseSnapshot());
             return toResponse(result);
         });
 
@@ -251,7 +265,7 @@ public class AiAutoReviewService {
         String promptSnapshot = prompt.promptSnapshot();
 
         AgentRun agentRun = agentRunService.create(AGENT_TYPE, submissionId, config.getProviderId(),
-                config.getModelName(), config.getPromptVersion(), promptSnapshot);
+                config.getModelName(), config.getPromptVersion(), promptSnapshot, null, resolveTraceId());
         agentRunService.start(agentRun.getId());
 
         AttemptOutcome outcome = executeAttempt(submission, config, agentRun, prompt);
@@ -282,6 +296,7 @@ public class AiAutoReviewService {
                         successResult.getDegraded(),
                         successResult.getLimitations());
                 applyFlowAction(submission, successResult, config);
+                recordAiReviewMetric(config, successResult, outcome.responseSnapshot());
                 appendAuditForRetrySuccess(submissionId, agentRun.getId());
             });
         } else {
@@ -294,7 +309,265 @@ public class AiAutoReviewService {
         if ("SUPERVISOR".equals(config.getAgentMode())) {
             return executeSupervisor(submission, config, agentRun, prompt.promptSnapshot());
         }
-        return executeDirect(submission, config, agentRun, prompt);
+        // 多策略分发
+        ReviewStrategy strategy = resolveReviewStrategy(config);
+        return switch (strategy) {
+            case LIGHTWEIGHT -> executeDirect(submission, config, agentRun, prompt);
+            case PARALLEL_VOTE -> executeParallelVote(submission, config, agentRun, prompt);
+            case DEEP_DIMENSION -> executeDeepDimension(submission, config, agentRun, prompt);
+            case AGENT_DEBATE -> executeAgentDebate(submission, config, agentRun, prompt.promptSnapshot());
+        };
+    }
+
+    private ReviewStrategy resolveReviewStrategy(AiReviewConfig config) {
+        if (config.getReviewStrategy() == null || config.getReviewStrategy().isBlank()) {
+            return ReviewStrategy.LIGHTWEIGHT;
+        }
+        try {
+            return ReviewStrategy.valueOf(config.getReviewStrategy());
+        } catch (IllegalArgumentException e) {
+            return ReviewStrategy.LIGHTWEIGHT;
+        }
+    }
+
+    // ── PARALLEL_VOTE ──
+
+    private AttemptOutcome executeParallelVote(Submission submission, AiReviewConfig config,
+                                               AgentRun agentRun, MediaPromptResult prompt) {
+        List<VoteModel> voteModels = parseVoteModels(config);
+        if (voteModels.isEmpty()) {
+            // 回退：没有配置投票模型 → 用主配置单路
+            return executeDirect(submission, config, agentRun, prompt);
+        }
+        if (voteModels.size() == 1) {
+            // 单路 → 用投票模型中的 provider/model 调用
+            VoteModel vm = voteModels.get(0);
+            LlmGatewayResponse response = callLlm(submission.getTaskId(), vm.providerId(), vm.modelName(),
+                    prompt.messages());
+            if (response.status() != LlmGatewayStatus.SUCCESS) {
+                agentRunService.fail(agentRun.getId(), AgentRunStatus.FAILED, response.errorMessage());
+                return AttemptOutcome.failure(response.errorCode(), response.errorMessage(), response.rawResponse());
+            }
+            try {
+                AiReviewResult result = successResult(submission, config, agentRun.getId(), prompt, response);
+                return AttemptOutcome.success(result, gatewayResponseSnapshot(response));
+            } catch (BusinessException ex) {
+                return AttemptOutcome.failure("INVALID_AI_REVIEW_OUTPUT", ex.getMessage(), response.rawResponse());
+            }
+        }
+
+        // 2+ 路并行
+        List<java.util.concurrent.CompletableFuture<Map<String, Object>>> futures = voteModels.stream()
+                .map(vm -> java.util.concurrent.CompletableFuture.supplyAsync(() -> {
+                    LlmGatewayResponse r = callLlm(submission.getTaskId(), vm.providerId(), vm.modelName(),
+                            prompt.messages());
+                    if (r.status() == LlmGatewayStatus.SUCCESS && r.structuredJson() != null) {
+                        return new java.util.LinkedHashMap<>(r.structuredJson());
+                    }
+                    return Map.<String, Object>of("decision", "UNCERTAIN", "confidence", 0.0);
+                }))
+                .toList();
+
+        java.util.concurrent.CompletableFuture.allOf(futures.toArray(new java.util.concurrent.CompletableFuture[0]))
+                .join();
+
+        List<Map<String, Object>> results = futures.stream()
+                .map(f -> {
+                    try { return f.get(); } catch (Exception e) { return Map.<String, Object>of(); }
+                })
+                .filter(r -> !r.isEmpty())
+                .toList();
+
+        int minAgreement = config.getVoteMinAgreement() != null ? config.getVoteMinAgreement() : 2;
+        VoteAggregator.AggregatedResult aggregated = voteAggregator.aggregate(results, minAgreement);
+
+        try {
+            Map<String, Object> enriched = new LinkedHashMap<>(aggregated.resultJson());
+            AiReviewResult result = successResultFromAggregated(submission, config, agentRun.getId(),
+                    prompt, enriched);
+            return AttemptOutcome.success(result, enriched);
+        } catch (BusinessException ex) {
+            agentRunService.fail(agentRun.getId(), AgentRunStatus.MANUAL_REQUIRED, ex.getMessage());
+            return AttemptOutcome.failure("INVALID_AI_REVIEW_OUTPUT", ex.getMessage(), null);
+        }
+    }
+
+    // ── DEEP_DIMENSION ──
+
+    private AttemptOutcome executeDeepDimension(Submission submission, AiReviewConfig config,
+                                                 AgentRun agentRun, MediaPromptResult prompt) {
+        List<String> dimensions = parseStringList(config.getScoringDimensionsJson());
+        if (dimensions.isEmpty()) {
+            return executeParallelVote(submission, config, agentRun, prompt);
+        }
+
+        Map<String, List<VoteModel>> dimReviewers = parseDimensionReviewers(config, dimensions);
+        Map<String, List<Map<String, Object>>> dimResults = new LinkedHashMap<>();
+
+        // 所有维度并行调用
+        List<java.util.concurrent.CompletableFuture<Void>> futures = new ArrayList<>();
+        for (Map.Entry<String, List<VoteModel>> entry : dimReviewers.entrySet()) {
+            String dim = entry.getKey();
+            List<VoteModel> reviewers = entry.getValue();
+            dimResults.put(dim, java.util.Collections.synchronizedList(new ArrayList<>()));
+
+            for (VoteModel vm : reviewers) {
+                futures.add(java.util.concurrent.CompletableFuture.runAsync(() -> {
+                    String dimPrompt = "Focus only on the dimension '" + dim + "'. "
+                            + prompt.promptSnapshot();
+                    List<LlmMessage> dimMessages = java.util.stream.Stream.concat(
+                            java.util.stream.Stream.of(new LlmMessage("system",
+                                    "You are LabelHub AI reviewer focused on dimension: " + dim
+                                            + ". Return valid JSON only.")),
+                            prompt.messages().stream()).toList();
+                    LlmGatewayResponse r = callLlm(submission.getTaskId(), vm.providerId(), vm.modelName(),
+                            dimMessages);
+                    if (r.status() == LlmGatewayStatus.SUCCESS && r.structuredJson() != null) {
+                        dimResults.get(dim).add(new LinkedHashMap<>(r.structuredJson()));
+                    }
+                }));
+            }
+        }
+
+        java.util.concurrent.CompletableFuture.allOf(futures.toArray(new java.util.concurrent.CompletableFuture[0]))
+                .join();
+
+        int minAgreement = config.getVoteMinAgreement() != null ? config.getVoteMinAgreement() : 1;
+        Map<String, Object> aggregated = dimensionAggregator.aggregate(dimResults, minAgreement);
+
+        try {
+            AiReviewResult result = successResultFromAggregated(submission, config, agentRun.getId(),
+                    prompt, aggregated);
+            return AttemptOutcome.success(result, aggregated);
+        } catch (BusinessException ex) {
+            agentRunService.fail(agentRun.getId(), AgentRunStatus.MANUAL_REQUIRED, ex.getMessage());
+            return AttemptOutcome.failure("INVALID_AI_REVIEW_OUTPUT", ex.getMessage(), null);
+        }
+    }
+
+    // ── AGENT_DEBATE ──
+
+    private AttemptOutcome executeAgentDebate(Submission submission, AiReviewConfig config,
+                                               AgentRun agentRun, String promptSnapshot) {
+        // 暂用 SupervisorAgent 承载辩论模式, 后续可扩展为多 Agent 辩论
+        return executeSupervisor(submission, config, agentRun, promptSnapshot);
+    }
+
+    // ── 辅助方法 ──
+
+    private LlmGatewayResponse callLlm(Long taskId, Long providerId, String modelName,
+                                        List<LlmMessage> messages) {
+        if (!rateLimiter.acquire(taskId, providerId)) {
+            return new LlmGatewayResponse(LlmGatewayStatus.RATE_LIMITED, null, null, null,
+                    null, "RATE_LIMITED", "AI review rate limited");
+        }
+        return llmGateway.review(new LlmGatewayRequest(
+                providerId,
+                modelName,
+                messages,
+                com.labelhub.infrastructure.llm.ResponseFormat.jsonSchema(AiReviewSchema.NAME, AiReviewSchema.SCHEMA)
+        ));
+    }
+
+    private List<VoteModel> parseVoteModels(AiReviewConfig config) {
+        if (config.getVoteModelsJson() == null || config.getVoteModelsJson().isBlank()) {
+            // 回退到主配置
+            if (config.getProviderId() != null && config.getModelName() != null) {
+                return List.of(new VoteModel(config.getProviderId(), config.getModelName()));
+            }
+            return List.of();
+        }
+        try {
+            List<Map<String, Object>> raw = objectMapper.readValue(config.getVoteModelsJson(), new TypeReference<>() {});
+            return raw.stream()
+                    .map(m -> {
+                        Long pid = m.get("providerId") instanceof Number n ? n.longValue() : null;
+                        String mn = m.get("modelName") instanceof String s ? s : null;
+                        return new VoteModel(pid, mn);
+                    })
+                    .filter(vm -> vm.providerId() != null && vm.modelName() != null)
+                    .toList();
+        } catch (JsonProcessingException e) {
+            return List.of();
+        }
+    }
+
+    private Map<String, List<VoteModel>> parseDimensionReviewers(AiReviewConfig config, List<String> dimensions) {
+        List<VoteModel> defaults = parseVoteModels(config);
+        if (defaults.isEmpty()) {
+            return dimensions.stream().collect(java.util.stream.Collectors.toMap(d -> d, d -> List.of()));
+        }
+        Map<String, List<VoteModel>> result = new LinkedHashMap<>();
+        if (config.getDimensionReviewersJson() != null && !config.getDimensionReviewersJson().isBlank()) {
+            try {
+                Map<String, Object> raw = objectMapper.readValue(config.getDimensionReviewersJson(), new TypeReference<>() {});
+                for (Map.Entry<String, Object> e : raw.entrySet()) {
+                    if (e.getValue() instanceof List<?> list) {
+                        List<VoteModel> vms = list.stream()
+                                .filter(item -> item instanceof Map<?, ?>)
+                                .map(item -> {
+                                    Map<?, ?> m = (Map<?, ?>) item;
+                                    Long pid = m.get("providerId") instanceof Number n ? n.longValue() : null;
+                                    String mn = m.get("modelName") instanceof String s ? s : null;
+                                    return new VoteModel(pid, mn);
+                                })
+                                .filter(vm -> vm.providerId() != null && vm.modelName() != null)
+                                .toList();
+                        if (!vms.isEmpty()) {
+                            result.put(e.getKey(), vms);
+                        }
+                    }
+                }
+            } catch (JsonProcessingException ignored) {
+            }
+        }
+        // 未配置的维度回退到默认模型列表
+        for (String dim : dimensions) {
+            if (!result.containsKey(dim)) {
+                result.put(dim, defaults);
+            }
+        }
+        return result;
+    }
+
+    private AiReviewResult successResultFromAggregated(Submission submission, AiReviewConfig config,
+                                                        Long agentRunId, MediaPromptResult prompt,
+                                                        Map<String, Object> aggregated) {
+        AiReviewResult result = baseResult(submission, config, agentRunId, prompt.promptSnapshot());
+        result.setStatus(AiReviewStatus.SUCCESS);
+        result.setDecision(stringValue(aggregated.get("decision"), "UNCERTAIN"));
+        result.setAverageScore(aggregated.get("averageScore") instanceof Number n
+                ? BigDecimal.valueOf(n.doubleValue()) : null);
+        result.setDimensionScores(toJson(aggregated.get("dimensionScores")));
+        result.setRiskFlags(toJson(aggregated.get("riskFlags")));
+        result.setSuggestion(stringValue(aggregated.get("suggestion"), ""));
+        result.setRawResponse(toJson(aggregated));
+        Object confidence = aggregated.get("confidence");
+        if (confidence instanceof BigDecimal d) {
+            result.setConfidence(d);
+        } else if (confidence instanceof Number n) {
+            result.setConfidence(BigDecimal.valueOf(n.doubleValue()));
+        }
+        if (prompt.degraded() && result.getConfidence() != null) {
+            BigDecimal penalty = config.getDegradationPenalty() != null
+                    ? config.getDegradationPenalty() : BigDecimal.valueOf(0.20);
+            result.setConfidence(result.getConfidence().subtract(penalty).max(BigDecimal.ZERO));
+        }
+        return result;
+    }
+
+    private record VoteModel(Long providerId, String modelName) {}
+
+    private String stringValue(Object value, String fallback) {
+        if (value == null) return fallback;
+        String s = String.valueOf(value);
+        return s.isBlank() ? fallback : s;
+    }
+
+    private double doubleValue(Object value, double fallback) {
+        if (value instanceof Number n) return n.doubleValue();
+        if (value == null) return fallback;
+        try { return Double.parseDouble(String.valueOf(value)); } catch (NumberFormatException e) { return fallback; }
     }
 
     private AttemptOutcome executeDirect(Submission submission, AiReviewConfig config,
@@ -572,6 +845,7 @@ public class AiAutoReviewService {
     private void moveSubmissionToPendingFinal(Submission submission) {
         submission.setStatus(SubmissionStatus.PENDING_FINAL);
         submissionMapper.updateById(submission);
+        reviewOwnershipResolver.assignToClaimant(submission);
     }
 
     private AiFlowAction normalizeFlowAction(Submission submission, AiFlowAction action) {
@@ -602,6 +876,32 @@ public class AiAutoReviewService {
         if (submission.getStatus() == SubmissionStatus.APPROVED) {
             eventPublisher.publishApproved(submission.getId(), null);
         }
+    }
+
+    /**
+     * Called by {@link AiReviewRecoveryRunner} at startup to replay the side effects
+     * of a terminal AI review whose submission was never moved past AI_REVIEWING.
+     * Mirrors {@link #applyFlowAction} but is package-private so the recovery runner
+     * can delegate instead of duplicating the side-effect logic.
+     */
+    void applyRecoveredFlowAction(Submission submission, AiReviewResult result) {
+        if (result.getFlowAction() == null || result.getStatus() != AiReviewStatus.SUCCESS) {
+            moveSubmissionToPendingFinal(submission);
+            return;
+        }
+        AiFlowAction action;
+        try {
+            action = AiFlowAction.valueOf(result.getFlowAction());
+        } catch (IllegalArgumentException ex) {
+            moveSubmissionToPendingFinal(submission);
+            return;
+        }
+        switch (action) {
+            case AI_DIRECT_APPROVE -> directApprove(submission);
+            case AI_DIRECT_REJECT -> directReject(submission, result);
+            default -> moveSubmissionToPendingFinal(submission);
+        }
+        publishPostTransactionEvents(submission);
     }
 
     private void directApprove(Submission submission) {
@@ -726,7 +1026,20 @@ public class AiAutoReviewService {
             }
         }
         return agentRunService.create(AGENT_TYPE, submissionId, config.getProviderId(),
-                config.getModelName(), config.getPromptVersion(), prompt.promptSnapshot());
+                config.getModelName(), config.getPromptVersion(), prompt.promptSnapshot(), null, resolveTraceId());
+    }
+
+    private void recordAiReviewMetric(AiReviewConfig config, AiReviewResult result, Map<String, Object> responseSnapshot) {
+        if (aiMetrics == null || config == null || result == null) {
+            return;
+        }
+        Long latencyMs = null;
+        if (responseSnapshot != null && responseSnapshot.get("latencyMs") instanceof Number number) {
+            latencyMs = number.longValue();
+        }
+        aiMetrics.record("AI_REVIEW", config.getProviderId(), config.getModelName(),
+                result.getStatus() == null ? "UNKNOWN" : result.getStatus().name(),
+                result.getErrorCode(), latencyMs);
     }
 
     private Object parseJsonValue(String json) {

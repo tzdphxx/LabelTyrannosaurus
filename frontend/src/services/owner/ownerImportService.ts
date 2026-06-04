@@ -1,5 +1,5 @@
 import { mockImportPreviews } from '../../mocks'
-import type { BatchAppendByFileRequest, DatasetImportJobResponse, FileUploadResponse, ImportPreview } from '../../types/import'
+import type { ImportPreview } from '../../types/import'
 
 function cloneImportPreview(preview: ImportPreview): ImportPreview {
   return {
@@ -13,41 +13,7 @@ function cloneImportPreview(preview: ImportPreview): ImportPreview {
   }
 }
 
-function nowIso() {
-  return new Date().toISOString()
-}
-
 export const ownerImportService = {
-  async uploadDatasetFile(file: File): Promise<FileUploadResponse> {
-    return {
-      fileId: Date.now(),
-      originalFilename: file.name,
-      contentType: file.type || 'application/octet-stream',
-      fileSize: file.size,
-      objectKey: `uploads/dataset/mock/${file.name}`,
-      checksum: 'mock-checksum',
-      downloadUrl: '',
-    }
-  },
-
-  async appendDatasetItemsByFile(taskId: string | number, request: BatchAppendByFileRequest): Promise<DatasetImportJobResponse> {
-    return {
-      jobId: Date.now(),
-      taskId: Number(taskId),
-      status: 'PENDING',
-      importMode: 'APPEND',
-      totalCount: 0,
-      successCount: 0,
-      failedCount: 0,
-      errorReportFileId: null,
-      errorReportUrl: null,
-      errorMessage: request.fileId > 0 ? null : 'Invalid fileId',
-      startedAt: null,
-      finishedAt: null,
-      createdAt: nowIso(),
-    }
-  },
-
   async getDefaultImportPreview(): Promise<ImportPreview> {
     const preview = mockImportPreviews.find((item) => item.issues.every((issue) => issue.level !== 'blocking')) ?? mockImportPreviews[0]
 

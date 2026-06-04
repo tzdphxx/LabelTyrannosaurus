@@ -13,7 +13,7 @@ public class DefaultDatasetMarketStatsService implements DatasetMarketStatsServi
     }
 
     @Override
-    public Integer countAvailableItems(Long taskId, Long labelerId) {
-        return datasetItemMapper.countAvailableForLabeler(taskId, labelerId);
+    public Integer countAvailableItems(Long taskId, Long labelerId, Integer overlapCount) {
+        return datasetItemMapper.countAvailableForLabeler(taskId, labelerId, overlapCount);
     }
 }

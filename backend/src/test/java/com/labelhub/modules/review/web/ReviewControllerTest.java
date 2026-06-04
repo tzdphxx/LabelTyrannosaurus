@@ -22,7 +22,6 @@ import com.labelhub.modules.review.dto.ReviewerSubmissionListItem;
 import com.labelhub.modules.review.dto.SubmissionReviewItem;
 import com.labelhub.modules.review.mapper.ReviewerSubmissionListMapper;
 import com.labelhub.modules.review.service.BatchReviewService;
-import com.labelhub.modules.review.service.ReviewClaimService;
 import com.labelhub.modules.review.service.ReviewService;
 import com.labelhub.modules.review.service.ReviewerSubmissionQueryService;
 import com.labelhub.modules.submission.domain.SubmissionStatus;
@@ -42,14 +41,13 @@ class ReviewControllerTest {
     @Mock private BatchReviewService batchReviewService;
     @Mock private ReviewerSubmissionQueryService reviewerQueryService;
     @Mock private ReviewerSubmissionListMapper reviewerListMapper;
-    @Mock private ReviewClaimService reviewClaimService;
 
     private ReviewController controller;
 
     @BeforeEach
     void setUp() {
         controller = new ReviewController(reviewService, batchReviewService,
-                reviewerQueryService, reviewerListMapper, reviewClaimService);
+                reviewerQueryService, reviewerListMapper);
     }
 
     @AfterEach
@@ -62,9 +60,9 @@ class ReviewControllerTest {
         CurrentUserContext.set(new CurrentUser(1L, "reviewer", "test@labelhub.dev", Set.of(RoleCode.REVIEWER), 1));
         ReviewerSubmissionListItem item = new ReviewerSubmissionListItem(
                 100L, 1L, 1L, 1L, SubmissionStatus.PENDING_FINAL, null, null, null, 1, null, null, null);
-        when(reviewerListMapper.countWithFilters(null, null, null, null, null, null, null))
+        when(reviewerListMapper.countWithFilters(null, null, null, null, null, null, null, 1L, null))
                 .thenReturn(1L);
-        when(reviewerListMapper.selectWithFilters(null, null, null, null, null, null, null, 0, 20))
+        when(reviewerListMapper.selectWithFilters(null, null, null, null, null, null, null, 1L, null, 0, 20))
                 .thenReturn(List.of(item));
 
         ApiResponse<PageResponse<ReviewerSubmissionListItem>> response = controller.list(
@@ -83,7 +81,7 @@ class ReviewControllerTest {
                 .thenReturn(serviceResponse);
 
         ApiResponse<ReviewActionResponse> response = controller.approve(
-                100L, new ApproveRequest("Looks good", 1));
+                100L, new ApproveRequest("Looks good", 1, null));
 
         assertThat(response.data()).isEqualTo(serviceResponse);
         assertThat(response.data().submissionStatus()).isEqualTo(SubmissionStatus.APPROVED);
@@ -145,7 +143,7 @@ class ReviewControllerTest {
     void labelerCannotApproveSubmission() {
         CurrentUserContext.set(new CurrentUser(2L, "labeler", "test@labelhub.dev", Set.of(RoleCode.LABELER), 1));
 
-        assertThatThrownBy(() -> controller.approve(100L, new ApproveRequest("ok", 1)))
+        assertThatThrownBy(() -> controller.approve(100L, new ApproveRequest("ok", 1, null)))
                 .isInstanceOfSatisfying(BusinessException.class,
                         ex -> assertThat(ex.getCode()).isEqualTo(403001));
     }

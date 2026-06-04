@@ -59,11 +59,32 @@ public class RewardRuleService {
                 RedisKeyBuilder.rewardRule(task.getId()),
                 RULE_LOCK_WAIT_MILLIS,
                 RULE_LOCK_LEASE_MILLIS,
-                () -> saveRuleLocked(task, request, actor)
+                () -> saveRuleLocked(task, request, actor.userId())
         );
     }
 
-    private RewardRuleResponse saveRuleLocked(TaskEntity task, RewardRuleRequest request, CurrentUser actor) {
+    /**
+     * 以指定 ownerId 保存奖励规则，不依赖 {@link CurrentUserContext}。
+     * 用于 TaskLifecycleService 等内部模块调用，避免与当前登录上下文耦合。
+     *
+     * @param taskId  任务 ID
+     * @param ownerId 任务所有者 ID（从调用链路传入）
+     * @param request 奖励规则请求体
+     * @return 创建后的奖励规则响应
+     */
+    @Transactional
+    public RewardRuleResponse saveRuleForTaskOwner(Long taskId, Long ownerId, RewardRuleRequest request) {
+        TaskEntity task = requireTaskOwnedBy(taskId, ownerId);
+        validateRule(request);
+        return redisLockService.withLock(
+                RedisKeyBuilder.rewardRule(task.getId()),
+                RULE_LOCK_WAIT_MILLIS,
+                RULE_LOCK_LEASE_MILLIS,
+                () -> saveRuleLocked(task, request, ownerId)
+        );
+    }
+
+    private RewardRuleResponse saveRuleLocked(TaskEntity task, RewardRuleRequest request, Long actorId) {
         int nextVersion = rewardRuleMapper.selectMaxVersionByTaskId(task.getId()) + 1;
         LocalDateTime now = LocalDateTime.now();
 
@@ -75,7 +96,7 @@ public class RewardRuleService {
         entity.setRewardCurrency(defaultString(request.rewardCurrency(), "POINT"));
         entity.setRewardVisible(request.rewardVisible() == null || request.rewardVisible());
         entity.setEffectiveAt(now);
-        entity.setCreatedBy(actor.userId());
+        entity.setCreatedBy(actorId);
         entity.setCreatedAt(now);
         rewardRuleMapper.insert(entity);
         return toResponse(entity);
@@ -86,11 +107,23 @@ public class RewardRuleService {
      */
     public RewardRuleResponse getLatestRule(Long taskId) {
         requireOwnedTask(taskId);
-        RewardRuleEntity rule = rewardRuleMapper.selectLatestByTaskId(taskId);
+        RewardRuleResponse rule = findLatestRule(taskId);
         if (rule == null) {
             throw new BusinessException(400102, "Reward rule not found");
         }
-        return toResponse(rule);
+        return rule;
+    }
+
+    /**
+     * 查询任务最新奖励规则，找不到时返回 null（不抛异常）。
+     * 用于任务详情等可选字段填充场景。
+     *
+     * @param taskId 任务 ID
+     * @return 最新规则，不存在时返回 null
+     */
+    public RewardRuleResponse findLatestRule(Long taskId) {
+        RewardRuleEntity rule = rewardRuleMapper.selectLatestByTaskId(taskId);
+        return rule == null ? null : toResponse(rule);
     }
 
     private void validateRule(RewardRuleRequest request) {
@@ -110,6 +143,17 @@ public class RewardRuleService {
             throw new BusinessException(400102, "Task not found");
         }
         if (!currentUser.roles().contains(RoleCode.ADMIN) && !currentUser.userId().equals(task.getOwnerId())) {
+            throw new BusinessException(403001, "Forbidden");
+        }
+        return task;
+    }
+
+    private TaskEntity requireTaskOwnedBy(Long taskId, Long ownerId) {
+        TaskEntity task = taskMapper.selectById(taskId);
+        if (task == null) {
+            throw new BusinessException(400102, "Task not found");
+        }
+        if (!ownerId.equals(task.getOwnerId())) {
             throw new BusinessException(403001, "Forbidden");
         }
         return task;

@@ -77,8 +77,8 @@ class TaskMarketServiceTest {
         when(taskMapper.selectPublishedMarketTasks(eq("qa"), eq("quality"), eq(TaskStatus.PUBLISHED.name()), any(LocalDateTime.class)))
                 .thenReturn(List.of(task));
         when(taskTagMapper.selectList(any(Wrapper.class))).thenReturn(List.of(taskTag("quality")));
-        when(datasetMarketStatsService.countAvailableItems(TASK_ID, LABELER_ID)).thenReturn(3);
-        when(datasetItemMapper.selectClaimableItems(TASK_ID, LABELER_ID, 20, 0)).thenReturn(List.of(datasetItem(100L)));
+        when(datasetMarketStatsService.countAvailableItems(TASK_ID, LABELER_ID, 2)).thenReturn(3);
+        when(datasetItemMapper.selectClaimableItems(TASK_ID, LABELER_ID, 2, 20, 0)).thenReturn(List.of(datasetItem(100L)));
         when(assignmentMarketStatsService.countClaimedByLabeler(TASK_ID, LABELER_ID)).thenReturn(1);
         when(rewardSummaryService.findRewardSummary(TASK_ID, true)).thenReturn(rewardSummary);
 
@@ -98,7 +98,7 @@ class TaskMarketServiceTest {
         assertThat(response.description()).isEqualTo("Check image quality");
         assertThat(response.instructionRichText()).isEqualTo("<p>Be precise</p>");
         assertThat(response.quota()).isEqualTo(30);
-        assertThat(response.overlapCount()).isEqualTo(1);
+        assertThat(response.overlapCount()).isEqualTo(2);
         assertThat(response.publishedTemplateVersionId()).isEqualTo(99L);
         assertThat(response.itemsPreview()).hasSize(1);
         assertThat(response.itemsPreview().get(0).datasetItemId()).isEqualTo(100L);
@@ -110,8 +110,8 @@ class TaskMarketServiceTest {
         Task task = publishedTask();
         when(taskMapper.selectPublishedMarketTasks(isNull(), isNull(), isNull(), any(LocalDateTime.class))).thenReturn(List.of(task));
         when(taskTagMapper.selectList(any(Wrapper.class))).thenReturn(List.of());
-        when(datasetMarketStatsService.countAvailableItems(TASK_ID, LABELER_ID)).thenReturn(0);
-        when(datasetItemMapper.selectClaimableItems(TASK_ID, LABELER_ID, 20, 0)).thenReturn(List.of());
+        when(datasetMarketStatsService.countAvailableItems(TASK_ID, LABELER_ID, 2)).thenReturn(0);
+        when(datasetItemMapper.selectClaimableItems(TASK_ID, LABELER_ID, 2, 20, 0)).thenReturn(List.of());
         when(assignmentMarketStatsService.countClaimedByLabeler(TASK_ID, LABELER_ID)).thenReturn(0);
         when(rewardSummaryService.findRewardSummary(TASK_ID, true)).thenReturn(null);
 
@@ -140,8 +140,8 @@ class TaskMarketServiceTest {
         Task task = publishedTask();
         when(taskMapper.selectPublishedMarketTaskById(eq(TASK_ID), any(LocalDateTime.class))).thenReturn(task);
         when(taskTagMapper.selectList(any(Wrapper.class))).thenReturn(List.of(taskTag("quality")));
-        when(datasetMarketStatsService.countAvailableItems(TASK_ID, LABELER_ID)).thenReturn(2);
-        when(datasetItemMapper.selectClaimableItems(TASK_ID, LABELER_ID, 10, 10)).thenReturn(List.of(datasetItem(101L)));
+        when(datasetMarketStatsService.countAvailableItems(TASK_ID, LABELER_ID, 2)).thenReturn(2);
+        when(datasetItemMapper.selectClaimableItems(TASK_ID, LABELER_ID, 2, 10, 10)).thenReturn(List.of(datasetItem(101L)));
         when(assignmentMarketStatsService.countClaimedByLabeler(TASK_ID, LABELER_ID)).thenReturn(1);
 
         MarketTaskResponse response = taskMarketService.getMarketTaskDetail(LABELER_ID, TASK_ID, 2, 10);
@@ -159,7 +159,7 @@ class TaskMarketServiceTest {
         task.setInstructionRichText("<p>Be precise</p>");
         task.setStatus(TaskStatus.PUBLISHED);
         task.setQuota(30);
-        task.setOverlapCount(1);
+        task.setOverlapCount(2);
         task.setDeadlineAt(LocalDateTime.now().plusDays(1));
         task.setPublishedTemplateVersionId(99L);
         task.setRewardVisible(true);

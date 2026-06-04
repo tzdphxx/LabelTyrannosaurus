@@ -12,5 +12,7 @@ public record VersionHistoryItem(
         LocalDateTime submittedAt,
         String aiDecision,
         String aiFlowAction,
-        String latestReviewAction
+        String latestReviewAction,
+        Long createdBy,
+        String creatorName
 ) {}

@@ -10,6 +10,7 @@ import static org.mockito.Mockito.when;
 import com.labelhub.modules.ai.service.LlmProviderRuntimeConfig;
 import com.labelhub.modules.ai.service.LlmProviderService;
 import com.labelhub.modules.ai.service.ProviderCapability;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -57,6 +58,44 @@ class DefaultLlmGatewayTest {
         ArgumentCaptor<List<LlmMessage>> messagesCaptor = ArgumentCaptor.forClass(List.class);
         verify(adapter).chat(any(), messagesCaptor.capture(), any(), any(), any());
         assertThat(messagesCaptor.getValue()).extracting(LlmMessage::content).contains("answer");
+    }
+
+    @Test
+    void recordsLlmGatewayMetricsForSuccessAndFailures() {
+        SimpleMeterRegistry registry = new SimpleMeterRegistry();
+        DefaultLlmGateway meteredGateway = new DefaultLlmGateway(llmProviderService, adapter,
+                new com.fasterxml.jackson.databind.ObjectMapper(), new AiMetrics(registry));
+        when(llmProviderService.findEnabledRuntimeConfig(PROVIDER_ID, "qwen-max"))
+                .thenReturn(Optional.of(config("qwen-max")));
+        when(adapter.chat(any(), any(), any(), any(), any()))
+                .thenReturn(OpenAiCompatibleResponse.success(200,
+                        "{\"choices\":[{\"message\":{\"content\":\"{\\\"decision\\\":\\\"PASS\\\"}\"}}]}",
+                        18L))
+                .thenReturn(OpenAiCompatibleResponse.failure(500,
+                        "{\"error\":\"bad\"}", 9L, "Provider call failed", false));
+
+        meteredGateway.review(request(PROVIDER_ID, "qwen-max", "answer"));
+        meteredGateway.review(request(PROVIDER_ID, "qwen-max", "answer"));
+
+        assertThat(registry.find("labelhub.ai.requests")
+                .tag("biz_type", "LLM_GATEWAY")
+                .tag("provider_id", "10")
+                .tag("model_name", "qwen-max")
+                .tag("status", "SUCCESS")
+                .counter().count()).isEqualTo(1.0);
+        assertThat(registry.find("labelhub.ai.requests")
+                .tag("status", "PROVIDER_ERROR")
+                .tag("error_code", "PROVIDER_ERROR")
+                .counter().count()).isEqualTo(1.0);
+        assertThat(registry.find("labelhub.ai.latency")
+                .tag("biz_type", "LLM_GATEWAY")
+                .tag("status", "SUCCESS")
+                .timer().count()).isEqualTo(1L);
+        assertThat(registry.find("labelhub.ai.latency")
+                .tag("biz_type", "LLM_GATEWAY")
+                .tag("status", "PROVIDER_ERROR")
+                .tag("error_code", "PROVIDER_ERROR")
+                .timer().count()).isEqualTo(1L);
     }
 
     @Test

@@ -25,6 +25,7 @@ tags
 quota
 claimedCount
 overlapCount
+strategy
 deadlineAt
 publishedAt
 endedAt
@@ -55,10 +56,32 @@ title required, max 200
 description optional
 instructionRichText optional
 tags optional, each tag max 64
-quota required, >= 1
+quota required for FCFS/QUOTA_GRAB (>= 1), auto-derived for ASSIGNED
 deadlineAt required, must be future time
+overlapCount required, must be 1
+strategy optional, default FCFS. Values: FCFS | QUOTA_GRAB | ASSIGNED
+maxClaimsPerLabeler optional, >= 1. Only effective for QUOTA_GRAB
 publishedTemplateVersionId optional, must belong to current OWNER
 aiReviewConfigId optional
+aiProviderId / aiModelName / aiPrompt / aiScoringDimensions / aiPassThreshold / aiManualReviewThreshold optional, for inline AI config
+reviewLevelCount optional, >= 1, default 1
+datasetFileId optional
+rewardRule optional
+```
+
+Claim strategy behavior:
+
+```text
+FCFS (default): Labelers freely claim any available item until the dataset runs out.
+                 Quota is not enforced; maxClaimsPerLabeler is ignored.
+
+QUOTA_GRAB:      Like FCFS, but with two additional gates:
+                 1. Task claimed_count < quota (atomic increment, rejects when full).
+                 2. Labeler's active unfinished claims < maxClaimsPerLabeler.
+
+ASSIGNED:        Labelers can only claim items explicitly dispatched to them by the owner.
+                 Quota is automatically derived from the total dispatch count.
+                 Requires dispatches to be created via the /dispatches API before publish.
 ```
 
 Response fields:
@@ -72,7 +95,7 @@ Effects:
 
 ```text
 Creates a tasks row with ownerId = current user and status = DRAFT.
-Sets overlapCount to 1 on the server; clients do not send this field.
+Strategy defaults to FCFS if not specified.
 If publishedTemplateVersionId is provided, verifies the template version belongs to current OWNER.
 Normalizes non-blank tags into task_tags.
 Appends TASK_CREATED audit log.
@@ -101,24 +124,18 @@ tags
 quota
 claimedCount
 overlapCount
+strategy
+maxClaimsPerLabeler
 deadlineAt
 publishedTemplateVersionId
 aiReviewConfigId
-aiProvider
-aiReviewConfig
+reviewLevelCount
 rewardVisible
+rewardRule
 publishedAt
 endedAt
 createdAt
 updatedAt
-```
-
-Notes:
-
-```text
-aiProvider is the safe LLM provider response for the task's AI review config, or null when not configured or missing.
-aiReviewConfig is the desensitized AI review config response, or null when not configured or missing.
-Dataset items are not embedded in this response; use GET /api/v1/tasks/{taskId}/dataset/items.
 ```
 
 Errors:
@@ -144,10 +161,15 @@ title required, max 200
 description optional
 instructionRichText optional
 tags optional, each tag max 64
-quota required, >= 1
+quota required for FCFS/QUOTA_GRAB (>= 1), auto-derived for ASSIGNED
 deadlineAt required, must be future time
+overlapCount required, must be 1
+strategy optional. Values: FCFS | QUOTA_GRAB | ASSIGNED. Only mutable while DRAFT
+maxClaimsPerLabeler optional, >= 1. Only effective for QUOTA_GRAB
 publishedTemplateVersionId optional, must belong to current OWNER
 aiReviewConfigId optional
+reviewLevelCount optional, >= 1
+rewardRule optional
 ```
 
 Response fields:
@@ -161,7 +183,6 @@ Rules:
 
 ```text
 Only DRAFT tasks can be edited.
-overlapCount is not editable and remains fixed at 1.
 If publishedTemplateVersionId is provided, verifies the template version belongs to current OWNER.
 Replaces the task tag set with normalized non-blank tags from the request.
 Appends TASK_UPDATED audit log.
@@ -188,9 +209,10 @@ Publish checks:
 
 ```text
 Task status must be DRAFT.
-Task quota must be > 0.
 Task overlapCount must be 1.
 Task deadlineAt must be in the future.
+Task quota must be > 0 (FCFS/QUOTA_GRAB only; ASSIGNED auto-syncs from dispatch count).
+For ASSIGNED strategy: at least one dispatch must exist.
 BE-B dataset must be ready.
 BE-B template version must exist and belong to the task owner.
 BE-B reward rule must exist.

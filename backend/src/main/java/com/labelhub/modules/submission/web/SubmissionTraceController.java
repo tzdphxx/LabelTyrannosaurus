@@ -1,9 +1,11 @@
 package com.labelhub.modules.submission.web;
 
 import com.labelhub.common.api.ApiResponse;
+import com.labelhub.common.exception.BusinessException;
 import com.labelhub.common.security.CurrentUserContext;
 import com.labelhub.common.security.RoleCode;
 import com.labelhub.modules.submission.dto.AnswerDiffResponse;
+import com.labelhub.modules.submission.dto.MultiVersionCompareResponse;
 import com.labelhub.modules.submission.dto.VersionHistoryItem;
 import com.labelhub.modules.submission.service.AnswerDiffService;
 import com.labelhub.modules.submission.service.SubmissionVersionService;
@@ -12,6 +14,7 @@ import com.labelhub.modules.submission.mapper.SubmissionMapper;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Set;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -56,5 +59,23 @@ public class SubmissionTraceController {
             return ApiResponse.ok(List.of());
         }
         return ApiResponse.ok(versionService.getVersionHistory(submission.getAssignmentId()));
+    }
+
+    @GetMapping("/compare")
+    @Operation(summary = "多版本对比", description = "传入多个提交 ID，返回按版本的字段级并排对比。所有 ID 必须属于同一 assignment。OWNER、REVIEWER、LABELER 可用。")
+    public ApiResponse<MultiVersionCompareResponse> compare(
+            @Parameter(description = "提交 ID 列表，逗号分隔，例如 101,102,103") @RequestParam String ids) {
+        CurrentUserContext.requireAnyRole(Set.of(RoleCode.OWNER, RoleCode.REVIEWER, RoleCode.LABELER));
+        List<Long> submissionIds;
+        try {
+            submissionIds = Arrays.stream(ids.split(","))
+                    .map(String::trim)
+                    .filter(s -> !s.isEmpty())
+                    .map(Long::parseLong)
+                    .toList();
+        } catch (NumberFormatException ex) {
+            throw new BusinessException(400801, "Invalid submission ID in parameter: " + ids);
+        }
+        return ApiResponse.ok(answerDiffService.multiCompare(submissionIds));
     }
 }

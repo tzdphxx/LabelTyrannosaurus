@@ -15,12 +15,24 @@ public class DefaultDatasetClaimService implements DatasetClaimService {
     }
 
     @Override
-    public Optional<DatasetItemSnapshot> reserveClaimableItem(Long taskId, Long labelerId) {
-        Long datasetItemId = datasetItemMapper.selectClaimableItemId(taskId, labelerId);
+    public Optional<DatasetItemSnapshot> reserveClaimableItem(Long taskId, Long labelerId, Integer overlapCount) {
+        Long datasetItemId = datasetItemMapper.selectClaimableItemId(taskId, labelerId, overlapCount);
         if (datasetItemId == null) {
             return Optional.empty();
         }
-        if (datasetItemMapper.reserveIfAvailable(datasetItemId) != 1) {
+        if (datasetItemMapper.reserveIfAvailable(datasetItemId, overlapCount) != 1) {
+            return Optional.empty();
+        }
+        DatasetItem datasetItem = datasetItemMapper.selectById(datasetItemId);
+        if (datasetItem == null) {
+            return Optional.empty();
+        }
+        return Optional.of(new DatasetItemSnapshot(datasetItem.getId(), datasetItem.getItemJson()));
+    }
+
+    @Override
+    public Optional<DatasetItemSnapshot> reserveSpecificItem(Long taskId, Long labelerId, Long datasetItemId) {
+        if (datasetItemMapper.reserveIfAvailable(datasetItemId, 1) != 1) {
             return Optional.empty();
         }
         DatasetItem datasetItem = datasetItemMapper.selectById(datasetItemId);

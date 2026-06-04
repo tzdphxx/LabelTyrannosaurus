@@ -63,13 +63,13 @@ class LlmTriggerControllerTest {
     }
 
     private LlmTriggerRunRequest request() {
-        return new LlmTriggerRunRequest(50L, "qwen-plus", "Suggest a summary.",
-                List.of("summary"), null, Map.of());
+        return new LlmTriggerRunRequest(null, null, null,
+                null, null, "summary", Map.of(), null);
     }
 
     private LlmTriggerRunRequest requestWithItem() {
-        return new LlmTriggerRunRequest(50L, "qwen-plus", "Suggest a summary.",
-                List.of("summary"), 30L, Map.of("answer", "draft"));
+        return new LlmTriggerRunRequest(null, null, null,
+                null, 30L, "summary", Map.of("answer", "draft"), null);
     }
 
     private LlmTriggerRunResponse response() {

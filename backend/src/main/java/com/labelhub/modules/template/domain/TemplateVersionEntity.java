@@ -47,16 +47,16 @@ public class TemplateVersionEntity {
         return taskId;
     }
 
+    public void setTaskId(Long taskId) {
+        this.taskId = taskId;
+    }
+
     public Long getOwnerId() {
         return ownerId;
     }
 
     public void setOwnerId(Long ownerId) {
         this.ownerId = ownerId;
-    }
-
-    public void setTaskId(Long taskId) {
-        this.taskId = taskId;
     }
 
     public Integer getVersionNo() {

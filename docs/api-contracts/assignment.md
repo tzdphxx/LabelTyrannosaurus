@@ -132,3 +132,72 @@ Resubmit after return:
 assignment.status RETURNED -> SUBMITTED
 new submission.versionNo = previous + 1
 ```
+
+## Claim Strategies
+
+The claim behavior is governed by `task.strategy` (set at creation, frozen at publish):
+
+| Strategy | Behavior |
+|---|---|
+| `FCFS` (default) | Free-for-all. Labelers claim any available item. Quota not enforced. |
+| `QUOTA_GRAB` | FCFS + two gates: task-level `quota` (atomic increment) and per-labeler `maxClaimsPerLabeler` (active unfinished count). On cancel, quota is reclaimed. |
+| `ASSIGNED` | Labelers can only claim items explicitly dispatched by the owner. Requires dispatches before publish. |
+
+In all strategies, the `POST /api/v1/tasks/{taskId}/assignments/claim` endpoint behaves according to the task's strategy.
+
+## POST /api/v1/tasks/{taskId}/dispatches
+
+Description: Owner batch-assigns dataset items to labelers. Only available for ASSIGNED strategy tasks in DRAFT status.
+
+Permission: `OWNER`
+
+Request:
+
+```text
+{
+  "dispatches": [
+    { "labelerId": 100, "datasetItemId": 500 },
+    { "labelerId": 101, "datasetItemId": 501 }
+  ]
+}
+```
+
+Constraints:
+
+```text
+Task must use ASSIGNED strategy and be in DRAFT status.
+Each datasetItemId must belong to the task and not already have a PENDING dispatch.
+Each labelerId must have the LABELER role.
+Max 500 entries per request.
+Auto-updates task.quota to match total dispatch count.
+```
+
+Response:
+
+```text
+[
+  { "dispatchId": 1, "taskId": 10, "datasetItemId": 500, "labelerId": 100, "status": "PENDING", "dispatchedAt": "...", "claimedAt": null }
+]
+```
+
+## GET /api/v1/tasks/{taskId}/dispatches
+
+Description: Owner lists all dispatch records for a task.
+
+Permission: `OWNER`
+
+## DELETE /api/v1/tasks/{taskId}/dispatches/{dispatchId}
+
+Description: Owner revokes an unclaimed dispatch. Only PENDING dispatches can be revoked.
+
+Permission: `OWNER`
+
+Effect: Auto-updates task.quota to match remaining dispatch count.
+
+## GET /api/v1/tasks/{taskId}/dispatches/my
+
+Description: Labeler views dispatches assigned to them for a task.
+
+Permission: `LABELER`
+
+Response: List of dispatch records with status PENDING or CLAIMED.

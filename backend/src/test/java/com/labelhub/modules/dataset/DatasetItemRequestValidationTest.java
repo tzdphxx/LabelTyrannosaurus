@@ -15,8 +15,8 @@ class DatasetItemRequestValidationTest {
     private final Validator validator = Validation.buildDefaultValidatorFactory().getValidator();
 
     @Test
-    void batchAppendRejectsMissingFileId() {
-        var violations = validator.validate(new BatchAppendItemsRequest(null));
+    void batchAppendRejectsNullItemElements() {
+        var violations = validator.validate(new BatchAppendItemsRequest(Collections.singletonList(null)));
 
         assertThat(violations).isNotEmpty();
     }

@@ -8,11 +8,15 @@ import com.labelhub.modules.ai.service.LlmProviderRuntimeConfig;
 import com.labelhub.modules.ai.service.LlmProviderService;
 import java.util.Map;
 import java.util.Optional;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 @Component
 public class DefaultLlmGateway implements LlmGateway {
+
+    private static final Logger log = LoggerFactory.getLogger(DefaultLlmGateway.class);
 
     private static final String PROVIDER_UNAVAILABLE = "PROVIDER_UNAVAILABLE";
     private static final String PROVIDER_ERROR = "PROVIDER_ERROR";
@@ -24,18 +28,21 @@ public class DefaultLlmGateway implements LlmGateway {
     private final LlmProviderService llmProviderService;
     private final OpenAiCompatibleAdapter adapter;
     private final ObjectMapper objectMapper;
+    private final AiMetrics aiMetrics;
 
     @Autowired
     public DefaultLlmGateway(LlmProviderService llmProviderService,
                              OpenAiCompatibleAdapter adapter,
-                             ObjectMapper objectMapper) {
+                             ObjectMapper objectMapper,
+                             AiMetrics aiMetrics) {
         this.llmProviderService = llmProviderService;
         this.adapter = adapter;
         this.objectMapper = objectMapper;
+        this.aiMetrics = aiMetrics;
     }
 
     DefaultLlmGateway(LlmProviderService llmProviderService, OpenAiCompatibleAdapter adapter) {
-        this(llmProviderService, adapter, new ObjectMapper());
+        this(llmProviderService, adapter, new ObjectMapper(), null);
     }
 
     @Override
@@ -43,21 +50,24 @@ public class DefaultLlmGateway implements LlmGateway {
         Optional<LlmProviderRuntimeConfig> runtimeConfig =
                 llmProviderService.findEnabledRuntimeConfig(request.providerId(), request.modelName());
         if (runtimeConfig.isEmpty()) {
-            return failure(LlmGatewayStatus.PROVIDER_UNAVAILABLE, null, null, null,
-                    PROVIDER_UNAVAILABLE, "LLM provider is unavailable");
+            return recordAndReturn(request.providerId(), request.modelName(),
+                    failure(LlmGatewayStatus.PROVIDER_UNAVAILABLE, null, null, null,
+                            PROVIDER_UNAVAILABLE, "LLM provider is unavailable"));
         }
         LlmProviderRuntimeConfig config = selectRuntimeModel(runtimeConfig.get(), request.messages());
         ResponseFormat responseFormat = resolveResponseFormat(config, request.responseFormat());
         OpenAiCompatibleResponse adapterResponse = adapter.chat(config, request.messages(), null, null, responseFormat);
         if (adapterResponse.timedOut()) {
-            return failure(LlmGatewayStatus.TIMEOUT, adapterResponse.rawResponse(), null, adapterResponse.latencyMs(),
-                    TIMEOUT, adapterResponse.errorMessage());
+            return recordAndReturn(request.providerId(), config.modelName(),
+                    failure(LlmGatewayStatus.TIMEOUT, adapterResponse.rawResponse(), null, adapterResponse.latencyMs(),
+                            TIMEOUT, adapterResponse.errorMessage()));
         }
         if (!adapterResponse.success()) {
-            return failure(LlmGatewayStatus.PROVIDER_ERROR, adapterResponse.rawResponse(), null, adapterResponse.latencyMs(),
-                    PROVIDER_ERROR, adapterResponse.errorMessage());
+            return recordAndReturn(request.providerId(), config.modelName(),
+                    failure(LlmGatewayStatus.PROVIDER_ERROR, adapterResponse.rawResponse(), null, adapterResponse.latencyMs(),
+                            PROVIDER_ERROR, adapterResponse.errorMessage()));
         }
-        return extractStructuredJson(adapterResponse);
+        return recordAndReturn(request.providerId(), config.modelName(), extractStructuredJson(adapterResponse));
     }
 
     private LlmProviderRuntimeConfig selectRuntimeModel(LlmProviderRuntimeConfig config, java.util.List<LlmMessage> messages) {
@@ -169,5 +179,16 @@ public class DefaultLlmGateway implements LlmGateway {
                                        String errorCode,
                                        String errorMessage) {
         return new LlmGatewayResponse(status, rawResponse, contentText, null, latencyMs, errorCode, errorMessage);
+    }
+
+    private LlmGatewayResponse recordAndReturn(Long providerId, String modelName, LlmGatewayResponse response) {
+        if (aiMetrics != null) {
+            aiMetrics.record("LLM_GATEWAY", providerId, modelName,
+                    response.status() == null ? "UNKNOWN" : response.status().name(),
+                    response.errorCode(), response.latencyMs());
+        } else {
+            log.debug("AiMetrics not available; skipping LLM gateway metric recording");
+        }
+        return response;
     }
 }

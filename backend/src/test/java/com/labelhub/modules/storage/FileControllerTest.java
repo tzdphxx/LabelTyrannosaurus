@@ -18,10 +18,10 @@ class FileControllerTest {
     private final FileController fileController = new FileController(fileService);
 
     @Test
-    void uploadDelegatesMultipartFileOnly() {
+    void uploadDelegatesMultipartFileAndBusinessType() {
         MockMultipartFile file = new MockMultipartFile("file", "dataset.jsonl",
                 "application/x-ndjson", "{\"id\":1}\n".getBytes());
-        when(fileService.upload(file)).thenReturn(new FileUploadResponse(
+        when(fileService.upload(file, "dataset")).thenReturn(new FileUploadResponse(
                 99L,
                 "dataset.jsonl",
                 "application/x-ndjson",
@@ -30,9 +30,9 @@ class FileControllerTest {
                 "https://cos.example.com/download"
         ));
 
-        var response = fileController.upload(file);
+        var response = fileController.upload(file, "dataset");
 
-        verify(fileService).upload(file);
+        verify(fileService).upload(file, "dataset");
         assertThat(response.data().fileId()).isEqualTo(99L);
         assertThat(response.data().downloadUrl()).isEqualTo("https://cos.example.com/download");
     }

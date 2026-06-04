@@ -28,6 +28,7 @@ import com.labelhub.modules.ai.domain.LlmProvider;
 import com.labelhub.modules.ai.mapper.AiReviewConfigMapper;
 import com.labelhub.modules.ai.service.DefaultMediaPromptContextBuilder;
 import com.labelhub.modules.ai.service.LlmProviderService;
+import com.labelhub.modules.ai.service.PromptTemplateEngine;
 import com.labelhub.modules.ai.service.ProviderCapability;
 import com.labelhub.modules.assignment.domain.Assignment;
 import com.labelhub.modules.assignment.domain.AssignmentStatus;
@@ -57,8 +58,11 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.mockito.junit.jupiter.MockitoSettings;
+import org.mockito.quality.Strictness;
 
 @ExtendWith(MockitoExtension.class)
+@MockitoSettings(strictness = Strictness.LENIENT)
 class PreAnnotationServiceTest {
 
     private static final Long ASSIGNMENT_ID = 10L;
@@ -82,6 +86,7 @@ class PreAnnotationServiceTest {
     @Mock private TraceIdProvider traceIdProvider;
     @Mock private RedisLockService redisLockService;
     @Mock private LlmTaskQueueService llmTaskQueueService;
+    @Mock private PromptTemplateEngine promptTemplateEngine;
 
     private PreAnnotationService service;
 
@@ -94,6 +99,23 @@ class PreAnnotationServiceTest {
                 llmTaskQueueService);
         lenient().when(redisLockService.withLock(any(), any(Long.class), any(Long.class), any(Supplier.class)))
                 .thenAnswer(invocation -> ((Supplier<?>) invocation.getArgument(3)).get());
+        lenient().when(agentRunService.create(
+                        org.mockito.ArgumentMatchers.any(),
+                        org.mockito.ArgumentMatchers.any(),
+                        org.mockito.ArgumentMatchers.any(),
+                        org.mockito.ArgumentMatchers.any(),
+                        org.mockito.ArgumentMatchers.any(),
+                        org.mockito.ArgumentMatchers.any(),
+                        org.mockito.ArgumentMatchers.any(),
+                        org.mockito.ArgumentMatchers.any()))
+                .thenReturn(agentRun());
+        org.springframework.test.util.ReflectionTestUtils.setField(service, "promptTemplateEngine", promptTemplateEngine);
+        lenient().when(promptTemplateEngine.buildPreAnnotationPrompt(
+                        org.mockito.ArgumentMatchers.any(),
+                        org.mockito.ArgumentMatchers.any(),
+                        org.mockito.ArgumentMatchers.any(),
+                        org.mockito.ArgumentMatchers.any()))
+                .thenReturn("You are LabelHub pre-annotation assistant.");
     }
 
     @Test
@@ -191,6 +213,8 @@ class PreAnnotationServiceTest {
         when(agentRunService.findActive(staleRunId)).thenReturn(Optional.empty());
         when(agentRunService.create(eq("PRE_ANNOTATION"), eq(null), eq(PROVIDER_ID), eq("qwen-vl"),
                 eq("v1"), any(), eq(ASSIGNMENT_ID))).thenReturn(agentRun(newRunId));
+        when(agentRunService.create(eq("PRE_ANNOTATION"), eq(null), eq(PROVIDER_ID), eq("qwen-vl"),
+                eq("v1"), any(), eq(ASSIGNMENT_ID), any())).thenReturn(agentRun(newRunId));
         when(llmGateway.review(any(LlmGatewayRequest.class))).thenReturn(new LlmGatewayResponse(
                 LlmGatewayStatus.SUCCESS,
                 "{\"ok\":true}",

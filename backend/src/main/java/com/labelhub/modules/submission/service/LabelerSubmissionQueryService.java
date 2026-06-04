@@ -23,6 +23,7 @@ import com.labelhub.modules.submission.mapper.SubmissionMapper;
 import com.labelhub.modules.template.domain.TemplateVersion;
 import com.labelhub.modules.template.mapper.TemplateVersionMapper;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import org.springframework.stereotype.Service;
 
@@ -40,19 +41,22 @@ public class LabelerSubmissionQueryService {
     private final ReviewRecordMapper reviewRecordMapper;
     private final DatasetItemMapper datasetItemMapper;
     private final TemplateVersionMapper templateVersionMapper;
+    private final SubmissionUserResolver userResolver;
 
     public LabelerSubmissionQueryService(SubmissionMapper submissionMapper,
                                          AssignmentMapper assignmentMapper,
                                          AiReviewResultMapper aiReviewResultMapper,
                                          ReviewRecordMapper reviewRecordMapper,
                                          DatasetItemMapper datasetItemMapper,
-                                         TemplateVersionMapper templateVersionMapper) {
+                                         TemplateVersionMapper templateVersionMapper,
+                                         SubmissionUserResolver userResolver) {
         this.submissionMapper = submissionMapper;
         this.assignmentMapper = assignmentMapper;
         this.aiReviewResultMapper = aiReviewResultMapper;
         this.reviewRecordMapper = reviewRecordMapper;
         this.datasetItemMapper = datasetItemMapper;
         this.templateVersionMapper = templateVersionMapper;
+        this.userResolver = userResolver;
     }
 
     public PageResponse<LabelerSubmissionListItem> listSubmissions(Long labelerId,
@@ -152,8 +156,15 @@ public class LabelerSubmissionQueryService {
                         .eq(Submission::getAssignmentId, submission.getAssignmentId())
                         .orderByAsc(Submission::getVersionNo));
 
+        Map<Long, String> userNames = userResolver.resolveCreatorNames(versions);
+
         List<VersionSummary> versionHistory = versions.stream()
-                .map(v -> new VersionSummary(v.getId(), v.getVersionNo(), v.getStatus(), v.getSubmittedAt()))
+                .map(v -> {
+                    Long creatorId = userResolver.effectiveCreatorId(v);
+                    return new VersionSummary(v.getId(), v.getVersionNo(), v.getStatus(),
+                            v.getSubmittedAt(), creatorId,
+                            userNames.get(creatorId));
+                })
                 .toList();
 
         boolean canModify = assignment != null

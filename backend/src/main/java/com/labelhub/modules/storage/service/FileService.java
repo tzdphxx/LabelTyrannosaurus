@@ -37,7 +37,7 @@ public class FileService {
             "mp3", "wav", "m4a",
             "md"
     );
-    private static final String DEFAULT_BUSINESS_TYPE = "dataset";
+    private static final Set<String> SUPPORTED_BUSINESS_TYPES = Set.of("dataset", "template", "export", "misc", "media");
 
     private final ObjectFileMapper objectFileMapper;
     private final ObjectStorageService objectStorageService;
@@ -52,12 +52,12 @@ public class FileService {
     }
 
     @Transactional
-    public FileUploadResponse upload(MultipartFile file) {
+    public FileUploadResponse upload(MultipartFile file, String businessType) {
         CurrentUser currentUser = CurrentUserContext.requireCurrentUser();
-        validate(file);
+        validate(file, businessType);
         String originalFilename = StringUtils.cleanPath(file.getOriginalFilename());
         String contentType = StringUtils.hasText(file.getContentType()) ? file.getContentType() : "application/octet-stream";
-        String objectKey = buildObjectKey(originalFilename);
+        String objectKey = buildObjectKey(businessType, originalFilename);
         byte[] bytes;
         try (InputStream inputStream = file.getInputStream()) {
             bytes = inputStream.readAllBytes();
@@ -107,12 +107,15 @@ public class FileService {
         return new SignedUrlResponse(file.getId(), downloadUrl.toString());
     }
 
-    private void validate(MultipartFile file) {
+    private void validate(MultipartFile file, String businessType) {
         if (file == null || file.isEmpty()) {
             throw new BusinessException(400102, "File is empty");
         }
         if (file.getSize() > properties.maxFileSizeBytes()) {
             throw new BusinessException(400102, "File is too large");
+        }
+        if (!SUPPORTED_BUSINESS_TYPES.contains(normalize(businessType))) {
+            throw new BusinessException(400102, "Invalid business type");
         }
         String filename = StringUtils.cleanPath(file.getOriginalFilename());
         String extension = extensionOf(filename);
@@ -128,10 +131,10 @@ public class FileService {
         return file.getOwnerId() != null && file.getOwnerId().equals(currentUser.userId());
     }
 
-    private String buildObjectKey(String originalFilename) {
+    private String buildObjectKey(String businessType, String originalFilename) {
         LocalDate today = LocalDate.now(ZoneId.systemDefault());
         return "uploads/%s/%04d/%02d/%02d/%s-%s".formatted(
-                DEFAULT_BUSINESS_TYPE,
+                normalize(businessType),
                 today.getYear(),
                 today.getMonthValue(),
                 today.getDayOfMonth(),
@@ -150,6 +153,10 @@ public class FileService {
             return "";
         }
         return filename.substring(filename.lastIndexOf('.') + 1).toLowerCase(Locale.ROOT);
+    }
+
+    private String normalize(String value) {
+        return value == null ? "" : value.trim().toLowerCase(Locale.ROOT);
     }
 
     private String sha256(byte[] bytes) {

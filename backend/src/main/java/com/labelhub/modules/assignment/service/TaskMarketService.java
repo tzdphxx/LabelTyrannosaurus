@@ -79,7 +79,7 @@ public class TaskMarketService {
                 task.getTitle(),
                 listTags(task.getId()),
                 task.getDeadlineAt(),
-                datasetMarketStatsService.countAvailableItems(task.getId(), labelerId),
+                datasetMarketStatsService.countAvailableItems(task.getId(), labelerId, task.getOverlapCount()),
                 assignmentMarketStatsService.countClaimedByLabeler(task.getId(), labelerId),
                 rewardSummaryService.findRewardSummary(task.getId(), Boolean.TRUE.equals(task.getRewardVisible())),
                 task.getDescription(),
@@ -96,7 +96,7 @@ public class TaskMarketService {
                                                                Long labelerId,
                                                                int limit,
                                                                int offset) {
-        return datasetItemMapper.selectClaimableItems(task.getId(), labelerId, limit, offset)
+        return datasetItemMapper.selectClaimableItems(task.getId(), labelerId, task.getOverlapCount(), limit, offset)
                 .stream()
                 .map(this::toMarketDatasetItem)
                 .toList();

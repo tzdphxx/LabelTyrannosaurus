@@ -180,14 +180,14 @@ public class DatasetImportService {
         if (mode == DatasetImportMode.OVERWRITE && task.getStatus() != TaskStatus.DRAFT) {
             throw new BusinessException(409301, "Overwrite import only allowed for draft task");
         }
-        CurrentUser currentUser = CurrentUserContext.requireCurrentUser();
-        ObjectFileEntity sourceFile = requireSourceFile(request.fileId(), currentUser);
+        ObjectFileEntity sourceFile = requireSourceFile(request.fileId());
         DatasetFileFormat format = resolveFormat(sourceFile);
         DatasetParser parser = parsers.get(format);
         if (parser == null || format == DatasetFileFormat.CSV) {
             throw new BusinessException(400102, "Unsupported dataset file format");
         }
 
+        CurrentUser currentUser = CurrentUserContext.requireCurrentUser();
         // 源文件和导入任务先落库，后台任务执行失败时仍可查询到失败状态。
         DatasetFileEntity datasetFile = new DatasetFileEntity();
         datasetFile.setTaskId(task.getId());
@@ -228,14 +228,10 @@ public class DatasetImportService {
         return task;
     }
 
-    private ObjectFileEntity requireSourceFile(Long fileId, CurrentUser currentUser) {
+    private ObjectFileEntity requireSourceFile(Long fileId) {
         ObjectFileEntity sourceFile = objectFileMapper.selectById(fileId);
         if (sourceFile == null) {
             throw new BusinessException(400102, "Dataset source file not found");
-        }
-        if (!currentUser.roles().contains(RoleCode.ADMIN)
-                && (sourceFile.getOwnerId() == null || !sourceFile.getOwnerId().equals(currentUser.userId()))) {
-            throw new BusinessException(403001, "Forbidden");
         }
         return sourceFile;
     }

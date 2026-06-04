@@ -4,5 +4,3 @@ springdoc:
   swagger-ui:
     enabled: true
 
-knife4j:
-  enable: true

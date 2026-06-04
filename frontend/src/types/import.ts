@@ -31,35 +31,3 @@ export interface ImportPreview {
   samples: DatasetSampleRow[]
   issues: ImportIssue[]
 }
-
-export interface FileUploadResponse {
-  fileId: number
-  originalFilename: string
-  contentType: string
-  fileSize: number
-  objectKey: string
-  checksum: string
-  downloadUrl: string
-}
-
-export type DatasetImportJobStatus = 'PENDING' | 'RUNNING' | 'SUCCESS' | 'FAILED' | 'PARTIAL_SUCCESS'
-
-export interface DatasetImportJobResponse {
-  jobId: number
-  taskId: number
-  status: DatasetImportJobStatus
-  importMode: 'APPEND' | 'OVERWRITE'
-  totalCount: number
-  successCount: number
-  failedCount: number
-  errorReportFileId: number | null
-  errorReportUrl: string | null
-  errorMessage: string | null
-  startedAt: string | null
-  finishedAt: string | null
-  createdAt: string
-}
-
-export interface BatchAppendByFileRequest {
-  fileId: number
-}

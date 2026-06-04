@@ -66,6 +66,16 @@ public class AiReviewConfig {
 
     private Boolean allowAiDirectApproveWhenDegraded;
 
+    // ── 多策略审核 ──
+    /** @see ReviewStrategy */
+    private String reviewStrategy;
+    /** JSON array of {providerId, modelName} for vote models */
+    private String voteModelsJson;
+    /** Min agreement count for parallel vote, default 2 */
+    private Integer voteMinAgreement;
+    /** JSON object: dimension -> [{providerId, modelName}] */
+    private String dimensionReviewersJson;
+
     private Long createdBy;
 
     private LocalDateTime createdAt;

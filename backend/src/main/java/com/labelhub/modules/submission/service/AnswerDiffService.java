@@ -44,7 +44,7 @@ public class AnswerDiffService {
     public AnswerDiffResponse diff(Long submissionId, Integer baseVersionNo) {
         Submission target = submissionMapper.selectById(submissionId);
         if (target == null) {
-            throw new BusinessException(NOT_FOUND, "Submission not found");
+            throw new BusinessException(NOT_FOUND, "提交记录不存在");
         }
         List<Submission> versions = submissionMapper.selectByAssignmentId(target.getAssignmentId());
         Submission base = versions.stream()
@@ -52,7 +52,7 @@ public class AnswerDiffService {
                 .findFirst()
                 .orElse(null);
         if (base == null) {
-            throw new BusinessException(NOT_FOUND, "Base version not found");
+            throw new BusinessException(NOT_FOUND, "基准版本不存在");
         }
 
         Map<String, Object> baseMap = parseAnswer(base.getAnswerJson());

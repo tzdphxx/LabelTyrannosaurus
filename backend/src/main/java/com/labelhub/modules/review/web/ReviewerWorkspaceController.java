@@ -5,18 +5,21 @@ import com.labelhub.common.security.CurrentUserContext;
 import com.labelhub.common.security.RoleCode;
 import com.labelhub.modules.review.dto.ReviewerAiReviewStatusItem;
 import com.labelhub.modules.review.dto.ReviewerDashboardResponse;
+import com.labelhub.modules.review.dto.ReviewerTaskItemPageResponse;
 import com.labelhub.modules.review.dto.ReviewerTaskSummary;
 import com.labelhub.modules.review.mapper.ReviewRecordMapper;
 import com.labelhub.modules.review.mapper.ReviewerSubmissionListMapper;
+import com.labelhub.modules.review.service.ReviewerTaskItemQueryService;
 import com.labelhub.modules.submission.mapper.SubmissionMapper;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
-import com.labelhub.modules.review.dto.ReviewerAiReviewStatusItem;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.List;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
@@ -27,13 +30,16 @@ public class ReviewerWorkspaceController {
     private final ReviewerSubmissionListMapper reviewerListMapper;
     private final SubmissionMapper submissionMapper;
     private final ReviewRecordMapper reviewRecordMapper;
+    private final ReviewerTaskItemQueryService taskItemQueryService;
 
     public ReviewerWorkspaceController(ReviewerSubmissionListMapper reviewerListMapper,
                                        SubmissionMapper submissionMapper,
-                                       ReviewRecordMapper reviewRecordMapper) {
+                                       ReviewRecordMapper reviewRecordMapper,
+                                       ReviewerTaskItemQueryService taskItemQueryService) {
         this.reviewerListMapper = reviewerListMapper;
         this.submissionMapper = submissionMapper;
         this.reviewRecordMapper = reviewRecordMapper;
+        this.taskItemQueryService = taskItemQueryService;
     }
 
     @GetMapping("/tasks")
@@ -43,6 +49,25 @@ public class ReviewerWorkspaceController {
         CurrentUserContext.requireRole(RoleCode.REVIEWER);
         Long reviewerId = CurrentUserContext.getUserId();
         return ApiResponse.ok(reviewerListMapper.selectTaskSummariesForReviewer(reviewerId));
+    }
+
+    @GetMapping("/tasks/{taskId}/items")
+    @Operation(summary = "审核员任务题目分页详情",
+            description = "分页查看当前审核员已领取或已分配任务下的全部题目及题目审核状态。")
+    public ApiResponse<ReviewerTaskItemPageResponse> taskItems(
+            @PathVariable Long taskId,
+            @RequestParam(required = false) String itemStatus,
+            @RequestParam(required = false) String submissionStatus,
+            @RequestParam(required = false) String aiDecision,
+            @RequestParam(required = false) String keyword,
+            @RequestParam(defaultValue = "1") int page,
+            @RequestParam(defaultValue = "20") int size) {
+        CurrentUserContext.requireRole(RoleCode.REVIEWER);
+        Long reviewerId = CurrentUserContext.getUserId();
+        int safePage = Math.max(1, page);
+        int safeSize = Math.max(1, Math.min(size, 100));
+        return ApiResponse.ok(taskItemQueryService.queryTaskItems(
+                taskId, reviewerId, itemStatus, submissionStatus, aiDecision, keyword, safePage, safeSize));
     }
 
     @GetMapping("/dashboard")

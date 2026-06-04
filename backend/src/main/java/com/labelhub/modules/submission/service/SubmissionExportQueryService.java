@@ -37,7 +37,7 @@ public class SubmissionExportQueryService {
     @Transactional(readOnly = true)
     public List<ExportableSubmissionSnapshot> queryExportableGoldenSubmissions(Long taskId, ExportPageRequest pageRequest) {
         if (taskId == null || pageRequest == null || pageRequest.pageSize() < 1) {
-            throw new BusinessException(400102, "Invalid export page request");
+            throw new BusinessException(400102, "导出分页请求不合法");
         }
         List<ExportableSubmissionRecord> records = submissionExportMapper.selectExportableGoldenSubmissions(
                 taskId,
@@ -90,7 +90,7 @@ public class SubmissionExportQueryService {
         try {
             return StringUtils.hasText(json) ? objectMapper.readTree(json) : objectMapper.nullNode();
         } catch (Exception ex) {
-            throw new BusinessException(500001, "Invalid export snapshot JSON");
+            throw new BusinessException(500001, "导出快照 JSON 不合法");
         }
     }
 }

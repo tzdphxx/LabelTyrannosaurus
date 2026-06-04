@@ -12,8 +12,12 @@ import com.baomidou.mybatisplus.core.conditions.Wrapper;
 import com.labelhub.common.audit.AuditAppender;
 import com.labelhub.common.audit.AuditCommand;
 import com.labelhub.common.exception.BusinessException;
+import com.labelhub.common.security.CurrentUser;
+import com.labelhub.common.security.CurrentUserContext;
+import com.labelhub.common.security.RoleCode;
 import com.labelhub.common.web.TraceIdProvider;
 import com.labelhub.modules.ai.mapper.AiReviewConfigMapper;
+import com.labelhub.modules.ai.service.LlmProviderService;
 import com.labelhub.modules.dataset.dto.DatasetImportJobResponse;
 import com.labelhub.modules.dataset.dto.DatasetImportRequest;
 import com.labelhub.modules.dataset.service.DatasetImportService;
@@ -38,6 +42,10 @@ import com.labelhub.modules.task.mapper.TaskMapper;
 import com.labelhub.modules.task.mapper.TaskTagMapper;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.Set;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -82,6 +90,9 @@ class TaskLifecycleServiceTest {
     @Mock
     private AssignmentDispatchMapper dispatchMapper;
 
+    @Mock
+    private LlmProviderService llmProviderService;
+
     private TaskLifecycleService taskLifecycleService;
 
     @BeforeEach
@@ -98,6 +109,11 @@ class TaskLifecycleServiceTest {
                 dispatchMapper,
                 applicationEventPublisher
         );
+    }
+
+    @AfterEach
+    void clearCurrentUser() {
+        CurrentUserContext.clear();
     }
 
     @Test
@@ -239,6 +255,7 @@ class TaskLifecycleServiceTest {
 
         assertThat(response.rewardRule()).isNull();
     }
+
 
     @Test
     void updatesDraftTaskOnly() {

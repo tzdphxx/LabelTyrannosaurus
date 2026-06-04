@@ -57,7 +57,10 @@ public interface TaskMapper extends BaseMapper<Task> {
             <script>
             SELECT t.*
             FROM tasks t
-            WHERE t.owner_id = #{ownerId}
+            WHERE 1 = 1
+              <if test="ownerId != null">
+                AND t.owner_id = #{ownerId}
+              </if>
               <if test="status != null">
                 AND t.status = #{status}
               </if>
@@ -81,7 +84,10 @@ public interface TaskMapper extends BaseMapper<Task> {
             <script>
             SELECT COUNT(1)
             FROM tasks t
-            WHERE t.owner_id = #{ownerId}
+            WHERE 1 = 1
+              <if test="ownerId != null">
+                AND t.owner_id = #{ownerId}
+              </if>
               <if test="status != null">
                 AND t.status = #{status}
               </if>

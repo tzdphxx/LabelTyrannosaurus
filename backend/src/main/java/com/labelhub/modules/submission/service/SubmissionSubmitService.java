@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.labelhub.common.audit.AuditAppender;
 import com.labelhub.common.audit.AuditCommand;
 import com.labelhub.common.exception.BusinessException;
+import com.labelhub.common.security.CurrentUserContext;
 import com.labelhub.common.util.AnswerCanonicalizer;
 import com.labelhub.common.web.TraceIdProvider;
 import com.labelhub.modules.agent.domain.AgentRun;
@@ -125,7 +126,7 @@ public class SubmissionSubmitService {
                 AssignmentStatus.SUBMITTED
         );
         if (updated != 1) {
-            throw new BusinessException(DRAFT_VERSION_CONFLICT, "Draft version conflict");
+            throw new BusinessException(DRAFT_VERSION_CONFLICT, "草稿版本冲突，请刷新后重试");
         }
         AgentRun agentRun = createPendingAiReviewRun(submission, task);
         appendSubmitAudit(assignment, submission, agentRun.getId());
@@ -135,9 +136,11 @@ public class SubmissionSubmitService {
     }
 
     private Assignment loadOwnedAssignment(Long assignmentId, Long labelerId) {
-        Assignment assignment = assignmentMapper.selectOwnedAssignment(assignmentId, labelerId);
+        Assignment assignment = CurrentUserContext.isAdmin()
+                ? assignmentMapper.selectById(assignmentId)
+                : assignmentMapper.selectOwnedAssignment(assignmentId, labelerId);
         if (assignment == null) {
-            throw new BusinessException(ASSIGNMENT_NOT_FOUND, "Assignment not found");
+            throw new BusinessException(ASSIGNMENT_NOT_FOUND, "领取记录不存在");
         }
         return assignment;
     }
@@ -146,20 +149,20 @@ public class SubmissionSubmitService {
         Task task = taskMapper.selectById(taskId);
         if (task == null || task.getStatus() != TaskStatus.PUBLISHED
                 || task.getDeadlineAt() == null || !task.getDeadlineAt().isAfter(LocalDateTime.now())) {
-            throw new BusinessException(TASK_NOT_SUBMITTABLE, "Task is not submittable");
+            throw new BusinessException(TASK_NOT_SUBMITTABLE, "当前任务不可提交");
         }
         return task;
     }
 
     private void requireCurrentDraftVersion(Assignment assignment, Integer clientDraftVersion) {
         if (!Objects.equals(assignment.getDraftVersion(), clientDraftVersion)) {
-            throw new BusinessException(DRAFT_VERSION_CONFLICT, "Draft version conflict");
+            throw new BusinessException(DRAFT_VERSION_CONFLICT, "草稿版本冲突，请刷新后重试");
         }
     }
 
     private void requireSubmittableStatus(Assignment assignment) {
         if (!SUBMITTABLE_STATUSES.contains(assignment.getStatus())) {
-            throw new BusinessException(ASSIGNMENT_STATUS_NOT_SUBMITTABLE, "Assignment status is not submittable");
+            throw new BusinessException(ASSIGNMENT_STATUS_NOT_SUBMITTABLE, "当前领取记录状态不可提交");
         }
     }
 

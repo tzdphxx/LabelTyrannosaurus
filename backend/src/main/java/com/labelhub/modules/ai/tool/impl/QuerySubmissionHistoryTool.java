@@ -59,7 +59,7 @@ public class QuerySubmissionHistoryTool implements ReviewTool {
             result.put("passRate", total > 0 ? String.format("%.1f%%", passed * 100.0 / total) : "N/A");
             return ToolResult.ok(objectMapper.writeValueAsString(result));
         } catch (Exception e) {
-            return ToolResult.error("Failed to query history: " + e.getMessage());
+            return ToolResult.error("查询提交历史失败：" + e.getMessage());
         }
     }
 }

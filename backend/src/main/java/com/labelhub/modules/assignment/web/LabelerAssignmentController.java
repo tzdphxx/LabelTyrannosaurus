@@ -49,7 +49,7 @@ public class LabelerAssignmentController {
             description = "标注员放弃已领取的 assignment，释放数据项回市场池。"
                     + "仅 CLAIMED/DRAFTING/RETURNED 状态可放弃。")
     public ApiResponse<Void> cancel(
-            @Parameter(description = "Assignment ID") @PathVariable Long assignmentId) {
+            @Parameter(description = "领取记录 ID") @PathVariable Long assignmentId) {
         CurrentUserContext.requireRole(RoleCode.LABELER);
         cancelService.cancel(assignmentId, CurrentUserContext.getUserId());
         return ApiResponse.ok(null);

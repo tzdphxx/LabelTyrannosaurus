@@ -38,7 +38,7 @@ public class RedissonRedisLockService implements RedisLockService {
     @Override
     public <T> T withLock(String key, long waitMillis, long leaseMillis, Supplier<T> action) {
         if (!tryLock(key, waitMillis, leaseMillis)) {
-            throw new BusinessException(409101, "Redis lock acquire timeout");
+            throw new BusinessException(409101, "获取 Redis 锁超时，请稍后重试");
         }
         try {
             return action.get();

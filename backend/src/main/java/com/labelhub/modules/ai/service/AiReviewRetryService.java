@@ -126,7 +126,7 @@ public class AiReviewRetryService implements AiReviewRetryCallback {
         Task task = taskMapper.selectById(submission.getTaskId());
         AiReviewConfig config = loadConfig(task);
         if (config == null) {
-            markManualRequired(result, "CONFIG_NOT_FOUND", "AI review config not found");
+            markManualRequired(result, "CONFIG_NOT_FOUND", "AI 审核配置不存在");
             return;
         }
         DatasetItem datasetItem = datasetItemMapper.selectById(submission.getDatasetItemId());
@@ -159,7 +159,7 @@ public class AiReviewRetryService implements AiReviewRetryCallback {
         Map<String, Object> structured = response.structuredJson();
         if (structured == null || !structured.containsKey("decision")) {
             agentRunService.fail(agentRun.getId(), AgentRunStatus.MANUAL_REQUIRED, "Missing decision");
-            markManualRequired(result, "INVALID_OUTPUT", "AI review decision is required");
+            markManualRequired(result, "INVALID_OUTPUT", "AI 审核结论不能为空");
             return;
         }
 

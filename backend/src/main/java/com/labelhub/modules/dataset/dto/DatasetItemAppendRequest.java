@@ -8,7 +8,9 @@ import java.util.Map;
 /**
  * 追加单条题目的请求。
  */
-public record DatasetItemAppendRequest(@NotBlank String externalId,
-                                       @NotNull Map<String, Object> itemJson,
-                                       Map<String, Object> metadataJson) {
+public record DatasetItemAppendRequest(
+        @NotBlank String externalId,
+        @NotNull Map<String, Object> itemJson,
+        Map<String, Object> metadataJson
+) {
 }

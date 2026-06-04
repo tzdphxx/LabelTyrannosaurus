@@ -70,7 +70,7 @@ public class AssignmentDraftService {
                 AssignmentStatus.DRAFTING
         );
         if (updated != 1) {
-            throw new BusinessException(DRAFT_VERSION_CONFLICT, "Draft version conflict");
+            throw new BusinessException(DRAFT_VERSION_CONFLICT, "草稿版本冲突，请刷新后重试");
         }
         LocalDateTime updatedAt = LocalDateTime.now();
         AssignmentDraftCacheEntry cacheEntry = new AssignmentDraftCacheEntry(
@@ -110,14 +110,14 @@ public class AssignmentDraftService {
     private Assignment loadOwnedAssignment(Long assignmentId, Long labelerId) {
         Assignment assignment = assignmentMapper.selectOwnedAssignment(assignmentId, labelerId);
         if (assignment == null) {
-            throw new BusinessException(ASSIGNMENT_NOT_FOUND, "Assignment not found");
+            throw new BusinessException(ASSIGNMENT_NOT_FOUND, "领取记录不存在");
         }
         return assignment;
     }
 
     private void requireEditable(Assignment assignment) {
         if (!EDITABLE_STATUSES.contains(assignment.getStatus())) {
-            throw new BusinessException(ASSIGNMENT_STATUS_NOT_EDITABLE, "Assignment status is not editable");
+            throw new BusinessException(ASSIGNMENT_STATUS_NOT_EDITABLE, "当前领取记录状态不可编辑");
         }
     }
 
@@ -125,13 +125,13 @@ public class AssignmentDraftService {
         try {
             objectMapper.readTree(answerJson);
         } catch (JsonProcessingException ex) {
-            throw new BusinessException(INVALID_ANSWER_JSON, "Answer JSON is invalid");
+            throw new BusinessException(INVALID_ANSWER_JSON, "作答 JSON 格式不合法");
         }
     }
 
     private void requireCurrentVersion(Assignment assignment, Integer clientDraftVersion) {
         if (!Objects.equals(assignment.getDraftVersion(), clientDraftVersion)) {
-            throw new BusinessException(DRAFT_VERSION_CONFLICT, "Draft version conflict");
+            throw new BusinessException(DRAFT_VERSION_CONFLICT, "草稿版本冲突，请刷新后重试");
         }
     }
 

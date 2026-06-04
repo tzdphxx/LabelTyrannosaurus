@@ -57,7 +57,7 @@ public class DetectAnomalyPatternTool implements ReviewTool {
             result.put("anomalies", anomalies);
             return ToolResult.ok(objectMapper.writeValueAsString(result));
         } catch (Exception e) {
-            return ToolResult.error("Anomaly detection failed: " + e.getMessage());
+            return ToolResult.error("异常模式检测失败：" + e.getMessage());
         }
     }
 }

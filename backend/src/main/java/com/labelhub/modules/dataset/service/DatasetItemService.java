@@ -201,7 +201,7 @@ public class DatasetItemService {
 
     private BatchItemResult validateEditableItem(Task task, DatasetItem entity, Long itemId) {
         if (entity == null || Boolean.TRUE.equals(entity.getDeleted()) || !task.getId().equals(entity.getTaskId())) {
-            return BatchItemResult.failure(itemId, null, 400102, "Dataset item not found");
+            return BatchItemResult.failure(itemId, null, 400102, "数据项不存在");
         }
         if (positive(entity.getAssignedCount()) || positive(entity.getSubmittedCount())) {
             return BatchItemResult.failure(entity.getId(), entity.getExternalId(), 400101,
@@ -214,10 +214,10 @@ public class DatasetItemService {
         CurrentUser currentUser = CurrentUserContext.requireCurrentUser();
         Task task = taskMapper.selectById(taskId);
         if (task == null) {
-            throw new BusinessException(400102, "Task not found");
+            throw new BusinessException(400102, "任务不存在");
         }
         if (!currentUser.roles().contains(RoleCode.ADMIN) && !currentUser.userId().equals(task.getOwnerId())) {
-            throw new BusinessException(403001, "Forbidden");
+            throw new BusinessException(403001, "当前账号没有权限执行该操作");
         }
         return task;
     }
@@ -280,7 +280,7 @@ public class DatasetItemService {
         try {
             return objectMapper.writeValueAsString(json == null ? Map.of() : json);
         } catch (JsonProcessingException ex) {
-            throw new BusinessException(400102, "Invalid JSON payload");
+            throw new BusinessException(400102, "JSON 请求内容不合法");
         }
     }
 
@@ -288,7 +288,7 @@ public class DatasetItemService {
         try {
             return json == null ? objectMapper.nullNode() : objectMapper.readTree(json);
         } catch (JsonProcessingException ex) {
-            throw new BusinessException(500001, "Invalid dataset JSON stored");
+            throw new BusinessException(500001, "已存储的数据集 JSON 不合法");
         }
     }
 

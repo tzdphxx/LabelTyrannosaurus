@@ -24,7 +24,7 @@ public class LlmProviderController {
     }
 
     @GetMapping
-    @Operation(summary = "可用模型列表", description = "OWNER 查询 ADMIN 已启用的 LLM Provider。")
+    @Operation(summary = "可用模型供应商列表", description = "Owner 查询 ADMIN 已启用的 LLM Provider，仅返回前端可展示的安全配置信息。")
     public ApiResponse<List<LlmProviderResponse>> list() {
         CurrentUserContext.requireRole(RoleCode.OWNER);
         return ApiResponse.ok(llmProviderService.listEnabled());

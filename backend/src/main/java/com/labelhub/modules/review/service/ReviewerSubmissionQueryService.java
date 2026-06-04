@@ -64,7 +64,7 @@ public class ReviewerSubmissionQueryService {
     public ReviewerSubmissionDetailResponse getDetail(Long submissionId) {
         Submission submission = submissionMapper.selectById(submissionId);
         if (submission == null) {
-            throw new BusinessException(SUBMISSION_NOT_FOUND, "Submission not found");
+            throw new BusinessException(SUBMISSION_NOT_FOUND, "提交记录不存在");
         }
 
         Assignment assignment = assignmentMapper.selectById(submission.getAssignmentId());

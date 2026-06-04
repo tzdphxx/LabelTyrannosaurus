@@ -4,6 +4,7 @@ import com.labelhub.common.audit.AuditAppender;
 import com.labelhub.common.audit.AuditCommand;
 import com.labelhub.common.exception.BusinessException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.labelhub.common.security.CurrentUserContext;
 import com.labelhub.common.util.AnswerCanonicalizer;
 import com.labelhub.modules.assignment.domain.Assignment;
 import com.labelhub.modules.assignment.domain.AssignmentStatus;
@@ -115,7 +116,7 @@ public class ReviewService {
 
         Assignment assignment = assignmentMapper.selectById(submission.getAssignmentId());
         if (assignment == null) {
-            throw new BusinessException(ASSIGNMENT_NOT_FOUND, "Associated assignment not found");
+            throw new BusinessException(ASSIGNMENT_NOT_FOUND, "关联的领取记录不存在");
         }
         assignment.setStatus(AssignmentStatus.APPROVED);
         assignment.setApprovedAt(LocalDateTime.now());
@@ -165,7 +166,7 @@ public class ReviewService {
     @Transactional
     public ReviewActionResponse reject(Long submissionId, Long reviewerId, RejectRequest request) {
         if (request.reason() == null || request.reason().isBlank()) {
-            throw new BusinessException(REJECT_REASON_REQUIRED, "Reject reason is required");
+            throw new BusinessException(REJECT_REASON_REQUIRED, "打回原因不能为空");
         }
         Submission submission = requirePendingFinal(submissionId);
         requireAssignedReviewer(submissionId, reviewerId);
@@ -180,7 +181,7 @@ public class ReviewService {
 
         Assignment assignment = assignmentMapper.selectById(submission.getAssignmentId());
         if (assignment == null) {
-            throw new BusinessException(ASSIGNMENT_NOT_FOUND, "Associated assignment not found");
+            throw new BusinessException(ASSIGNMENT_NOT_FOUND, "关联的领取记录不存在");
         }
         assignment.setStatus(AssignmentStatus.RETURNED);
         assignment.setReturnedAt(LocalDateTime.now());
@@ -196,7 +197,7 @@ public class ReviewService {
     private Submission requirePendingFinal(Long submissionId) {
         Submission submission = submissionMapper.selectById(submissionId);
         if (submission == null) {
-            throw new BusinessException(SUBMISSION_NOT_FOUND, "Submission not found");
+            throw new BusinessException(SUBMISSION_NOT_FOUND, "提交记录不存在");
         }
         if (submission.getStatus() != SubmissionStatus.PENDING_FINAL) {
             throw new BusinessException(SUBMISSION_STATUS_NOT_REVIEWABLE,
@@ -206,6 +207,9 @@ public class ReviewService {
     }
 
     private void requireAssignedReviewer(Long submissionId, Long reviewerId) {
+        if (CurrentUserContext.isAdmin()) {
+            return;
+        }
         Submission submission = submissionMapper.selectById(submissionId);
         if (submission == null || !reviewerId.equals(submission.getAssignedReviewerId())) {
             throw new BusinessException(REVIEWER_NOT_ASSIGNED,

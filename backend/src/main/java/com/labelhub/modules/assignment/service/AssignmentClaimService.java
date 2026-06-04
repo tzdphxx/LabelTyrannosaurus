@@ -72,11 +72,12 @@ public class AssignmentClaimService {
     }
 
     public AssignmentClaimResponse claim(Long taskId, Long labelerId) {
-        if (!CurrentUserContext.requireCurrentUser().roles().contains(RoleCode.LABELER)) {
-            throw new BusinessException(PERMISSION_DENIED, "Permission denied");
+        var currentUser = CurrentUserContext.requireCurrentUser();
+        if (!currentUser.hasRole(RoleCode.LABELER)) {
+            throw new BusinessException(PERMISSION_DENIED, "当前账号没有权限执行该操作");
         }
-        if (!CurrentUserContext.requireCurrentUser().userId().equals(labelerId)) {
-            throw new BusinessException(PERMISSION_DENIED, "Cannot claim assignment for another user");
+        if (!currentUser.isAdmin() && !currentUser.userId().equals(labelerId)) {
+            throw new BusinessException(PERMISSION_DENIED, "不能代替其他用户领取任务");
         }
         Task task = loadClaimableTask(taskId);
         ClaimStrategy strategy = task.getStrategy();
@@ -210,19 +211,19 @@ public class AssignmentClaimService {
     private Task loadClaimableTask(Long taskId) {
         Task task = taskMapper.selectById(taskId);
         if (task == null) {
-            throw new BusinessException(TASK_NOT_FOUND, "Task not found");
+            throw new BusinessException(TASK_NOT_FOUND, "任务不存在");
         }
         if (task.getStatus() != TaskStatus.PUBLISHED) {
-            throw new BusinessException(TASK_STATUS_NOT_ALLOWED, "Only published tasks can be claimed");
+            throw new BusinessException(TASK_STATUS_NOT_ALLOWED, "只有已发布任务可以领取");
         }
         if (task.getDeadlineAt() == null || !task.getDeadlineAt().isAfter(LocalDateTime.now())) {
-            throw new BusinessException(TASK_STATUS_NOT_ALLOWED, "Task claim deadline has passed");
+            throw new BusinessException(TASK_STATUS_NOT_ALLOWED, "任务领取截止时间已过");
         }
         if (task.getPublishedTemplateVersionId() == null) {
-            throw new BusinessException(TASK_STATUS_NOT_ALLOWED, "Task template version is missing");
+            throw new BusinessException(TASK_STATUS_NOT_ALLOWED, "任务模板版本缺失");
         }
         if (!Integer.valueOf(1).equals(task.getOverlapCount())) {
-            throw new BusinessException(TASK_STATUS_NOT_ALLOWED, "Task overlap count must be 1");
+            throw new BusinessException(TASK_STATUS_NOT_ALLOWED, "任务重叠标注数量必须为 1");
         }
         return task;
     }

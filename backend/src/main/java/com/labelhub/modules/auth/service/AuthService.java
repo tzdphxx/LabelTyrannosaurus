@@ -61,7 +61,7 @@ public class AuthService {
         RoleCode registerRole = parseRegisterRole(request.role());
 
         if (userMapper.selectByUsername(request.username()) != null || userMapper.selectByEmail(request.email()) != null) {
-            throw new BusinessException(400102, "Username or email already exists");
+            throw new BusinessException(400102, "用户名或邮箱已存在");
         }
         UserEntity user = new UserEntity();
         user.setUsername(request.username());
@@ -85,7 +85,7 @@ public class AuthService {
     public TokenResponse login(LoginRequest request) {
         UserEntity user = userMapper.selectByUsernameOrEmail(request.account());
         if (!canLogin(user) || !passwordEncoder.matches(request.password(), user.getPasswordHash())) {
-            throw new BusinessException(401001, "Invalid account or password");
+            throw new BusinessException(401001, "账号或密码错误");
         }
         Set<RoleCode> roles = userRoleMapper.selectRoleCodesByUserId(user.getId());
         RoleCode role = requireSingleRole(roles);
@@ -103,7 +103,7 @@ public class AuthService {
         JwtTokenService.TokenClaims claims = jwtTokenService.parseRefreshToken(refreshToken);
         UserEntity user = userMapper.selectById(claims.userId());
         if (!canLogin(user) || !user.getTokenVersion().equals(claims.tokenVersion())) {
-            throw new BusinessException(401001, "Invalid refresh token");
+            throw new BusinessException(401001, "刷新令牌无效");
         }
         Set<RoleCode> roles = userRoleMapper.selectRoleCodesByUserId(user.getId());
         RoleCode role = requireSingleRole(roles);
@@ -130,23 +130,23 @@ public class AuthService {
 
     private RoleCode requireSingleRole(Set<RoleCode> roles) {
         if (roles == null || roles.size() != 1) {
-            throw new BusinessException(400102, "User must have exactly one role");
+            throw new BusinessException(400102, "用户必须且只能拥有一个角色");
         }
         return roles.iterator().next();
     }
 
     private RoleCode parseRegisterRole(String rawRole) {
         if (rawRole == null || rawRole.isBlank()) {
-            throw new BusinessException(400102, "Invalid register role");
+            throw new BusinessException(400102, "注册角色不合法");
         }
         try {
             RoleCode role = RoleCode.valueOf(rawRole.trim().toUpperCase());
             if (!REGISTERABLE_ROLES.contains(role)) {
-                throw new BusinessException(400102, "Invalid register role");
+                throw new BusinessException(400102, "注册角色不合法");
             }
             return role;
         } catch (IllegalArgumentException ex) {
-            throw new BusinessException(400102, "Invalid register role");
+            throw new BusinessException(400102, "注册角色不合法");
         }
     }
 
@@ -162,10 +162,10 @@ public class AuthService {
     public void changePassword(Long userId, ChangePasswordRequest request) {
         UserEntity user = userMapper.selectById(userId);
         if (user == null) {
-            throw new BusinessException(401001, "User not found");
+            throw new BusinessException(401001, "用户不存在");
         }
         if (!passwordEncoder.matches(request.oldPassword(), user.getPasswordHash())) {
-            throw new BusinessException(401001, "Old password is incorrect");
+            throw new BusinessException(401001, "旧密码不正确");
         }
         user.setPasswordHash(passwordEncoder.encode(request.newPassword()));
         userMapper.updateById(user);
@@ -176,12 +176,12 @@ public class AuthService {
     public void updateProfile(Long userId, UpdateProfileRequest request) {
         UserEntity user = userMapper.selectById(userId);
         if (user == null) {
-            throw new BusinessException(401001, "User not found");
+            throw new BusinessException(401001, "用户不存在");
         }
         if (request.email() != null && !request.email().isBlank()) {
             UserEntity existing = userMapper.selectByEmail(request.email());
             if (existing != null && !existing.getId().equals(userId)) {
-                throw new BusinessException(400102, "Email already in use");
+                throw new BusinessException(400102, "邮箱已被使用");
             }
             user.setEmail(request.email());
         }

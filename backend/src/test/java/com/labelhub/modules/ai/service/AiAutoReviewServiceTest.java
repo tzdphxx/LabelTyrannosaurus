@@ -373,7 +373,7 @@ class AiAutoReviewServiceTest {
         assertThat(response.status()).isEqualTo(AiReviewStatus.MANUAL_REQUIRED);
         assertThat(response.errorCode()).isEqualTo("INVALID_AI_REVIEW_OUTPUT");
         verify(retryScheduler, never()).scheduleRetry(anyLong(), any(Duration.class));
-        verify(agentRunService).fail(AGENT_RUN_ID, AgentRunStatus.MANUAL_REQUIRED, "AI review decision is required");
+        verify(agentRunService).fail(AGENT_RUN_ID, AgentRunStatus.MANUAL_REQUIRED, "AI 审核结论不能为空");
     }
 
     @Test

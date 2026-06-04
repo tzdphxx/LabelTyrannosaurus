@@ -204,7 +204,7 @@ public class LlmProviderService {
     private LlmProvider loadProvider(Long providerId) {
         LlmProvider provider = llmProviderMapper.selectById(providerId);
         if (provider == null) {
-            throw new BusinessException(PROVIDER_NOT_FOUND, "LLM provider not found");
+            throw new BusinessException(PROVIDER_NOT_FOUND, "LLM Provider 不存在");
         }
         return provider;
     }
@@ -279,7 +279,7 @@ public class LlmProviderService {
             }
             String normalizedKey = key.trim();
             if (normalizedKey.contains("\r") || normalizedKey.contains("\n")) {
-                throw new BusinessException(PROVIDER_HEADER_INVALID, "LLM provider header name is invalid");
+                throw new BusinessException(PROVIDER_HEADER_INVALID, "LLM Provider 请求头名称不合法");
             }
             normalized.put(normalizedKey, value.trim());
         });
@@ -293,7 +293,7 @@ public class LlmProviderService {
         try {
             return new LinkedHashMap<>(objectMapper.readValue(headersJson, STRING_MAP));
         } catch (JsonProcessingException ex) {
-            throw new BusinessException(PROVIDER_JSON_INVALID, "LLM provider headers are invalid");
+            throw new BusinessException(PROVIDER_JSON_INVALID, "LLM Provider 请求头配置不合法");
         }
     }
 
@@ -301,7 +301,7 @@ public class LlmProviderService {
         try {
             return objectMapper.writeValueAsString(headers == null ? Collections.emptyMap() : headers);
         } catch (JsonProcessingException ex) {
-            throw new BusinessException(PROVIDER_JSON_INVALID, "LLM provider headers are invalid");
+            throw new BusinessException(PROVIDER_JSON_INVALID, "LLM Provider 请求头配置不合法");
         }
     }
 

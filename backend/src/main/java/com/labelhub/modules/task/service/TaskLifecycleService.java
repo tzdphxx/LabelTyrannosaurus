@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.labelhub.common.audit.AuditAppender;
 import com.labelhub.common.audit.AuditCommand;
 import com.labelhub.common.exception.BusinessException;
+import com.labelhub.common.security.CurrentUserContext;
 import com.labelhub.common.web.TraceIdProvider;
 import com.labelhub.modules.ai.dto.AiReviewConfigRequest;
 import com.labelhub.modules.ai.service.AiReviewConfigService;
@@ -191,7 +192,7 @@ public class TaskLifecycleService {
     public TaskStatusResponse updateDraft(Long ownerId, Long taskId, UpdateTaskRequest request) {
         Task task = loadOwnedTask(ownerId, taskId);
         if (task.getStatus() != TaskStatus.DRAFT) {
-            throw new BusinessException(TASK_STATUS_NOT_ALLOWED, "Only draft tasks can be edited");
+            throw new BusinessException(TASK_STATUS_NOT_ALLOWED, "只有草稿状态的任务可以编辑");
         }
         Map<String, Object> beforeJson = snapshot(task);
         task.setTitle(request.title());
@@ -278,31 +279,31 @@ public class TaskLifecycleService {
 
     private void requireStatus(Task task, Set<TaskStatus> allowedStatuses) {
         if (!allowedStatuses.contains(task.getStatus())) {
-            throw new BusinessException(TASK_STATUS_NOT_ALLOWED, "Task status transition is not allowed");
+            throw new BusinessException(TASK_STATUS_NOT_ALLOWED, "任务状态不允许这样流转");
         }
     }
 
     private void validatePublishRequirements(Task task) {
         if (task.getQuota() == null || task.getQuota() <= 0) {
-            throw missingPublishRequirement("Task quota is required");
+            throw missingPublishRequirement("任务配额不能为空");
         }
         if (task.getOverlapCount() == null || task.getOverlapCount() < 1) {
             throw missingPublishRequirement("Task overlap count is required");
         }
         if (task.getDeadlineAt() == null || !task.getDeadlineAt().isAfter(LocalDateTime.now())) {
-            throw missingPublishRequirement("Task deadline must be in the future");
+            throw missingPublishRequirement("任务截止时间必须晚于当前时间");
         }
         if (!publishDependencyChecker.datasetReady(task.getId())) {
-            throw missingPublishRequirement("Task dataset is required");
+            throw missingPublishRequirement("任务数据集不能为空");
         }
         if (!publishDependencyChecker.templateVersionExists(task.getPublishedTemplateVersionId())) {
             throw missingPublishRequirement("Task template version is required");
         }
         if (!publishDependencyChecker.aiReviewConfigExists(task.getId(), task.getAiReviewConfigId())) {
-            throw missingPublishRequirement("Task AI review config is required");
+            throw missingPublishRequirement("任务 AI 审核配置不能为空");
         }
         if (!publishDependencyChecker.rewardRuleExists(task.getId())) {
-            throw missingPublishRequirement("Task reward rule is required");
+            throw missingPublishRequirement("任务奖励规则不能为空");
         }
         ClaimStrategy strategy = task.getStrategy();
         if (strategy == null) {
@@ -389,8 +390,8 @@ public class TaskLifecycleService {
 
     private Task loadOwnedTask(Long ownerId, Long taskId) {
         Task task = taskMapper.selectById(taskId);
-        if (task == null || !ownerId.equals(task.getOwnerId())) {
-            throw new BusinessException(TASK_NOT_FOUND, "Task not found");
+        if (task == null || (!CurrentUserContext.isAdmin() && !ownerId.equals(task.getOwnerId()))) {
+            throw new BusinessException(TASK_NOT_FOUND, "任务不存在");
         }
         return task;
     }

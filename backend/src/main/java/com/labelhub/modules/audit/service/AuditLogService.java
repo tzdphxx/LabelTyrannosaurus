@@ -60,7 +60,7 @@ public class AuditLogService implements AuditAppender {
      */
     public List<AuditLogResponse> listByBiz(String bizType, Long bizId) {
         if (!StringUtils.hasText(bizType) || bizId == null) {
-            throw new BusinessException(400102, "Invalid audit query parameter");
+            throw new BusinessException(400102, "审计查询参数不合法");
         }
         return auditLogMapper.selectByBiz(bizType, bizId).stream()
                 .map(this::toResponse)
@@ -74,7 +74,7 @@ public class AuditLogService implements AuditAppender {
                 || !StringUtils.hasText(command.bizType())
                 || command.bizId() == null
                 || !StringUtils.hasText(command.action())) {
-            throw new BusinessException(400102, "Invalid audit command");
+            throw new BusinessException(400102, "审计命令不合法");
         }
     }
 
@@ -85,7 +85,7 @@ public class AuditLogService implements AuditAppender {
         try {
             return objectMapper.writeValueAsString(value);
         } catch (JsonProcessingException ex) {
-            throw new BusinessException(400102, "Invalid audit json snapshot");
+            throw new BusinessException(400102, "审计 JSON 快照不合法");
         }
     }
 
@@ -112,7 +112,7 @@ public class AuditLogService implements AuditAppender {
         try {
             return objectMapper.readTree(value);
         } catch (JsonProcessingException ex) {
-            throw new BusinessException(500001, "Invalid audit json stored");
+            throw new BusinessException(500001, "已存储的审计 JSON 不合法");
         }
     }
 }

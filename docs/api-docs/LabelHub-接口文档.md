@@ -614,9 +614,11 @@ Authorization: Bearer <accessToken>
 
 ## 4. 数据集管理
 
+> **通用规则**：所有数据集接口需 ADMIN 或 OWNER 角色，否则返回 `403`。任务不存在返回 `404`，参数校验失败返回 `400`。
+
 ### 4.1 GET /api/v1/tasks/{taskId}/dataset/items
 
-**作用**：分页查询任务下未删除的数据项列表。支持按 externalId 精确筛选。
+**作用**：分页查询任务下未删除的数据项列表。支持按 externalId 模糊筛选。
 
 **权限**：ADMIN 或 OWNER
 
@@ -632,7 +634,15 @@ Authorization: Bearer <accessToken>
 |------|------|------|--------|------|
 | page | Integer | 否 | 1 | 页码，从 1 开始 |
 | pageSize | Integer | 否 | 20 | 每页条数 |
-| externalId | String | 否 | - | 按外部 ID 精确筛选 |
+| externalId | String | 否 | - | 按外部 ID 模糊筛选 |
+
+**HTTP 状态码**：
+
+| 状态码 | 含义 |
+|--------|------|
+| 200 | 成功，返回分页结果 |
+| 403 | 无 ADMIN/OWNER 角色 |
+| 404 | 任务不存在 |
 
 **响应体** `DatasetItemPageResponse`：
 
@@ -649,7 +659,7 @@ Authorization: Bearer <accessToken>
 
 ### 4.2 POST /api/v1/tasks/{taskId}/dataset/items/batch-append
 
-**作用**：向任务数据集批量追加数据项。同任务内 externalId 重复的项会进入错误报告。
+**作用**：向任务数据集批量追加新数据项。同任务内 externalId 不可重复，重复项返回失败。追加成功后自动刷新媒体上下文并记录变更日志。每项独立处理，一项失败不影响其他项。
 
 **权限**：ADMIN 或 OWNER
 
@@ -663,25 +673,34 @@ Authorization: Bearer <accessToken>
 
 | 字段 | 类型 | 必填 | 说明 |
 |------|------|------|------|
-| externalId | String | 是 | 外部唯一标识 |
+| externalId | String | 是 | 外部唯一标识，不可与已有数据项重复 |
 | itemJson | String | 是 | 题目内容 JSON |
 | metadataJson | String | 否 | 元数据 JSON |
+
+**HTTP 状态码**：
+
+| 状态码 | 含义 |
+|--------|------|
+| 200 | 成功，返回逐项处理结果列表 |
+| 400 | 请求参数无效（如 items 为空） |
+| 403 | 无 ADMIN/OWNER 角色 |
+| 404 | 任务不存在 |
 
 **响应体** `List<BatchItemResult>`：
 
 | 字段 | 类型 | 说明 |
 |------|------|------|
-| itemId | Long | 数据项 ID（成功时） |
+| itemId | Long | 数据项 ID（成功时非空） |
 | externalId | String | 外部 ID |
 | success | Boolean | 是否成功 |
-| errorCode | String | 错误码（失败时） |
+| errorCode | Integer | 错误码（失败时） |
 | errorMessage | String | 错误信息（失败时） |
 
 ---
 
 ### 4.3 POST /api/v1/tasks/{taskId}/dataset/items/batch-update
 
-**作用**：批量更新任务数据项内容。已领取或已提交的题目不允许修改。
+**作用**：批量更新数据项的 `itemJson`（题目内容）和 `metadataJson`（元数据）。已进入标注流程的数据项（已被领取或已提交）不允许修改，对应项返回失败结果。每项独立处理，一项失败不影响其他项。
 
 **权限**：ADMIN 或 OWNER
 
@@ -699,15 +718,24 @@ Authorization: Bearer <accessToken>
 | itemJson | String | 是 | 新的题目内容 JSON |
 | metadataJson | String | 否 | 新的元数据 JSON |
 
-**响应体**：同 `List<BatchItemResult>`
+**HTTP 状态码**：
 
-**错误码**：400101（题目已被领取，不可修改）
+| 状态码 | 含义 |
+|--------|------|
+| 200 | 成功，返回逐项处理结果列表 |
+| 400 | 请求参数无效（如 items 为空） |
+| 403 | 无 ADMIN/OWNER 角色 |
+| 404 | 任务不存在 |
+
+**响应体**：同 `List<BatchItemResult>`（参见 4.2 节）
+
+**错误码**：`400101`（题目已被领取或已提交，不可修改）
 
 ---
 
 ### 4.4 POST /api/v1/tasks/{taskId}/dataset/items/batch-delete
 
-**作用**：批量软删除任务数据项。已领取或已提交的题目不允许删除。
+**作用**：批量**软删除**（标记为已删除，不物理删除）数据项。已进入标注流程的数据项不允许删除，对应项返回失败结果。每项独立处理，一项失败不影响其他项。
 
 **权限**：ADMIN 或 OWNER
 
@@ -717,7 +745,16 @@ Authorization: Bearer <accessToken>
 |------|------|------|------|
 | itemIds | List&lt;Long&gt; | 是 | 待删除的数据项 ID 列表 |
 
-**响应体**：同 `List<BatchItemResult>`
+**HTTP 状态码**：
+
+| 状态码 | 含义 |
+|--------|------|
+| 200 | 成功，返回逐项处理结果列表 |
+| 400 | 请求参数无效 |
+| 403 | 无 ADMIN/OWNER 角色 |
+| 404 | 任务不存在 |
+
+**响应体**：同 `List<BatchItemResult>`（参见 4.2 节）
 
 ---
 

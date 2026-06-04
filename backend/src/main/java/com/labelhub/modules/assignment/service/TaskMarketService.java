@@ -17,6 +17,8 @@ import com.labelhub.modules.task.mapper.TaskMapper;
 import com.labelhub.modules.task.mapper.TaskTagMapper;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 import org.springframework.stereotype.Service;
 
 @Service
@@ -53,9 +55,11 @@ public class TaskMarketService {
         String keyword = normalize(request == null ? null : request.keyword());
         String tag = normalize(request == null ? null : request.tag());
         String status = request == null || request.status() == null ? null : request.status().name();
-        return taskMapper.selectPublishedMarketTasks(keyword, tag, status, LocalDateTime.now())
-                .stream()
-                .map(task -> toResponse(labelerId, task))
+        List<Task> tasks = taskMapper.selectPublishedMarketTasks(keyword, tag, status, LocalDateTime.now());
+        Map<Long, List<String>> tagsByTask = loadTags(tasks.stream().map(Task::getId).toList());
+        return tasks.stream()
+                .map(task -> toResponse(labelerId, task, 1, DEFAULT_ITEM_PREVIEW_SIZE,
+                        tagsByTask.getOrDefault(task.getId(), List.of())))
                 .toList();
     }
 
@@ -64,19 +68,16 @@ public class TaskMarketService {
         if (task == null) {
             throw new BusinessException(MARKET_TASK_NOT_FOUND, "Market task not found");
         }
-        return toResponse(labelerId, task, itemPage, itemSize);
+        return toResponse(labelerId, task, itemPage, itemSize, listTags(taskId));
     }
 
-    private TaskMarketResponse toResponse(Long labelerId, Task task) {
-        return toResponse(labelerId, task, 1, DEFAULT_ITEM_PREVIEW_SIZE);
-    }
-
-    private TaskMarketResponse toResponse(Long labelerId, Task task, int itemPage, int itemSize) {
+    private TaskMarketResponse toResponse(Long labelerId, Task task, int itemPage, int itemSize,
+                                          List<String> tags) {
         int normalizedPage = Math.max(1, itemPage);
         int normalizedSize = Math.min(Math.max(1, itemSize), 100);
         int offset = (normalizedPage - 1) * normalizedSize;
         return new TaskMarketResponse(
-                toSummary(task),
+                toSummary(task, tags),
                 datasetMarketStatsService.countAvailableItems(task.getId(), labelerId, task.getOverlapCount()),
                 assignmentMarketStatsService.countClaimedByLabeler(task.getId(), labelerId),
                 rewardSummaryService.findRewardSummary(task.getId(), Boolean.TRUE.equals(task.getRewardVisible())),
@@ -86,12 +87,12 @@ public class TaskMarketService {
         );
     }
 
-    private TaskSummaryResponse toSummary(Task task) {
+    private TaskSummaryResponse toSummary(Task task, List<String> tags) {
         return new TaskSummaryResponse(
                 task.getId(),
                 task.getTitle(),
                 task.getStatus(),
-                listTags(task.getId()),
+                tags,
                 task.getQuota(),
                 task.getClaimedCount(),
                 task.getOverlapCount(),
@@ -130,6 +131,17 @@ public class TaskMarketService {
                 .stream()
                 .map(TaskTag::getTagName)
                 .toList();
+    }
+
+    private Map<Long, List<String>> loadTags(List<Long> taskIds) {
+        List<Long> ids = taskIds.stream().filter(java.util.Objects::nonNull).distinct().toList();
+        if (ids.isEmpty()) {
+            return Map.of();
+        }
+        return taskTagMapper.selectByTaskIds(ids).stream()
+                .collect(Collectors.groupingBy(
+                        TaskTag::getTaskId,
+                        Collectors.mapping(TaskTag::getTagName, Collectors.toList())));
     }
 
     private String normalize(String value) {

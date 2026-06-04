@@ -149,6 +149,53 @@
 | latestSubmissionStatus | String | 最新提交状态 |
 | updatedAt | String | 更新时间 |
 
+> 说明：`task` 摘要中的 `tags`、`strategy`、`claimedCount` 以及 `publishedAt`/`endedAt`/`createdAt` 均为该任务的真实值；`mySubmittedCount`、`myApprovedCount` 按当前用户在该任务下的 assignment 状态实时聚合。
+
+### 响应示例
+
+```json
+{
+  "code": 0,
+  "message": "OK",
+  "data": [
+    {
+      "task": {
+        "taskId": 10,
+        "title": "图片质量审核",
+        "status": "PUBLISHED",
+        "tags": ["image", "quality"],
+        "quota": 100,
+        "claimedCount": 20,
+        "overlapCount": 1,
+        "strategy": "FCFS",
+        "deadlineAt": "2026-06-10T10:00:00",
+        "publishedAt": "2026-06-01T09:00:00",
+        "endedAt": null,
+        "createdAt": "2026-05-30T15:00:00",
+        "updatedAt": "2026-06-05T18:30:00"
+      },
+      "myClaimedCount": 5,
+      "mySubmittedCount": 3,
+      "myApprovedCount": 2,
+      "items": [
+        {
+          "claimId": 500,
+          "itemId": 100,
+          "externalId": "q-100",
+          "claimStatus": "SUBMITTED",
+          "itemJson": "{\"text\":\"hello\"}",
+          "metadataJson": "{\"source\":\"import\"}",
+          "draftVersion": 2,
+          "latestSubmissionStatus": "AI_REVIEWING",
+          "updatedAt": "2026-06-05T18:30:00"
+        }
+      ]
+    }
+  ],
+  "traceId": null
+}
+```
+
 ---
 
 ## 5. 获取当前任务详情，包含题目详情

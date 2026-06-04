@@ -8,10 +8,13 @@ import com.labelhub.modules.assignment.dto.LabelerAssignmentListItem;
 import com.labelhub.modules.assignment.mapper.AssignmentMapper;
 import com.labelhub.modules.task.domain.ClaimStrategy;
 import com.labelhub.modules.task.domain.TaskStatus;
+import com.labelhub.modules.task.domain.TaskTag;
 import com.labelhub.modules.task.dto.TaskSummaryResponse;
+import com.labelhub.modules.task.mapper.TaskTagMapper;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 import org.springframework.stereotype.Service;
 
 @Service
@@ -21,9 +24,12 @@ public class LabelerAssignmentQueryService {
     private static final int DEFAULT_ITEM_PREVIEW_SIZE = 20;
 
     private final AssignmentMapper assignmentMapper;
+    private final TaskTagMapper taskTagMapper;
 
-    public LabelerAssignmentQueryService(AssignmentMapper assignmentMapper) {
+    public LabelerAssignmentQueryService(AssignmentMapper assignmentMapper,
+                                         TaskTagMapper taskTagMapper) {
         this.assignmentMapper = assignmentMapper;
+        this.taskTagMapper = taskTagMapper;
     }
 
     public List<LabelerAssignmentListItem> list(Long labelerId,
@@ -51,9 +57,12 @@ public class LabelerAssignmentQueryService {
         int normalizedSize = Math.min(Math.max(1, size), 100);
         int offset = (normalizedPage - 1) * normalizedSize;
 
-        return assignmentMapper.selectLabelerClaimedTasks(labelerId, normalizedSize, offset)
-                .stream()
-                .map(row -> toClaimedTask(labelerId, row, null, 1, DEFAULT_ITEM_PREVIEW_SIZE))
+        List<Map<String, Object>> rows =
+                assignmentMapper.selectLabelerClaimedTasks(labelerId, normalizedSize, offset);
+        Map<Long, List<String>> tagsByTask = loadTags(
+                rows.stream().map(r -> toLong(r.get("task_id"))).toList());
+        return rows.stream()
+                .map(row -> toClaimedTask(labelerId, row, null, 1, DEFAULT_ITEM_PREVIEW_SIZE, tagsByTask))
                 .toList();
     }
 
@@ -66,7 +75,7 @@ public class LabelerAssignmentQueryService {
         if (row == null || row.isEmpty()) {
             throw new BusinessException(CLAIMED_TASK_NOT_FOUND, "Claimed task not found");
         }
-        return toClaimedTask(labelerId, row, status, page, size);
+        return toClaimedTask(labelerId, row, status, page, size, loadTags(List.of(taskId)));
     }
 
     private LabelerAssignmentListItem toListItem(Map<String, Object> row) {
@@ -87,13 +96,14 @@ public class LabelerAssignmentQueryService {
                                                      Map<String, Object> row,
                                                      String status,
                                                      int itemPage,
-                                                     int itemSize) {
+                                                     int itemSize,
+                                                     Map<Long, List<String>> tagsByTask) {
         Long taskId = toLong(row.get("task_id"));
         int normalizedPage = Math.max(1, itemPage);
         int normalizedSize = Math.min(Math.max(1, itemSize), 100);
         int offset = (normalizedPage - 1) * normalizedSize;
         return new ClaimedTaskResponse(
-                toTaskSummary(row),
+                toTaskSummary(row, tagsByTask.getOrDefault(taskId, List.of())),
                 toInt(row.get("claimed_item_count")),
                 toInt(row.get("submitted_count")),
                 toInt(row.get("approved_count")),
@@ -101,20 +111,20 @@ public class LabelerAssignmentQueryService {
         );
     }
 
-    private TaskSummaryResponse toTaskSummary(Map<String, Object> row) {
+    private TaskSummaryResponse toTaskSummary(Map<String, Object> row, List<String> tags) {
         return new TaskSummaryResponse(
                 toLong(row.get("task_id")),
                 (String) row.get("title"),
                 TaskStatus.valueOf((String) row.get("status")),
-                List.of(),
+                tags,
                 toInt(row.get("quota")),
-                0,
+                toInt(row.get("claimed_count")),
                 toInt(row.get("overlap_count")),
-                ClaimStrategy.FCFS,
+                toStrategy(row.get("strategy")),
                 toLocalDateTime(row.get("deadline_at")),
-                null,
-                null,
-                null,
+                toLocalDateTime(row.get("published_at")),
+                toLocalDateTime(row.get("ended_at")),
+                toLocalDateTime(row.get("created_at")),
                 toLocalDateTime(row.get("updated_at"))
         );
     }
@@ -149,6 +159,23 @@ public class LabelerAssignmentQueryService {
             return null;
         }
         return value.trim();
+    }
+
+    private Map<Long, List<String>> loadTags(List<Long> taskIds) {
+        List<Long> ids = taskIds.stream().filter(java.util.Objects::nonNull).distinct().toList();
+        if (ids.isEmpty()) {
+            return Map.of();
+        }
+        return taskTagMapper.selectByTaskIds(ids).stream()
+                .collect(Collectors.groupingBy(
+                        TaskTag::getTaskId,
+                        Collectors.mapping(TaskTag::getTagName, Collectors.toList())));
+    }
+
+    private ClaimStrategy toStrategy(Object val) {
+        if (val == null) return ClaimStrategy.FCFS;
+        if (val instanceof ClaimStrategy s) return s;
+        return ClaimStrategy.valueOf(val.toString());
     }
 
     private Long toLong(Object val) {

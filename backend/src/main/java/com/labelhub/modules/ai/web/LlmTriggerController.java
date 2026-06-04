@@ -16,7 +16,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
-@Tag(name = "LlmTrigger", description = "字段级 AI 辅助：标注作答时触发 / Owner 预览测试")
+@Tag(name = "LLM 字段触发", description = "字段级 AI 辅助：标注员作答时触发 AI 生成建议 / Owner 设计模板时预览测试效果")
 public class LlmTriggerController {
 
     private final LlmTriggerService llmTriggerService;

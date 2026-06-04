@@ -2,21 +2,21 @@ package com.labelhub.modules.storage.dto;
 
 import io.swagger.v3.oas.annotations.media.Schema;
 
-@Schema(description = "File upload response")
+@Schema(description = "文件上传响应")
 public record FileUploadResponse(
-        @Schema(description = "File ID", example = "99")
+        @Schema(description = "文件 ID", example = "99")
         Long fileId,
-        @Schema(description = "Original filename", example = "dataset.jsonl")
+        @Schema(description = "原始文件名", example = "dataset.jsonl")
         String originalFilename,
-        @Schema(description = "Content type", example = "application/x-ndjson")
+        @Schema(description = "文件类型", example = "application/x-ndjson")
         String contentType,
-        @Schema(description = "File size in bytes", example = "1024")
+        @Schema(description = "文件大小（字节）", example = "1024")
         Long fileSize,
-        @Schema(description = "Object storage key", example = "uploads/dataset/file.jsonl")
+        @Schema(description = "对象存储 Key", example = "uploads/dataset/file.jsonl")
         String objectKey,
-        @Schema(description = "SHA-256 checksum")
+        @Schema(description = "SHA-256 校验和")
         String checksum,
-        @Schema(description = "Download URL or signed URL")
+        @Schema(description = "下载地址（预签名 URL）")
         String downloadUrl
 ) {
     public FileUploadResponse(Long fileId,

@@ -3,6 +3,7 @@ package com.labelhub.modules.review.service;
 import com.labelhub.common.audit.AuditAppender;
 import com.labelhub.common.audit.AuditCommand;
 import com.labelhub.common.exception.BusinessException;
+import com.labelhub.common.web.TraceIdProvider;
 import com.labelhub.modules.review.domain.ReviewTaskClaim;
 import com.labelhub.modules.review.dto.ReviewTaskClaimResponse;
 import com.labelhub.modules.review.mapper.ReviewTaskClaimMapper;
@@ -36,15 +37,18 @@ public class ReviewTaskClaimService {
     private final SubmissionMapper submissionMapper;
     private final TaskMapper taskMapper;
     private final AuditAppender auditAppender;
+    private final TraceIdProvider traceIdProvider;
 
     public ReviewTaskClaimService(ReviewTaskClaimMapper claimMapper,
                                   SubmissionMapper submissionMapper,
                                   TaskMapper taskMapper,
-                                  AuditAppender auditAppender) {
+                                  AuditAppender auditAppender,
+                                  TraceIdProvider traceIdProvider) {
         this.claimMapper = claimMapper;
         this.submissionMapper = submissionMapper;
         this.taskMapper = taskMapper;
         this.auditAppender = auditAppender;
+        this.traceIdProvider = traceIdProvider;
     }
 
     @Transactional
@@ -136,6 +140,6 @@ public class ReviewTaskClaimService {
         after.put("reviewerId", reviewerId);
         after.put("claimedSubmissionCount", claimedCount);
         auditAppender.append(new AuditCommand(USER_ACTOR_TYPE, reviewerId,
-                CLAIM_BIZ_TYPE, taskId, action, null, after, null, null));
+                CLAIM_BIZ_TYPE, taskId, action, null, after, traceIdProvider.currentTraceId(), null));
     }
 }

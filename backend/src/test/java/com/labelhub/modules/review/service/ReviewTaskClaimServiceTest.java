@@ -8,9 +8,12 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.lenient;
 
 import com.labelhub.common.audit.AuditAppender;
+import com.labelhub.common.audit.AuditCommand;
 import com.labelhub.common.exception.BusinessException;
+import com.labelhub.common.web.TraceIdProvider;
 import com.labelhub.modules.review.domain.ReviewTaskClaim;
 import com.labelhub.modules.review.dto.ReviewTaskClaimResponse;
 import com.labelhub.modules.review.mapper.ReviewTaskClaimMapper;
@@ -19,6 +22,7 @@ import com.labelhub.modules.task.domain.Task;
 import com.labelhub.modules.task.domain.TaskStatus;
 import com.labelhub.modules.task.mapper.TaskMapper;
 import java.util.List;
+import org.mockito.ArgumentCaptor;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -36,12 +40,14 @@ class ReviewTaskClaimServiceTest {
     @Mock private SubmissionMapper submissionMapper;
     @Mock private TaskMapper taskMapper;
     @Mock private AuditAppender auditAppender;
+    @Mock private TraceIdProvider traceIdProvider;
 
     private ReviewTaskClaimService service;
 
     @BeforeEach
     void setUp() {
-        service = new ReviewTaskClaimService(claimMapper, submissionMapper, taskMapper, auditAppender);
+        lenient().when(traceIdProvider.currentTraceId()).thenReturn("trace-review-claim");
+        service = new ReviewTaskClaimService(claimMapper, submissionMapper, taskMapper, auditAppender, traceIdProvider);
     }
 
     @Test
@@ -57,7 +63,9 @@ class ReviewTaskClaimServiceTest {
         assertThat(response.reviewLevel()).isEqualTo(1);
         assertThat(response.claimedSubmissionCount()).isEqualTo(7);
         verify(claimMapper).insert(any(ReviewTaskClaim.class));
-        verify(auditAppender).append(any());
+        ArgumentCaptor<AuditCommand> auditCaptor = ArgumentCaptor.forClass(AuditCommand.class);
+        verify(auditAppender).append(auditCaptor.capture());
+        assertThat(auditCaptor.getValue().traceId()).isEqualTo("trace-review-claim");
     }
 
     @Test
@@ -122,6 +130,9 @@ class ReviewTaskClaimServiceTest {
 
         verify(submissionMapper).clearReviewerForTaskLevel(TASK_ID, 1, REVIEWER_A);
         verify(claimMapper).deleteById(anyLong());
+        ArgumentCaptor<AuditCommand> auditCaptor = ArgumentCaptor.forClass(AuditCommand.class);
+        verify(auditAppender).append(auditCaptor.capture());
+        assertThat(auditCaptor.getValue().traceId()).isEqualTo("trace-review-claim");
     }
 
     @Test

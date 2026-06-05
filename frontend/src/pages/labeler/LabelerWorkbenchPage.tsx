@@ -54,42 +54,43 @@ export function LabelerWorkbenchPage() {
       ? 'in_progress'
       : currentQuestion.status
     : 'pending'
+  const isCurrentSchemaEmpty = currentQuestion ? currentQuestion.schema.nodes.length === 0 : false
   const canGoPrevious = currentQuestionIndex > 0
   const canGoNext = currentQuestionIndex >= 0 && currentQuestionIndex < questions.length - 1
   const answerSource = currentDraft ? '当前草稿' : currentQuestion?.previousValues ? '上一轮答案' : '空白答案'
   const flowItems = currentQuestion
     ? [
-        {
-          color: 'blue',
-          children: `题目状态：${labelingQuestionStatusLabels[currentQuestionStatus]}`,
-        },
-        ...(currentQuestion.previousValues
-          ? [
-              {
-                color: 'red',
-                children: reviewSummary
-                  ? `已打回：${reviewSummary.reason}`
-                  : '已打回：存在上一轮待修正答案',
-              },
-            ]
-          : []),
-        ...(currentDraft
-          ? [
-              {
-                color: 'gold',
-                children: `草稿保存：${currentDraft.updatedAt}`,
-              },
-            ]
-          : []),
-        ...(currentQuestion.status === 'submitted'
-          ? [
-              {
-                color: 'green',
-                children: '当前题已提交',
-              },
-            ]
-          : []),
-      ]
+      {
+        color: 'blue',
+        children: `题目状态：${labelingQuestionStatusLabels[currentQuestionStatus]}`,
+      },
+      ...(currentQuestion.previousValues
+        ? [
+          {
+            color: 'red',
+            children: reviewSummary
+              ? `已打回：${reviewSummary.reason}`
+              : '已打回：存在上一轮待修正答案',
+          },
+        ]
+        : []),
+      ...(currentDraft
+        ? [
+          {
+            color: 'gold',
+            children: `草稿保存：${currentDraft.updatedAt}`,
+          },
+        ]
+        : []),
+      ...(currentQuestion.status === 'submitted'
+        ? [
+          {
+            color: 'green',
+            children: '当前题已提交',
+          },
+        ]
+        : []),
+    ]
     : []
 
   useEffect(() => {
@@ -276,13 +277,22 @@ export function LabelerWorkbenchPage() {
                   </Descriptions.Item>
                 ))}
               </Descriptions>
-              <DynamicFormRenderer
-                initialValues={formInitialValues}
-                schema={currentQuestion.schema}
-                submitText="校验当前题"
-                onSubmit={(result) => setLatestValues(result.values)}
-                onValuesChange={handleValuesChange}
-              />
+              {isCurrentSchemaEmpty ? (
+                <Alert
+                  message="模板加载失败或暂无可渲染字段"
+                  description="已展示题目材料，请稍后刷新重试。"
+                  showIcon
+                  type="warning"
+                />
+              ) : (
+                <DynamicFormRenderer
+                  initialValues={formInitialValues}
+                  schema={currentQuestion.schema}
+                  submitText="校验当前题"
+                  onSubmit={(result) => setLatestValues(result.values)}
+                  onValuesChange={handleValuesChange}
+                />
+              )}
               <div className="labeler-workbench__actions">
                 <Space className="labeler-workbench__pager">
                   <Button
@@ -312,6 +322,7 @@ export function LabelerWorkbenchPage() {
                 </Space>
                 <Space className="labeler-workbench__submit-actions">
                   <Button
+                    disabled={isCurrentSchemaEmpty}
                     icon={<SaveOutlined />}
                     loading={isDraftSaving}
                     onClick={() => void handleSaveDraft()}
@@ -319,6 +330,7 @@ export function LabelerWorkbenchPage() {
                     保存草稿
                   </Button>
                   <Button
+                    disabled={isCurrentSchemaEmpty}
                     icon={<SendOutlined />}
                     loading={isSubmitting}
                     type="primary"

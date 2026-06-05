@@ -12,6 +12,17 @@ export type LabelerTaskStatus =
 
 export type LabelerTaskQueryStatus = LabelerTaskStatus | 'all'
 
+export type LabelerAssignmentStatus =
+  | 'CLAIMED'
+  | 'DRAFTING'
+  | 'SUBMITTED'
+  | 'AI_RETURNED'
+  | 'RETURNED'
+  | 'APPROVED'
+  | 'CANCELLED'
+
+export type LabelerAssignmentQueryStatus = LabelerAssignmentStatus | 'all'
+
 export interface LabelerTaskSummary {
   id: string
   title: string
@@ -39,6 +50,29 @@ export interface LabelerTaskListQuery {
   keyword: string
   tag: string
   status: LabelerTaskQueryStatus
+}
+
+export interface LabelerAssignmentListQuery {
+  taskId?: string
+  status?: LabelerAssignmentQueryStatus
+  page?: number
+  size?: number
+}
+
+export interface LabelerAssignmentSummary {
+  id: string
+  assignmentId: string
+  taskId: string
+  taskTitle: string
+  datasetItemId: string
+  status: LabelerAssignmentStatus
+  draftVersion: number
+  claimedAt: string
+  returnedAt?: string
+  updatedAt: string
+  myClaimedCount?: number
+  mySubmittedCount?: number
+  myApprovedCount?: number
 }
 
 export interface LabelingQuestion {
@@ -110,4 +144,14 @@ export interface LabelerSubmissionStats {
   rejected: number
   needsRevision: number
   inProgress: number
+}
+
+export interface LabelerAssignmentStats {
+  total: number
+  claimed: number
+  drafting: number
+  submitted: number
+  returned: number
+  approved: number
+  cancelled: number
 }

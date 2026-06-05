@@ -6,6 +6,10 @@ import {
   mockLabelingSubmissions,
 } from '../../mocks'
 import type {
+  LabelerAssignmentListQuery,
+  LabelerAssignmentStats,
+  LabelerAssignmentStatus,
+  LabelerAssignmentSummary,
   LabelerSubmissionStats,
   LabelerTaskListQuery,
   LabelerTaskSummary,
@@ -42,6 +46,76 @@ const draftStorageKey = 'labelhub-labeling-drafts'
 const drafts: LabelingDraft[] = mergeDrafts(mockLabelingDrafts.map(cloneDraft), readStoredDrafts(draftStorageKey))
 const submissions: LabelingSubmission[] = mockLabelingSubmissions.map(cloneSubmission)
 const reviews: LabelingReviewSummary[] = mockLabelingReviews.map((review) => ({ ...review }))
+
+function mapMockAssignmentStatus(task: LabelerTaskSummary): LabelerAssignmentStatus | null {
+  switch (task.status) {
+    case 'claimed':
+      return 'CLAIMED'
+    case 'in_progress':
+      return 'DRAFTING'
+    case 'submitted':
+      return 'SUBMITTED'
+    case 'rejected':
+      return 'RETURNED'
+    case 'approved':
+      return 'APPROVED'
+    case 'ended':
+      return 'CANCELLED'
+    case 'available':
+    default:
+      return null
+  }
+}
+
+function buildMockAssignments(query: LabelerAssignmentListQuery = {}): LabelerAssignmentSummary[] {
+  return tasks.flatMap((task) => {
+    const status = mapMockAssignmentStatus(task)
+
+    if (!status) {
+      return []
+    }
+
+    if (query.taskId && task.id !== query.taskId) {
+      return []
+    }
+
+    if (query.status && query.status !== 'all' && status !== query.status) {
+      return []
+    }
+
+    const taskQuestions = questions.filter((question) => question.taskId === task.id)
+    const question = taskQuestions[0]
+    const taskDrafts = drafts.filter((draft) => draft.taskId === task.id)
+    const latestDraft = taskDrafts[taskDrafts.length - 1]
+
+    return [
+      {
+        id: question?.id ?? task.id,
+        assignmentId: question?.id ?? task.id,
+        taskId: task.id,
+        taskTitle: task.title,
+        datasetItemId: question?.id ?? '-',
+        status,
+        draftVersion: taskDrafts.length,
+        claimedAt: task.claimedAt ?? '-',
+        returnedAt: task.reviewedAt,
+        updatedAt: latestDraft?.updatedAt ?? task.submittedAt ?? task.reviewedAt ?? task.claimedAt ?? '-',
+      },
+    ]
+  })
+}
+
+function buildAssignmentStats(assignments: LabelerAssignmentSummary[]): LabelerAssignmentStats {
+  return {
+    total: assignments.length,
+    claimed: assignments.filter((assignment) => assignment.status === 'CLAIMED').length,
+    drafting: assignments.filter((assignment) => assignment.status === 'DRAFTING').length,
+    submitted: assignments.filter((assignment) => assignment.status === 'SUBMITTED').length,
+    returned: assignments.filter((assignment) => assignment.status === 'RETURNED').length,
+    approved: assignments.filter((assignment) => assignment.status === 'APPROVED').length,
+    cancelled: assignments.filter((assignment) => assignment.status === 'CANCELLED').length,
+  }
+}
 
 function getTaskIndex(taskId: string) {
   return tasks.findIndex((task) => task.id === taskId)
@@ -355,5 +429,13 @@ export const mockLabelingService = {
 
   async listSubmissions(): Promise<LabelingSubmission[]> {
     return submissions.map(cloneSubmission)
+  },
+
+  async getAssignmentStats(): Promise<LabelerAssignmentStats> {
+    return buildAssignmentStats(buildMockAssignments())
+  },
+
+  async listAssignments(query: LabelerAssignmentListQuery = {}): Promise<LabelerAssignmentSummary[]> {
+    return buildMockAssignments(query)
   },
 }

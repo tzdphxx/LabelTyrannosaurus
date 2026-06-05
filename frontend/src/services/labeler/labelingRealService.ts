@@ -1,5 +1,15 @@
-import type { DynamicFormSchema, DynamicFormSubmitResult } from '../../types/dynamicForm'
 import type {
+  DynamicFieldType,
+  DynamicFormSchema,
+  DynamicFormSubmitResult,
+  DynamicSchemaNode,
+  DynamicValidationRule,
+} from '../../types/dynamicForm'
+import type {
+  LabelerAssignmentListQuery,
+  LabelerAssignmentStats,
+  LabelerAssignmentStatus,
+  LabelerAssignmentSummary,
   LabelerSubmissionStats,
   LabelerTaskListQuery,
   LabelerTaskStatus,
@@ -11,27 +21,62 @@ import type {
   LabelingSubmitResult,
   LabelingSubmitValidationResult,
 } from '../../types/labeling'
-import { request } from '../http'
+import { ApiError, request } from '../http'
 import { mockLabelingService } from './labelingService'
 import { getNowLabel, validateQuestionDraft, validateTaskDrafts } from './labelingServiceHelpers'
 
-interface MarketTaskResponse {
+interface TaskSnapshotResponse {
   taskId: number
   title: string
-  description?: string
   tags?: string[]
   quota?: number
-  remainingQuota?: number
   deadlineAt?: string
-  reward?: string
   status?: string
   strategy?: string
+  claimedCount?: number
+  overlapCount?: number
+  publishedAt?: string
+  endedAt?: string | null
+  createdAt?: string
+  updatedAt?: string
+}
+
+interface RewardSummaryResponse {
+  rewardMode?: string
+  unitReward?: number
+  rewardCurrency?: string
+  amount?: number
+  unit?: string
+  text?: string
+}
+
+interface MarketItemPreviewResponse {
+  itemId: number
+  externalId?: string
+  itemJson?: string
+  metadataJson?: string
+}
+
+interface MarketTaskResponse {
+  task?: TaskSnapshotResponse
+  taskId?: number
+  title?: string
+  description?: string
+  instructionRichText?: string
+  tags?: string[]
+  quota?: number
+  deadlineAt?: string
+  status?: string
   availableCount?: number
   currentUserClaimedCount?: number
+  itemsPreview?: MarketItemPreviewResponse[]
   rewardSummary?: {
     amount?: number
     unit?: string
     text?: string
+    rewardMode?: string
+    unitReward?: number
+    rewardCurrency?: string
   }
 }
 
@@ -43,34 +88,39 @@ interface AssignmentClaimResponse {
   status?: string
   schemaJson?: string
   itemJson?: string
+  metadataJson?: string
   draftAnswerJson?: string
   draftVersion?: number
 }
 
-interface AssignmentDetailResponse {
-  assignmentId: number
-  taskId: number
-  datasetItemId: number
-  itemList?: unknown[]
+interface ClaimItemResponse {
+  claimId: number
+  itemId: number
+  externalId?: string
+  claimStatus?: string
   itemJson?: string
+  metadataJson?: string
+  draftVersion?: number
+  latestSubmissionStatus?: string
+  updatedAt?: string
+}
+
+interface ClaimedTaskResponse {
+  task?: TaskSnapshotResponse
+  taskId: number
+  title?: string
+  description?: string
+  instructionRichText?: string
+  myClaimedCount?: number
+  mySubmittedCount?: number
+  myApprovedCount?: number
+  items?: ClaimItemResponse[]
+}
+
+interface AnswerTemplateResponse {
+  taskId: number
   templateVersionId: number
   schemaJson?: string
-  status?: string
-  draftAnswerJson?: string
-  draftVersion?: number
-  updatedAt?: string
-}
-
-interface LabelerAssignmentListItem {
-  assignmentId: number
-  taskId: number
-  taskTitle?: string
-  datasetItemId: number
-  status: string
-  draftVersion?: number
-  claimedAt?: string
-  returnedAt?: string | null
-  updatedAt?: string
 }
 
 interface AssignmentDraftResponse {
@@ -82,8 +132,8 @@ interface AssignmentDraftResponse {
 }
 
 interface SubmissionSubmitResponse {
-  submissionId: number
-  assignmentId: number
+  submissionId?: number
+  assignmentId?: number
   versionNo?: number
   status?: string
 }
@@ -103,8 +153,14 @@ interface CachedAssignmentContext {
   updatedAt?: string
 }
 
+interface CachedClaimedTaskContext {
+  task: LabelerTaskSummary
+  questions: LabelingQuestion[]
+}
+
 const assignmentCacheKey = 'labelhub-real-labeler-assignments'
 const assignmentCache = readAssignmentCache()
+const claimedTaskCache: Record<string, CachedClaimedTaskContext> = {}
 
 function readAssignmentCache(): Record<string, CachedAssignmentContext> {
   if (typeof window === 'undefined') {
@@ -157,6 +213,26 @@ function parseJsonValue(value?: string | null): unknown {
   }
 }
 
+function parseJsonDeep(value: unknown): unknown {
+  let current = value
+
+  for (let index = 0; index < 3; index += 1) {
+    if (typeof current !== 'string') {
+      return current
+    }
+
+    const parsed = parseJsonValue(current)
+
+    if (parsed === null) {
+      return current
+    }
+
+    current = parsed
+  }
+
+  return current
+}
+
 function toRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {}
 }
@@ -177,26 +253,261 @@ function formatValue(value: unknown) {
   return JSON.stringify(value)
 }
 
-function parseSchema(schemaJson?: string, templateVersionId?: number | string): DynamicFormSchema {
-  const parsedSchema = toRecord(parseJsonValue(schemaJson))
-  const parsedNodes = Array.isArray(parsedSchema.nodes) ? parsedSchema.nodes : []
+function toStringValue(value: unknown, fallback: string) {
+  return typeof value === 'string' && value.trim() ? value : fallback
+}
+
+function isDynamicFieldType(value: unknown): value is DynamicFieldType {
+  return [
+    'input',
+    'textarea',
+    'radio',
+    'checkbox',
+    'select',
+    'showItem',
+    'richText',
+    'fileUpload',
+    'jsonEditor',
+    'llmPrompt',
+    'group',
+    'tabs',
+    'tabPane',
+  ].includes(String(value))
+}
+
+function normalizeFieldType(type: unknown, component?: unknown, hasChildren = false): DynamicFieldType {
+  if (isDynamicFieldType(type)) {
+    return type
+  }
+
+  const componentName = String(component ?? type ?? '').toLowerCase()
+
+  if (componentName.includes('textarea')) {
+    return 'textarea'
+  }
+
+  if (componentName.includes('radio')) {
+    return 'radio'
+  }
+
+  if (componentName.includes('checkbox')) {
+    return 'checkbox'
+  }
+
+  if (componentName.includes('select')) {
+    return 'select'
+  }
+
+  if (componentName.includes('showitem')) {
+    return 'showItem'
+  }
+
+  if (componentName.includes('richtext')) {
+    return 'richText'
+  }
+
+  if (componentName.includes('upload')) {
+    return 'fileUpload'
+  }
+
+  if (componentName.includes('json')) {
+    return 'jsonEditor'
+  }
+
+  if (componentName.includes('tabs')) {
+    return 'tabs'
+  }
+
+  if (componentName.includes('tabpane')) {
+    return 'tabPane'
+  }
+
+  if (hasChildren || String(type).toLowerCase() === 'object') {
+    return 'group'
+  }
+
+  return 'input'
+}
+
+function normalizeRules(value: unknown): DynamicValidationRule[] | undefined {
+  const validators = Array.isArray(value) ? value : value ? [value] : []
+  const rules: DynamicValidationRule[] = []
+
+  validators.forEach((validator) => {
+    const validatorRecord = toRecord(validator)
+    const message = validatorRecord.message as string | undefined
+
+    if (validatorRecord.required) {
+      rules.push({ type: 'required', message })
+
+      return
+    }
+
+    if (typeof validatorRecord.min === 'number') {
+      rules.push({ type: 'minLength', value: validatorRecord.min, message })
+
+      return
+    }
+
+    if (typeof validatorRecord.max === 'number') {
+      rules.push({ type: 'maxLength', value: validatorRecord.max, message })
+
+      return
+    }
+
+    if (Array.isArray(validatorRecord.enum)) {
+      const values = validatorRecord.enum.filter((item): item is string | number | boolean =>
+        typeof item === 'string' || typeof item === 'number' || typeof item === 'boolean',
+      )
+
+      if (values.length) {
+        rules.push({ type: 'enum', values, message })
+      }
+    }
+  })
+
+  return rules.length ? rules : undefined
+}
+
+function isDynamicValidationRule(value: unknown): value is DynamicValidationRule {
+  const rule = toRecord(value)
+
+  return ['required', 'minLength', 'maxLength', 'enum'].includes(String(rule.type))
+}
+
+function normalizeDynamicNode(value: unknown, fallbackKey: string): DynamicSchemaNode | null {
+  const node = toRecord(value)
+
+  if (!Object.keys(node).length) {
+    return null
+  }
+
+  const rawChildren = Array.isArray(node.children) ? node.children : []
+  const key = toStringValue(node.key ?? node.name, fallbackKey)
+  const type = normalizeFieldType(node.type, node['x-component'], rawChildren.length > 0)
+  const children = normalizeDynamicNodes(rawChildren, key)
+  const rules = Array.isArray(node.rules) ? node.rules.filter(isDynamicValidationRule) : undefined
 
   return {
-    id: String(parsedSchema.id ?? templateVersionId ?? 'template'),
-    version: String(parsedSchema.version ?? templateVersionId ?? '1'),
-    title: String(parsedSchema.title ?? '标注模板'),
-    nodes: parsedNodes as DynamicFormSchema['nodes'],
+    ...node,
+    id: toStringValue(node.id, `node-${key}`),
+    key,
+    type,
+    title: toStringValue(node.title ?? node.label, key),
+    props: toRecord(node.props),
+    rules,
+    children: children.length ? children : undefined,
   }
 }
 
-function parseItemList(detail: AssignmentDetailResponse | AssignmentClaimResponse) {
-  if ('itemList' in detail && Array.isArray(detail.itemList)) {
-    return detail.itemList
+function normalizeFormilyProperty(key: string, value: unknown): DynamicSchemaNode | null {
+  const property = toRecord(value)
+
+  if (!Object.keys(property).length) {
+    return null
   }
 
-  const parsedItem = parseJsonValue(detail.itemJson)
+  const properties = toRecord(property.properties)
+  const children = normalizeFormilyProperties(properties, key)
+  const componentProps = toRecord(property['x-component-props'])
+  const type = normalizeFieldType(property.type, property['x-component'], children.length > 0)
 
-  return Array.isArray(parsedItem) ? parsedItem : parsedItem ? [parsedItem] : []
+  return {
+    id: toStringValue(property.id, `node-${key}`),
+    key,
+    type,
+    title: toStringValue(property.title, key),
+    defaultValue: property.default,
+    props: componentProps,
+    rules: normalizeRules(property['x-validator']),
+    children: children.length ? children : undefined,
+  }
+}
+
+function normalizeTemplateComponent(value: unknown, fallbackKey: string): DynamicSchemaNode | null {
+  const component = toRecord(value)
+
+  if (!Object.keys(component).length) {
+    return null
+  }
+
+  const rawChildren = Array.isArray(component.children)
+    ? component.children
+    : Array.isArray(component.components)
+      ? component.components
+      : []
+  const key = toStringValue(component.field ?? component.key ?? component.name, fallbackKey)
+  const type = normalizeFieldType(undefined, component.type, rawChildren.length > 0)
+  const children = normalizeTemplateComponents(rawChildren, key)
+  const props = {
+    ...Object.fromEntries(
+      Object.entries(component).filter(([propKey]) =>
+        !['id', 'type', 'field', 'key', 'name', 'label', 'title', 'required', 'rules', 'children', 'components'].includes(propKey),
+      ),
+    ),
+    ...toRecord(component.props),
+  }
+  const rules = normalizeRules(component.rules) ?? []
+
+  if (component.required && !rules.some((rule) => rule.type === 'required')) {
+    rules.push({ type: 'required' })
+  }
+
+  if (type === 'showItem' && props.text === undefined) {
+    props.text = toStringValue(component.label ?? component.field, key)
+  }
+
+  return {
+    id: toStringValue(component.id, `node-${key}`),
+    key,
+    type,
+    title: toStringValue(component.title ?? component.label, key),
+    props,
+    rules: rules.length ? rules : undefined,
+    children: children.length ? children : undefined,
+  }
+}
+
+function normalizeDynamicNodes(nodes: unknown[], parentKey = 'field') {
+  return nodes
+    .map((node, index) => normalizeDynamicNode(node, `${parentKey}_${index + 1}`))
+    .filter((node): node is DynamicSchemaNode => Boolean(node))
+}
+
+function normalizeTemplateComponents(components: unknown[], parentKey = 'field') {
+  return components
+    .map((component, index) => normalizeTemplateComponent(component, `${parentKey}_${index + 1}`))
+    .filter((node): node is DynamicSchemaNode => Boolean(node))
+}
+
+function normalizeFormilyProperties(properties: Record<string, unknown>, parentKey = 'field') {
+  return Object.entries(properties)
+    .map(([key, property], index) => normalizeFormilyProperty(key || `${parentKey}_${index + 1}`, property))
+    .filter((node): node is DynamicSchemaNode => Boolean(node))
+}
+
+function parseSchema(schemaJson?: unknown, templateVersionId?: number | string): DynamicFormSchema {
+  const parsedValue = parseJsonDeep(schemaJson)
+  const parsedSchema = toRecord(parsedValue)
+  const nestedSchema = toRecord(parsedSchema.schema)
+  const sourceSchema = Object.keys(nestedSchema).length ? nestedSchema : parsedSchema
+  const rawNodes = Array.isArray(parsedValue)
+    ? parsedValue
+    : Array.isArray(sourceSchema.nodes)
+      ? sourceSchema.nodes
+      : []
+  const parsedNodes = rawNodes.length
+    ? normalizeDynamicNodes(rawNodes)
+    : Array.isArray(sourceSchema.components)
+      ? normalizeTemplateComponents(sourceSchema.components)
+      : normalizeFormilyProperties(toRecord(sourceSchema.properties))
+
+  return {
+    id: String(sourceSchema.id ?? templateVersionId ?? 'template'),
+    version: String(sourceSchema.version ?? templateVersionId ?? '1'),
+    title: String(sourceSchema.title ?? '标注模板'),
+    nodes: parsedNodes,
+  }
 }
 
 function buildSourceRecord(itemList: unknown[]): Record<string, string> {
@@ -220,6 +531,12 @@ function buildSourceRecord(itemList: unknown[]): Record<string, string> {
   }, {})
 }
 
+function buildClaimedItemSource(item: ClaimItemResponse | AssignmentClaimResponse) {
+  const sourceItems = [parseJsonValue(item.itemJson), parseJsonValue(item.metadataJson)].filter((value) => value !== null)
+
+  return buildSourceRecord(sourceItems)
+}
+
 function formatDateTime(value?: string | null) {
   if (!value) {
     return '-'
@@ -228,48 +545,59 @@ function formatDateTime(value?: string | null) {
   return value.replace('T', ' ').slice(0, 16)
 }
 
-function buildRewardText(task: MarketTaskResponse) {
-  if (task.reward) {
-    return task.reward
+function buildRewardText(rewardSummary?: RewardSummaryResponse) {
+  if (rewardSummary?.text) {
+    return rewardSummary.text
   }
 
-  if (task.rewardSummary?.text) {
-    return task.rewardSummary.text
+  if (rewardSummary?.unitReward !== undefined) {
+    return `${rewardSummary.unitReward}${rewardSummary.rewardCurrency ? ` ${rewardSummary.rewardCurrency}` : ''}/题`
   }
 
-  if (task.rewardSummary?.amount !== undefined) {
-    return `${task.rewardSummary.amount}${task.rewardSummary.unit ?? ''}`
+  if (rewardSummary?.amount !== undefined) {
+    return `${rewardSummary.amount}${rewardSummary.unit ?? ''}`
   }
 
   return '-'
 }
 
-function mapMarketStatus(task: MarketTaskResponse): LabelerTaskStatus {
-  const remainingQuota = task.remainingQuota ?? task.availableCount ?? 0
+function getMarketTaskSnapshot(response: MarketTaskResponse): TaskSnapshotResponse {
+  return response.task ?? {
+    taskId: response.taskId ?? 0,
+    title: response.title ?? '',
+    tags: response.tags,
+    quota: response.quota,
+    deadlineAt: response.deadlineAt,
+    status: response.status,
+  }
+}
 
-  if (remainingQuota <= 0) {
+function mapMarketStatus(response: MarketTaskResponse): LabelerTaskStatus {
+  const availableCount = response.availableCount ?? 0
+
+  if (availableCount <= 0) {
     return 'ended'
   }
 
   return 'available'
 }
 
-function mapAssignmentTaskStatus(status?: string): LabelerTaskStatus {
+function mapTaskStatusToAssignmentStatus(status: LabelerTaskStatus): LabelerAssignmentStatus {
   switch (status) {
-    case 'CLAIMED':
-      return 'claimed'
-    case 'DRAFTING':
-      return 'in_progress'
-    case 'RETURNED':
-      return 'rejected'
-    case 'SUBMITTED':
-      return 'submitted'
-    case 'APPROVED':
-      return 'approved'
-    case 'CANCELLED':
-      return 'ended'
+    case 'in_progress':
+      return 'DRAFTING'
+    case 'submitted':
+      return 'SUBMITTED'
+    case 'approved':
+      return 'APPROVED'
+    case 'rejected':
+      return 'RETURNED'
+    case 'ended':
+      return 'CANCELLED'
+    case 'available':
+    case 'claimed':
     default:
-      return 'claimed'
+      return 'CLAIMED'
   }
 }
 
@@ -277,6 +605,7 @@ function mapQuestionStatus(status?: string): LabelingQuestion['status'] {
   switch (status) {
     case 'DRAFTING':
       return 'draft'
+    case 'AI_RETURNED':
     case 'RETURNED':
       return 'rejected'
     case 'SUBMITTED':
@@ -293,66 +622,153 @@ function mapSubmissionStatus(status?: string): LabelingSubmission['status'] {
     return 'approved'
   }
 
-  if (status === 'RETURNED' || status === 'REJECTED') {
+  if (status === 'AI_RETURNED' || status === 'RETURNED' || status === 'REJECTED') {
     return 'rejected'
   }
 
   return 'submitted'
 }
 
-function buildTaskSummaryFromMarket(task: MarketTaskResponse): LabelerTaskSummary {
-  const totalQuestions = task.quota ?? task.availableCount ?? 0
-  const remainingQuota = task.remainingQuota ?? task.availableCount ?? 0
+function getTaskStatusFromClaimedItems(items: ClaimItemResponse[]): LabelerTaskStatus {
+  if (items.length === 0) {
+    return 'claimed'
+  }
+
+  if (items.some((item) => item.claimStatus === 'AI_RETURNED' || item.claimStatus === 'RETURNED')) {
+    return 'rejected'
+  }
+
+  if (items.some((item) => item.claimStatus === 'DRAFTING')) {
+    return 'in_progress'
+  }
+
+  if (items.every((item) => item.claimStatus === 'APPROVED')) {
+    return 'approved'
+  }
+
+  if (items.every((item) => item.claimStatus === 'SUBMITTED' || item.claimStatus === 'APPROVED')) {
+    return 'submitted'
+  }
+
+  if (items.every((item) => item.claimStatus === 'CANCELLED')) {
+    return 'ended'
+  }
+
+  return 'claimed'
+}
+
+function buildTaskSummaryFromMarket(response: MarketTaskResponse): LabelerTaskSummary {
+  const task = getMarketTaskSnapshot(response)
+  const totalQuestions = task.quota ?? response.availableCount ?? 0
+  const availableCount = response.availableCount ?? 0
 
   return {
     id: String(task.taskId),
-    title: task.title,
-    description: task.description ?? '',
-    instruction: task.description ?? '',
+    title: task.title || `任务 #${task.taskId}`,
+    description: response.description ?? '',
+    instruction: response.instructionRichText ?? response.description ?? '',
     tags: task.tags ?? [],
-    status: mapMarketStatus(task),
+    status: mapMarketStatus(response),
     templateId: '',
     templateName: '-',
     deadline: formatDateTime(task.deadlineAt),
-    rewardText: buildRewardText(task),
+    rewardText: buildRewardText(response.rewardSummary),
     totalQuestions,
-    completedQuestions: Math.max(totalQuestions - remainingQuota, 0),
+    completedQuestions: Math.max(totalQuestions - availableCount, 0),
   }
 }
 
-function buildTaskSummaryFromAssignment(assignment: LabelerAssignmentListItem, existingTask?: LabelerTaskSummary): LabelerTaskSummary {
-  const status = mapAssignmentTaskStatus(assignment.status)
+function buildTaskSummaryFromClaimedTask(response: ClaimedTaskResponse): LabelerTaskSummary {
+  const task = response.task ?? {
+    taskId: response.taskId,
+    title: response.title ?? '',
+  }
+  const items = response.items ?? []
+  const completedQuestions = response.mySubmittedCount ?? items.filter((item) => item.claimStatus === 'SUBMITTED' || item.claimStatus === 'APPROVED').length
 
   return {
-    id: String(assignment.taskId),
-    title: assignment.taskTitle ?? existingTask?.title ?? `任务 #${assignment.taskId}`,
-    description: existingTask?.description ?? '',
-    instruction: existingTask?.instruction ?? existingTask?.description ?? '',
-    tags: existingTask?.tags ?? [],
-    status,
-    templateId: existingTask?.templateId ?? '',
-    templateName: existingTask?.templateName ?? '-',
-    deadline: existingTask?.deadline ?? '-',
-    rewardText: existingTask?.rewardText ?? '-',
-    totalQuestions: existingTask?.totalQuestions ?? 1,
-    completedQuestions: status === 'submitted' || status === 'approved' ? 1 : existingTask?.completedQuestions ?? 0,
-    claimedAt: formatDateTime(assignment.claimedAt),
-    reviewedAt: assignment.returnedAt ? formatDateTime(assignment.returnedAt) : undefined,
+    id: String(task.taskId),
+    title: task.title || `任务 #${task.taskId}`,
+    description: response.description ?? '',
+    instruction: response.instructionRichText ?? response.description ?? '',
+    tags: task.tags ?? [],
+    status: getTaskStatusFromClaimedItems(items),
+    templateId: '',
+    templateName: '-',
+    deadline: formatDateTime(task.deadlineAt),
+    rewardText: '-',
+    totalQuestions: response.myClaimedCount ?? items.length,
+    completedQuestions,
+    claimedAt: items[0]?.updatedAt ? formatDateTime(items[0].updatedAt) : undefined,
+    submittedAt: completedQuestions > 0 ? formatDateTime(items[0]?.updatedAt) : undefined,
+    reviewedAt: formatDateTime(task.updatedAt),
   }
 }
 
-function buildQuestion(detail: AssignmentDetailResponse | AssignmentClaimResponse, taskId: string): LabelingQuestion {
+function buildQuestionFromClaimedItem(
+  taskId: string,
+  item: ClaimItemResponse,
+  schema: DynamicFormSchema,
+): LabelingQuestion {
+  return {
+    id: String(item.claimId),
+    taskId,
+    title: item.externalId ? `题目 ${item.externalId}` : `题目 #${item.itemId}`,
+    description: '',
+    source: buildClaimedItemSource(item),
+    schema,
+    status: mapQuestionStatus(item.claimStatus),
+  }
+}
+
+function buildAssignmentSummary(response: ClaimedTaskResponse): LabelerAssignmentSummary {
+  const task = response.task ?? {
+    taskId: response.taskId,
+    title: response.title ?? '',
+  }
+  const items = response.items ?? []
+  const firstItem = items[0]
+  const status = getTaskStatusFromClaimedItems(items)
+
+  return {
+    id: String(task.taskId),
+    assignmentId: firstItem ? String(firstItem.claimId) : String(task.taskId),
+    taskId: String(task.taskId),
+    taskTitle: task.title || `任务 #${task.taskId}`,
+    datasetItemId: firstItem ? String(firstItem.itemId) : '-',
+    status: mapTaskStatusToAssignmentStatus(status),
+    draftVersion: firstItem?.draftVersion ?? 0,
+    claimedAt: firstItem?.updatedAt ? formatDateTime(firstItem.updatedAt) : '-',
+    updatedAt: firstItem?.updatedAt ? formatDateTime(firstItem.updatedAt) : formatDateTime(task.updatedAt),
+    myClaimedCount: response.myClaimedCount ?? items.length,
+    mySubmittedCount: response.mySubmittedCount ?? items.filter((item) => item.claimStatus === 'SUBMITTED').length,
+    myApprovedCount: response.myApprovedCount ?? items.filter((item) => item.claimStatus === 'APPROVED').length,
+  }
+}
+
+function buildAssignmentStats(assignments: LabelerAssignmentSummary[]): LabelerAssignmentStats {
+  return {
+    total: assignments.length,
+    claimed: assignments.filter((assignment) => assignment.status === 'CLAIMED').length,
+    drafting: assignments.filter((assignment) => assignment.status === 'DRAFTING').length,
+    submitted: assignments.filter((assignment) => assignment.status === 'SUBMITTED').length,
+    returned: assignments.filter((assignment) => assignment.status === 'RETURNED' || assignment.status === 'AI_RETURNED').length,
+    approved: assignments.filter((assignment) => assignment.status === 'APPROVED').length,
+    cancelled: assignments.filter((assignment) => assignment.status === 'CANCELLED').length,
+  }
+}
+
+function buildQuestion(detail: AssignmentClaimResponse, taskId: string): LabelingQuestion {
   const assignmentId = String(detail.assignmentId)
   const datasetItemId = String(detail.datasetItemId)
   const templateVersionId = detail.templateVersionId
-  const itemList = parseItemList(detail)
 
   return {
     id: assignmentId,
     taskId,
     title: `题目 #${datasetItemId}`,
     description: '',
-    source: buildSourceRecord(itemList),
+    source: buildClaimedItemSource(detail),
     schema: parseSchema(detail.schemaJson, templateVersionId),
     status: mapQuestionStatus(detail.status),
   }
@@ -382,7 +798,7 @@ function buildSubmission(
   userId: string,
 ): LabelingSubmission {
   return {
-    id: String(response.submissionId),
+    id: String(response.submissionId ?? response.assignmentId ?? `submission-${task.id}-${Date.now()}`),
     taskId: task.id,
     taskTitle: task.title,
     userId,
@@ -394,6 +810,17 @@ function buildSubmission(
         values: { ...answer.values },
       },
     ],
+  }
+}
+
+function cloneQuestion(question: LabelingQuestion): LabelingQuestion {
+  return {
+    ...question,
+    source: { ...question.source },
+    schema: {
+      ...question.schema,
+      nodes: [...question.schema.nodes],
+    },
   }
 }
 
@@ -418,33 +845,76 @@ function normalizeListResponse<T>(response: T[] | { list?: T[]; records?: T[]; c
   return response.list ?? response.records ?? response.content ?? response.data ?? []
 }
 
-async function listAssignments(taskId?: string) {
-  const response = await request.get<LabelerAssignmentListItem[] | { list?: LabelerAssignmentListItem[]; records?: LabelerAssignmentListItem[]; content?: LabelerAssignmentListItem[]; data?: LabelerAssignmentListItem[] }>(
-    '/v1/labeler/assignments',
+function getErrorDetailMessage(error: ApiError) {
+  const details = error.details
+
+  if (details && typeof details === 'object' && 'message' in details && typeof details.message === 'string') {
+    return details.message
+  }
+
+  return ''
+}
+
+function normalizeAssignmentError(error: unknown): never {
+  if (!(error instanceof ApiError)) {
+    throw error
+  }
+
+  const code = String(error.code ?? '')
+  const messageByCode: Record<string, string> = {
+    '400101': '当前 assignment 状态不允许提交',
+    '409101': '草稿版本冲突，请刷新后重试',
+    '409301': 'Schema 校验失败，请检查答案后重试',
+  }
+
+  if (messageByCode[code]) {
+    const detailMessage = getErrorDetailMessage(error)
+
+    throw new ApiError({
+      code: error.code,
+      message: detailMessage || messageByCode[code],
+      status: error.status,
+      url: error.url,
+      method: error.method,
+      details: error.details,
+    })
+  }
+
+  throw error
+}
+
+async function fetchClaimedTasks(query: LabelerAssignmentListQuery = {}) {
+  const response = await request.get<ClaimedTaskResponse[] | { list?: ClaimedTaskResponse[]; records?: ClaimedTaskResponse[]; content?: ClaimedTaskResponse[]; data?: ClaimedTaskResponse[] }>(
+    '/v1/claims',
     {
       params: {
-        taskId,
-        page: 1,
-        size: 100,
+        taskId: query.taskId,
+        status: query.status === 'all' ? undefined : query.status,
+        page: query.page ?? 1,
+        size: query.size ?? 100,
       },
     },
   )
-  const assignments = normalizeListResponse(response)
+  const claimedTasks = normalizeListResponse(response)
 
-  assignments.forEach((assignment) => {
-    cacheAssignment({
-      assignmentId: String(assignment.assignmentId),
-      taskId: String(assignment.taskId),
-      datasetItemId: String(assignment.datasetItemId),
-      draftVersion: assignment.draftVersion,
-      status: assignment.status,
-      claimedAt: assignment.claimedAt,
-      returnedAt: assignment.returnedAt,
-      updatedAt: assignment.updatedAt,
+  claimedTasks.forEach((claimedTask) => {
+    const task = buildTaskSummaryFromClaimedTask(claimedTask)
+
+    claimedTask.items?.forEach((item) => {
+      cacheAssignment({
+        ...assignmentCache[String(item.claimId)],
+        assignmentId: String(item.claimId),
+        taskId: task.id,
+        datasetItemId: String(item.itemId),
+        task,
+        draftVersion: item.draftVersion,
+        status: item.claimStatus,
+        updatedAt: item.updatedAt,
+      })
     })
   })
 
-  return assignments
+  return claimedTasks
 }
 
 async function resolveAssignmentForTask(taskId: string) {
@@ -454,31 +924,64 @@ async function resolveAssignmentForTask(taskId: string) {
     return cachedAssignment
   }
 
-  const assignments = await listAssignments(taskId)
-  const assignment = assignments.find((item) => String(item.taskId) === taskId)
+  const claimedTask = claimedTaskCache[taskId] ?? await loadClaimedTask(taskId)
+  const firstQuestion = claimedTask.questions[0]
 
-  return assignment ? assignmentCache[String(assignment.assignmentId)] : null
+  return firstQuestion ? assignmentCache[firstQuestion.id] : null
 }
 
-async function loadAssignmentDetail(assignmentId: string, taskId?: string) {
-  const detail = await request.get<AssignmentDetailResponse>(`/v1/assignments/${assignmentId}`)
-  const resolvedTaskId = String(detail.taskId ?? taskId ?? assignmentCache[assignmentId]?.taskId)
-  const question = buildQuestion(detail, resolvedTaskId)
-  const draftValues = toRecord(parseJsonValue(detail.draftAnswerJson))
-  const draft = buildDraft(resolvedTaskId, question.id, '', draftValues, detail.updatedAt)
-  const context = cacheAssignment({
-    assignmentId,
-    taskId: resolvedTaskId,
-    datasetItemId: String(detail.datasetItemId),
-    templateVersionId: String(detail.templateVersionId),
-    question,
-    draft,
-    draftVersion: detail.draftVersion,
-    status: detail.status,
-    updatedAt: detail.updatedAt,
+async function loadAnswerTemplate(taskId: string) {
+  return request.get<AnswerTemplateResponse>(`/v1/labeler/tasks/${taskId}/answer-template`)
+}
+
+async function loadAssignmentDetail(assignmentId: string) {
+  return assignmentCache[assignmentId] ?? null
+}
+
+async function loadClaimedTask(taskId: string) {
+  const [claimedTasks, answerTemplate] = await Promise.all([
+    fetchClaimedTasks({ taskId, page: 1, size: 100 }),
+    loadAnswerTemplate(taskId),
+  ])
+  const response = claimedTasks[0] ?? {
+    taskId: Number(taskId),
+    title: `任务 #${taskId}`,
+    items: [],
+  }
+  const resolvedTaskId = String(response.task?.taskId ?? response.taskId ?? taskId)
+  const items = response.items ?? []
+  const task = {
+    ...buildTaskSummaryFromClaimedTask(response),
+    templateId: String(answerTemplate.templateVersionId ?? ''),
+    templateName: answerTemplate.templateVersionId ? `模板版本 #${answerTemplate.templateVersionId}` : '-',
+  }
+  const schema = parseSchema(answerTemplate.schemaJson, answerTemplate.templateVersionId)
+  const questions = items.map((item) => buildQuestionFromClaimedItem(resolvedTaskId, item, schema))
+
+  questions.forEach((question, index) => {
+    const item = items[index]
+
+    cacheAssignment({
+      ...assignmentCache[question.id],
+      assignmentId: question.id,
+      taskId: resolvedTaskId,
+      datasetItemId: String(item.itemId),
+      templateVersionId: String(answerTemplate.templateVersionId ?? ''),
+      task,
+      question,
+      draft: assignmentCache[question.id]?.draft,
+      draftVersion: assignmentCache[question.id]?.draftVersion ?? item.draftVersion,
+      status: assignmentCache[question.id]?.status ?? item.claimStatus,
+      updatedAt: assignmentCache[question.id]?.updatedAt ?? item.updatedAt,
+    })
   })
 
-  return context
+  claimedTaskCache[resolvedTaskId] = {
+    task,
+    questions,
+  }
+
+  return claimedTaskCache[resolvedTaskId]
 }
 
 async function ensureAssignmentDetailForTask(taskId: string) {
@@ -492,7 +995,7 @@ async function ensureAssignmentDetailForTask(taskId: string) {
     return assignment
   }
 
-  return loadAssignmentDetail(assignment.assignmentId, taskId)
+  return assignment
 }
 
 export const realLabelingService = {
@@ -503,33 +1006,15 @@ export const realLabelingService = {
       status: query.status === 'available' || query.status === 'all' ? 'PUBLISHED' : undefined,
     }
     const marketResponse = await request.get<MarketTaskResponse[]>('/v1/market/tasks', { params })
-    const assignments = await listAssignments().catch(() => [])
-    const taskMap = new Map<string, LabelerTaskSummary>()
 
-    marketResponse.map(buildTaskSummaryFromMarket).forEach((task) => {
-      taskMap.set(task.id, task)
-    })
-
-    assignments.forEach((assignment) => {
-      const taskId = String(assignment.taskId)
-      const task = buildTaskSummaryFromAssignment(assignment, taskMap.get(taskId))
-      taskMap.set(taskId, task)
-      cacheAssignment({
-        ...assignmentCache[String(assignment.assignmentId)],
-        assignmentId: String(assignment.assignmentId),
-        taskId,
-        task,
-      })
-    })
-
-    return Array.from(taskMap.values()).filter((task) => matchesQuery(task, query))
+    return marketResponse.map(buildTaskSummaryFromMarket).filter((task) => matchesQuery(task, query))
   },
 
   async listTags(): Promise<string[]> {
-    const marketTasks = await request.get<MarketTaskResponse[]>('/v1/market/tasks', {
-      params: {
-        status: 'PUBLISHED',
-      },
+    const marketTasks = await this.listMarketTasks({
+      keyword: '',
+      tag: 'all',
+      status: 'available',
     })
 
     return Array.from(new Set(marketTasks.flatMap((task) => task.tags ?? []))).sort((first, second) =>
@@ -538,29 +1023,19 @@ export const realLabelingService = {
   },
 
   async getTaskDetail(taskId: string): Promise<LabelerTaskSummary | null> {
-    const cachedAssignment = findAssignmentByTaskId(taskId)
+    const claimedTask = claimedTaskCache[taskId] ?? await loadClaimedTask(taskId)
 
-    if (cachedAssignment?.task) {
-      return {
-        ...cachedAssignment.task,
-        tags: [...cachedAssignment.task.tags],
-      }
+    return {
+      ...claimedTask.task,
+      tags: [...claimedTask.task.tags],
     }
-
-    const tasks = await this.listMarketTasks({
-      keyword: '',
-      tag: 'all',
-      status: 'all',
-    })
-
-    return tasks.find((task) => task.id === taskId) ?? null
   },
 
   async claimTask(taskId: string): Promise<LabelerTaskSummary | null> {
-    const claimResponse = await request.post<AssignmentClaimResponse>(`/v1/tasks/${taskId}/assignments/claim`)
+    const claimResponse = await request.post<AssignmentClaimResponse>(`/v1/tasks/${taskId}/items/claim`)
     const assignmentId = String(claimResponse.assignmentId)
     const question = claimResponse.schemaJson ? buildQuestion(claimResponse, taskId) : undefined
-    const task = await this.getTaskDetail(taskId)
+    const task = claimedTaskCache[taskId]?.task
     const nextTask: LabelerTaskSummary = task
       ? {
           ...task,
@@ -602,9 +1077,9 @@ export const realLabelingService = {
   },
 
   async listQuestions(taskId: string): Promise<LabelingQuestion[]> {
-    const assignment = await ensureAssignmentDetailForTask(taskId)
+    const claimedTask = claimedTaskCache[taskId] ?? await loadClaimedTask(taskId)
 
-    return assignment?.question ? [{ ...assignment.question, source: { ...assignment.question.source } }] : []
+    return claimedTask.questions.map(cloneQuestion)
   },
 
   async getQuestion(questionId: string): Promise<LabelingQuestion | null> {
@@ -620,16 +1095,9 @@ export const realLabelingService = {
       return null
     }
 
-    const draftResponse = await request.get<AssignmentDraftResponse>(`/v1/assignments/${assignment.assignmentId}/draft`).catch(() => null)
-
-    if (!draftResponse) {
-      return assignment.draft
-        ? {
-            ...assignment.draft,
-            userId,
-          }
-        : null
-    }
+    const draftResponse = await request.get<AssignmentDraftResponse>(`/v1/claims/${assignment.assignmentId}/draft`).catch((error: unknown) => {
+      normalizeAssignmentError(error)
+    })
     const draft = buildDraft(taskId, assignment.assignmentId, userId, toRecord(parseJsonValue(draftResponse.draftAnswerJson)), draftResponse.updatedAt)
 
     cacheAssignment({
@@ -647,13 +1115,18 @@ export const realLabelingService = {
     const assignment = assignmentCache[payload.questionId] ?? await ensureAssignmentDetailForTask(payload.taskId)
     const assignmentId = assignment?.assignmentId ?? payload.questionId
     const draftResponse = await request.put<AssignmentDraftResponse, { answerJson: string; clientVersion: number }>(
-      `/v1/assignments/${assignmentId}/draft`,
+      `/v1/claims/${assignmentId}/draft`,
       {
         answerJson: JSON.stringify(payload.values),
         clientVersion: assignment?.draftVersion ?? 0,
       },
-    )
-    const draft = buildDraft(payload.taskId, assignmentId, payload.userId, payload.values, draftResponse.updatedAt)
+    ).catch((error: unknown) => {
+      normalizeAssignmentError(error)
+    })
+    const draftValues = draftResponse.draftAnswerJson
+      ? toRecord(parseJsonValue(draftResponse.draftAnswerJson))
+      : payload.values
+    const draft = buildDraft(payload.taskId, assignmentId, payload.userId, draftValues, draftResponse.updatedAt)
 
     cacheAssignment({
       ...(assignment ?? {
@@ -737,12 +1210,14 @@ export const realLabelingService = {
       values: { ...draft.values },
     }
     const submitResponse = await request.post<SubmissionSubmitResponse, { answerJson: string; clientVersion: number }>(
-      `/v1/assignments/${assignment.assignmentId}/submit`,
+      `/v1/claims/${assignment.assignmentId}/submit`,
       {
         answerJson: JSON.stringify(draft.values),
         clientVersion: assignment.draftVersion ?? 0,
       },
-    )
+    ).catch((error: unknown) => {
+      normalizeAssignmentError(error)
+    })
     const task = assignment.task ?? await this.getTaskDetail(taskId) ?? {
       id: taskId,
       title: `任务 #${taskId}`,
@@ -792,5 +1267,17 @@ export const realLabelingService = {
 
   async listSubmissions(): Promise<LabelingSubmission[]> {
     return mockLabelingService.listSubmissions()
+  },
+
+  async getAssignmentStats(): Promise<LabelerAssignmentStats> {
+    const assignments = await fetchClaimedTasks({ page: 1, size: 100 })
+
+    return buildAssignmentStats(assignments.map(buildAssignmentSummary))
+  },
+
+  async listAssignments(query: LabelerAssignmentListQuery = {}): Promise<LabelerAssignmentSummary[]> {
+    const assignments = await fetchClaimedTasks(query)
+
+    return assignments.map(buildAssignmentSummary)
   },
 }

@@ -34,7 +34,7 @@ public class FileController {
     @PostMapping(value = "/upload", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     @Operation(summary = "上传文件", description = "上传文件到对象存储，并记录当前用户归属的文件元数据。")
     public ApiResponse<FileUploadResponse> upload(@RequestParam("file") MultipartFile file,
-                                                   @RequestParam("businessType") String businessType) {
+                                                   @RequestParam(value = "businessType",required = false, defaultValue = "dataset") String businessType) {
         return ApiResponse.ok(fileService.upload(file, businessType));
     }
 

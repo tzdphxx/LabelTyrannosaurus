@@ -128,7 +128,7 @@ strategy
 maxClaimsPerLabeler
 deadlineAt
 publishedTemplateVersionId
-aiReviewConfigId
+aiReview (AiReviewConfigResponse, nullable)
 reviewLevelCount
 rewardVisible
 rewardRule

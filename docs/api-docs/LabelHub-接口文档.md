@@ -418,7 +418,7 @@ Authorization: Bearer <accessToken>
 | overlapCount | Integer | 重叠标注数 |
 | deadlineAt | LocalDateTime | 截止时间 |
 | publishedTemplateVersionId | Long | 模板版本 ID |
-| aiReviewConfigId | Long | AI 审核配置 ID |
+| aiReview | AiReviewConfigResponse | AI 审核配置对象；未配置时为 null |
 | reviewLevelCount | Integer | 审核级别数（1=单级，2=初审+终审，3=初审+复审+终审） |
 | rewardVisible | Boolean | 奖励是否对标注员可见 |
 | publishedAt | LocalDateTime | 发布时间 |

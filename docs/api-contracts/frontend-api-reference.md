@@ -739,3 +739,19 @@ POST /api/v1/submissions/{submissionId}/ai-review/retry
 | `POST /tasks/{id}/dataset/import` | `POST /tasks/{id}/imports` |
 | `POST /tasks/{id}/reviewers` | ❌ 已删除 |
 | `GET /tasks/{id}/reviewers` | ❌ 已删除 |
+
+---
+
+## FCFS bulk claim update
+
+`POST /api/v1/tasks/{taskId}/items/claim` now accepts an optional JSON body:
+
+```json
+{
+  "quantity": 3
+}
+```
+
+`quantity` defaults to `1`, valid range is `1..100`, and values greater than `1` are supported only for `FCFS` tasks. If fewer FCFS items are available than requested, the whole request fails.
+
+The response `data` is now `AssignmentClaimResponse[]`; single-item claims return a one-element array.

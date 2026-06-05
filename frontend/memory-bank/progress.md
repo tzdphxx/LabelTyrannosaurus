@@ -671,6 +671,19 @@
   - `src/features/dynamic-form/utils/designerDrag.ts`
   - `src/pages/owner/templates/OwnerTemplateDesignerPage.tsx`
 
+## 2026-06-05 - Labeler draft autosave and submit check
+
+### Implemented
+- Fixed workbench draft autosave so `PUT /v1/claims/{claimId}/draft` is only sent when answer values differ from the last loaded or saved draft.
+- Added stable answer-value signatures in `LabelerWorkbenchPage` to avoid treating form initialization or save-result refresh as a new edit.
+- Manual draft save now skips the API call when values are unchanged.
+- Submit flow now saves first only when needed, and stops before `POST /v1/claims/{claimId}/submit` if draft save fails.
+- Confirmed real submit endpoint is connected through `LabelerWorkbenchPage.submitCurrentQuestion` -> `labelingStore.submitQuestionDraft` -> `realLabelingService.submitQuestionDraft`.
+
+### Pending verification
+- Run local ESLint for `src/pages/labeler/LabelerWorkbenchPage.tsx`.
+- Optionally verify in browser network panel that idle workbench no longer sends repeated draft saves.
+
 ## 2026-06-02 - 草稿提交与我的领取真实接口补强
 
 ### 已实现

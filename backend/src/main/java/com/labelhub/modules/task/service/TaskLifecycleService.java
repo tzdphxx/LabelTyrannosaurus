@@ -5,10 +5,12 @@ import com.labelhub.common.audit.AuditAppender;
 import com.labelhub.common.audit.AuditCommand;
 import com.labelhub.common.exception.BusinessException;
 import com.labelhub.common.security.CurrentUserContext;
+import com.labelhub.common.security.RoleCode;
 import com.labelhub.common.web.TraceIdProvider;
 import com.labelhub.modules.ai.dto.AiReviewConfigRequest;
 import com.labelhub.modules.ai.service.AiReviewConfigService;
 import com.labelhub.modules.assignment.mapper.AssignmentDispatchMapper;
+import com.labelhub.modules.auth.repository.UserRoleMapper;
 import com.labelhub.modules.dataset.dto.DatasetImportJobResponse;
 import com.labelhub.modules.dataset.dto.DatasetImportRequest;
 import com.labelhub.modules.dataset.service.DatasetImportService;
@@ -43,6 +45,7 @@ public class TaskLifecycleService {
     private static final int TASK_STATUS_NOT_ALLOWED = 400101;
     private static final int TASK_PUBLISH_REQUIREMENT_MISSING = 400102;
     private static final int INVALID_STRATEGY = 400103;
+    private static final int INVALID_ASSIGNED_LABELER = 400104;
     private static final String TASK_BIZ_TYPE = "TASK";
     private static final String USER_ACTOR_TYPE = "USER";
 
@@ -55,6 +58,7 @@ public class TaskLifecycleService {
     private final AiReviewConfigService aiReviewConfigService;
     private final RewardRuleService rewardRuleService;
     private final AssignmentDispatchMapper dispatchMapper;
+    private final UserRoleMapper userRoleMapper;
     private final org.springframework.context.ApplicationEventPublisher applicationEventPublisher;
 
     public TaskLifecycleService(TaskMapper taskMapper,
@@ -66,6 +70,7 @@ public class TaskLifecycleService {
                                 AiReviewConfigService aiReviewConfigService,
                                 RewardRuleService rewardRuleService,
                                 AssignmentDispatchMapper dispatchMapper,
+                                UserRoleMapper userRoleMapper,
                                 org.springframework.context.ApplicationEventPublisher applicationEventPublisher) {
         this.taskMapper = taskMapper;
         this.taskTagMapper = taskTagMapper;
@@ -76,6 +81,7 @@ public class TaskLifecycleService {
         this.aiReviewConfigService = aiReviewConfigService;
         this.rewardRuleService = rewardRuleService;
         this.dispatchMapper = dispatchMapper;
+        this.userRoleMapper = userRoleMapper;
         this.applicationEventPublisher = applicationEventPublisher;
     }
 
@@ -147,11 +153,13 @@ public class TaskLifecycleService {
         task.setDescription(request.description());
         task.setInstructionRichText(request.instructionRichText());
         task.setStatus(TaskStatus.DRAFT);
-        task.setQuota(resolveQuota(request.strategy(), request.quota()));
+        ClaimStrategy strategy = parseStrategy(request.strategy());
+        task.setQuota(resolveQuota(strategy, request.quota()));
         task.setClaimedCount(0);
         task.setOverlapCount(request.overlapCount());
-        task.setStrategy(parseStrategy(request.strategy()));
+        task.setStrategy(strategy);
         task.setMaxClaimsPerLabeler(request.maxClaimsPerLabeler());
+        task.setAssignedLabelerId(resolveAssignedLabelerId(strategy, request.assignedLabelerId()));
         task.setDeadlineAt(request.deadlineAt());
         task.setPublishedTemplateVersionId(request.publishedTemplateVersionId());
         task.setAiReviewConfigId(request.aiReviewConfigId());
@@ -198,10 +206,11 @@ public class TaskLifecycleService {
         task.setTitle(request.title());
         task.setDescription(request.description());
         task.setInstructionRichText(request.instructionRichText());
-        task.setQuota(resolveQuota(request.strategy(), request.quota()));
+        ClaimStrategy updatedStrategy = parseStrategy(request.strategy());
+        task.setQuota(resolveQuota(updatedStrategy, request.quota()));
         task.setOverlapCount(request.overlapCount());
         if (request.strategy() != null) {
-            task.setStrategy(parseStrategy(request.strategy()));
+            task.setStrategy(updatedStrategy);
         }
         if (request.maxClaimsPerLabeler() != null) {
             task.setMaxClaimsPerLabeler(request.maxClaimsPerLabeler());
@@ -346,6 +355,7 @@ public class TaskLifecycleService {
                 task.getDescription(),
                 task.getInstructionRichText(),
                 task.getMaxClaimsPerLabeler(),
+                task.getAssignedLabelerId(),
                 task.getPublishedTemplateVersionId(),
                 aiReviewConfigService.findResponseByTaskId(task.getId()),
                 task.getReviewLevelCount(),
@@ -382,6 +392,7 @@ public class TaskLifecycleService {
         snapshot.put("overlapCount", task.getOverlapCount());
         snapshot.put("strategy", task.getStrategy());
         snapshot.put("maxClaimsPerLabeler", task.getMaxClaimsPerLabeler());
+        snapshot.put("assignedLabelerId", task.getAssignedLabelerId());
         snapshot.put("deadlineAt", task.getDeadlineAt());
         snapshot.put("publishedTemplateVersionId", task.getPublishedTemplateVersionId());
         snapshot.put("aiReviewConfigId", task.getAiReviewConfigId());
@@ -438,8 +449,24 @@ public class TaskLifecycleService {
         }
     }
 
-    private int resolveQuota(String strategy, Integer requestQuota) {
-        ClaimStrategy parsed = parseStrategy(strategy);
+    private Long resolveAssignedLabelerId(ClaimStrategy strategy, Long assignedLabelerId) {
+        if (assignedLabelerId == null) {
+            return null;
+        }
+        if (strategy != ClaimStrategy.ASSIGNED) {
+            throw new BusinessException(INVALID_ASSIGNED_LABELER,
+                    "assignedLabelerId is only valid for ASSIGNED strategy");
+        }
+        Set<RoleCode> roles = userRoleMapper != null
+                ? userRoleMapper.selectRoleCodesByUserId(assignedLabelerId) : Set.of();
+        if (roles == null || !roles.contains(RoleCode.LABELER)) {
+            throw new BusinessException(INVALID_ASSIGNED_LABELER,
+                    "Assigned user must be a labeler");
+        }
+        return assignedLabelerId;
+    }
+
+    private int resolveQuota(ClaimStrategy parsed, Integer requestQuota) {
         if (parsed == ClaimStrategy.ASSIGNED) {
             return 0;
         }

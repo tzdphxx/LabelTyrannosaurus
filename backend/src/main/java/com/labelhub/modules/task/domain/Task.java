@@ -35,6 +35,8 @@ public class Task {
 
     private Integer maxClaimsPerLabeler;
 
+    private Long assignedLabelerId;
+
     private LocalDateTime deadlineAt;
 
     private Long publishedTemplateVersionId;

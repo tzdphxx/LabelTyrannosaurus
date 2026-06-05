@@ -12,6 +12,8 @@ import com.labelhub.infrastructure.async.AsyncJobCommand;
 import com.labelhub.infrastructure.async.AsyncJobService;
 import com.labelhub.infrastructure.async.AsyncJobType;
 import com.labelhub.infrastructure.storage.ObjectStorageService;
+import com.labelhub.modules.assignment.domain.AssignmentDispatch;
+import com.labelhub.modules.assignment.mapper.AssignmentDispatchMapper;
 import com.labelhub.modules.dataset.domain.DatasetFileEntity;
 import com.labelhub.modules.dataset.domain.DatasetFileFormat;
 import com.labelhub.modules.dataset.domain.DatasetImportJobEntity;
@@ -33,6 +35,7 @@ import com.labelhub.modules.storage.repository.ObjectFileMapper;
 import com.labelhub.modules.storage.service.FileStorageProperties;
 import com.labelhub.modules.task.domain.Task;
 import com.labelhub.modules.task.domain.TaskStatus;
+import com.labelhub.modules.task.domain.ClaimStrategy;
 import com.labelhub.modules.task.mapper.TaskMapper;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -79,6 +82,7 @@ public class DatasetImportService {
     private final DatasetImportJobMapper importJobMapper;
     private final DatasetItemMapper datasetItemMapper;
     private final DatasetItemChangeLogMapper changeLogMapper;
+    private final AssignmentDispatchMapper assignmentDispatchMapper;
     private final ObjectStorageService objectStorageService;
     private final FileStorageProperties storageProperties;
     private final AsyncJobService asyncJobService;
@@ -94,6 +98,7 @@ public class DatasetImportService {
                                 DatasetImportJobMapper importJobMapper,
                                 DatasetItemMapper datasetItemMapper,
                                 DatasetItemChangeLogMapper changeLogMapper,
+                                AssignmentDispatchMapper assignmentDispatchMapper,
                                 ObjectStorageService objectStorageService,
                                 FileStorageProperties storageProperties,
                                 AsyncJobService asyncJobService,
@@ -102,8 +107,8 @@ public class DatasetImportService {
                                 List<DatasetParser> parsers,
                                 @Autowired(required = false) MediaProcessingService mediaProcessingService) {
         this(taskMapper, objectFileMapper, datasetFileMapper, importJobMapper, datasetItemMapper, changeLogMapper,
-                objectStorageService, storageProperties, asyncJobService, new TransactionTemplate(transactionManager),
-                objectMapper, parsers, mediaProcessingService);
+                assignmentDispatchMapper, objectStorageService, storageProperties, asyncJobService,
+                new TransactionTemplate(transactionManager), objectMapper, parsers, mediaProcessingService);
     }
 
     public DatasetImportService(TaskMapper taskMapper,
@@ -112,14 +117,15 @@ public class DatasetImportService {
                                 DatasetImportJobMapper importJobMapper,
                                 DatasetItemMapper datasetItemMapper,
                                 DatasetItemChangeLogMapper changeLogMapper,
+                                AssignmentDispatchMapper assignmentDispatchMapper,
                                 ObjectStorageService objectStorageService,
                                 FileStorageProperties storageProperties,
                                 AsyncJobService asyncJobService,
                                 ObjectMapper objectMapper,
                                 List<DatasetParser> parsers) {
         this(taskMapper, objectFileMapper, datasetFileMapper, importJobMapper, datasetItemMapper, changeLogMapper,
-                objectStorageService, storageProperties, asyncJobService, new ImmediateTransactionOperations(),
-                objectMapper, parsers, null);
+                assignmentDispatchMapper, objectStorageService, storageProperties, asyncJobService,
+                new ImmediateTransactionOperations(), objectMapper, parsers, null);
     }
 
     private DatasetImportService(TaskMapper taskMapper,
@@ -128,6 +134,7 @@ public class DatasetImportService {
                                  DatasetImportJobMapper importJobMapper,
                                  DatasetItemMapper datasetItemMapper,
                                  DatasetItemChangeLogMapper changeLogMapper,
+                                 AssignmentDispatchMapper assignmentDispatchMapper,
                                  ObjectStorageService objectStorageService,
                                  FileStorageProperties storageProperties,
                                  AsyncJobService asyncJobService,
@@ -141,6 +148,7 @@ public class DatasetImportService {
         this.importJobMapper = importJobMapper;
         this.datasetItemMapper = datasetItemMapper;
         this.changeLogMapper = changeLogMapper;
+        this.assignmentDispatchMapper = assignmentDispatchMapper;
         this.objectStorageService = objectStorageService;
         this.storageProperties = storageProperties;
         this.asyncJobService = asyncJobService;
@@ -429,10 +437,37 @@ public class DatasetImportService {
                 refreshMediaContext(job.getTaskId(), item, actorId);
                 appendChangeLog(job.getTaskId(), item, actorId, mode);
             }
+            autoDispatchImportedItems(job.getTaskId(), batch.items());
             finishJob(job, batch.totalCount(), batch.items().size(), batch.errors(), actorId);
         } catch (JsonProcessingException ex) {
             throw new ImportExecutionException(ex);
         }
+    }
+
+    private void autoDispatchImportedItems(Long taskId, List<DatasetItem> items) {
+        if (assignmentDispatchMapper == null || items.isEmpty()) {
+            return;
+        }
+        Task task = taskMapper.selectById(taskId);
+        if (task == null
+                || task.getStrategy() != ClaimStrategy.ASSIGNED
+                || task.getAssignedLabelerId() == null) {
+            return;
+        }
+        LocalDateTime dispatchedAt = LocalDateTime.now();
+        for (DatasetItem item : items) {
+            if (item.getId() == null) {
+                continue;
+            }
+            AssignmentDispatch dispatch = new AssignmentDispatch();
+            dispatch.setTaskId(taskId);
+            dispatch.setDatasetItemId(item.getId());
+            dispatch.setLabelerId(task.getAssignedLabelerId());
+            dispatch.setStatus("PENDING");
+            dispatch.setDispatchedAt(dispatchedAt);
+            assignmentDispatchMapper.insert(dispatch);
+        }
+        assignmentDispatchMapper.syncQuotaToTask(taskId);
     }
 
     private Throwable unwrapImportFailure(Throwable failure) {

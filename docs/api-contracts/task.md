@@ -61,6 +61,7 @@ deadlineAt required, must be future time
 overlapCount required, must be 1
 strategy optional, default FCFS. Values: FCFS | QUOTA_GRAB | ASSIGNED
 maxClaimsPerLabeler optional, >= 1. Only effective for QUOTA_GRAB
+assignedLabelerId optional. Only valid for ASSIGNED; imported items are auto-dispatched to this labeler.
 publishedTemplateVersionId optional, must belong to current OWNER
 aiReviewConfigId optional
 aiProviderId / aiModelName / aiPrompt / aiScoringDimensions / aiPassThreshold / aiManualReviewThreshold optional, for inline AI config
@@ -81,7 +82,9 @@ QUOTA_GRAB:      Like FCFS, but with two additional gates:
 
 ASSIGNED:        Labelers can only claim items explicitly dispatched to them by the owner.
                  Quota is automatically derived from the total dispatch count.
-                 Requires dispatches to be created via the /dispatches API before publish.
+                 If assignedLabelerId is provided at creation, imported items are dispatched
+                 to that labeler automatically after import succeeds.
+                 Without assignedLabelerId, dispatches must be created via the /dispatches API before publish.
 ```
 
 Response fields:
@@ -126,6 +129,7 @@ claimedCount
 overlapCount
 strategy
 maxClaimsPerLabeler
+assignedLabelerId
 deadlineAt
 publishedTemplateVersionId
 aiReview (AiReviewConfigResponse, nullable)

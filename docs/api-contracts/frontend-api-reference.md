@@ -76,6 +76,7 @@ POST /api/v1/tasks
   "overlapCount": 1,
   "strategy": "FCFS",
   "maxClaimsPerLabeler": 10,
+  "assignedLabelerId": null,
   "publishedTemplateVersionId": 20,
   "aiReviewConfigId": 30,
   "reviewLevelCount": 1,
@@ -127,6 +128,7 @@ GET /api/v1/tasks/{taskId}
   "description": "对商品图片进行类别标注",
   "instructionRichText": "<p>标注说明...</p>",
   "maxClaimsPerLabeler": 10,
+  "assignedLabelerId": null,
   "publishedTemplateVersionId": 20,
   "aiReview": {
     "id": 30,

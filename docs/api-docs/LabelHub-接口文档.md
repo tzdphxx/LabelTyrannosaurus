@@ -353,6 +353,9 @@ Authorization: Bearer <accessToken>
 | quota | Integer | 是 | ≥ 1 | 任务配额（可领取总数） |
 | deadlineAt | LocalDateTime | 是 | 必须为未来时间 | 截止时间 |
 | overlapCount | Integer | 是 | ≥ 1 | 每条数据需要的标注份数 |
+| strategy | String | 否 | FCFS / QUOTA_GRAB / ASSIGNED，默认 FCFS | 领取策略 |
+| maxClaimsPerLabeler | Integer | 否 | ≥ 1 | 单人并发未完成上限，仅 QUOTA_GRAB 有效 |
+| assignedLabelerId | Long | 否 | 仅 ASSIGNED 有效，用户需具备 LABELER 角色 | 默认指派标注员；导入成功后自动生成指派 |
 | publishedTemplateVersionId | Long | 否 | - | 关联的模板版本 ID |
 | **── AI 审核（引用已有 或 内联创建，二选一）──** |
 | aiReviewConfigId | Long | 否 | - | 引用已创建的 AI 配置 ID |
@@ -416,6 +419,7 @@ Authorization: Bearer <accessToken>
 | quota | Integer | 配额 |
 | claimedCount | Integer | 已领取数量 |
 | overlapCount | Integer | 重叠标注数 |
+| assignedLabelerId | Long | ASSIGNED 策略默认指派的标注员 ID |
 | deadlineAt | LocalDateTime | 截止时间 |
 | publishedTemplateVersionId | Long | 模板版本 ID |
 | aiReview | AiReviewConfigResponse | AI 审核配置对象；未配置时为 null |

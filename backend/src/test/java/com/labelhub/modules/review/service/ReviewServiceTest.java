@@ -19,6 +19,7 @@ import com.labelhub.common.exception.BusinessException;
 import com.labelhub.common.security.CurrentUser;
 import com.labelhub.common.security.CurrentUserContext;
 import com.labelhub.common.security.RoleCode;
+import com.labelhub.common.web.TraceIdProvider;
 import com.labelhub.modules.assignment.domain.Assignment;
 import com.labelhub.modules.assignment.domain.AssignmentStatus;
 import com.labelhub.modules.assignment.mapper.AssignmentMapper;
@@ -63,6 +64,7 @@ class ReviewServiceTest {
     @Mock private DatasetClaimService datasetClaimService;
     @Mock private ReviewLevelEscalationService escalationService;
     @Mock private ObjectMapper objectMapper;
+    @Mock private TraceIdProvider traceIdProvider;
 
     private ReviewService reviewService;
 
@@ -70,10 +72,11 @@ class ReviewServiceTest {
     void setUp() {
         lenient().when(escalationService.getMaxReviewLevel(any())).thenReturn(1);
         lenient().when(submissionMapper.casUpdateStatus(any(), any(), any())).thenReturn(1);
+        lenient().when(traceIdProvider.currentTraceId()).thenReturn("trace-review-action");
         reviewService = new ReviewService(
                 submissionMapper, assignmentMapper, reviewRecordMapper,
                 reviewSubmissionMapper, reviewTaskMapper, eventPublisher, auditAppender, datasetClaimService,
-                escalationService, objectMapper);
+                escalationService, objectMapper, traceIdProvider);
     }
 
     @AfterEach
@@ -143,7 +146,9 @@ class ReviewServiceTest {
 
         reviewService.approve(SUBMISSION_ID, REVIEWER_ID, new ApproveRequest("ok", 1, null));
 
-        verify(auditAppender).append(any(AuditCommand.class));
+        ArgumentCaptor<AuditCommand> auditCaptor = ArgumentCaptor.forClass(AuditCommand.class);
+        verify(auditAppender).append(auditCaptor.capture());
+        assertThat(auditCaptor.getValue().traceId()).isEqualTo("trace-review-action");
     }
 
     @Test
@@ -288,6 +293,18 @@ class ReviewServiceTest {
         assertThat(record.getAction()).isEqualTo(ReviewAction.REJECT);
         assertThat(record.getReason()).isEqualTo("Bad label");
         assertThat(record.getReviewLevel()).isEqualTo(1);
+    }
+
+    @Test
+    void rejectWritesAuditWithTraceId() {
+        when(submissionMapper.selectById(SUBMISSION_ID)).thenReturn(pendingFinalSubmission());
+        when(assignmentMapper.selectById(ASSIGNMENT_ID)).thenReturn(submittedAssignment());
+
+        reviewService.reject(SUBMISSION_ID, REVIEWER_ID, new RejectRequest("Bad label", 1));
+
+        ArgumentCaptor<AuditCommand> auditCaptor = ArgumentCaptor.forClass(AuditCommand.class);
+        verify(auditAppender).append(auditCaptor.capture());
+        assertThat(auditCaptor.getValue().traceId()).isEqualTo("trace-review-action");
     }
 
     @Test

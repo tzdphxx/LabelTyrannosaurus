@@ -113,9 +113,6 @@ public class OpenAiCompatibleAdapter {
                 .uri(requestUri)
                 .timeout(containsImagePart(messages) ? visionTimeout : timeout)
                 .header("Content-Type", "application/json");
-        if (requestUri != originalUri) {
-            builder.header("Host", originalUri.getHost());
-        }
         if (config.customHeaders() != null) {
             config.customHeaders().forEach((key, value) -> {
                 if (!BLOCKED_HEADER_KEYS.contains(key.toLowerCase(Locale.ROOT))
@@ -278,10 +275,7 @@ public class OpenAiCompatibleAdapter {
                 throw new IllegalArgumentException(
                         "LLM baseUrl must not resolve to a private/loopback address");
             }
-            int port = originalUri.getPort();
-            String resolvedAuthority = addr.getHostAddress() + (port > 0 ? ":" + port : "");
-            return new URI(originalUri.getScheme(), resolvedAuthority,
-                    originalUri.getPath(), originalUri.getQuery(), null);
+            return new URI(originalUri.toString());
         } catch (UnknownHostException e) {
             throw new IllegalArgumentException("LLM baseUrl host cannot be resolved: " + host);
         } catch (java.net.URISyntaxException e) {

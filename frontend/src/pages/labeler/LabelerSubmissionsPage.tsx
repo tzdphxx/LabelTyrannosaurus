@@ -1,112 +1,108 @@
-import { Button, Card, Input, Modal, Select, Space, Statistic, Table, Tag, Typography } from 'antd'
+import { Alert, Button, Card, Input, Modal, Select, Space, Statistic, Table, Tag, Typography } from 'antd'
 import { EyeOutlined, FormOutlined, ReloadOutlined } from '@ant-design/icons'
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router'
 import { ContentShell } from '../../components/page/ContentShell'
 import { PageHeader } from '../../components/page/PageHeader'
 import { useLabelingStore } from '../../stores/labelingStore'
-import type { LabelingSubmission } from '../../types/labeling'
+import type { LabelerAssignmentQueryStatus, LabelerAssignmentSummary } from '../../types/labeling'
 
-const statusLabels: Record<LabelingSubmission['status'], string> = {
-  submitted: '待人工复核',
-  approved: '已通过',
-  rejected: '待修改',
+const statusLabels: Record<LabelerAssignmentSummary['status'], string> = {
+  CLAIMED: '已领取',
+  DRAFTING: '草稿中',
+  SUBMITTED: '已提交',
+  AI_RETURNED: 'AI 退回',
+  RETURNED: '待修改',
+  APPROVED: '已通过',
+  CANCELLED: '已取消',
 }
 
-const statusColors: Record<LabelingSubmission['status'], string> = {
-  submitted: 'processing',
-  approved: 'success',
-  rejected: 'error',
+const statusColors: Record<LabelerAssignmentSummary['status'], string> = {
+  CLAIMED: 'warning',
+  DRAFTING: 'processing',
+  SUBMITTED: 'geekblue',
+  AI_RETURNED: 'error',
+  RETURNED: 'error',
+  APPROVED: 'success',
+  CANCELLED: 'default',
 }
 
-const statusOptions = [
+const statusOptions: Array<{ label: string; value: LabelerAssignmentQueryStatus }> = [
   { label: '全部状态', value: 'all' },
-  { label: '待人工复核', value: 'submitted' },
-  { label: '已通过', value: 'approved' },
-  { label: '待修改', value: 'rejected' },
+  { label: '已领取', value: 'CLAIMED' },
+  { label: '草稿中', value: 'DRAFTING' },
+  { label: '已提交', value: 'SUBMITTED' },
+  { label: 'AI 退回', value: 'AI_RETURNED' },
+  { label: '待修改', value: 'RETURNED' },
+  { label: '已通过', value: 'APPROVED' },
+  { label: '已取消', value: 'CANCELLED' },
 ]
 
-const aiDecisionLabels: Record<NonNullable<LabelingSubmission['aiDecision']>, string> = {
-  pass: 'AI 通过',
-  manual_review: 'AI 转人工',
-  reject: 'AI 打回',
-}
-
-const aiDecisionColors: Record<NonNullable<LabelingSubmission['aiDecision']>, string> = {
-  pass: 'success',
-  manual_review: 'processing',
-  reject: 'error',
-}
-
-const reviewSourceLabels: Record<NonNullable<LabelingSubmission['reviewSource']>, string> = {
-  ai: 'AI 审核',
-  manual: '人工审核',
-}
-
-const reviewSourceColors: Record<NonNullable<LabelingSubmission['reviewSource']>, string> = {
-  ai: 'blue',
-  manual: 'purple',
+function canOpenWorkbench(status: LabelerAssignmentSummary['status']) {
+  return status !== 'CANCELLED'
 }
 
 export function LabelerSubmissionsPage() {
   const navigate = useNavigate()
-  const submissionStats = useLabelingStore((state) => state.submissionStats)
-  const submissions = useLabelingStore((state) => state.submissions)
-  const isSubmissionsLoading = useLabelingStore((state) => state.isSubmissionsLoading)
-  const loadSubmissions = useLabelingStore((state) => state.loadSubmissions)
+  const assignmentStats = useLabelingStore((state) => state.assignmentStats)
+  const assignments = useLabelingStore((state) => state.assignments)
+  const error = useLabelingStore((state) => state.error)
+  const isAssignmentsLoading = useLabelingStore((state) => state.isAssignmentsLoading)
+  const loadAssignments = useLabelingStore((state) => state.loadAssignments)
   const [keyword, setKeyword] = useState('')
-  const [status, setStatus] = useState<LabelingSubmission['status'] | 'all'>('all')
-  const [previewSubmission, setPreviewSubmission] = useState<LabelingSubmission | null>(null)
+  const [status, setStatus] = useState<LabelerAssignmentQueryStatus>('all')
+  const [previewAssignment, setPreviewAssignment] = useState<LabelerAssignmentSummary | null>(null)
 
   useEffect(() => {
-    void loadSubmissions()
-  }, [loadSubmissions])
+    void loadAssignments({ status, page: 1, size: 100 })
+  }, [loadAssignments, status])
 
-  const filteredSubmissions = useMemo(() => {
+  const filteredAssignments = useMemo(() => {
     const normalizedKeyword = keyword.trim().toLowerCase()
 
-    return submissions.filter((submission) => {
-      const matchesStatus = status === 'all' || submission.status === status
-      const matchesKeyword =
-        normalizedKeyword.length === 0 ||
-        submission.taskTitle.toLowerCase().includes(normalizedKeyword) ||
-        submission.rejectReason?.toLowerCase().includes(normalizedKeyword) ||
-        submission.reviewComment?.toLowerCase().includes(normalizedKeyword) ||
-        submission.aiReviewSummary?.toLowerCase().includes(normalizedKeyword)
+    return assignments.filter((assignment) => {
+      if (normalizedKeyword.length === 0) {
+        return true
+      }
 
-      return matchesStatus && matchesKeyword
+      return (
+        assignment.taskTitle.toLowerCase().includes(normalizedKeyword) ||
+        assignment.taskId.includes(normalizedKeyword)
+      )
     })
-  }, [keyword, status, submissions])
+  }, [assignments, keyword])
 
   return (
     <main className="labeler-page">
       <ContentShell className="labeler-hero">
         <PageHeader
-          title="我的数据"
-          description="查看提交统计、审核结果和历史提交记录。待修改任务可直接回到工作台继续处理。"
+          title="我的领取"
+          description="查看当前账号已领取的任务，继续未完成草稿或处理被退回的题目。"
           extra={
-            <Button icon={<ReloadOutlined />} loading={isSubmissionsLoading} onClick={() => void loadSubmissions()}>
+            <Button icon={<ReloadOutlined />} loading={isAssignmentsLoading} onClick={() => void loadAssignments({ status, page: 1, size: 100 })}>
               刷新
             </Button>
           }
         />
       </ContentShell>
 
+      {error ? <Alert message={error} showIcon type="error" /> : null}
+
       <div className="labeler-stat-grid">
         <Card className="labeler-stat-card">
-          <Statistic title="已提交" value={submissionStats?.submitted ?? 0} />
+          <Statistic title="全部领取" value={assignmentStats?.total ?? 0} />
         </Card>
         <Card className="labeler-stat-card">
-          <Statistic title="已通过" value={submissionStats?.approved ?? 0} />
+          <Statistic title="草稿中" value={assignmentStats?.drafting ?? 0} />
         </Card>
         <Card className="labeler-stat-card">
-          <Statistic title="已打回" value={submissionStats?.rejected ?? 0} />
+          <Statistic title="已提交" value={assignmentStats?.submitted ?? 0} />
         </Card>
         <Card className="labeler-stat-card">
-          <Statistic title="待修改" value={submissionStats?.needsRevision ?? 0} />
+          <Statistic title="待修改" value={assignmentStats?.returned ?? 0} />
         </Card>
         <Card className="labeler-stat-card">
-          <Statistic title="进行中" value={submissionStats?.inProgress ?? 0} />
+          <Statistic title="已通过" value={assignmentStats?.approved ?? 0} />
         </Card>
       </div>
 
@@ -115,25 +111,30 @@ export function LabelerSubmissionsPage() {
           <Input.Search
             allowClear
             className="labeler-toolbar__search"
-            placeholder="搜索任务标题或审核意见"
+            placeholder="搜索任务标题或任务 ID"
             value={keyword}
             onChange={(event) => setKeyword(event.target.value)}
             onSearch={setKeyword}
           />
-          <Select className="labeler-toolbar__select" options={statusOptions} value={status} onChange={setStatus} />
+          <Select
+            className="labeler-toolbar__select"
+            options={statusOptions}
+            value={status}
+            onChange={setStatus}
+          />
         </div>
 
-        <Table<LabelingSubmission>
+        <Table<LabelerAssignmentSummary>
           columns={[
             {
               title: '任务',
               dataIndex: 'taskTitle',
-              render: (_, submission) => (
+              render: (_, assignment) => (
                 <Space direction="vertical" size={4}>
-                  <Typography.Text strong>{submission.taskTitle}</Typography.Text>
-                  <Typography.Text type="secondary">提交时间：{submission.submittedAt}</Typography.Text>
-                  {submission.aiReviewSummary ? <Typography.Text type="secondary">{submission.aiReviewSummary}</Typography.Text> : null}
-                  {submission.rejectReason ? <Typography.Text type="danger">{submission.rejectReason}</Typography.Text> : null}
+                  <Typography.Text strong>{assignment.taskTitle}</Typography.Text>
+                  <Typography.Text type="secondary">
+                    任务 #{assignment.taskId} / 已领取 {assignment.myClaimedCount ?? 0} 题
+                  </Typography.Text>
                 </Space>
               ),
             },
@@ -141,75 +142,66 @@ export function LabelerSubmissionsPage() {
               title: '状态',
               dataIndex: 'status',
               width: 110,
-              render: (value: LabelingSubmission['status']) => <Tag color={statusColors[value]}>{statusLabels[value]}</Tag>,
+              render: (value: LabelerAssignmentSummary['status']) => <Tag color={statusColors[value]}>{statusLabels[value]}</Tag>,
             },
             {
-              title: 'AI 结果',
-              dataIndex: 'aiDecision',
+              title: '提交/通过',
               width: 120,
-              render: (value?: LabelingSubmission['aiDecision']) =>
-                value ? <Tag color={aiDecisionColors[value]}>{aiDecisionLabels[value]}</Tag> : '-',
+              render: (_, assignment) => `${assignment.mySubmittedCount ?? 0} / ${assignment.myApprovedCount ?? 0}`,
             },
             {
-              title: '审核来源',
-              dataIndex: 'reviewSource',
+              title: '最近领取',
+              dataIndex: 'claimedAt',
               width: 150,
-              render: (value?: LabelingSubmission['reviewSource']) =>
-                value ? <Tag color={reviewSourceColors[value]}>{reviewSourceLabels[value]}</Tag> : '-',
             },
             {
-              title: '审核时间',
-              dataIndex: 'reviewedAt',
+              title: '更新时间',
+              dataIndex: 'updatedAt',
               width: 150,
-              render: (value?: string) => value ?? '-',
             },
             {
               title: '操作',
               width: 190,
-              render: (_, submission) => (
+              render: (_, assignment) => (
                 <Space wrap>
-                  <Button icon={<EyeOutlined />} size="small" onClick={() => setPreviewSubmission(submission)}>
+                  <Button icon={<EyeOutlined />} size="small" onClick={() => setPreviewAssignment(assignment)}>
                     查看
                   </Button>
-                  {submission.status === 'rejected' ? (
-                    <Button
-                      icon={<FormOutlined />}
-                      size="small"
-                      type="primary"
-                      onClick={() => navigate(`/app/labeler/workbench/${submission.taskId}`)}
-                    >
-                      修改
-                    </Button>
-                  ) : null}
+                  <Button
+                    disabled={!canOpenWorkbench(assignment.status)}
+                    icon={<FormOutlined />}
+                    size="small"
+                    type={assignment.status === 'DRAFTING' || assignment.status === 'RETURNED' ? 'primary' : 'default'}
+                    onClick={() => navigate(`/app/labeler/workbench/${assignment.taskId}`)}
+                  >
+                    进入工作台
+                  </Button>
                 </Space>
               ),
             },
           ]}
-          dataSource={filteredSubmissions}
-          loading={isSubmissionsLoading}
+          dataSource={filteredAssignments}
+          loading={isAssignmentsLoading}
           pagination={false}
-          rowKey="id"
+          rowKey="taskId"
         />
       </Card>
 
       <Modal
         footer={null}
-        open={Boolean(previewSubmission)}
-        title={previewSubmission?.taskTitle}
-        width={720}
-        onCancel={() => setPreviewSubmission(null)}
+        open={Boolean(previewAssignment)}
+        title={previewAssignment?.taskTitle}
+        width={640}
+        onCancel={() => setPreviewAssignment(null)}
       >
-        <Space direction="vertical" size={12}>
-          <Typography.Text>提交时间：{previewSubmission?.submittedAt}</Typography.Text>
-          <Typography.Text>审核结果：{previewSubmission ? statusLabels[previewSubmission.status] : '-'}</Typography.Text>
-          {previewSubmission?.aiDecision ? (
-            <Typography.Text>AI 结果：{aiDecisionLabels[previewSubmission.aiDecision]}</Typography.Text>
-          ) : null}
-          {previewSubmission?.reviewSource ? (
-            <Typography.Text>审核来源：{reviewSourceLabels[previewSubmission.reviewSource]}</Typography.Text>
-          ) : null}
-          {previewSubmission?.reviewComment ? <Typography.Paragraph>{previewSubmission.reviewComment}</Typography.Paragraph> : null}
-          <pre className="labeler-history-card__content">{JSON.stringify(previewSubmission?.answers ?? [], null, 2)}</pre>
+        <Space direction="vertical" size={10}>
+          <Typography.Text>任务 ID：{previewAssignment?.taskId}</Typography.Text>
+          <Typography.Text>已领取题目数：{previewAssignment?.myClaimedCount ?? 0}</Typography.Text>
+          <Typography.Text>已提交题目数：{previewAssignment?.mySubmittedCount ?? 0}</Typography.Text>
+          <Typography.Text>已通过题目数：{previewAssignment?.myApprovedCount ?? 0}</Typography.Text>
+          <Typography.Text>状态：{previewAssignment ? statusLabels[previewAssignment.status] : '-'}</Typography.Text>
+          <Typography.Text>最近领取：{previewAssignment?.claimedAt ?? '-'}</Typography.Text>
+          <Typography.Text>更新时间：{previewAssignment?.updatedAt ?? '-'}</Typography.Text>
         </Space>
       </Modal>
     </main>

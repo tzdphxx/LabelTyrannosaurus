@@ -580,3 +580,258 @@
 - 已执行 `npm run build`，失败于既有 TypeScript 错误：
   - `src/features/dynamic-form/utils/designerDrag.ts` 的 `never` 属性访问。
   - `src/pages/owner/templates/OwnerTemplateDesignerPage.tsx` 的 `never` 属性访问。
+## 2026-06-01 - 标注工作台题目级提交与状态流程调整
+
+### 已实现
+
+- 扩展标注题目状态，题目导航支持展示：待标注、进行中、已打回、已提交、草稿。
+- 新增题目状态文案与颜色映射，工作台左侧题目导航和右侧状态展示复用统一映射。
+- 将工作台提交逻辑从任务级提交调整为题目级提交：
+  - 新增题目级草稿校验。
+  - 新增 `submitQuestionDraft` 服务层方法。
+  - 新增 `labelingStore.submitQuestionDraft` action。
+  - 当前题提交成功后只更新当前题为已提交，不再把整任务所有题目置为已提交。
+- 调整标注工作台布局：
+  - 上一题/下一题移动到中间表单区域左下方。
+  - 保存草稿/提交当前题移动到中间表单区域右下方。
+  - 右侧栏改为“题目状态与流程”，展示当前题状态、回填来源、保存状态、最近保存和本题流程时间线。
+- Mock 数据中将返修任务题目标记为已打回，用于覆盖已打回状态展示。
+- 优化工作台页面内部表单值处理，避免在 effect 中同步重置 state 导致 ESLint `react-hooks/set-state-in-effect` 命中。
+
+### 当前约束
+
+- 本次仍基于前端 Mock 服务层实现，不接真实后端接口。
+- 题目级提交生成的提交记录仍复用现有 `LabelingSubmission` 结构，后续接后端时可进一步拆分为题目级提交实体。
+- “进行中”当前作为页面临时编辑态展示：当前题有未保存修改时显示为进行中，保存后显示为草稿。
+- 全量构建和 lint 仍受既有问题阻塞，阻塞点不在本次工作改动文件中。
+
+### 已验证
+
+- 已执行 `nvm list`，当前可用 Node 版本为 `22.14.0`。
+- 已执行 `npm ci` 安装 lockfile 依赖。
+- 已执行本次修改文件的局部 ESLint： 
+  - `npx eslint src\pages\labeler\LabelerWorkbenchPage.tsx src\stores\labelingStore.ts src\services\labeler\labelingService.ts src\services\labeler\labelingServiceHelpers.ts src\types\labeling.ts src\utils\labeling.ts src\mocks\labeling.mock.ts`
+  - 结果通过。
+- 已执行 `git diff --check -- src\pages\labeler\LabelerWorkbenchPage.tsx src\stores\labelingStore.ts src\services\labeler\labelingService.ts src\services\labeler\labelingServiceHelpers.ts src\types\labeling.ts src\utils\labeling.ts src\mocks\labeling.mock.ts src\index.css`，未发现空白错误，仅有 Git LF/CRLF 提示。
+- 已执行 `npm run build`，失败于既有 TypeScript 错误：
+  - `src/app/navigation.tsx`
+  - `src/components/navigation/RoleBadge.tsx`
+  - `src/features/dynamic-form/utils/designerDrag.ts`
+  - `src/pages/owner/templates/OwnerTemplateDesignerPage.tsx`
+- 已执行全量 `npm run lint`，失败于既有 lint 错误：
+  - `src/app/navigation.tsx`
+  - `src/features/dynamic-form/components/DynamicFormRenderer.tsx`
+  - `src/features/dynamic-form/components/designer/LinkageRuleEditor.tsx`
+  - `src/features/dynamic-form/components/designer/SchemaManagerPanel.tsx`
+  - `src/features/dynamic-form/materialRegistry.ts`
+  - `src/pages/owner/templates/OwnerTemplatesPage.ts`
+## 2026-06-02 - 标注员市场领取真实服务接入
+
+### 已实现
+
+- 阅读并对齐标注市场与领取接口文档，按文档契约接入真实服务。
+- 新增 `src/services/labeler/labelingRealService.ts`：
+  - 接入 `GET /v1/market/tasks` 查询标注市场任务。
+  - 接入 `POST /v1/tasks/{taskId}/assignments/claim` 领取 assignment。
+  - 接入 `GET /v1/assignments/{assignmentId}` 加载 assignment 详情、题目材料、schema 和草稿。
+  - 接入 `GET /v1/labeler/assignments` 查询当前标注员已领取 assignment，用于市场页找回已领取任务。
+  - 接入 assignment 草稿读取、保存和题目级提交接口。
+- 将原 mock 标注服务改名为 `mockLabelingService`，并在 `src/services/labeler/index.ts` 按 `VITE_SERVICE_MODE` 切换：
+  - `mock` 模式继续使用原 mock 行为。
+  - `real` 模式使用真实接口服务。
+- 保持市场页和工作台现有调用方式不变：
+  - 领取后仍跳转 `/app/labeler/workbench/:taskId`。
+  - 真实服务内部维护 `taskId -> assignmentId` 映射。
+- 完成字段降级策略：
+  - 进度使用 `quota - remainingQuota` 和 `quota` 计算。
+  - `instruction` 使用 `description` 兜底。
+  - `templateName`、`templateId`、审核详情等接口缺失字段使用空值或占位展示。
+  - assignment 题目标题使用 `题目 #datasetItemId` 生成。
+  - `itemList` / `itemJson` 转换为工作台材料区可展示的键值结构。
+- 增加真实状态到前端状态的映射：
+  - `CLAIMED`、`DRAFTING`、`RETURNED`、`SUBMITTED`、`APPROVED`、`CANCELLED` 映射到现有任务/题目状态。
+
+### 当前约束
+
+- 本次不调整工作台路由，仍以 `taskId` 作为 URL 参数。
+- 本次不实现取消领取接口。
+- 真实审核历史、上一轮答案、AI/人工审核详情接口当前仍未接入，相关字段保留为空或占位。
+- 如果 `GET /v1/labeler/assignments` 暂不可用，市场列表仍可通过 `GET /v1/market/tasks` 展示可领取任务，但已领取任务找回会受限。
+
+### 已验证
+
+- 已执行 `nvm list`，当前 Node 版本为 `22.14.0`；项目无 `.nvmrc`，`package.json` 未声明 `engines.node`。
+- 已执行本次相关文件的局部 ESLint：
+  - `npx eslint src\services\labeler\labelingService.ts src\services\labeler\labelingRealService.ts src\services\labeler\index.ts src\stores\labelingStore.ts src\pages\labeler\LabelerMarketPage.tsx src\pages\labeler\LabelerWorkbenchPage.tsx`
+  - 结果通过。
+- 已执行相关文件 `git diff --check`，未发现空白错误，仅有 Git LF/CRLF 提示。
+- 已执行 `npm run build`，失败于既有无关 TypeScript 错误：
+  - `src/app/navigation.tsx`
+  - `src/components/navigation/RoleBadge.tsx`
+  - `src/features/dynamic-form/utils/designerDrag.ts`
+  - `src/pages/owner/templates/OwnerTemplateDesignerPage.tsx`
+
+## 2026-06-02 - 草稿提交与我的领取真实接口补强
+
+### 已实现
+
+- 补强 assignment 草稿与提交真实接口：
+  - `GET /v1/assignments/{assignmentId}/draft` 用于读取后端草稿并回填工作台表单。
+  - `PUT /v1/assignments/{assignmentId}/draft` 按契约提交 `answerJson` 和 `clientVersion`，保存成功后同步最新 `draftVersion`。
+  - `POST /v1/assignments/{assignmentId}/submit` 按契约提交最终答案和当前 `draftVersion`。
+- 增加 assignment 相关错误码映射：
+  - `400101`：当前 assignment 状态不允许提交。
+  - `409101`：草稿版本冲突，提示刷新后重试。
+  - `409301`：Schema 校验失败，提示检查答案后重试。
+- `labelingStore` 支持透传 `ApiError.message`，避免真实接口错误被统一吞成默认保存/提交失败文案。
+- 新增 assignment 列表前端类型：
+  - `LabelerAssignmentStatus`
+  - `LabelerAssignmentListQuery`
+  - `LabelerAssignmentSummary`
+  - `LabelerAssignmentStats`
+- “我的领取”页面改为 assignment 维度列表：
+  - 页面进入时调用 `GET /v1/labeler/assignments`。
+  - 支持按 `status` 重新请求后端筛选。
+  - 展示 `assignmentId`、`taskId`、`datasetItemId`、`status`、`draftVersion`、`claimedAt`、`returnedAt`、`updatedAt`。
+  - 点击“进入工作台”仍沿用当前路由 `/app/labeler/workbench/:taskId`。
+- Mock 服务补齐 `listAssignments` 和 `getAssignmentStats`，保持 `mock` / `real` 服务模式切换兼容。
+
+### 当前约束
+
+- “我的领取”页面文件仍沿用 `LabelerSubmissionsPage.tsx` 和现有 `/app/labeler/submissions` 路由，仅页面语义和数据源已改为 assignment。
+- 工作台路由暂不改为 assignmentId 级别；如果后续允许同一任务下多个 assignment，需要进一步调整为 assignment 级路由。
+- `getSubmissionStats` 和 `listSubmissions` 在真实服务中仍保留 mock 回退，本次“我的领取”已改用新的 assignment 数据源，不再依赖提交记录接口。
+- assignment 统计当前通过额外一次 `GET /v1/labeler/assignments` 聚合生成，后续如后端提供统计接口可替换。
+
+### 已验证
+
+- 已执行 `nvm list`，当前 Node 版本为 `22.14.0`；项目无 `.nvmrc`，`package.json` 未声明 `engines.node`。
+- 已执行草稿与提交补强相关文件的局部 ESLint：
+  - `npx eslint src\services\labeler\labelingRealService.ts src\stores\labelingStore.ts src\pages\labeler\LabelerWorkbenchPage.tsx`
+  - 结果通过。
+- 已执行“我的领取”assignment 接入相关文件的局部 ESLint：
+  - `npx eslint src\types\labeling.ts src\services\labeler\labelingService.ts src\services\labeler\labelingRealService.ts src\stores\labelingStore.ts src\pages\labeler\LabelerSubmissionsPage.tsx`
+  - 结果通过。
+- 已执行相关文件 `git diff --check`，未发现空白错误，仅有 Git LF/CRLF 提示。
+- 已执行 `npm run build`，本次改动未引入新的构建错误，仍失败于既有无关 TypeScript 错误：
+  - `src/app/navigation.tsx`
+  - `src/components/navigation/RoleBadge.tsx`
+  - `src/features/dynamic-form/utils/designerDrag.ts`
+  - `src/pages/owner/templates/OwnerTemplateDesignerPage.tsx`
+
+## 2026-06-05 - 标注答案提交接口核对
+
+### 已确认
+
+- 标注工作台“提交当前题目”已接入真实提交接口：
+  - 页面入口：`LabelerWorkbenchPage.submitCurrentQuestion`
+  - Store action：`labelingStore.submitQuestionDraft`
+  - 真实服务：`realLabelingService.submitQuestionDraft`
+- 实际接口为：
+  - `POST /v1/claims/{claimId}/submit`
+- 请求体与 `labeler-task-workflow-api.md` 一致：
+  - `answerJson: JSON.stringify(draft.values)`
+  - `clientVersion: assignment.draftVersion ?? 0`
+- 当前提交流程会先保存草稿：
+  - `PUT /v1/claims/{claimId}/draft`
+  - 然后提交最终答案：
+  - `POST /v1/claims/{claimId}/submit`
+
+### 当前差异
+
+- 提交成功后当前会刷新任务广场和提交记录 mock 回退。
+- 暂未在提交成功后重新调用 `GET /v1/claims` 刷新“我的领取”聚合状态。
+- 暂未重新调用工作台的 `GET /v1/claims?taskId=...` 刷新当前任务下题目状态。
+
+## 2026-06-04 - 模板 schemaJson components 解析修复
+
+### 已实现
+
+- 修复真实模板接口返回 `{ "components": [...] }` 时无法渲染的问题。
+- `parseSchema` 新增 `components` 数组识别，并转换为前端 `DynamicFormSchema.nodes`。
+- 支持后端组件字段映射：
+  - `type` 映射为前端字段类型。
+  - `field` 映射为 `key`。
+  - `label` 映射为 `title`。
+  - `required: true` 映射为必填规则。
+- `ShowItem` 在没有显式 `props.text` 时，自动使用 `label` 或 `field` 作为展示文本。
+- 字段类型识别改为同时参考 `type` 和组件名，支持 `ShowItem`、`Input` 等首字母大写类型。
+
+### 已验证
+
+- 已执行 `nvm list`，当前 Node 版本为 `22.14.0`；项目无 `.nvmrc`，`package.json` 未声明 `engines.node`。
+- 已执行局部 ESLint：
+  - `npx eslint src\services\labeler\labelingRealService.ts src\pages\labeler\LabelerWorkbenchPage.tsx`
+  - 结果通过。
+- 已执行 `git diff --check -- src\services\labeler\labelingRealService.ts`，未发现空白错误，仅有 Git LF/CRLF 提示。
+- 已执行 `npm run build`，本次改动未引入新的构建错误，仍失败于既有无关 TypeScript 错误：
+  - `src/app/navigation.tsx`
+  - `src/components/navigation/RoleBadge.tsx`
+  - `src/features/dynamic-form/utils/designerDrag.ts`
+  - `src/pages/owner/templates/OwnerTemplateDesignerPage.tsx`
+
+## 2026-06-04 - Labeler 任务流接口按新文档重构
+
+### 已实现
+
+- 按 `labeler-task-workflow-api.md` 重构标注员真实服务接口，只保留文档中的接口：
+  - `GET /v1/market/tasks`
+  - `GET /v1/claims`
+  - `GET /v1/labeler/tasks/{taskId}/answer-template`
+  - `POST /v1/tasks/{taskId}/items/claim`
+  - `GET /v1/claims/{claimId}/draft`
+  - `PUT /v1/claims/{claimId}/draft`
+  - `POST /v1/claims/{claimId}/submit`
+- 移除真实服务对旧接口的调用：
+  - `/v1/assignments/{assignmentId}`
+  - `/v1/labeler/claimed-tasks/{taskId}`
+  - `/v1/tasks/{taskId}/assignments/claim`
+  - `/v1/assignments/{assignmentId}/draft`
+  - `/v1/assignments/{assignmentId}/submit`
+  - `/v1/labeler/assignments`
+- 任务广场进入时只通过 `GET /v1/market/tasks` 加载列表，标签由列表数据派生。
+- “我的领取”改为任务聚合视图，使用 `GET /v1/claims`，统计由本次列表结果聚合。
+- 工作台使用 `GET /v1/claims?taskId=...` 获取已领取题目，使用 `GET /v1/labeler/tasks/{taskId}/answer-template` 获取模板。
+- 草稿和提交统一改为基于 `claimId` 的 `/claims/{claimId}` 接口。
+
+### 已验证
+
+- 已执行 `nvm list`，当前 Node 版本为 `22.14.0`；项目无 `.nvmrc`，`package.json` 未声明 `engines.node`。
+- 已执行局部 ESLint：
+  - `npx eslint src\services\labeler\labelingRealService.ts src\stores\labelingStore.ts src\pages\labeler\LabelerMarketPage.tsx src\pages\labeler\LabelerSubmissionsPage.tsx src\pages\labeler\LabelerWorkbenchPage.tsx src\types\labeling.ts`
+  - 结果通过。
+- 已执行 `git diff --check`，未发现空白错误，仅有 Git LF/CRLF 提示。
+- 已执行 `npm run build`，本次改动未引入新的构建错误，仍失败于既有无关 TypeScript 错误：
+  - `src/app/navigation.tsx`
+  - `src/components/navigation/RoleBadge.tsx`
+  - `src/features/dynamic-form/utils/designerDrag.ts`
+  - `src/pages/owner/templates/OwnerTemplateDesignerPage.tsx`
+
+## 2026-06-03 - Assignment schemaJson 模板解析修复
+
+### 已实现
+
+- 修复真实服务中 assignment 详情的模板解析：
+  - `GET /v1/assignments/{assignmentId}` 返回后继续从 `schemaJson` 字段读取模板。
+  - 支持 `schemaJson` 为字符串、对象、二次转义 JSON 字符串。
+  - 支持前端动态表单格式 `{ id, version, title, nodes }`。
+  - 支持 `nodes` 数组直接作为模板内容。
+  - 支持 Formily 风格 `{ type: "object", properties: {...} }` 并转换为 `DynamicFormSchema.nodes`。
+- 增加真实 schema 字段降级：
+  - 自动补齐缺失的 `id`、`key`、`title`、`props`。
+  - 将常见 Formily 组件映射为前端动态表单字段类型。
+  - 未识别字段默认降级为 `input`，避免页面崩溃。
+- 保持 mock 服务不变，工作台仍通过真实 assignment 详情中的 `schemaJson` 渲染题目。
+
+### 已验证
+
+- 已执行 `nvm list`，当前 Node 版本为 `22.14.0`；项目无 `.nvmrc`，`package.json` 未声明 `engines.node`。
+- 已执行局部 ESLint：
+  - `npx eslint src\services\labeler\labelingRealService.ts src\stores\labelingStore.ts src\pages\labeler\LabelerWorkbenchPage.tsx`
+  - 结果通过。
+- 已执行 `git diff --check -- src\services\labeler\labelingRealService.ts`，未发现空白错误，仅有 Git LF/CRLF 提示。
+- 已执行 `npm run build`，本次改动未引入新的构建错误，仍失败于既有无关 TypeScript 错误：
+  - `src/app/navigation.tsx`
+  - `src/components/navigation/RoleBadge.tsx`
+  - `src/features/dynamic-form/utils/designerDrag.ts`
+  - `src/pages/owner/templates/OwnerTemplateDesignerPage.tsx`

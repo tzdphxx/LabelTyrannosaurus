@@ -69,7 +69,7 @@ export const roleNavigation: Record<Role, NavItem[]> = {
     },
     {
       key: 'labeler-submissions',
-      label: '我的提交',
+      label: '我的领取',
       path: '/app/labeler/submissions',
       role: 'LABELER',
       icon: <FileDoneOutlined />,

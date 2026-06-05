@@ -542,7 +542,7 @@ select {
   color: #23313f;
 }
 
-.owner-dataset-table .ant-table-thead > tr > th {
+.owner-dataset-table .ant-table-thead>tr>th {
   background: #f7fafc;
   font-weight: 600;
 }
@@ -557,7 +557,7 @@ select {
   overflow-wrap: anywhere;
 }
 
-.owner-dataset-table__row--draft > td {
+.owner-dataset-table__row--draft>td {
   background: #f5f9ff !important;
 }
 
@@ -697,13 +697,31 @@ select {
   width: 100%;
 }
 
+.labeler-workbench__actions {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  justify-content: space-between;
+  padding-top: 16px;
+  border-top: 1px solid #e5ebf0;
+}
+
 .labeler-workbench__pager {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
+  max-width: 220px;
 }
 
 .labeler-workbench__pager .ant-btn {
   width: 100%;
+}
+
+.labeler-workbench__submit-actions {
+  justify-content: flex-end;
+}
+
+.labeler-question-flow.ant-timeline {
+  margin: 4px 0 0;
 }
 
 .labeler-history-card.ant-card {
@@ -1118,6 +1136,54 @@ select {
 
   .labeler-workbench__nav .ant-list {
     max-height: none;
+  }
+
+  .labeler-workbench__actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .labeler-workbench__pager,
+  .labeler-workbench__submit-actions {
+    max-width: none;
+    width: 100%;
+  }
+
+  .labeler-workbench__submit-actions {
+    justify-content: stretch;
+  }
+
+  .labeler-workbench__submit-actions .ant-btn {
+    flex: 1;
+  }
+
+  .designer-shell {
+    grid-template-columns: 1fr;
+    height: auto;
+    min-height: 0;
+  }
+
+  .designer-panel.ant-card {
+    height: auto;
+  }
+
+  .designer-panel--materials .ant-card-body,
+  .designer-panel--inspector .ant-card-body {
+    overflow: visible;
+  }
+
+  .designer-panel .ant-card-body {
+    min-height: 0;
+    overflow: visible;
+  }
+
+  .designer-canvas-scroll {
+    height: auto;
+    overflow: visible;
+  }
+
+  .designer-canvas-list {
+    min-height: 260px;
   }
 
   .owner-toolbar {

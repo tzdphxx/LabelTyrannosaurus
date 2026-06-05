@@ -1,6 +1,6 @@
 import { Alert, Button, Card, Descriptions, List, Modal, Space, Tag, Timeline, Typography, message } from 'antd'
 import { ArrowLeftOutlined, SaveOutlined, SendOutlined } from '@ant-design/icons'
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router'
 import { ContentShell } from '../../components/page/ContentShell'
 import { PageHeader } from '../../components/page/PageHeader'
@@ -15,10 +15,28 @@ import {
   labelingQuestionStatusLabels,
 } from '../../utils/labeling'
 
+function stringifyDraftValues(value: unknown): string {
+  if (!value || typeof value !== 'object') {
+    return JSON.stringify(value ?? null)
+  }
+
+  if (Array.isArray(value)) {
+    return `[${value.map((item) => stringifyDraftValues(item)).join(',')}]`
+  }
+
+  const record = value as Record<string, unknown>
+
+  return `{${Object.keys(record)
+    .sort()
+    .map((key) => `${JSON.stringify(key)}:${stringifyDraftValues(record[key])}`)
+    .join(',')}}`
+}
+
 export function LabelerWorkbenchPage() {
   const { taskId } = useParams()
   const navigate = useNavigate()
   const [messageApi, contextHolder] = message.useMessage()
+  const [modal, modalContextHolder] = Modal.useModal()
   const currentUser = useAuthStore((state) => state.currentUser)
   const currentTask = useLabelingStore((state) => state.currentTask)
   const questions = useLabelingStore((state) => state.questions)
@@ -42,6 +60,12 @@ export function LabelerWorkbenchPage() {
     () => currentDraft?.values ?? currentQuestion?.previousValues ?? {},
     [currentDraft?.values, currentQuestion?.previousValues],
   )
+  const formInitialValuesSignature = useMemo(() => stringifyDraftValues(formInitialValues), [formInitialValues])
+  const activeQuestionId = currentQuestion?.id ?? null
+  const savedValuesSignatureRef = useRef(formInitialValuesSignature)
+  const currentValuesSignatureRef = useRef(formInitialValuesSignature)
+  const savingValuesSignatureRef = useRef<string | null>(null)
+
   const effectiveValues =
     hasUnsavedChanges && editingQuestionId === currentQuestion?.id
       ? latestValues
@@ -106,11 +130,38 @@ export function LabelerWorkbenchPage() {
   }, [currentQuestion, currentUser, loadDraft, taskId])
 
   useEffect(() => {
+    if (editingQuestionId === activeQuestionId && hasUnsavedChanges) {
+      return
+    }
+
+    savedValuesSignatureRef.current = formInitialValuesSignature
+    currentValuesSignatureRef.current = formInitialValuesSignature
+    savingValuesSignatureRef.current = null
+  }, [activeQuestionId, editingQuestionId, formInitialValuesSignature, hasUnsavedChanges])
+
+  const markDraftSaved = useCallback((draftValues: Record<string, unknown>) => {
+    const savedSignature = stringifyDraftValues(draftValues)
+
+    savedValuesSignatureRef.current = savedSignature
+    savingValuesSignatureRef.current = null
+    setHasUnsavedChanges(currentValuesSignatureRef.current !== savedSignature)
+  }, [])
+
+  useEffect(() => {
     if (!taskId || !currentQuestion || !currentUser || !hasUnsavedChanges) {
       return
     }
 
+    const valuesSignature = stringifyDraftValues(effectiveValues)
+
+    if (valuesSignature === savedValuesSignatureRef.current || valuesSignature === savingValuesSignatureRef.current) {
+      setHasUnsavedChanges(false)
+
+      return
+    }
+
     const timer = window.setTimeout(() => {
+      savingValuesSignatureRef.current = valuesSignature
       void saveDraft({
         taskId,
         questionId: currentQuestion.id,
@@ -118,13 +169,15 @@ export function LabelerWorkbenchPage() {
         values: effectiveValues,
       }).then((draft) => {
         if (draft) {
-          setHasUnsavedChanges(false)
+          markDraftSaved(draft.values)
+        } else {
+          savingValuesSignatureRef.current = null
         }
       })
     }, 1200)
 
     return () => window.clearTimeout(timer)
-  }, [currentQuestion, currentUser, effectiveValues, hasUnsavedChanges, saveDraft, taskId])
+  }, [currentQuestion, currentUser, effectiveValues, hasUnsavedChanges, markDraftSaved, saveDraft, taskId])
 
   const handleSaveDraft = async () => {
     if (!taskId || !currentQuestion || !currentUser) {
@@ -132,6 +185,15 @@ export function LabelerWorkbenchPage() {
       return
     }
 
+    const valuesSignature = stringifyDraftValues(effectiveValues)
+
+    if (valuesSignature === savedValuesSignatureRef.current) {
+      setHasUnsavedChanges(false)
+
+      return
+    }
+
+    savingValuesSignatureRef.current = valuesSignature
     const draft = await saveDraft({
       taskId,
       questionId: currentQuestion.id,
@@ -140,17 +202,21 @@ export function LabelerWorkbenchPage() {
     })
 
     if (draft) {
-      setHasUnsavedChanges(false)
+      markDraftSaved(draft.values)
       messageApi.success('草稿已保存')
     } else {
+      savingValuesSignatureRef.current = null
       messageApi.error('草稿保存失败')
     }
   }
 
   const handleValuesChange = (values: Record<string, unknown>) => {
+    const valuesSignature = stringifyDraftValues(values)
+
+    currentValuesSignatureRef.current = valuesSignature
     setLatestValues(values)
     setEditingQuestionId(currentQuestion?.id ?? null)
-    setHasUnsavedChanges(true)
+    setHasUnsavedChanges(valuesSignature !== savedValuesSignatureRef.current)
   }
 
   const selectQuestion = (questionId: string) => {
@@ -165,13 +231,28 @@ export function LabelerWorkbenchPage() {
       return
     }
 
-    await saveDraft({
-      taskId,
-      questionId: currentQuestion.id,
-      userId: currentUser.id,
-      values: effectiveValues,
-    })
-    setHasUnsavedChanges(false)
+    const valuesSignature = stringifyDraftValues(effectiveValues)
+
+    if (valuesSignature !== savedValuesSignatureRef.current || !currentDraft) {
+      savingValuesSignatureRef.current = valuesSignature
+      const draft = await saveDraft({
+        taskId,
+        questionId: currentQuestion.id,
+        userId: currentUser.id,
+        values: effectiveValues,
+      })
+
+      if (!draft) {
+        savingValuesSignatureRef.current = null
+        messageApi.error('鑽夌淇濆瓨澶辫触锛屾湭鎻愪氦')
+
+        return
+      }
+
+      markDraftSaved(draft.values)
+    } else {
+      setHasUnsavedChanges(false)
+    }
 
     const result = await submitQuestionDraft(taskId, currentQuestion.id, currentUser.id)
 
@@ -190,7 +271,7 @@ export function LabelerWorkbenchPage() {
   }
 
   const confirmSubmitQuestion = () => {
-    Modal.confirm({
+    modal.confirm({
       title: '提交当前题目',
       content: '提交后仅当前题进入已提交状态，其他题目不会被提交。确认提交当前题吗？',
       okText: '提交',
@@ -210,6 +291,7 @@ export function LabelerWorkbenchPage() {
   return (
     <main className="labeler-page">
       {contextHolder}
+      {modalContextHolder}
       <ContentShell className="labeler-hero">
         <PageHeader
           title={currentTask?.title ?? '标注工作台'}

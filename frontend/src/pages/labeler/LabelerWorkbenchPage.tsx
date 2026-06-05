@@ -202,11 +202,7 @@ export function LabelerWorkbenchPage() {
     })
 
     if (draft) {
-<<<<<<< HEAD
-      setValueSnapshot((snapshot) => (snapshot.key === valuesKey ? { ...snapshot, dirty: false } : snapshot))
-=======
       markDraftSaved(draft.values)
->>>>>>> feature/labelerApi
       messageApi.success('草稿已保存')
     } else {
       savingValuesSignatureRef.current = null

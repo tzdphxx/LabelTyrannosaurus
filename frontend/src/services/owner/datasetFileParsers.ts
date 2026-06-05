@@ -4,8 +4,6 @@ import type { DatasetSampleRow, ImportIssue, ImportPreview } from '../../types/i
 type DatasetFileType = ImportPreview['fileType']
 type ParsedRow = Record<string, unknown>
 
-const SAMPLE_LIMIT = 20
-
 function createIssue(row: number, message: string, field = '-', level: ImportIssue['level'] = 'blocking'): ImportIssue {
   return {
     id: `issue-${row}-${field}`,
@@ -53,7 +51,7 @@ function getOrderedFields(rows: ParsedRow[]) {
 }
 
 function toSampleRows(rows: ParsedRow[]): DatasetSampleRow[] {
-  return rows.slice(0, SAMPLE_LIMIT).map((row, index) => ({
+  return rows.map((row, index) => ({
     id: `sample-${index + 1}`,
     values: Object.fromEntries(Object.entries(row).map(([field, value]) => [field, normalizeCellValue(value)])),
   }))

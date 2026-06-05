@@ -310,7 +310,7 @@ function mapSummaryResponse(response: OwnerTaskSummaryResponse): OwnerTask {
 
 function mapDetailResponse(response: TaskDetailResponse): OwnerTask {
   const rewardValue = Number(response.reward)
-  const aiReviewConfig = response.aiReviewConfig
+  const aiReviewConfig = response.aiReview
 
   return {
     id: String(response.taskId),

@@ -209,7 +209,7 @@ export interface TaskDetailResponse {
   aiScoringDimensions?: string[]
   aiPassThreshold?: number
   aiManualReviewThreshold?: number
-  aiReviewConfig?: {
+  aiReview?: {
     modelName?: string
     promptTemplate?: string
     scoringDimensions?: string[]

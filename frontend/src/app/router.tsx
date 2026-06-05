@@ -1,5 +1,6 @@
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router'
 import { StatePlaceholder } from '../components/states/StatePlaceholder'
+import { AdminReviewAssignmentPage } from '../pages/admin/AdminReviewAssignmentPage'
 import { LoginPage } from '../pages/auth/LoginPage'
 import { LabelerMarketPage } from '../pages/labeler/LabelerMarketPage'
 import { LabelerSubmissionsPage } from '../pages/labeler/LabelerSubmissionsPage'
@@ -47,6 +48,14 @@ export function AppRouter() {
           path="/app"
         >
           <Route index element={<EntryRedirect />} />
+          <Route path="admin">
+            <Route index element={<AdminReviewAssignmentPage />} />
+            <Route element={<AdminReviewAssignmentPage />} path="review-assignment" />
+            <Route
+              element={<StatePlaceholder status="empty" message="该入口已预留，后续阶段接入业务页面。" />}
+              path="*"
+            />
+          </Route>
           <Route path="owner">
             <Route index element={<OwnerDashboardPage />} />
             <Route element={<OwnerTasksPage />} path="tasks" />

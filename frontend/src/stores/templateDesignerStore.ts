@@ -18,8 +18,10 @@ interface TemplateDesignerStore {
   selectedNodeId: string | null
   isLoading: boolean
   isSaving: boolean
+  isDraftTemplate: boolean
   error: string | null
   hasUnsavedChanges: boolean
+  initializeDraftTemplate: (input: { description: string; name: string }) => void
   loadTemplate: (templateId: string) => Promise<void>
   addNode: (type: DynamicFieldType, parentId?: string | null) => string | null
   selectNode: (nodeId: string | null) => void
@@ -37,8 +39,38 @@ export const useTemplateDesignerStore = create<TemplateDesignerStore>((set, get)
   selectedNodeId: null,
   isLoading: false,
   isSaving: false,
+  isDraftTemplate: false,
   error: null,
   hasUnsavedChanges: false,
+
+  initializeDraftTemplate: (input) => {
+    const id = `draft-${Date.now()}`
+    const schema: DynamicFormSchema = {
+      id,
+      version: 'v0.1',
+      title: input.name,
+      nodes: [],
+    }
+
+    set({
+      template: {
+        id,
+        currentVersionId: `${id}-v1`,
+        name: input.name,
+        version: 'v0.1',
+        status: 'draft',
+        fieldCount: 0,
+        description: input.description,
+        schema,
+        updatedAt: new Date().toLocaleString('zh-CN', { hour12: false }),
+      },
+      schema,
+      selectedNodeId: null,
+      isDraftTemplate: true,
+      hasUnsavedChanges: true,
+      error: null,
+    })
+  },
 
   loadTemplate: async (templateId) => {
     set({ isLoading: true, error: null })
@@ -55,6 +87,7 @@ export const useTemplateDesignerStore = create<TemplateDesignerStore>((set, get)
         template,
         schema: template.schema,
         selectedNodeId: template.schema.nodes[0]?.id ?? null,
+        isDraftTemplate: false,
         hasUnsavedChanges: false,
       })
     } catch {
@@ -155,7 +188,7 @@ export const useTemplateDesignerStore = create<TemplateDesignerStore>((set, get)
   },
 
   saveSchema: async () => {
-    const { schema, template } = get()
+    const { isDraftTemplate, schema, template } = get()
 
     if (!schema || !template) {
       return false
@@ -171,6 +204,28 @@ export const useTemplateDesignerStore = create<TemplateDesignerStore>((set, get)
     set({ isSaving: true, error: null })
 
     try {
+      if (isDraftTemplate) {
+        const createdTemplate = await ownerTemplateService.createTemplate({
+          name: template.name,
+          description: template.description,
+          schema,
+        })
+        const selectedNodeId = get().selectedNodeId
+
+        set({
+          schema: createdTemplate.schema,
+          template: createdTemplate,
+          selectedNodeId:
+            selectedNodeId && findSchemaNode(createdTemplate.schema, selectedNodeId)
+              ? selectedNodeId
+              : createdTemplate.schema.nodes[0]?.id ?? null,
+          isDraftTemplate: false,
+          hasUnsavedChanges: false,
+        })
+
+        return true
+      }
+
       const savedSchema = await ownerTemplateService.saveTemplateSchema(template.id, schema)
       const selectedNodeId = get().selectedNodeId
 
@@ -181,6 +236,7 @@ export const useTemplateDesignerStore = create<TemplateDesignerStore>((set, get)
           schema: savedSchema,
         },
         selectedNodeId: selectedNodeId && findSchemaNode(savedSchema, selectedNodeId) ? selectedNodeId : savedSchema.nodes[0]?.id ?? null,
+        isDraftTemplate: false,
         hasUnsavedChanges: false,
       })
 

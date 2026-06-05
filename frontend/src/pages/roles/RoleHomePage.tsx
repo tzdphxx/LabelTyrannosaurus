@@ -15,6 +15,16 @@ const roleHomeContent: Record<
     nextSteps: string[]
   }
 > = {
+  ADMIN: {
+    headline: '管理员工作台',
+    summary: '查看平台审核分配、审核员负载和待终审任务池，支撑运营侧调度判断。',
+    metrics: [
+      { label: '审核分配', value: '已接入' },
+      { label: '审核员进度', value: '已接入' },
+      { label: '平台配置', value: '预留' },
+    ],
+    nextSteps: ['审核分配查询入口', '审核员工作状态入口', '平台管理入口'],
+  },
   OWNER: {
     headline: '任务负责人工作台',
     summary: '后续承载任务创建、模板搭建、发布分发、质量追踪和导出审计。',

@@ -3,6 +3,14 @@ import type { ImportPreview } from '../../types/import'
 import type {
   CreateTaskRequest,
   CreateTaskResponse,
+  DatasetItemAppendInput,
+  DatasetItemAppendResult,
+  DatasetItemBatchAppendRequest,
+  DatasetItemPageQuery,
+  DatasetItemPageResponse,
+  DatasetItemResponse,
+  DistributionStrategy,
+  DistributionStrategyCode,
   OwnerTask,
   OwnerTaskApiStatus,
   OwnerTaskDetail,
@@ -34,6 +42,18 @@ const ownerStatusToApiStatus: Record<OwnerTaskStatus, OwnerTaskApiStatus> = {
   published: 'PUBLISHED',
   paused: 'PAUSED',
   ended: 'ENDED',
+}
+
+const distributionStrategyToApi: Record<DistributionStrategy, DistributionStrategyCode> = {
+  先到先得: 'FCFS',
+  配额分发: 'QUOTA',
+  指派: 'ASSIGN',
+}
+
+const apiToDistributionStrategy: Partial<Record<DistributionStrategyCode, DistributionStrategy>> = {
+  FCFS: '先到先得',
+  QUOTA: '配额分发',
+  ASSIGN: '指派',
 }
 
 const tasks: OwnerTask[] = mockTasks.map(cloneTask)
@@ -92,6 +112,85 @@ function getImportPreview(importPreviewId?: string) {
   const preview = mockImportPreviews.find((item) => item.id === importPreviewId)
 
   return preview ? cloneImportPreview(preview) : null
+}
+
+function toDatasetItem(task: OwnerTask, sample: ImportPreview['samples'][number], index: number): DatasetItemResponse {
+  return {
+    itemId: index + 1,
+    taskId: Number(task.id.replace(/\D/g, '')) || index + 1,
+    externalId: sample.id,
+    itemJson: sample.values,
+    metadataJson: {},
+    assignedCount: 0,
+    submittedCount: 0,
+    approvedCount: 0,
+    itemStatus: 'UNCLAIMED',
+    labelerId: null,
+    createdAt: task.createdAt,
+    updatedAt: task.updatedAt,
+  }
+}
+
+function getMockDatasetItems(taskId: string, query: DatasetItemPageQuery): DatasetItemPageResponse {
+  const task = tasks.find((item) => item.id === taskId)
+  const preview = task ? getImportPreview(task.importPreviewId) : null
+  const allItems = task && preview ? preview.samples.map((sample, index) => toDatasetItem(task, sample, index)) : []
+  const filteredItems = query.externalId ? allItems.filter((item) => item.externalId.includes(query.externalId ?? '')) : allItems
+  const start = (query.page - 1) * query.pageSize
+
+  return {
+    items: filteredItems.slice(start, start + query.pageSize),
+    page: query.page,
+    pageSize: query.pageSize,
+    total: filteredItems.length,
+  }
+}
+
+function toMockDatasetValues(itemJson: DatasetItemAppendInput['itemJson']): Record<string, string | number | boolean | null> {
+  return Object.fromEntries(
+    Object.entries(itemJson).map(([key, value]) => [
+      key,
+      typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean' || value === null
+        ? value
+        : JSON.stringify(value),
+    ]),
+  )
+}
+
+function appendMockDatasetItems(taskId: string, items: DatasetItemAppendInput[]): DatasetItemAppendResult[] {
+  const task = tasks.find((item) => item.id === taskId)
+  const preview = task ? mockImportPreviews.find((item) => item.id === task.importPreviewId) : null
+
+  if (!task || !preview) {
+    return items.map((item) => ({
+      itemId: 0,
+      externalId: item.externalId,
+      success: false,
+      errorCode: 404,
+      errorMessage: '任务数据集不存在',
+    }))
+  }
+
+  const startIndex = preview.samples.length
+
+  items.forEach((item, index) => {
+    preview.samples.push({
+      id: item.externalId || `manual-${Date.now()}-${index + 1}`,
+      values: toMockDatasetValues(item.itemJson),
+    })
+  })
+  preview.totalRows += items.length
+  preview.validRows += items.length
+  task.dataCount = preview.validRows
+  task.progress.totalItems = preview.validRows
+
+  return items.map((item, index) => ({
+    itemId: startIndex + index + 1,
+    externalId: item.externalId,
+    success: true,
+    errorCode: 0,
+    errorMessage: '',
+  }))
 }
 
 function getTemplate(publishedTemplateVersionId: string | null) {
@@ -181,6 +280,9 @@ function mapSummaryResponse(response: OwnerTaskSummaryResponse): OwnerTask {
     rewardRule: {
       unitPrice: 0,
       currency: 'CNY',
+      rewardMode: 'APPROVED_ITEM',
+      rewardCurrency: 'POINT',
+      rewardVisible: true,
       description: '',
     },
     distributionStrategy: '先到先得',
@@ -192,16 +294,23 @@ function mapSummaryResponse(response: OwnerTaskSummaryResponse): OwnerTask {
     createdAt: formatTaskDate(response.createdAt),
     progress: getEmptyProgress(response.quota, response.claimedCount),
     aiReview: {
-      prompt: '',
-      model: '',
-      rating: '',
+      aiPrompt: '',
+      aiModelName: '',
+      aiProviderId: null,
+      aiScoringDimensions: [],
+      aiPassThreshold: 80,
+      aiManualReviewThreshold: 60,
+      aiReviewStrategy: 'LIGHTWEIGHT',
     },
     reviewLevelCount: 1,
+    overlapCount: 1,
+    maxClaimsPerLabeler: 10,
   }
 }
 
 function mapDetailResponse(response: TaskDetailResponse): OwnerTask {
   const rewardValue = Number(response.reward)
+  const aiReviewConfig = response.aiReviewConfig
 
   return {
     id: String(response.taskId),
@@ -214,11 +323,14 @@ function mapDetailResponse(response: TaskDetailResponse): OwnerTask {
     quota: response.quota,
     claimedCount: response.claimedCount,
     rewardRule: {
-      unitPrice: Number.isFinite(rewardValue) ? rewardValue : 0,
+      unitPrice: response.rewardRule?.unitReward ?? (Number.isFinite(rewardValue) ? rewardValue : 0),
       currency: 'CNY',
+      rewardMode: response.rewardRule?.rewardMode ?? 'APPROVED_ITEM',
+      rewardCurrency: response.rewardRule?.rewardCurrency ?? 'POINT',
+      rewardVisible: response.rewardRule?.rewardVisible ?? true,
       description: response.reward,
     },
-    distributionStrategy: response.strategy,
+    distributionStrategy: apiToDistributionStrategy[response.strategy as DistributionStrategyCode] ?? (response.strategy as DistributionStrategy),
     publishedTemplateVersionId: response.publishedTemplateVersionId ? String(response.publishedTemplateVersionId) : null,
     templateName: response.publishedTemplateVersionId ? `版本 ${response.publishedTemplateVersionId}` : '未关联模板',
     status: apiStatusToOwnerStatus[response.status],
@@ -227,11 +339,17 @@ function mapDetailResponse(response: TaskDetailResponse): OwnerTask {
     createdAt: formatTaskDate(response.createdAt),
     progress: getEmptyProgress(response.quota, response.claimedCount),
     aiReview: {
-      prompt: response.prompt ?? '',
-      model: response.model ?? '',
-      rating: response.rating ?? '',
+      aiPrompt: aiReviewConfig?.promptTemplate ?? response.aiPrompt ?? '',
+      aiModelName: aiReviewConfig?.modelName ?? response.aiModelName ?? '',
+      aiProviderId: response.aiProviderId ? String(response.aiProviderId) : null,
+      aiScoringDimensions: aiReviewConfig?.scoringDimensions ?? response.aiScoringDimensions ?? [],
+      aiPassThreshold: aiReviewConfig?.passThreshold ?? response.aiPassThreshold ?? 80,
+      aiManualReviewThreshold: aiReviewConfig?.manualReviewThreshold ?? response.aiManualReviewThreshold ?? 60,
+      aiReviewStrategy: response.aiReviewStrategy ?? 'LIGHTWEIGHT',
     },
     reviewLevelCount: response.reviewLevelCount ?? 1,
+    overlapCount: response.overlapCount ?? 1,
+    maxClaimsPerLabeler: response.maxClaimsPerLabeler ?? 10,
     publishedAt: response.publishedAt ?? null,
     endedAt: response.endedAt ?? null,
   }
@@ -245,18 +363,33 @@ function buildTaskRequest(payload: TaskDraftInput, includeDatasetFileId: boolean
     tags: payload.tags,
     quota: payload.quota,
     deadlineAt: payload.deadline,
-    reward: String(payload.rewardRule.unitPrice),
-    strategy: payload.distributionStrategy,
-    prompt: payload.aiReview.prompt,
-    model: payload.aiReview.model,
-    rating: payload.aiReview.rating,
+    overlapCount: payload.overlapCount,
+    rewardRule: {
+      rewardMode: payload.rewardRule.rewardMode,
+      unitReward: payload.rewardRule.unitPrice,
+      rewardCurrency: payload.rewardRule.rewardCurrency,
+      rewardVisible: payload.rewardRule.rewardVisible,
+    },
+    strategy: distributionStrategyToApi[payload.distributionStrategy],
+    aiPrompt: payload.aiReview.aiPrompt,
+    aiModelName: payload.aiReview.aiModelName,
+    aiScoringDimensions: payload.aiReview.aiScoringDimensions,
+    aiPassThreshold: payload.aiReview.aiPassThreshold,
+    aiManualReviewThreshold: payload.aiReview.aiManualReviewThreshold,
+    aiReviewStrategy: payload.aiReview.aiReviewStrategy,
     reviewLevelCount: payload.reviewLevelCount,
+    maxClaimsPerLabeler: payload.maxClaimsPerLabeler,
   }
   const publishedTemplateVersionId = toNumberId(payload.publishedTemplateVersionId)
   const datasetFileId = toNumberId(payload.datasetFileId)
+  const aiProviderId = toNumberId(payload.aiReview.aiProviderId)
 
   if (publishedTemplateVersionId) {
     requestPayload.publishedTemplateVersionId = publishedTemplateVersionId
+  }
+
+  if (aiProviderId) {
+    requestPayload.aiProviderId = aiProviderId
   }
 
   if (includeDatasetFileId && datasetFileId) {
@@ -334,6 +467,38 @@ function validateTaskForPublish(task: OwnerTask | TaskDraftInput, hasTaskId: boo
 
   if (!task.distributionStrategy) {
     errors.push('请选择分发策略')
+  }
+
+  if (!task.aiReview.aiProviderId) {
+    errors.push('请选择 AI 模型')
+  }
+
+  if (!task.aiReview.aiPrompt.trim()) {
+    errors.push('AI 审核 Prompt 不能为空')
+  }
+
+  if (task.aiReview.aiPrompt.length > 10000) {
+    errors.push('AI 审核 Prompt 不能超过 10000 个字符')
+  }
+
+  if (task.aiReview.aiModelName.length > 128) {
+    errors.push('AI 模型名不能超过 128 个字符')
+  }
+
+  if (!task.aiReview.aiScoringDimensions.length) {
+    errors.push('评分维度不能为空')
+  }
+
+  if (task.aiReview.aiScoringDimensions.some((dimension) => dimension.length > 64)) {
+    errors.push('单个评分维度不能超过 64 个字符')
+  }
+
+  if (task.aiReview.aiPassThreshold < 0 || task.aiReview.aiPassThreshold > 100) {
+    errors.push('通过阈值必须在 0 到 100 之间')
+  }
+
+  if (task.aiReview.aiManualReviewThreshold < 0 || task.aiReview.aiManualReviewThreshold > 100) {
+    errors.push('人工复核阈值必须在 0 到 100 之间')
   }
 
   if ('status' in task && task.status && task.status !== 'draft') {
@@ -416,6 +581,34 @@ export const ownerTaskService = {
       template: getTemplate(task.publishedTemplateVersionId),
       importPreview: getImportPreview(task.importPreviewId),
     }
+  },
+
+  async listTaskDatasetItems(taskId: string, query: DatasetItemPageQuery): Promise<DatasetItemPageResponse> {
+    if (isRealServiceMode()) {
+      const params: Record<string, string | number> = {
+        page: query.page,
+        pageSize: query.pageSize,
+      }
+
+      if (query.externalId?.trim()) {
+        params.externalId = query.externalId.trim()
+      }
+
+      return request.get<DatasetItemPageResponse>(`/v1/tasks/${taskId}/dataset/items`, { params })
+    }
+
+    return getMockDatasetItems(taskId, query)
+  },
+
+  async batchAppendDatasetItems(taskId: string, items: DatasetItemAppendInput[]): Promise<DatasetItemAppendResult[]> {
+    if (isRealServiceMode()) {
+      return request.post<DatasetItemAppendResult[], DatasetItemBatchAppendRequest>(
+        `/v1/tasks/${taskId}/dataset/items/batch-append-json`,
+        { items },
+      )
+    }
+
+    return appendMockDatasetItems(taskId, items)
   },
 
   async createTask(payload: TaskDraftInput): Promise<OwnerTask> {

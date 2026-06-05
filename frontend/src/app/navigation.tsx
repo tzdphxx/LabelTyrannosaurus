@@ -5,14 +5,23 @@ import {
   FileDoneOutlined,
   FormOutlined,
   InboxOutlined,
-  ProfileOutlined,
   ProjectOutlined,
   ReadOutlined,
+  SafetyCertificateOutlined,
 } from '@ant-design/icons'
 import type { Role } from '../types/auth'
 import type { NavItem } from '../types/navigation'
 
 export const roleNavigation: Record<Role, NavItem[]> = {
+  ADMIN: [
+    {
+      key: 'admin-review-assignment',
+      label: '审核分配',
+      path: '/app/admin',
+      role: 'ADMIN',
+      icon: <SafetyCertificateOutlined />,
+    },
+  ],
   OWNER: [
     {
       key: 'owner-dashboard',

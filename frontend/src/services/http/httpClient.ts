@@ -120,7 +120,6 @@ function createApiError(options: {
 
 function applyAuthHeader(config: InternalAxiosRequestConfig) {
   const token = getAuthToken()
-  console.log('token', token)
   if (!token) {
     return config
   }
@@ -131,7 +130,7 @@ function applyAuthHeader(config: InternalAxiosRequestConfig) {
   }
 
   config.headers = AxiosHeaders.from(config.headers)
-  // config.headers.set('Authorization', `Bearer ${token}`)
+  config.headers.set('Authorization', `Bearer ${token}`)
 
   return config
 }

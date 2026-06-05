@@ -477,3 +477,106 @@
   - `src/components/navigation/RoleBadge.tsx` 角色 key 不匹配。
   - dynamic-form Designer 相关 `never` 推断错误。
   - 本次新增的模板、任务和上传接口改动未再产生新的 TypeScript 错误。
+
+## 2026-06-02 - Owner 创建任务 AI 字段与模板列表对接
+
+### 已实现
+
+- 调整创建任务 AI 审核配置字段，前端草稿、类型和请求组装统一使用后端新字段：
+  - `aiProviderId`
+  - `aiModelName`
+  - `aiPrompt`
+  - `aiScoringDimensions`
+  - `aiPassThreshold`
+  - `aiManualReviewThreshold`
+- 创建任务页补充 AI 审核配置能力：
+  - 大模型下拉继续调用 `GET /v1/llm-providers`，展示 `defaultModel`。
+  - 选择模型后保存 provider ID 和模型名。
+  - 评分维度改为可添加的标签式输入，并以字符串数组保存。
+  - 新增“通过阈值”和“人工复核阈值”两个 0-100 数值输入。
+- 更新创建/编辑任务请求：
+  - `POST /v1/tasks` 和 `PUT /v1/tasks/{taskId}` 不再提交旧的 `providerId`、`model`、`prompt`、`rating`。
+  - 请求 payload 改为提交后端要求的 AI 字段。
+  - 模板字段继续使用 `publishedTemplateVersionId`，值来自模板当前版本 ID。
+- 更新发布前校验：
+  - 校验 AI 模型、Prompt、评分维度和两个阈值。
+  - 校验 Prompt、模型名、评分维度长度，以及阈值范围。
+- 调整 OWNER 模板列表映射：
+  - `GET /v1/owner/templates` 继续通过现有 request 层自动解包 `ApiResponse.data`。
+  - `templateId` 映射为模板 ID。
+  - `currentVersion.versionId` 映射为 `currentVersionId`，用于创建任务时提交版本 ID。
+  - 支持 `PUBLISHED_SNAPSHOT -> ready`，未知或空状态按 `draft` 处理。
+- 同步更新 mock 任务数据中的 AI 审核配置结构，保持 mock mode 可用。
+
+### 当前约束
+
+- 工作区仍包含此前任务产生的 owner 上传、文件解析、CSS 迁移等未提交改动，本次没有回滚。
+- 完整 TypeScript build 仍被无关既有错误阻塞：
+  - `src/app/navigation.tsx`
+  - `src/components/navigation/RoleBadge.tsx`
+  - dynamic-form Designer 相关 `never` 推断错误。
+- `npm run lint` 仍被无关既有 lint 错误阻塞：
+  - `src/app/navigation.tsx`
+  - `LinkageRuleEditor.tsx`
+  - `SchemaManagerPanel.tsx`
+
+### 已验证
+
+- 已执行 `nvm list`，当前 Node 为 `22.14.0`。
+- 已执行 `npm exec vite build`，通过，仅有 chunk size warning。
+- 已执行 `npm run lint`，失败于无关既有 lint 错误。
+- 已执行 `npm run build`，失败于无关既有 TypeScript 错误。
+## 2026-06-05 - Owner 真实接口与页面交互补充
+
+### 已实现
+
+- 接入 Admin 审核分配查询业务：
+  - 新增 `ADMIN` 角色入口、导航与 `/app/admin` 路由。
+  - 新增 Admin 审核分配页面，展示可分配任务、可分配审核员和审核员进度。
+  - 新增 `adminReviewAssignmentService`，对接：
+    - `GET /v1/admin/review/tasks/assignable`
+    - `GET /v1/admin/review/reviewers/assignable`
+    - `GET /v1/admin/review/reviewers/progress`
+- 完善 Owner 任务详情题目渲染：
+  - 接入 `GET /v1/tasks/{taskId}/dataset/items` 分页查询题目。
+  - 接入 `POST /v1/tasks/{taskId}/dataset/items/batch-append-json`，支持在任务详情中手动追加题目。
+  - 题目展示改为 Ant Design Table，动态字段列来自 `itemJson` keys。
+  - 点击加号可在表格中新增一条可编辑空白行，确认后组装 `externalId`、`itemJson`、`metadataJson` 调用接口。
+- 调整 Owner 创建任务请求体：
+  - `POST /v1/tasks` 请求体改为新版接口结构。
+  - 新增并提交 `overlapCount`、`maxClaimsPerLabeler`、`aiReviewStrategy`。
+  - 奖励字段从旧 `reward` 字符串改为 `rewardRule` 对象：
+    - `rewardMode`
+    - `unitReward`
+    - `rewardCurrency`
+    - `rewardVisible`
+  - 分发策略从前端中文值映射为后端编码：
+    - `先到先得 -> FCFS`
+    - `配额分发 -> QUOTA`
+    - `指派 -> ASSIGN`
+  - `aiReviewConfigId` 按当前决策暂不传，继续使用内联 AI 字段。
+  - 创建任务页面新增一致性次数、每人最大领取数、AI 审核策略、奖励模式、奖励币种、奖励展示开关。
+- 优化 Owner 模板详情 Designer 页面：
+  - 模板详情页 `<main>` 增加页面级 CSS Module class。
+  - 页面高度锁定在 app 内容区内，外层 `overflow: hidden`，避免浏览器页面级滚动条。
+  - Designer 主体区改为 flex 剩余空间布局，移除原先撑开页面的固定 `min-height`。
+  - 保留画布和属性面板的局部滚动。
+- 维护 mock 模式：
+  - mock 任务补齐新增创建任务字段默认值。
+  - mock 题目追加逻辑同步更新本地 mock 数据集样本。
+
+### 当前约束
+
+- `aiReviewConfigId` 暂无前端来源，本阶段不传。
+- `aiReviewStrategy` 当前只提供接口示例中的 `LIGHTWEIGHT`。
+- `rewardMode` 当前只提供 `APPROVED_ITEM`，`rewardCurrency` 当前只提供 `POINT`。
+- 完整 TypeScript build 仍被既有 dynamic-form Designer `never` 类型错误阻塞。
+- Vite dev server 曾因本地 `spawn EPERM` 无法在沙箱内启动，未强制继续启动。
+
+### 已验证
+
+- 已执行 `nvm list`，当前 Node 为 `22.14.0`。
+- 已多次执行 `npm exec vite build`，通过，仅有 chunk size warning。
+- 已执行 `npm run build`，失败于既有 TypeScript 错误：
+  - `src/features/dynamic-form/utils/designerDrag.ts` 的 `never` 属性访问。
+  - `src/pages/owner/templates/OwnerTemplateDesignerPage.tsx` 的 `never` 属性访问。

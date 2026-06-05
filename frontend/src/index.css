@@ -420,7 +420,6 @@ select {
 .owner-stat-card.ant-card,
 .owner-progress-card.ant-card,
 .owner-table-card.ant-card,
-.owner-step-card.ant-card,
 .owner-form-card.ant-card,
 .owner-side-card.ant-card {
   border: 1px solid #d9e1e8;
@@ -479,13 +478,14 @@ select {
   width: 100%;
 }
 
-.owner-step-card .ant-card-body {
-  padding: 18px 24px;
-}
-
 .owner-form-card,
 .owner-side-card {
   margin-bottom: 16px;
+}
+
+.owner-form-card .ant-card-head,
+.owner-side-card .ant-card-head {
+  background: #fbfcfd;
 }
 
 .owner-form-grid {
@@ -509,6 +509,7 @@ select {
 
 .owner-field .ant-input,
 .owner-field .ant-input-number,
+.owner-field .ant-picker,
 .owner-field .ant-select {
   width: 100%;
 }
@@ -522,6 +523,83 @@ select {
 
 .owner-import-preview .ant-typography {
   margin-bottom: 0;
+}
+
+.owner-dataset-titlebar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.owner-dataset-table.ant-table-wrapper {
+  overflow: hidden;
+  border: 1px solid #d9e1e8;
+  border-radius: 8px;
+}
+
+.owner-dataset-table .ant-table {
+  color: #23313f;
+}
+
+.owner-dataset-table .ant-table-thead > tr > th {
+  background: #f7fafc;
+  font-weight: 600;
+}
+
+.owner-dataset-table .ant-table-cell {
+  vertical-align: top;
+}
+
+.owner-dataset-table .ant-typography {
+  max-width: 320px;
+  margin-bottom: 0;
+  overflow-wrap: anywhere;
+}
+
+.owner-dataset-table__row--draft > td {
+  background: #f5f9ff !important;
+}
+
+.owner-dataset-stats {
+  color: #5f6f7d;
+  font-size: 12px;
+}
+
+.owner-dataset-field--tone-1.ant-tag {
+  color: #0f5c5a;
+  border-color: #93d6d1;
+  background: #e9fbf8;
+}
+
+.owner-dataset-field--tone-2.ant-tag {
+  color: #7a4d00;
+  border-color: #f3cd7a;
+  background: #fff7df;
+}
+
+.owner-dataset-field--tone-3.ant-tag {
+  color: #7b1f45;
+  border-color: #ee9dbd;
+  background: #fff0f6;
+}
+
+.owner-dataset-field--tone-4.ant-tag {
+  color: #244b84;
+  border-color: #9ebff0;
+  background: #eef5ff;
+}
+
+.owner-dataset-field--tone-5.ant-tag {
+  color: #345214;
+  border-color: #b7d77e;
+  background: #f4fbe8;
+}
+
+.owner-dataset-field--tone-6.ant-tag {
+  color: #5b3a84;
+  border-color: #c7a8ee;
+  background: #f7f0ff;
 }
 
 .labeler-page {

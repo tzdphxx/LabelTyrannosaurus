@@ -1,10 +1,10 @@
-import { Button, Card, Form, Input, Modal, Space, Table, Tag, Typography, message } from 'antd'
+import { Button, Card, Form, Input, Modal, Space, Table, Tag, Typography } from 'antd'
 import { EditOutlined, EyeOutlined, PlusOutlined } from '@ant-design/icons'
-import { useCallback, useEffect, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router'
 import { ContentShell } from '../../../components/page/ContentShell'
 import { PageHeader } from '../../../components/page/PageHeader'
-import { ApiError, ownerTemplateService } from '../../../services'
+import { ownerTemplateService } from '../../../services'
 import type { TemplateSummary } from '../../../types/template'
 
 const templateStatusMeta = {
@@ -16,19 +16,9 @@ const templateStatusMeta = {
 export function OwnerTemplatesPage() {
   const navigate = useNavigate()
   const [form] = Form.useForm<{ name: string; description: string }>()
-  const [messageApi, contextHolder] = message.useMessage()
   const [templates, setTemplates] = useState<TemplateSummary[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [isCreateOpen, setIsCreateOpen] = useState(false)
-  const [isCreating, setIsCreating] = useState(false)
-
-  const loadTemplates = useCallback(() => {
-    setIsLoading(true)
-    void ownerTemplateService
-      .listTemplates()
-      .then(setTemplates)
-      .finally(() => setIsLoading(false))
-  }, [])
 
   useEffect(() => {
     let ignore = false
@@ -51,32 +41,25 @@ export function OwnerTemplatesPage() {
     }
   }, [])
 
-  async function createTemplate() {
-    const values = await form.validateFields()
+  function openTemplateDraft() {
+    const values = form.getFieldsValue()
+    const name = values.name?.trim() || '未命名模板'
+    const description = values.description?.trim() ?? ''
 
-    setIsCreating(true)
-
-    try {
-      const template = await ownerTemplateService.createTemplate(values)
-      messageApi.success('模板已创建')
-      setIsCreateOpen(false)
-      form.resetFields()
-      loadTemplates()
-      navigate(`/app/owner/templates/${template.id}/designer`)
-    } catch (error) {
-      if (error instanceof ApiError && error.code === 409301) {
-        messageApi.error('schema 校验失败')
-      } else {
-        messageApi.error('模板创建失败')
-      }
-    } finally {
-      setIsCreating(false)
-    }
+    setIsCreateOpen(false)
+    form.resetFields()
+    navigate('/app/owner/templates/draft/designer', {
+      state: {
+        draftTemplate: {
+          description,
+          name,
+        },
+      },
+    })
   }
 
   return (
     <main className="owner-page">
-      {contextHolder}
       <ContentShell>
         <PageHeader
           title="模板管理"
@@ -149,27 +132,18 @@ export function OwnerTemplatesPage() {
       </Card>
 
       <Modal
-        confirmLoading={isCreating}
         destroyOnClose
         onCancel={() => setIsCreateOpen(false)}
-        onOk={() => void createTemplate()}
+        onOk={openTemplateDraft}
         open={isCreateOpen}
         title="新建模板"
       >
         <Form form={form} layout="vertical" preserve={false}>
-          <Form.Item
-            label="模板名称"
-            name="name"
-            rules={[{ required: true, message: '请输入模板名称' }]}
-          >
+          <Form.Item label="模板标题" name="name">
             <Input placeholder="例如：商品质检标注模板" />
           </Form.Item>
-          <Form.Item
-            label="变更说明"
-            name="description"
-            rules={[{ required: true, message: '请输入变更说明' }]}
-          >
-            <Input.TextArea autoSize={{ minRows: 3, maxRows: 5 }} placeholder="例如：初始版本" />
+          <Form.Item label="模板描述" name="description">
+            <Input.TextArea autoSize={{ minRows: 3, maxRows: 5 }} placeholder="例如：初始版本说明" />
           </Form.Item>
         </Form>
       </Modal>

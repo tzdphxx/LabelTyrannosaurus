@@ -37,6 +37,7 @@ const statusOptions = [
 export function OwnerTasksPage() {
   const navigate = useNavigate()
   const [messageApi, contextHolder] = message.useMessage()
+  const [modalApi, modalContextHolder] = Modal.useModal()
   const tasks = useOwnerTaskStore((state) => state.tasks)
   const filters = useOwnerTaskStore((state) => state.filters)
   const total = useOwnerTaskStore((state) => state.total)
@@ -46,6 +47,7 @@ export function OwnerTasksPage() {
   const isDeleting = useOwnerTaskStore((state) => state.isDeleting)
   const setFilters = useOwnerTaskStore((state) => state.setFilters)
   const loadTasks = useOwnerTaskStore((state) => state.loadTasks)
+  const publishTask = useOwnerTaskStore((state) => state.publishTask)
   const updateTaskStatus = useOwnerTaskStore((state) => state.updateTaskStatus)
   const deleteTask = useOwnerTaskStore((state) => state.deleteTask)
 
@@ -59,7 +61,7 @@ export function OwnerTasksPage() {
   }
 
   const confirmDeleteTask = (task: OwnerTask) => {
-    Modal.confirm({
+    modalApi.confirm({
       title: '删除草稿任务',
       content: `确认要删除「${task.title}」吗？删除后不可恢复。`,
       okText: '删除',
@@ -78,7 +80,7 @@ export function OwnerTasksPage() {
   }
 
   const confirmStatusChange = (task: OwnerTask, status: OwnerTaskStatus, label: string) => {
-    Modal.confirm({
+    modalApi.confirm({
       title: `${label}任务`,
       content: `确认要${label}「${task.title}」吗？`,
       okText: '确认',
@@ -95,13 +97,32 @@ export function OwnerTasksPage() {
     })
   }
 
+  const confirmPublishTask = (task: OwnerTask) => {
+    modalApi.confirm({
+      title: '发布任务',
+      content: `确认要发布「${task.title}」吗？`,
+      okText: '发布',
+      cancelText: '取消',
+      onOk: async () => {
+        const publishedTask = await publishTask(task.id)
+
+        if (publishedTask) {
+          messageApi.success('任务已发布')
+        } else {
+          messageApi.error('发布失败')
+        }
+      },
+    })
+  }
+
   return (
     <main className="owner-page">
       {contextHolder}
+      {modalContextHolder}
       <ContentShell>
         <PageHeader
           title="任务管理"
-          description="查看 Owner 负责的任务、进度和当前状态。P0 支持搜索、状态筛选、编辑入口和基础状态操作。"
+          description="查看 Owner 负责的任务、进度和当前状态。支持搜索、状态筛选、编辑入口和状态操作。"
           extra={
             <>
               <Button icon={<ReloadOutlined />} loading={isListLoading} onClick={() => void loadTasks()}>
@@ -170,7 +191,7 @@ export function OwnerTasksPage() {
                 <Space className="owner-table-progress" direction="vertical" size={4}>
                   <Progress percent={getProgressPercent(task.progress)} size="small" />
                   <Typography.Text type="secondary">
-                    {formatCount(task.progress.completedItems)} / {formatCount(task.progress.totalItems)} 完成，待审{' '}
+                    {formatCount(task.progress.completedItems)} / {formatCount(task.progress.totalItems)} 完成，待审核{' '}
                     {formatCount(task.progress.pendingReviewItems)}
                   </Typography.Text>
                 </Space>
@@ -196,7 +217,7 @@ export function OwnerTasksPage() {
                     编辑
                   </Button>
                   {task.status === 'draft' ? (
-                    <Button size="small" type="link" onClick={() => navigate(`/app/owner/tasks/${task.id}/edit`)}>
+                    <Button loading={isStatusSubmitting} size="small" type="link" onClick={() => confirmPublishTask(task)}>
                       发布
                     </Button>
                   ) : null}

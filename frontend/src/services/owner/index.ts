@@ -1,4 +1,5 @@
 export { ownerDashboardService } from './ownerDashboardService'
 export { ownerImportService } from './ownerImportService'
+export { ownerModelService } from './ownerModelService'
 export { ownerTaskService } from './ownerTaskService'
 export { ownerTemplateService } from './ownerTemplateService'

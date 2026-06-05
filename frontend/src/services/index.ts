@@ -1,3 +1,4 @@
+export { adminReviewAssignmentService } from './admin'
 export { authService } from './auth'
 export { labelingService } from './labeler'
 export {
@@ -14,5 +15,5 @@ export {
 } from './http'
 export type { ApiResponseEnvelope, RequestConfig, ServiceMode } from './http'
 export { llmService } from './llm'
-export { ownerDashboardService, ownerImportService, ownerTaskService, ownerTemplateService } from './owner'
+export { ownerDashboardService, ownerImportService, ownerModelService, ownerTaskService, ownerTemplateService } from './owner'
 export { reviewService } from './review'

@@ -2,7 +2,7 @@ import { DndContext, DragOverlay, type DragEndEvent, type DragStartEvent, Pointe
 import { SaveOutlined } from '@ant-design/icons'
 import { Alert, Button, Card, Modal, Space, Tabs, Tag, message } from 'antd'
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { useNavigate, useParams } from 'react-router'
+import { useLocation, useNavigate, useParams } from 'react-router'
 import { ContentShell } from '../../../components/page/ContentShell'
 import { PageHeader } from '../../../components/page/PageHeader'
 import {
@@ -24,6 +24,7 @@ import styles from './OwnerTemplateDesignerPage.module.css'
 
 export function OwnerTemplateDesignerPage() {
   const navigate = useNavigate()
+  const location = useLocation()
   const { templateId } = useParams()
   const [messageApi, contextHolder] = message.useMessage()
   const [previewResult, setPreviewResult] = useState<DynamicFormSubmitResult | null>(null)
@@ -35,8 +36,10 @@ export function OwnerTemplateDesignerPage() {
   const selectedNodeId = useTemplateDesignerStore((state) => state.selectedNodeId)
   const isLoading = useTemplateDesignerStore((state) => state.isLoading)
   const isSaving = useTemplateDesignerStore((state) => state.isSaving)
+  const isDraftTemplate = useTemplateDesignerStore((state) => state.isDraftTemplate)
   const hasUnsavedChanges = useTemplateDesignerStore((state) => state.hasUnsavedChanges)
   const error = useTemplateDesignerStore((state) => state.error)
+  const initializeDraftTemplate = useTemplateDesignerStore((state) => state.initializeDraftTemplate)
   const loadTemplate = useTemplateDesignerStore((state) => state.loadTemplate)
   const addNode = useTemplateDesignerStore((state) => state.addNode)
   const selectNode = useTemplateDesignerStore((state) => state.selectNode)
@@ -48,10 +51,18 @@ export function OwnerTemplateDesignerPage() {
   const saveSchema = useTemplateDesignerStore((state) => state.saveSchema)
 
   useEffect(() => {
+    if (templateId === 'draft') {
+      const draftTemplate = (location.state as { draftTemplate?: { description: string; name: string } } | null)?.draftTemplate
+
+      initializeDraftTemplate(draftTemplate ?? { description: '', name: '未命名模板' })
+
+      return
+    }
+
     if (templateId) {
       void loadTemplate(templateId)
     }
-  }, [loadTemplate, templateId])
+  }, [initializeDraftTemplate, loadTemplate, location.state, templateId])
 
   const selectedNode = useMemo(() => {
     if (!schema || !selectedNodeId) {
@@ -73,6 +84,14 @@ export function OwnerTemplateDesignerPage() {
     const saved = await saveSchema()
 
     if (saved) {
+      const latestTemplate = useTemplateDesignerStore.getState().template
+
+      if (templateId === 'draft' && latestTemplate?.id) {
+        messageApi.success('模板已创建')
+        navigate(`/app/owner/templates/${latestTemplate.id}/designer`, { replace: true })
+        return
+      }
+
       messageApi.success('模板 schema 已保存')
     } else {
       messageApi.error('模板 schema 保存失败')
@@ -151,17 +170,18 @@ export function OwnerTemplateDesignerPage() {
   }
 
   return (
-    <main className="owner-page">
+    <main className={['owner-page', styles.page].join(' ')}>
       {contextHolder}
       <ContentShell className={styles.headerShell}>
         <PageHeader
           title={template?.name ?? '模板 Designer'}
+          description={template?.description}
           extra={
             <>
               {hasUnsavedChanges ? <Tag color="warning">有未保存变更</Tag> : <Tag color="success">已同步</Tag>}
               <Button onClick={() => navigate('/app/owner/templates')}>返回模板列表</Button>
               <Button icon={<SaveOutlined />} loading={isSaving} onClick={() => void saveCurrentSchema()} type="primary">
-                保存 schema
+                {isDraftTemplate ? '创建模板' : '保存 schema'}
               </Button>
             </>
           }

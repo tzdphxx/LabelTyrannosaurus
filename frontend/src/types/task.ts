@@ -5,17 +5,40 @@ export type OwnerTaskStatus = 'draft' | 'published' | 'paused' | 'ended'
 export type OwnerTaskApiStatus = 'DRAFT' | 'PUBLISHED' | 'PAUSED' | 'ENDED'
 
 export type DistributionStrategy = '先到先得' | '配额分发' | '指派'
+export type DistributionStrategyCode = 'FCFS' | 'QUOTA' | 'ASSIGN'
+export type AiReviewStrategy = 'LIGHTWEIGHT'
+export type RewardMode = 'APPROVED_ITEM'
+export type RewardCurrency = 'POINT'
 
 export interface RewardRule {
   unitPrice: number
   currency: 'CNY'
   description: string
+  rewardMode: RewardMode
+  rewardCurrency: RewardCurrency
+  rewardVisible: boolean
 }
 
 export interface AiReviewConfigDraft {
-  prompt: string
-  model: string
-  rating: string
+  aiPrompt: string
+  aiModelName: string
+  aiProviderId?: string | null
+  aiScoringDimensions: string[]
+  aiPassThreshold: number
+  aiManualReviewThreshold: number
+  aiReviewStrategy: AiReviewStrategy
+}
+
+export interface OwnerModelOptionResponse {
+  id: number
+  providerCode: string
+  providerName: string
+  defaultModel: string
+  supportVision: boolean
+  supportMultiImage: boolean
+  maxImageCount: number
+  visionModel: string
+  structuredOutputMode: string
 }
 
 export interface TaskProgress {
@@ -49,6 +72,8 @@ export interface OwnerTask {
   progress: TaskProgress
   aiReview: AiReviewConfigDraft
   reviewLevelCount: number
+  overlapCount: number
+  maxClaimsPerLabeler: number
   datasetFileId?: string | null
   ownerId?: string
   publishedAt?: string | null
@@ -68,6 +93,52 @@ export interface OwnerTaskPage {
   page: number
   pageSize: number
   total: number
+}
+
+export interface DatasetItemResponse {
+  itemId: number
+  taskId: number
+  externalId: string
+  itemJson: Record<string, unknown>
+  metadataJson: Record<string, unknown>
+  assignedCount: number
+  submittedCount: number
+  approvedCount: number
+  itemStatus: 'UNCLAIMED' | 'CLAIMED' | 'DRAFT' | 'SUBMITTED' | 'RETURNED' | 'APPROVED' | ''
+  labelerId: number | null
+  createdAt: string
+  updatedAt: string
+}
+
+export interface DatasetItemPageResponse {
+  items: DatasetItemResponse[]
+  page: number
+  pageSize: number
+  total: number
+}
+
+export interface DatasetItemPageQuery {
+  page: number
+  pageSize: number
+  externalId?: string
+}
+
+export interface DatasetItemAppendInput {
+  externalId: string
+  itemJson: Record<string, unknown>
+  metadataJson: Record<string, unknown>
+}
+
+export interface DatasetItemBatchAppendRequest {
+  items: DatasetItemAppendInput[]
+}
+
+export interface DatasetItemAppendResult {
+  itemId: number
+  externalId: string
+  success: boolean
+  errorCode: number
+  errorMessage: string
 }
 
 export type TaskDraft = Omit<OwnerTask, 'claimedCount' | 'createdAt' | 'dataCount' | 'progress' | 'status' | 'templateName' | 'updatedAt'> & {
@@ -132,10 +203,29 @@ export interface TaskDetailResponse {
   claimedCount: number
   deadlineAt: string
   publishedTemplateVersionId?: number | null
-  prompt?: string
-  model?: string
-  rating?: string
+  aiPrompt?: string
+  aiModelName?: string
+  aiProviderId?: number | null
+  aiScoringDimensions?: string[]
+  aiPassThreshold?: number
+  aiManualReviewThreshold?: number
+  aiReviewConfig?: {
+    modelName?: string
+    promptTemplate?: string
+    scoringDimensions?: string[]
+    passThreshold?: number
+    manualReviewThreshold?: number
+  } | null
   reviewLevelCount?: number
+  overlapCount?: number
+  maxClaimsPerLabeler?: number
+  aiReviewStrategy?: AiReviewStrategy
+  rewardRule?: {
+    rewardMode?: RewardMode
+    unitReward?: number
+    rewardCurrency?: RewardCurrency
+    rewardVisible?: boolean
+  } | null
   publishedAt?: string | null
   endedAt?: string | null
   createdAt: string
@@ -151,14 +241,26 @@ export interface CreateTaskRequest {
   tags?: string[]
   quota: number
   deadlineAt: string
+  overlapCount: number
   publishedTemplateVersionId?: number
-  prompt?: string
-  model?: string
-  rating?: string
+  aiReviewConfigId?: number
+  aiPrompt?: string
+  aiModelName?: string
+  aiProviderId?: number
+  aiScoringDimensions?: string[]
+  aiPassThreshold?: number
+  aiManualReviewThreshold?: number
+  aiReviewStrategy: AiReviewStrategy
   reviewLevelCount?: number
+  maxClaimsPerLabeler: number
   datasetFileId?: number
-  reward: string
-  strategy: DistributionStrategy
+  rewardRule: {
+    rewardMode: RewardMode
+    unitReward: number
+    rewardCurrency: RewardCurrency
+    rewardVisible: boolean
+  }
+  strategy: DistributionStrategyCode
 }
 
 export type UpdateTaskRequest = Omit<CreateTaskRequest, 'datasetFileId'>

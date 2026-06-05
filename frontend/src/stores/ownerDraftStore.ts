@@ -1,7 +1,17 @@
 import { create } from 'zustand'
-import { isRealServiceMode, ownerImportService, ownerTaskService } from '../services'
+import { ownerImportService, ownerTaskService } from '../services'
 import type { FileUploadResponse, ImportPreview } from '../types/import'
 import type { AiReviewConfigDraft, OwnerTask, PublishValidationResult, TaskDraftInput } from '../types/task'
+
+export const DEFAULT_AI_REVIEW_PROMPT = `你是电商商品标题审核员。请基于以下维度为提交内容打分(0-100):
+[相关性]标注结果与原始数据是否对齐
+[准确性]类目/关键词与商品事实是否一致
+[格式合规]是否满足模板字符/正则规则
+[安全性]是否包含敏感/违规词
+请通过 function_call 返回 JSON:
+{ "scores": {...}, "verdict": "pass|reject|manual", "reason": "..." }`
+
+export const DEFAULT_AI_SCORING_DIMENSIONS = ['相关性', '准确性', '格式合规', '安全性']
 
 type TaskDraftChanges = Partial<Omit<TaskDraftInput, 'aiReview'>> & {
   aiReview?: Partial<AiReviewConfigDraft>
@@ -12,7 +22,6 @@ interface OwnerDraftStore {
   draft: TaskDraftInput
   importPreview: ImportPreview | null
   uploadedDatasetFile: FileUploadResponse | null
-  currentStep: number
   hasUnsavedChanges: boolean
   isSaving: boolean
   isLoading: boolean
@@ -22,7 +31,6 @@ interface OwnerDraftStore {
   resetDraft: () => Promise<void>
   loadFromTask: (taskId: string) => Promise<void>
   updateDraft: (changes: TaskDraftChanges) => void
-  setStep: (step: number) => void
   loadImportPreview: () => Promise<void>
   uploadDatasetFile: (file: File) => Promise<FileUploadResponse | null>
   saveDraft: () => Promise<OwnerTask | null>
@@ -40,16 +48,25 @@ const emptyDraft: TaskDraftInput = {
   rewardRule: {
     unitPrice: 0.12,
     currency: 'CNY',
+    rewardMode: 'APPROVED_ITEM',
+    rewardCurrency: 'POINT',
+    rewardVisible: true,
     description: '按有效标注条目结算',
   },
   distributionStrategy: '先到先得',
   publishedTemplateVersionId: null,
   aiReview: {
-    prompt: '',
-    model: '',
-    rating: '',
+    aiPrompt: DEFAULT_AI_REVIEW_PROMPT,
+    aiModelName: '',
+    aiProviderId: null,
+    aiScoringDimensions: DEFAULT_AI_SCORING_DIMENSIONS,
+    aiPassThreshold: 80,
+    aiManualReviewThreshold: 60,
+    aiReviewStrategy: 'LIGHTWEIGHT',
   },
   reviewLevelCount: 1,
+  overlapCount: 1,
+  maxClaimsPerLabeler: 10,
   datasetFileId: null,
 }
 
@@ -66,6 +83,8 @@ function toDraftInput(task: OwnerTask): TaskDraftInput {
     publishedTemplateVersionId: task.publishedTemplateVersionId,
     aiReview: { ...task.aiReview },
     reviewLevelCount: task.reviewLevelCount,
+    overlapCount: task.overlapCount,
+    maxClaimsPerLabeler: task.maxClaimsPerLabeler,
     datasetFileId: task.datasetFileId,
   }
 }
@@ -75,7 +94,6 @@ export const useOwnerDraftStore = create<OwnerDraftStore>((set, get) => ({
   draft: emptyDraft,
   importPreview: null,
   uploadedDatasetFile: null,
-  currentStep: 0,
   hasUnsavedChanges: false,
   isSaving: false,
   isLoading: false,
@@ -93,12 +111,10 @@ export const useOwnerDraftStore = create<OwnerDraftStore>((set, get) => ({
       },
       importPreview: null,
       uploadedDatasetFile: null,
-      currentStep: 0,
       hasUnsavedChanges: false,
       validationResult: null,
       error: null,
     })
-    await get().loadImportPreview()
   },
   loadFromTask: async (taskId) => {
     set({ isLoading: true, error: null })
@@ -117,7 +133,6 @@ export const useOwnerDraftStore = create<OwnerDraftStore>((set, get) => ({
         draft: toDraftInput(detail.task),
         importPreview: detail.importPreview,
         uploadedDatasetFile: null,
-        currentStep: 0,
         hasUnsavedChanges: false,
         validationResult: null,
       })
@@ -140,7 +155,6 @@ export const useOwnerDraftStore = create<OwnerDraftStore>((set, get) => ({
       validationResult: null,
     }))
   },
-  setStep: (step) => set({ currentStep: step }),
   loadImportPreview: async () => {
     set({ isLoading: true, error: null })
 
@@ -158,7 +172,7 @@ export const useOwnerDraftStore = create<OwnerDraftStore>((set, get) => ({
 
     try {
       const uploadedDatasetFile = await ownerImportService.uploadDatasetFile(file)
-      const importPreview = isRealServiceMode() ? null : await ownerImportService.getDefaultImportPreview()
+      const importPreview = await ownerImportService.parseDatasetFile(file)
 
       set((state) => ({
         draft: {
@@ -232,23 +246,24 @@ export const useOwnerDraftStore = create<OwnerDraftStore>((set, get) => ({
     return validationResult
   },
   publishDraft: async () => {
-    const validationResult = await get().validatePublish()
-    const draftId = get().draftId
+    const { draftId, hasUnsavedChanges } = get()
+    const task = !draftId || hasUnsavedChanges ? await get().saveDraft() : null
+    const taskId = get().draftId ?? task?.id
 
-    if (!validationResult.valid || !draftId) {
+    if (!taskId) {
       return null
     }
 
-    const task = await ownerTaskService.publishTask(draftId)
+    const publishedTask = await ownerTaskService.publishTask(taskId)
 
-    if (task) {
+    if (publishedTask) {
       set({
-        draft: toDraftInput(task),
+        draft: toDraftInput(publishedTask),
         hasUnsavedChanges: false,
         validationResult: null,
       })
     }
 
-    return task
+    return publishedTask
   },
 }))

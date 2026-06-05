@@ -14,10 +14,16 @@ import { fromBackendTemplateSchema, toBackendTemplateSchema } from '../../featur
 import { getSchemaNodeKeys } from '../../features/dynamic-form/utils/schemaTree'
 import { isRealServiceMode, request } from '../http'
 
-const ownerTemplateStatusMap: Record<OwnerTemplateVersionState, TemplateStatus> = {
-  DRAFT: 'draft',
-  PUBLISHED: 'ready',
-  ARCHIVED: 'archived',
+function mapOwnerTemplateStatus(state: OwnerTemplateVersionState): TemplateStatus {
+  if (state === 'PUBLISHED_SNAPSHOT' || state === 'PUBLISHED') {
+    return 'ready'
+  }
+
+  if (state === 'ARCHIVED') {
+    return 'archived'
+  }
+
+  return 'draft'
 }
 
 function createEmptySchema(id: string, title: string): DynamicFormSchema {
@@ -29,24 +35,14 @@ function createEmptySchema(id: string, title: string): DynamicFormSchema {
   }
 }
 
-function isDynamicFormSchema(value: unknown): value is DynamicFormSchema {
-  return Boolean(
-    value &&
-      typeof value === 'object' &&
-      'id' in value &&
-      'version' in value &&
-      'title' in value &&
-      'nodes' in value &&
-      Array.isArray((value as DynamicFormSchema).nodes),
-  )
-}
-
 function normalizeSchema(schemaJson: unknown, templateId: string, name: string): DynamicFormSchema {
-  if (isDynamicFormSchema(schemaJson)) {
-    return fromBackendTemplateSchema(schemaJson)
-  }
+  const schema = fromBackendTemplateSchema(schemaJson)
 
-  return createEmptySchema(templateId, name)
+  return {
+    ...schema,
+    id: schema.id || templateId,
+    title: schema.title || name,
+  }
 }
 
 function mapOwnerTemplate(response: OwnerTemplateResponse): TemplateDetail {
@@ -58,7 +54,7 @@ function mapOwnerTemplate(response: OwnerTemplateResponse): TemplateDetail {
     currentVersionId: String(response.currentVersion.versionId),
     name: response.name,
     version: `v${response.currentVersionNo}`,
-    status: ownerTemplateStatusMap[response.currentVersion.state],
+    status: mapOwnerTemplateStatus(response.currentVersion.state),
     fieldCount: getSchemaNodeKeys(schema).length,
     description: response.currentVersion.changeNote,
     schema,
@@ -129,7 +125,7 @@ export const ownerTemplateService = {
   async createTemplate(input: TemplateCreateInput): Promise<TemplateDetail> {
     const suffix = Math.random().toString(36).slice(2, 8)
     const templateId = `tpl-${suffix}`
-    const schema = createEmptySchema(templateId, input.name)
+    const schema = input.schema ?? createEmptySchema(templateId, input.name)
 
     if (isRealServiceMode()) {
       const payload: OwnerTemplateCreateRequest = {

@@ -3,6 +3,7 @@ import {
   Button,
   Card,
   Col,
+  DatePicker,
   Input,
   InputNumber,
   Progress,
@@ -10,35 +11,54 @@ import {
   Select,
   Space,
   Statistic,
-  Steps,
+  Switch,
   Table,
   Tag,
   Typography,
   Upload,
   message,
 } from 'antd'
-import { InboxOutlined, SaveOutlined, SendOutlined } from '@ant-design/icons'
-import { useEffect, useMemo, useState } from 'react'
+import { CheckOutlined, CloseOutlined, InboxOutlined, PlusOutlined, SaveOutlined, SendOutlined } from '@ant-design/icons'
+import dayjs from 'dayjs'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router'
 import { ContentShell } from '../../components/page/ContentShell'
 import { PageHeader } from '../../components/page/PageHeader'
-import { ownerTemplateService } from '../../services'
+import { ownerModelService, ownerTemplateService } from '../../services'
 import { useOwnerDraftStore } from '../../stores/ownerDraftStore'
 import { useOwnerTaskStore } from '../../stores/ownerTaskStore'
 import type { DatasetSampleRow } from '../../types/import'
+import type { DatasetItemResponse, OwnerModelOptionResponse } from '../../types/task'
 import type { TemplateSummary } from '../../types/template'
 import { distributionStrategyLabels, formatCount, getProgressPercent } from '../../utils/ownerTasks'
+
+type DatasetDraftRow = {
+  rowType: 'draft'
+  rowKey: 'draft'
+  externalId: string
+  itemJson: Record<string, unknown>
+}
+
+type DatasetTableRow = DatasetItemResponse | DatasetDraftRow
+
+function isDatasetDraftRow(row: DatasetTableRow): row is DatasetDraftRow {
+  return 'rowType' in row
+}
 
 export function OwnerTaskEditorPage() {
   const navigate = useNavigate()
   const { taskId } = useParams()
   const [messageApi, contextHolder] = message.useMessage()
   const [templates, setTemplates] = useState<TemplateSummary[]>([])
+  const [isLoadingTemplates, setIsLoadingTemplates] = useState(false)
+  const [modelOptions, setModelOptions] = useState<OwnerModelOptionResponse[]>([])
+  const [isLoadingModels, setIsLoadingModels] = useState(false)
+  const isLoadingTemplatesRef = useRef(false)
+  const isLoadingModelsRef = useRef(false)
   const draft = useOwnerDraftStore((state) => state.draft)
   const draftId = useOwnerDraftStore((state) => state.draftId)
   const importPreview = useOwnerDraftStore((state) => state.importPreview)
   const uploadedDatasetFile = useOwnerDraftStore((state) => state.uploadedDatasetFile)
-  const currentStep = useOwnerDraftStore((state) => state.currentStep)
   const hasUnsavedChanges = useOwnerDraftStore((state) => state.hasUnsavedChanges)
   const isSaving = useOwnerDraftStore((state) => state.isSaving)
   const isLoadingDraft = useOwnerDraftStore((state) => state.isLoading)
@@ -48,19 +68,57 @@ export function OwnerTaskEditorPage() {
   const resetDraft = useOwnerDraftStore((state) => state.resetDraft)
   const loadFromTask = useOwnerDraftStore((state) => state.loadFromTask)
   const updateDraft = useOwnerDraftStore((state) => state.updateDraft)
-  const setStep = useOwnerDraftStore((state) => state.setStep)
   const uploadDatasetFile = useOwnerDraftStore((state) => state.uploadDatasetFile)
   const saveDraft = useOwnerDraftStore((state) => state.saveDraft)
   const validatePublish = useOwnerDraftStore((state) => state.validatePublish)
   const publishDraft = useOwnerDraftStore((state) => state.publishDraft)
   const currentTaskProgress = useOwnerTaskStore((state) => state.currentTaskProgress)
   const currentTaskDetail = useOwnerTaskStore((state) => state.currentTaskDetail)
+  const currentDatasetItemsPage = useOwnerTaskStore((state) => state.currentDatasetItemsPage)
+  const isDatasetItemsLoading = useOwnerTaskStore((state) => state.isDatasetItemsLoading)
+  const isAppendingDatasetItems = useOwnerTaskStore((state) => state.isAppendingDatasetItems)
   const loadTaskDetail = useOwnerTaskStore((state) => state.loadTaskDetail)
+  const loadTaskDatasetItems = useOwnerTaskStore((state) => state.loadTaskDatasetItems)
+  const appendTaskDatasetItems = useOwnerTaskStore((state) => state.appendTaskDatasetItems)
   const loadTasks = useOwnerTaskStore((state) => state.loadTasks)
+  const [draftDatasetItem, setDraftDatasetItem] = useState<Record<string, string> | null>(null)
+  const [draftDatasetExternalId, setDraftDatasetExternalId] = useState('')
 
-  useEffect(() => {
-    void ownerTemplateService.listTemplates().then(setTemplates)
-  }, [])
+  const loadTemplateOptions = useCallback(async () => {
+    if (isLoadingTemplatesRef.current) {
+      return
+    }
+
+    isLoadingTemplatesRef.current = true
+    setIsLoadingTemplates(true)
+
+    try {
+      setTemplates(await ownerTemplateService.listTemplates())
+    } catch {
+      messageApi.error('模板列表加载失败')
+    } finally {
+      isLoadingTemplatesRef.current = false
+      setIsLoadingTemplates(false)
+    }
+  }, [messageApi])
+
+  const loadModelOptions = useCallback(async () => {
+    if (isLoadingModelsRef.current) {
+      return
+    }
+
+    isLoadingModelsRef.current = true
+    setIsLoadingModels(true)
+
+    try {
+      setModelOptions(await ownerModelService.listModelOptions())
+    } catch {
+      messageApi.error('大模型列表加载失败')
+    } finally {
+      isLoadingModelsRef.current = false
+      setIsLoadingModels(false)
+    }
+  }, [messageApi])
 
   useEffect(() => {
     if (taskId) {
@@ -75,9 +133,14 @@ export function OwnerTaskEditorPage() {
   const templateOptions = templates.map((template) => ({
     label: `${template.name} ${template.version}`,
     value: template.currentVersionId,
-    disabled: template.status !== 'ready',
+  }))
+  const modelSelectOptions = modelOptions.map((option) => ({
+    label: option.defaultModel,
+    value: String(option.id),
   }))
   const isReadonlyTask = Boolean(taskId && currentTaskDetail?.task.status !== 'draft')
+  const deadlineValue = draft.deadline && dayjs(draft.deadline).isValid() ? dayjs(draft.deadline) : null
+  const ratingDimensions = draft.aiReview.aiScoringDimensions
 
   const sampleColumns = useMemo(() => {
     if (!importPreview) {
@@ -91,6 +154,131 @@ export function OwnerTaskEditorPage() {
       render: (value: string | number | boolean | null) => String(value ?? '-'),
     }))
   }, [importPreview])
+  const datasetFieldNames = useMemo(() => {
+    const fieldNames = new Set<string>()
+
+    currentDatasetItemsPage?.items.forEach((item) => {
+      Object.keys(item.itemJson).forEach((key) => fieldNames.add(key))
+    })
+
+    const names = Array.from(fieldNames)
+
+    return names.length ? names : ['text']
+  }, [currentDatasetItemsPage?.items])
+  const formatDatasetItemTime = (value: string) => value?.replace('T', ' ').slice(0, 19) || '-'
+  const formatDatasetValue = (value: unknown) => {
+    if (value === null || value === undefined || value === '') {
+      return '-'
+    }
+
+    return typeof value === 'object' ? JSON.stringify(value) : String(value)
+  }
+  const getDatasetFieldTone = (index: number) => `owner-dataset-field--tone-${(index % 6) + 1}`
+  const datasetTableRows = useMemo<DatasetTableRow[]>(() => {
+    const items = currentDatasetItemsPage?.items ?? []
+
+    if (!draftDatasetItem) {
+      return items
+    }
+
+    return [
+      {
+        rowType: 'draft',
+        rowKey: 'draft',
+        externalId: draftDatasetExternalId,
+        itemJson: draftDatasetItem,
+      },
+      ...items,
+    ]
+  }, [currentDatasetItemsPage?.items, draftDatasetExternalId, draftDatasetItem])
+  const datasetColumns = useMemo(() => [
+    {
+      title: 'externalId',
+      dataIndex: 'externalId',
+      width: 190,
+      fixed: 'left' as const,
+      render: (_: unknown, row: DatasetTableRow) =>
+        isDatasetDraftRow(row) ? (
+          <Input
+            placeholder="留空自动生成"
+            size="small"
+            value={draftDatasetExternalId}
+            onChange={(event) => setDraftDatasetExternalId(event.target.value)}
+          />
+        ) : (
+          <Typography.Text strong>{row.externalId || `#${row.itemId}`}</Typography.Text>
+        ),
+    },
+    ...datasetFieldNames.map((field, index) => ({
+      title: <Tag className={getDatasetFieldTone(index)}>{field}</Tag>,
+      dataIndex: ['itemJson', field],
+      minWidth: 180,
+      render: (_: unknown, row: DatasetTableRow) =>
+        isDatasetDraftRow(row) ? (
+          <Input
+            placeholder={`填写 ${field}`}
+            size="small"
+            value={String(draftDatasetItem?.[field] ?? '')}
+            onChange={(event) => updateDatasetItemDraft(field, event.target.value)}
+          />
+        ) : (
+          <Typography.Text>{formatDatasetValue(row.itemJson[field])}</Typography.Text>
+        ),
+    })),
+    {
+      title: '状态',
+      width: 110,
+      render: (_: unknown, row: DatasetTableRow) => (isDatasetDraftRow(row) ? <Tag color="blue">新增</Tag> : <Tag>{row.itemStatus || '-'}</Tag>),
+    },
+    {
+      title: '更新时间',
+      width: 170,
+      render: (_: unknown, row: DatasetTableRow) =>
+        isDatasetDraftRow(row) ? '-' : <Typography.Text type="secondary">{formatDatasetItemTime(row.updatedAt)}</Typography.Text>,
+    },
+    {
+      title: '统计',
+      width: 210,
+      render: (_: unknown, row: DatasetTableRow) =>
+        isDatasetDraftRow(row) ? (
+          '-'
+        ) : (
+          <Space className="owner-dataset-stats" size={8} wrap>
+            <span>分发 {formatCount(row.assignedCount)}</span>
+            <span>提交 {formatCount(row.submittedCount)}</span>
+            <span>通过 {formatCount(row.approvedCount)}</span>
+          </Space>
+        ),
+    },
+    {
+      title: '操作',
+      width: 110,
+      fixed: 'right' as const,
+      render: (_: unknown, row: DatasetTableRow) =>
+        isDatasetDraftRow(row) ? (
+          <Space size={6}>
+            <Button
+              icon={<CheckOutlined />}
+              loading={isAppendingDatasetItems}
+              size="small"
+              type="primary"
+              onClick={() => void submitDatasetItemDraft()}
+            />
+            <Button
+              disabled={isAppendingDatasetItems}
+              icon={<CloseOutlined />}
+              size="small"
+              onClick={cancelDatasetItemDraft}
+            />
+          </Space>
+        ) : null,
+    },
+  ], [
+    datasetFieldNames,
+    draftDatasetExternalId,
+    draftDatasetItem,
+    isAppendingDatasetItems,
+  ])
 
   const formatFileSize = (fileSize: number) => {
     if (fileSize < 1024) {
@@ -113,6 +301,50 @@ export function OwnerTaskEditorPage() {
     }
 
     messageApi.success('数据集文件已上传')
+  }
+
+  function startDatasetItemDraft() {
+    setDraftDatasetExternalId('')
+    setDraftDatasetItem(Object.fromEntries(datasetFieldNames.map((field) => [field, ''])))
+  }
+
+  function updateDatasetItemDraft(field: string, value: string) {
+    setDraftDatasetItem((current) => (current ? { ...current, [field]: value } : current))
+  }
+
+  function cancelDatasetItemDraft() {
+    setDraftDatasetExternalId('')
+    setDraftDatasetItem(null)
+  }
+
+  async function submitDatasetItemDraft() {
+    if (!taskId || !draftDatasetItem) {
+      return
+    }
+
+    const externalId = draftDatasetExternalId.trim() || `manual-${Date.now()}`
+    const results = await appendTaskDatasetItems(taskId, [
+      {
+        externalId,
+        itemJson: Object.fromEntries(datasetFieldNames.map((field) => [field, draftDatasetItem[field] ?? ''])),
+        metadataJson: {},
+      },
+    ])
+
+    if (!results) {
+      messageApi.error('题目添加失败')
+      return
+    }
+
+    const failedResult = results.find((result) => !result.success)
+
+    if (failedResult) {
+      messageApi.error(failedResult.errorMessage || '题目添加失败')
+      return
+    }
+
+    messageApi.success('题目已添加')
+    cancelDatasetItemDraft()
   }
 
   const saveCurrentDraft = async () => {
@@ -187,18 +419,6 @@ export function OwnerTaskEditorPage() {
         <Alert message="发布校验未通过" description={validationResult.errors.join('；')} showIcon type="warning" />
       ) : null}
 
-      <Card className="owner-step-card">
-        <Steps
-          current={currentStep}
-          items={[
-            { title: '基础信息' },
-            { title: '数据导入' },
-            { title: '预览校验' },
-          ]}
-          onChange={setStep}
-        />
-      </Card>
-
       <Row gutter={[16, 16]}>
         <Col lg={15} xs={24}>
           <Card className="owner-form-card" loading={isLoadingDraft} title="基础信息">
@@ -209,7 +429,12 @@ export function OwnerTaskEditorPage() {
               </label>
               <label className="owner-field">
                 <span>截止时间</span>
-                <Input placeholder="YYYY-MM-DDTHH:mm:ss" value={draft.deadline} onChange={(event) => updateDraft({ deadline: event.target.value })} />
+                <DatePicker
+                  format="YYYY-MM-DD HH:mm:ss"
+                  showTime
+                  value={deadlineValue}
+                  onChange={(value) => updateDraft({ deadline: value ? value.format('YYYY-MM-DDTHH:mm:ss') : '' })}
+                />
               </label>
               <label className="owner-field">
                 <span>任务配额</span>
@@ -233,21 +458,47 @@ export function OwnerTaskEditorPage() {
               </label>
               <label className="owner-field">
                 <span>标签</span>
-                <Select mode="tags" value={draft.tags} onChange={(tags) => updateDraft({ tags })} />
+                <Select
+                  mode="tags"
+                  options={draft.tags.map((tag) => ({ label: tag, value: tag }))}
+                  placeholder="输入标签后回车添加"
+                  tokenSeparators={[',', '，', ' ']}
+                  value={draft.tags}
+                  onChange={(tags) => updateDraft({ tags })}
+                />
               </label>
               <label className="owner-field">
                 <span>关联模板</span>
                 <Select
                   allowClear
+                  loading={isLoadingTemplates}
                   options={templateOptions}
                   placeholder="选择模板当前版本"
                   value={draft.publishedTemplateVersionId}
                   onChange={(publishedTemplateVersionId) => updateDraft({ publishedTemplateVersionId: publishedTemplateVersionId ?? null })}
+                  onOpenChange={(open) => {
+                    if (open) {
+                      void loadTemplateOptions()
+                    }
+                  }}
                 />
               </label>
               <label className="owner-field">
                 <span>审核级别数</span>
                 <InputNumber min={1} precision={0} value={draft.reviewLevelCount} onChange={(reviewLevelCount) => updateDraft({ reviewLevelCount: reviewLevelCount ?? 1 })} />
+              </label>
+              <label className="owner-field">
+                <span>一致性次数</span>
+                <InputNumber min={1} precision={0} value={draft.overlapCount} onChange={(overlapCount) => updateDraft({ overlapCount: overlapCount ?? 1 })} />
+              </label>
+              <label className="owner-field">
+                <span>每人最大领取数</span>
+                <InputNumber
+                  min={1}
+                  precision={0}
+                  value={draft.maxClaimsPerLabeler}
+                  onChange={(maxClaimsPerLabeler) => updateDraft({ maxClaimsPerLabeler: maxClaimsPerLabeler ?? 10 })}
+                />
               </label>
               <label className="owner-field">
                 <span>奖励单价</span>
@@ -267,6 +518,50 @@ export function OwnerTaskEditorPage() {
                 />
               </label>
               <label className="owner-field">
+                <span>奖励模式</span>
+                <Select
+                  options={[{ label: '按通过题目', value: 'APPROVED_ITEM' }]}
+                  value={draft.rewardRule.rewardMode}
+                  onChange={(rewardMode) =>
+                    updateDraft({
+                      rewardRule: {
+                        ...draft.rewardRule,
+                        rewardMode,
+                      },
+                    })
+                  }
+                />
+              </label>
+              <label className="owner-field">
+                <span>奖励币种</span>
+                <Select
+                  options={[{ label: '积分', value: 'POINT' }]}
+                  value={draft.rewardRule.rewardCurrency}
+                  onChange={(rewardCurrency) =>
+                    updateDraft({
+                      rewardRule: {
+                        ...draft.rewardRule,
+                        rewardCurrency,
+                      },
+                    })
+                  }
+                />
+              </label>
+              <label className="owner-field">
+                <span>展示奖励</span>
+                <Switch
+                  checked={draft.rewardRule.rewardVisible}
+                  onChange={(rewardVisible) =>
+                    updateDraft({
+                      rewardRule: {
+                        ...draft.rewardRule,
+                        rewardVisible,
+                      },
+                    })
+                  }
+                />
+              </label>
+              <label className="owner-field">
                 <span>分发策略</span>
                 <Select
                   options={Object.entries(distributionStrategyLabels).map(([value, label]) => ({ value, label }))}
@@ -274,21 +569,76 @@ export function OwnerTaskEditorPage() {
                   onChange={(distributionStrategy) => updateDraft({ distributionStrategy })}
                 />
               </label>
+              <label className="owner-field">
+                <span>AI 审核策略</span>
+                <Select
+                  options={[{ label: '轻量审核', value: 'LIGHTWEIGHT' }]}
+                  value={draft.aiReview.aiReviewStrategy}
+                  onChange={(aiReviewStrategy) => updateDraft({ aiReview: { aiReviewStrategy } })}
+                />
+              </label>
               <label className="owner-field owner-field--wide">
                 <span>AI 审核 Prompt</span>
                 <Input.TextArea
                   autoSize={{ minRows: 2, maxRows: 4 }}
-                  value={draft.aiReview.prompt}
-                  onChange={(event) => updateDraft({ aiReview: { prompt: event.target.value } })}
+                  value={draft.aiReview.aiPrompt}
+                  onChange={(event) => updateDraft({ aiReview: { aiPrompt: event.target.value } })}
                 />
               </label>
               <label className="owner-field">
                 <span>AI 模型</span>
-                <Input value={draft.aiReview.model} onChange={(event) => updateDraft({ aiReview: { model: event.target.value } })} />
+                <Select
+                  allowClear
+                  loading={isLoadingModels}
+                  options={modelSelectOptions}
+                  placeholder="选择大模型"
+                  value={draft.aiReview.aiProviderId ?? undefined}
+                  onChange={(aiProviderId) => {
+                    const selectedModel = modelOptions.find((option) => String(option.id) === aiProviderId)
+                    updateDraft({
+                      aiReview: {
+                        aiProviderId: aiProviderId ?? null,
+                        aiModelName: selectedModel?.defaultModel ?? '',
+                      },
+                    })
+                  }}
+                  onOpenChange={(open) => {
+                    if (open) {
+                      void loadModelOptions()
+                    }
+                  }}
+                />
               </label>
               <label className="owner-field">
                 <span>评分维度</span>
-                <Input value={draft.aiReview.rating} onChange={(event) => updateDraft({ aiReview: { rating: event.target.value } })} />
+                <Select
+                  mode="tags"
+                  options={ratingDimensions.map((dimension) => ({ label: dimension, value: dimension }))}
+                  placeholder="输入维度后回车添加"
+                  tokenSeparators={[',', '，', ' ']}
+                  value={ratingDimensions}
+                  onChange={(dimensions) => updateDraft({ aiReview: { aiScoringDimensions: dimensions } })}
+                />
+              </label>
+              <label className="owner-field">
+                <span>通过阈值</span>
+                <InputNumber
+                  max={100}
+                  min={0}
+                  precision={2}
+                  value={draft.aiReview.aiPassThreshold}
+                  onChange={(aiPassThreshold) => updateDraft({ aiReview: { aiPassThreshold: aiPassThreshold ?? 0 } })}
+                />
+              </label>
+              <label className="owner-field">
+                <span>人工复核阈值</span>
+                <InputNumber
+                  max={100}
+                  min={0}
+                  precision={2}
+                  value={draft.aiReview.aiManualReviewThreshold}
+                  onChange={(aiManualReviewThreshold) => updateDraft({ aiReview: { aiManualReviewThreshold: aiManualReviewThreshold ?? 0 } })}
+                />
               </label>
             </div>
           </Card>
@@ -318,6 +668,43 @@ export function OwnerTaskEditorPage() {
                 showIcon
                 type="success"
               />
+            ) : null}
+
+            {taskId ? (
+              <div className="owner-import-preview">
+                <div className="owner-dataset-titlebar">
+                  <Typography.Title level={5}>任务题目列表</Typography.Title>
+                  <Button
+                    disabled={Boolean(draftDatasetItem) || isReadonlyTask}
+                    icon={<PlusOutlined />}
+                    size="small"
+                    type="primary"
+                    onClick={startDatasetItemDraft}
+                  >
+                    添加题目
+                  </Button>
+                </div>
+
+                <Table<DatasetTableRow>
+                  className="owner-dataset-table"
+                  columns={datasetColumns}
+                  dataSource={datasetTableRows}
+                  loading={isDatasetItemsLoading}
+                  pagination={{
+                    current: currentDatasetItemsPage?.page ?? 1,
+                    pageSize: currentDatasetItemsPage?.pageSize ?? 10,
+                    showSizeChanger: true,
+                    total: currentDatasetItemsPage?.total ?? 0,
+                    onChange: (page, pageSize) => {
+                      void loadTaskDatasetItems(taskId, { page, pageSize })
+                    },
+                  }}
+                  rowClassName={(row) => (isDatasetDraftRow(row) ? 'owner-dataset-table__row--draft' : '')}
+                  rowKey={(row) => (isDatasetDraftRow(row) ? row.rowKey : String(row.itemId))}
+                  scroll={{ x: 'max-content' }}
+                  size="middle"
+                />
+              </div>
             ) : null}
 
             {importPreview ? (

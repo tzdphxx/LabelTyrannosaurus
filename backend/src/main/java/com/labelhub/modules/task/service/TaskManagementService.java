@@ -66,7 +66,7 @@ public class TaskManagementService {
 
         Long effectiveOwnerId = CurrentUserContext.isAdmin() ? null : ownerId;
         long total = taskMapper.countOwnerTasks(effectiveOwnerId, status, keyword);
-        List<OwnerTaskSummaryResponse> items = taskMapper
+        List<TaskSummaryResponse> items = taskMapper
                 .selectOwnerTasksPage(effectiveOwnerId, status, keyword, normalizedSize, offset)
                 .stream()
                 .map(task -> new TaskSummaryResponse(

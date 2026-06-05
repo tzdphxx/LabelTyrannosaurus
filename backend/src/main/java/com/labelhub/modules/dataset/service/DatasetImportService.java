@@ -19,7 +19,6 @@ import com.labelhub.modules.dataset.domain.DatasetImportMode;
 import com.labelhub.modules.dataset.domain.DatasetImportStatus;
 import com.labelhub.modules.dataset.domain.DatasetItem;
 import com.labelhub.modules.dataset.domain.DatasetItemChangeLogEntity;
-import com.labelhub.modules.dataset.domain.DatasetItemEntity;
 import com.labelhub.modules.dataset.dto.BatchAppendJsonItemsRequest;
 import com.labelhub.modules.dataset.dto.DatasetImportJobResponse;
 import com.labelhub.modules.dataset.dto.DatasetImportRequest;
@@ -166,7 +165,7 @@ public class DatasetImportService {
      */
     @Transactional
     public DatasetImportJobResponse createAppendImportFromJson(Long taskId, BatchAppendJsonItemsRequest request) {
-        TaskEntity task = requireWritableTask(taskId);
+        Task task = requireWritableTask(taskId);
         CurrentUser currentUser = CurrentUserContext.requireCurrentUser();
         DatasetParseResult result = parseDirectAppendItems(request.items());
         ObjectFileEntity sourceFile = createDirectJsonSourceFile(task.getId(), currentUser.userId(), request.items());
@@ -228,7 +227,7 @@ public class DatasetImportService {
         return toResponse(job);
     }
 
-    private DatasetImportJobEntity createImportJob(TaskEntity task,
+    private DatasetImportJobEntity createImportJob(Task task,
                                                    ObjectFileEntity sourceFile,
                                                    DatasetFileFormat format,
                                                    DatasetImportMode mode,

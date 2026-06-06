@@ -58,6 +58,8 @@ GET /api/v1/owner/tasks
 
 ### 1.2 创建任务
 
+创建 `ASSIGNED` 策略任务前，可先调用 `GET /api/v1/owner/labelers/assignable` 获取可选标注员，并将返回的 `labelerId` 填入 `assignedLabelerId`。
+
 ```
 POST /api/v1/tasks
 权限: OWNER
@@ -223,7 +225,7 @@ GET /api/v1/tasks/{taskId}/labelers
 ### 2.1 题目列表
 
 ```
-GET /api/v1/tasks/{taskId}/items
+GET /api/v1/tasks/{taskId}/dataset/items
 权限: ADMIN / OWNER
 ```
 
@@ -262,9 +264,9 @@ ItemStatus 取值: `UNCLAIMED` | `CLAIMED` | `DRAFT` | `SUBMITTED` | `RETURNED` 
 ### 2.2 批量操作题目
 
 ```
-POST /api/v1/tasks/{taskId}/items/batch-append   # 批量追加（传 List）
-POST /api/v1/tasks/{taskId}/items/batch-update   # 批量更新（传 List，按 itemId 修改）
-POST /api/v1/tasks/{taskId}/items/batch-delete   # 批量删除（传 List<itemId>）
+POST /api/v1/tasks/{taskId}/dataset/items/batch-append   # 批量追加（传 List）
+POST /api/v1/tasks/{taskId}/dataset/items/batch-update   # 批量更新（传 List，按 itemId 修改）
+POST /api/v1/tasks/{taskId}/dataset/items/batch-delete   # 批量删除（传 List<itemId>）
 权限: ADMIN / OWNER
 ```
 

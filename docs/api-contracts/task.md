@@ -40,6 +40,36 @@ Only tasks whose ownerId equals the current user are returned.
 Results are ordered by updatedAt desc, then id desc.
 ```
 
+## GET /api/v1/owner/labelers/assignable
+
+Description: Lists labeler users that an OWNER can select when creating an ASSIGNED strategy task.
+
+- Method: `GET`
+- Permission: `OWNER`
+- Query: `keyword` optional, `enabledOnly` default true, `page` default 1, `size` default 20 and max 100
+- Response: `PageResponse<AssignableLabelerResponse>`
+
+Response fields:
+
+```text
+labelerId
+username
+email
+displayName
+avatarUrl
+enabled
+loginEnabled
+```
+
+Rules:
+
+```text
+Only users with role LABELER are returned.
+System users are excluded.
+When enabledOnly=true, only enabled and login-enabled labelers are returned.
+keyword matches username, email, or displayName.
+```
+
 ## POST /api/v1/tasks
 
 Description: Creates an OWNER task draft that can later be configured, supplied with data/template/rules, and published.

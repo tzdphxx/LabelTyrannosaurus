@@ -336,6 +336,37 @@ Authorization: Bearer <accessToken>
 
 ---
 
+### 3.1.1 GET /api/v1/owner/labelers/assignable
+
+**作用**：查询当前可被 OWNER 指派的标注员候选列表，用于创建 `ASSIGNED` 策略任务时选择 `assignedLabelerId`。
+
+**权限**：OWNER
+
+**请求参数**：
+
+| 参数 | 类型 | 必填 | 默认值 | 说明 |
+|------|------|------|--------|------|
+| keyword | String | 否 | - | 按用户名、邮箱或显示名搜索 |
+| enabledOnly | Boolean | 否 | true | 是否只返回已启用且允许登录的标注员 |
+| page | Integer | 否 | 1 | 页码，从 1 开始 |
+| size | Integer | 否 | 20 | 每页条数，最大 100 |
+
+**响应体** `PageResponse<AssignableLabelerResponse>`：
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| labelerId | Long | 标注员用户 ID，可作为 `assignedLabelerId` |
+| username | String | 用户名 |
+| email | String | 邮箱 |
+| displayName | String | 显示名 |
+| avatarUrl | String | 头像 URL |
+| enabled | Boolean | 账号是否启用 |
+| loginEnabled | Boolean | 是否允许登录 |
+
+**规则**：仅返回具备 `LABELER` 角色且 `userType != SYSTEM` 的用户。默认过滤禁用或不可登录账号。
+
+---
+
 ### 3.2 POST /api/v1/tasks
 
 **作用**：创建草稿任务。任务归属当前 OWNER 用户。可同时指定 datasetFileId 来触发数据集导入。

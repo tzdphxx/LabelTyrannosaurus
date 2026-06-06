@@ -2,6 +2,7 @@ package com.labelhub.modules.auth.repository;
 
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import com.labelhub.modules.auth.domain.UserEntity;
+import com.labelhub.modules.task.dto.AssignableLabelerResponse;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 import org.apache.ibatis.annotations.Select;
@@ -20,6 +21,61 @@ public interface UserMapper extends BaseMapper<UserEntity> {
 
     @Select("select * from users where username = #{account} or email = #{account} limit 1")
     UserEntity selectByUsernameOrEmail(String account);
+
+    @Select("""
+            <script>
+            SELECT COUNT(DISTINCT u.id)
+            FROM users u
+            JOIN user_roles ur ON ur.user_id = u.id AND ur.role_code = 'LABELER'
+            WHERE u.user_type &lt;&gt; 'SYSTEM'
+            <if test="enabledOnly">
+              AND u.enabled = TRUE
+              AND u.login_enabled = TRUE
+            </if>
+            <if test="keyword != null">
+              AND (
+                u.username LIKE CONCAT('%', #{keyword}, '%')
+                OR u.email LIKE CONCAT('%', #{keyword}, '%')
+                OR u.display_name LIKE CONCAT('%', #{keyword}, '%')
+              )
+            </if>
+            </script>
+            """)
+    long countAssignableLabelers(@Param("keyword") String keyword,
+                                 @Param("enabledOnly") boolean enabledOnly);
+
+    @Select("""
+            <script>
+            SELECT DISTINCT
+                   u.id AS labelerId,
+                   u.username AS username,
+                   u.email AS email,
+                   u.display_name AS displayName,
+                   u.avatar_url AS avatarUrl,
+                   u.enabled AS enabled,
+                   u.login_enabled AS loginEnabled
+            FROM users u
+            JOIN user_roles ur ON ur.user_id = u.id AND ur.role_code = 'LABELER'
+            WHERE u.user_type &lt;&gt; 'SYSTEM'
+            <if test="enabledOnly">
+              AND u.enabled = TRUE
+              AND u.login_enabled = TRUE
+            </if>
+            <if test="keyword != null">
+              AND (
+                u.username LIKE CONCAT('%', #{keyword}, '%')
+                OR u.email LIKE CONCAT('%', #{keyword}, '%')
+                OR u.display_name LIKE CONCAT('%', #{keyword}, '%')
+              )
+            </if>
+            ORDER BY u.username ASC, u.id ASC
+            LIMIT #{limit} OFFSET #{offset}
+            </script>
+            """)
+    List<AssignableLabelerResponse> selectAssignableLabelers(@Param("keyword") String keyword,
+                                                             @Param("enabledOnly") boolean enabledOnly,
+                                                             @Param("offset") int offset,
+                                                             @Param("limit") int limit);
 
     @Select("""
             select * from users

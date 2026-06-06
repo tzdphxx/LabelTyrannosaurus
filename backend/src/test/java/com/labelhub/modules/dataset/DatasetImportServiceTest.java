@@ -10,7 +10,6 @@ import com.labelhub.infrastructure.async.AsyncJobService;
 import com.labelhub.infrastructure.storage.ObjectStorageService;
 import com.labelhub.modules.dataset.domain.DatasetFileEntity;
 import com.labelhub.modules.dataset.domain.DatasetImportJobEntity;
-import com.labelhub.modules.dataset.domain.DatasetItemEntity;
 import com.labelhub.modules.dataset.dto.BatchAppendJsonItemsRequest;
 import com.labelhub.modules.dataset.domain.DatasetItem;
 import com.labelhub.modules.dataset.dto.DatasetImportRequest;

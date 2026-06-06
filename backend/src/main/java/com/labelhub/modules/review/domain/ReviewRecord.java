@@ -1,6 +1,7 @@
 package com.labelhub.modules.review.domain;
 
 import com.baomidou.mybatisplus.annotation.IdType;
+import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
 import java.time.LocalDateTime;
@@ -25,6 +26,7 @@ public class ReviewRecord {
 
     private String reason;
 
+    @TableField("comment")
     private String reviewComment;
 
     private LocalDateTime createdAt;

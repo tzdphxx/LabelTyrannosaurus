@@ -128,7 +128,20 @@ GET /api/v1/tasks/{taskId}
   "instructionRichText": "<p>标注说明...</p>",
   "maxClaimsPerLabeler": 10,
   "publishedTemplateVersionId": 20,
-  "aiReviewConfigId": 30,
+  "aiReview": {
+    "id": 30,
+    "taskId": 100,
+    "providerId": 8,
+    "modelName": "qwen-plus",
+    "promptTemplate": "Review prompt",
+    "scoringDimensions": ["accuracy"],
+    "passThreshold": 0.80,
+    "manualReviewThreshold": 0.60,
+    "promptVersion": "v1",
+    "maxRetry": 3,
+    "aiFlowPolicy": "MANUAL_FIRST",
+    "reviewStrategy": "LIGHTWEIGHT"
+  },
   "reviewLevelCount": 1,
   "rewardVisible": true,
   "rewardRule": { "id": 500, "taskId": 100, "effectiveVersion": 1, "rewardMode": "APPROVED_ITEM", "unitReward": 0.50 }

@@ -16,6 +16,7 @@ import com.labelhub.common.security.CurrentUser;
 import com.labelhub.common.security.CurrentUserContext;
 import com.labelhub.common.security.RoleCode;
 import com.labelhub.common.web.TraceIdProvider;
+import com.labelhub.modules.ai.dto.AiReviewConfigResponse;
 import com.labelhub.modules.ai.mapper.AiReviewConfigMapper;
 import com.labelhub.modules.ai.service.LlmProviderService;
 import com.labelhub.modules.dataset.dto.DatasetImportJobResponse;
@@ -40,6 +41,7 @@ import com.labelhub.modules.task.dto.TaskSummaryResponse;
 import com.labelhub.modules.task.dto.UpdateTaskRequest;
 import com.labelhub.modules.task.mapper.TaskMapper;
 import com.labelhub.modules.task.mapper.TaskTagMapper;
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
@@ -230,8 +232,10 @@ class TaskLifecycleServiceTest {
     void returnsOwnedTaskDetail() {
         Task task = publishableDraftTask();
         RewardRuleResponse rewardRule = rewardRuleResponse(2, "3.00", false);
+        AiReviewConfigResponse aiReview = aiReviewConfigResponse();
         when(taskMapper.selectById(TASK_ID)).thenReturn(task);
         when(taskTagMapper.selectList(any(Wrapper.class))).thenReturn(List.of(taskTag("qa")));
+        when(aiReviewConfigService.findResponseByTaskId(TASK_ID)).thenReturn(aiReview);
         when(rewardRuleService.findLatestRule(TASK_ID)).thenReturn(rewardRule);
 
         TaskResponse response = taskLifecycleService.getOwnedTask(OWNER_ID, TASK_ID);
@@ -240,7 +244,8 @@ class TaskLifecycleServiceTest {
         assertThat(response.ownerId()).isEqualTo(OWNER_ID);
         assertThat(response.tags()).containsExactly("qa");
         assertThat(response.publishedTemplateVersionId()).isEqualTo(100L);
-        assertThat(response.aiReviewConfigId()).isEqualTo(200L);
+        assertThat(response.aiReview()).isEqualTo(aiReview);
+        assertThat(response.aiReview().id()).isEqualTo(200L);
         assertThat(response.rewardRule()).isEqualTo(rewardRule);
     }
 
@@ -254,6 +259,18 @@ class TaskLifecycleServiceTest {
         TaskResponse response = taskLifecycleService.getOwnedTask(OWNER_ID, TASK_ID);
 
         assertThat(response.rewardRule()).isNull();
+    }
+
+    @Test
+    void returnsOwnedTaskDetailWithoutAiReviewConfig() {
+        Task task = draftTask();
+        when(taskMapper.selectById(TASK_ID)).thenReturn(task);
+        when(taskTagMapper.selectList(any(Wrapper.class))).thenReturn(List.of(taskTag("qa")));
+        when(aiReviewConfigService.findResponseByTaskId(TASK_ID)).thenReturn(null);
+
+        TaskResponse response = taskLifecycleService.getOwnedTask(OWNER_ID, TASK_ID);
+
+        assertThat(response.aiReview()).isNull();
     }
 
 
@@ -542,6 +559,28 @@ class TaskLifecycleServiceTest {
                 LocalDateTime.now(),
                 OWNER_ID,
                 LocalDateTime.now()
+        );
+    }
+
+    private AiReviewConfigResponse aiReviewConfigResponse() {
+        return new AiReviewConfigResponse(
+                200L,
+                TASK_ID,
+                300L,
+                "qwen-plus",
+                "Review prompt",
+                List.of("accuracy"),
+                new BigDecimal("0.80"),
+                new BigDecimal("0.60"),
+                null,
+                "v1",
+                3,
+                "MANUAL_FIRST",
+                false,
+                false,
+                null,
+                null,
+                null
         );
     }
 

@@ -24,7 +24,7 @@ import java.util.List;
  * <p>Controller 只声明 HTTP 契约和角色入口，任务归属、已领取题不可改等业务边界由 Service 层统一执行。</p>
  */
 @RestController
-@RequestMapping("/api/v1/tasks/{taskId}/dataset/items")
+@RequestMapping("/api/v1/tasks/{taskId}/items")
 @PreAuthorize("hasAnyRole('ADMIN','OWNER')")
 @Tag(name = "数据集", description = "任务数据项查询和批量编辑")
 public class DatasetItemController {

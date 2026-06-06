@@ -6,6 +6,7 @@ import com.labelhub.common.exception.BusinessException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.labelhub.common.security.CurrentUserContext;
 import com.labelhub.common.util.AnswerCanonicalizer;
+import com.labelhub.common.web.TraceIdProvider;
 import com.labelhub.modules.assignment.domain.Assignment;
 import com.labelhub.modules.assignment.domain.AssignmentStatus;
 import com.labelhub.modules.assignment.mapper.AssignmentMapper;
@@ -53,6 +54,7 @@ public class ReviewService {
     private final DatasetClaimService datasetClaimService;
     private final ReviewLevelEscalationService escalationService;
     private final ObjectMapper objectMapper;
+    private final TraceIdProvider traceIdProvider;
 
     public ReviewService(SubmissionMapper submissionMapper,
                          AssignmentMapper assignmentMapper,
@@ -63,7 +65,8 @@ public class ReviewService {
                          AuditAppender auditAppender,
                          DatasetClaimService datasetClaimService,
                          ReviewLevelEscalationService escalationService,
-                         ObjectMapper objectMapper) {
+                         ObjectMapper objectMapper,
+                         TraceIdProvider traceIdProvider) {
         this.submissionMapper = submissionMapper;
         this.assignmentMapper = assignmentMapper;
         this.reviewRecordMapper = reviewRecordMapper;
@@ -74,6 +77,7 @@ public class ReviewService {
         this.datasetClaimService = datasetClaimService;
         this.escalationService = escalationService;
         this.objectMapper = objectMapper;
+        this.traceIdProvider = traceIdProvider;
     }
 
     public List<SubmissionReviewItem> listPendingFinal() {
@@ -255,6 +259,6 @@ public class ReviewService {
 
         auditAppender.append(new AuditCommand(USER_ACTOR_TYPE, reviewerId,
                 SUBMISSION_BIZ_TYPE, submission.getId(),
-                action, before, after, null, null));
+                action, before, after, traceIdProvider.currentTraceId(), null));
     }
 }

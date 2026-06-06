@@ -3,6 +3,8 @@ package com.labelhub.infrastructure.llm;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.labelhub.modules.ai.service.LlmProviderRuntimeConfig;
+import java.net.http.HttpRequest;
 import java.time.Duration;
 import java.util.List;
 import java.util.Map;
@@ -44,5 +46,24 @@ class OpenAiCompatibleAdapterTest {
                 "url", "https://example.com/a.jpg",
                 "detail", "auto"
         ));
+    }
+
+    @Test
+    void buildsValidatedRequestWithoutRestrictedHostHeader() {
+        OpenAiCompatibleAdapter adapter = new OpenAiCompatibleAdapter(
+                new ObjectMapper(), Duration.ofSeconds(1), Duration.ofSeconds(1), true);
+        LlmProviderRuntimeConfig config = new LlmProviderRuntimeConfig(
+                "http://93.184.216.34/v1", "sk-live", "qwen-plus", Map.of());
+
+        HttpRequest request = ReflectionTestUtils.invokeMethod(
+                adapter,
+                "buildRequest",
+                config,
+                List.of(new LlmMessage("user", "ping")),
+                null,
+                null,
+                ResponseFormat.none());
+
+        assertThat(request.headers().firstValue("Host")).isEmpty();
     }
 }

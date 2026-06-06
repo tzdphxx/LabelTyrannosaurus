@@ -136,6 +136,14 @@ public class AiReviewConfigService {
         return toResponse(config);
     }
 
+    public AiReviewConfigResponse findResponseByTaskId(Long taskId) {
+        if (taskId == null) {
+            return null;
+        }
+        AiReviewConfig config = findByTaskId(taskId);
+        return config != null ? toResponse(config) : null;
+    }
+
     public boolean existsForTask(Long taskId, Long configId) {
         if (taskId == null || configId == null) {
             return false;

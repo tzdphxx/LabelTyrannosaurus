@@ -347,7 +347,7 @@ public class TaskLifecycleService {
                 task.getInstructionRichText(),
                 task.getMaxClaimsPerLabeler(),
                 task.getPublishedTemplateVersionId(),
-                task.getAiReviewConfigId(),
+                aiReviewConfigService.findResponseByTaskId(task.getId()),
                 task.getReviewLevelCount(),
                 task.getRewardVisible(),
                 rewardRuleService.findLatestRule(task.getId())

@@ -19,6 +19,7 @@ import com.labelhub.common.web.TraceIdProvider;
 import com.labelhub.modules.ai.dto.AiReviewConfigResponse;
 import com.labelhub.modules.ai.mapper.AiReviewConfigMapper;
 import com.labelhub.modules.ai.service.LlmProviderService;
+import com.labelhub.modules.auth.repository.UserRoleMapper;
 import com.labelhub.modules.dataset.dto.DatasetImportJobResponse;
 import com.labelhub.modules.dataset.dto.DatasetImportRequest;
 import com.labelhub.modules.dataset.service.DatasetImportService;
@@ -29,6 +30,7 @@ import com.labelhub.modules.reward.dto.RewardRuleRequest;
 import com.labelhub.modules.reward.dto.RewardRuleResponse;
 import com.labelhub.modules.reward.repository.RewardRuleRepositoryMapper;
 import com.labelhub.modules.reward.service.RewardRuleService;
+import com.labelhub.modules.task.domain.ClaimStrategy;
 import com.labelhub.modules.template.mapper.TemplateVersionMapper;
 import com.labelhub.modules.task.domain.Task;
 import com.labelhub.modules.task.domain.TaskStatus;
@@ -95,6 +97,9 @@ class TaskLifecycleServiceTest {
     @Mock
     private LlmProviderService llmProviderService;
 
+    @Mock
+    private UserRoleMapper userRoleMapper;
+
     private TaskLifecycleService taskLifecycleService;
 
     @BeforeEach
@@ -109,6 +114,7 @@ class TaskLifecycleServiceTest {
                 aiReviewConfigService,
                 rewardRuleService,
                 dispatchMapper,
+                userRoleMapper,
                 applicationEventPublisher
         );
     }
@@ -212,6 +218,42 @@ class TaskLifecycleServiceTest {
         assertThat(response.taskId()).isEqualTo(TASK_ID);
         assertThat(response.rewardRule()).isEqualTo(rewardResponse);
         verify(rewardRuleService).saveRuleForTaskOwner(TASK_ID, OWNER_ID, rewardRule);
+    }
+
+    @Test
+    void createsAssignedTaskWithDefaultLabeler() {
+        when(traceIdProvider.currentTraceId()).thenReturn("trace-1");
+        when(userRoleMapper.selectRoleCodesByUserId(20L)).thenReturn(Set.of(RoleCode.LABELER));
+        when(taskMapper.insert(any(Task.class))).thenAnswer(invocation -> {
+            Task task = invocation.getArgument(0);
+            task.setId(TASK_ID);
+            return 1;
+        });
+
+        TaskStatusResponse response = taskLifecycleService.create(OWNER_ID, createAssignedRequestWithLabeler(20L));
+
+        assertThat(response.taskId()).isEqualTo(TASK_ID);
+        ArgumentCaptor<Task> taskCaptor = ArgumentCaptor.forClass(Task.class);
+        verify(taskMapper).insert(taskCaptor.capture());
+        assertThat(taskCaptor.getValue().getStrategy()).isEqualTo(ClaimStrategy.ASSIGNED);
+        assertThat(taskCaptor.getValue().getAssignedLabelerId()).isEqualTo(20L);
+        assertThat(taskCaptor.getValue().getQuota()).isZero();
+    }
+
+    @Test
+    void rejectsAssignedLabelerWhenStrategyIsNotAssigned() {
+        assertThatThrownBy(() -> taskLifecycleService.create(OWNER_ID, createRequestWithAssignedLabeler(20L)))
+                .isInstanceOfSatisfying(BusinessException.class,
+                        ex -> assertThat(ex.getCode()).isEqualTo(400104));
+    }
+
+    @Test
+    void rejectsAssignedTaskWhenDefaultLabelerIsNotLabeler() {
+        when(userRoleMapper.selectRoleCodesByUserId(20L)).thenReturn(Set.of(RoleCode.OWNER));
+
+        assertThatThrownBy(() -> taskLifecycleService.create(OWNER_ID, createAssignedRequestWithLabeler(20L)))
+                .isInstanceOfSatisfying(BusinessException.class,
+                        ex -> assertThat(ex.getCode()).isEqualTo(400104));
     }
 
     @Test
@@ -459,7 +501,50 @@ class TaskLifecycleServiceTest {
                 null, null,
                 1,
                 null,
+                null,
                 null
+        );
+    }
+
+    private CreateTaskRequest createRequestWithAssignedLabeler(Long assignedLabelerId) {
+        return new CreateTaskRequest(
+                "New task",
+                "Description",
+                "Instruction",
+                List.of("qa"),
+                10,
+                LocalDateTime.now().plusDays(1),
+                1,
+                100L,
+                200L,
+                null, null, null, null, null, null,
+                null,
+                "FCFS", null,
+                1,
+                null,
+                null,
+                assignedLabelerId
+        );
+    }
+
+    private CreateTaskRequest createAssignedRequestWithLabeler(Long assignedLabelerId) {
+        return new CreateTaskRequest(
+                "Assigned task",
+                "Description",
+                "Instruction",
+                List.of("qa"),
+                null,
+                LocalDateTime.now().plusDays(1),
+                1,
+                100L,
+                200L,
+                null, null, null, null, null, null,
+                null,
+                "ASSIGNED", null,
+                1,
+                null,
+                null,
+                assignedLabelerId
         );
     }
 
@@ -479,6 +564,7 @@ class TaskLifecycleServiceTest {
                 null, null,
                 1,
                 99L,
+                null,
                 null
         );
     }
@@ -499,7 +585,8 @@ class TaskLifecycleServiceTest {
                 null, null,
                 1,
                 null,
-                rewardRule
+                rewardRule,
+                null
         );
     }
 

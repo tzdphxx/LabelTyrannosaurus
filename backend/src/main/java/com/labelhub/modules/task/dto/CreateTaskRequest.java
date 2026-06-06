@@ -73,6 +73,8 @@ public record CreateTaskRequest(
         Long datasetFileId,
         @Schema(description = "任务奖励规则，可选，填写后自动创建初始奖励规则")
         @Valid
-        RewardRuleRequest rewardRule
+        RewardRuleRequest rewardRule,
+        @Schema(description = "ASSIGNED 策略默认指派的标注员 ID", example = "20")
+        Long assignedLabelerId
 ) {
 }

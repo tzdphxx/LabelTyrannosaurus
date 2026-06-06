@@ -153,6 +153,7 @@ GET /api/v1/tasks/{taskId}
   "instructionRichText": "<p>标注说明...</p>",
   "maxClaimsPerLabeler": 10,
   "assignedLabelerId": null,
+  "assignedLabelerName": null,
   "publishedTemplateVersionId": 20,
   "aiReview": {
     "id": 30,

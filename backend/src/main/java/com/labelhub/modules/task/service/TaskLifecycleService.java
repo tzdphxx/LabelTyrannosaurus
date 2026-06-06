@@ -10,6 +10,8 @@ import com.labelhub.common.web.TraceIdProvider;
 import com.labelhub.modules.ai.dto.AiReviewConfigRequest;
 import com.labelhub.modules.ai.service.AiReviewConfigService;
 import com.labelhub.modules.assignment.mapper.AssignmentDispatchMapper;
+import com.labelhub.modules.auth.domain.UserEntity;
+import com.labelhub.modules.auth.repository.UserMapper;
 import com.labelhub.modules.auth.repository.UserRoleMapper;
 import com.labelhub.modules.dataset.dto.DatasetImportJobResponse;
 import com.labelhub.modules.dataset.dto.DatasetImportRequest;
@@ -58,6 +60,7 @@ public class TaskLifecycleService {
     private final AiReviewConfigService aiReviewConfigService;
     private final RewardRuleService rewardRuleService;
     private final AssignmentDispatchMapper dispatchMapper;
+    private final UserMapper userMapper;
     private final UserRoleMapper userRoleMapper;
     private final org.springframework.context.ApplicationEventPublisher applicationEventPublisher;
 
@@ -70,6 +73,7 @@ public class TaskLifecycleService {
                                 AiReviewConfigService aiReviewConfigService,
                                 RewardRuleService rewardRuleService,
                                 AssignmentDispatchMapper dispatchMapper,
+                                UserMapper userMapper,
                                 UserRoleMapper userRoleMapper,
                                 org.springframework.context.ApplicationEventPublisher applicationEventPublisher) {
         this.taskMapper = taskMapper;
@@ -81,6 +85,7 @@ public class TaskLifecycleService {
         this.aiReviewConfigService = aiReviewConfigService;
         this.rewardRuleService = rewardRuleService;
         this.dispatchMapper = dispatchMapper;
+        this.userMapper = userMapper;
         this.userRoleMapper = userRoleMapper;
         this.applicationEventPublisher = applicationEventPublisher;
     }
@@ -356,6 +361,7 @@ public class TaskLifecycleService {
                 task.getInstructionRichText(),
                 task.getMaxClaimsPerLabeler(),
                 task.getAssignedLabelerId(),
+                resolveAssignedLabelerName(task.getAssignedLabelerId()),
                 task.getPublishedTemplateVersionId(),
                 aiReviewConfigService.findResponseByTaskId(task.getId()),
                 task.getReviewLevelCount(),
@@ -405,6 +411,21 @@ public class TaskLifecycleService {
             throw new BusinessException(TASK_NOT_FOUND, "任务不存在");
         }
         return task;
+    }
+
+    private String resolveAssignedLabelerName(Long assignedLabelerId) {
+        if (assignedLabelerId == null || userMapper == null) {
+            return null;
+        }
+        UserEntity user = userMapper.selectById(assignedLabelerId);
+        if (user == null) {
+            return null;
+        }
+        String displayName = user.getDisplayName();
+        if (displayName != null && !displayName.isBlank()) {
+            return displayName;
+        }
+        return user.getUsername();
     }
 
     private void replaceTags(Long taskId, Iterable<String> tags) {

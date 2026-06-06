@@ -461,6 +461,7 @@ Authorization: Bearer <accessToken>
 | claimedCount | Integer | 已领取数量 |
 | overlapCount | Integer | 重叠标注数 |
 | assignedLabelerId | Long | ASSIGNED 策略默认指派的标注员 ID |
+| assignedLabelerName | String | ASSIGNED 策略默认指派的标注员名称，优先显示名称，缺失时使用用户名 |
 | deadlineAt | LocalDateTime | 截止时间 |
 | publishedTemplateVersionId | Long | 模板版本 ID |
 | aiReview | AiReviewConfigResponse | AI 审核配置对象；未配置时为 null |

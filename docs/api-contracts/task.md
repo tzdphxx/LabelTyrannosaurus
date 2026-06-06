@@ -170,6 +170,7 @@ overlapCount
 strategy
 maxClaimsPerLabeler
 assignedLabelerId
+assignedLabelerName
 deadlineAt
 publishedTemplateVersionId
 aiReview (AiReviewConfigResponse, nullable)

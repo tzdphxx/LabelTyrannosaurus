@@ -48,6 +48,8 @@ public record TaskResponse(
         Integer maxClaimsPerLabeler,
         @Schema(description = "ASSIGNED 策略默认指派的标注员 ID", example = "20")
         Long assignedLabelerId,
+        @Schema(description = "ASSIGNED 策略默认指派的标注员名称，优先显示名称，缺失时使用用户名", example = "Labeler A")
+        String assignedLabelerName,
         @Schema(description = "已发布模板版本 ID", example = "20")
         Long publishedTemplateVersionId,
         @Schema(description = "AI 审核配置")

@@ -19,6 +19,8 @@ import com.labelhub.common.web.TraceIdProvider;
 import com.labelhub.modules.ai.dto.AiReviewConfigResponse;
 import com.labelhub.modules.ai.mapper.AiReviewConfigMapper;
 import com.labelhub.modules.ai.service.LlmProviderService;
+import com.labelhub.modules.auth.domain.UserEntity;
+import com.labelhub.modules.auth.repository.UserMapper;
 import com.labelhub.modules.auth.repository.UserRoleMapper;
 import com.labelhub.modules.dataset.dto.DatasetImportJobResponse;
 import com.labelhub.modules.dataset.dto.DatasetImportRequest;
@@ -98,6 +100,9 @@ class TaskLifecycleServiceTest {
     private LlmProviderService llmProviderService;
 
     @Mock
+    private UserMapper userMapper;
+
+    @Mock
     private UserRoleMapper userRoleMapper;
 
     private TaskLifecycleService taskLifecycleService;
@@ -114,6 +119,7 @@ class TaskLifecycleServiceTest {
                 aiReviewConfigService,
                 rewardRuleService,
                 dispatchMapper,
+                userMapper,
                 userRoleMapper,
                 applicationEventPublisher
         );
@@ -292,6 +298,35 @@ class TaskLifecycleServiceTest {
     }
 
     @Test
+    void returnsAssignedLabelerDisplayNameInTaskDetail() {
+        Task task = publishableDraftTask();
+        task.setAssignedLabelerId(20L);
+        UserEntity labeler = user(20L, "labeler-a", "标注员A");
+        when(taskMapper.selectById(TASK_ID)).thenReturn(task);
+        when(taskTagMapper.selectList(any(Wrapper.class))).thenReturn(List.of(taskTag("qa")));
+        when(userMapper.selectById(20L)).thenReturn(labeler);
+
+        TaskResponse response = taskLifecycleService.getOwnedTask(OWNER_ID, TASK_ID);
+
+        assertThat(response.assignedLabelerId()).isEqualTo(20L);
+        assertThat(response.assignedLabelerName()).isEqualTo("标注员A");
+    }
+
+    @Test
+    void fallsBackToUsernameWhenAssignedLabelerDisplayNameIsBlank() {
+        Task task = publishableDraftTask();
+        task.setAssignedLabelerId(20L);
+        UserEntity labeler = user(20L, "labeler-a", " ");
+        when(taskMapper.selectById(TASK_ID)).thenReturn(task);
+        when(taskTagMapper.selectList(any(Wrapper.class))).thenReturn(List.of(taskTag("qa")));
+        when(userMapper.selectById(20L)).thenReturn(labeler);
+
+        TaskResponse response = taskLifecycleService.getOwnedTask(OWNER_ID, TASK_ID);
+
+        assertThat(response.assignedLabelerName()).isEqualTo("labeler-a");
+    }
+
+    @Test
     void returnsOwnedTaskDetailWithoutRewardRule() {
         Task task = publishableDraftTask();
         when(taskMapper.selectById(TASK_ID)).thenReturn(task);
@@ -313,6 +348,8 @@ class TaskLifecycleServiceTest {
         TaskResponse response = taskLifecycleService.getOwnedTask(OWNER_ID, TASK_ID);
 
         assertThat(response.aiReview()).isNull();
+        assertThat(response.assignedLabelerName()).isNull();
+        verify(userMapper, never()).selectById(any());
     }
 
 
@@ -688,6 +725,14 @@ class TaskLifecycleServiceTest {
         taskTag.setTaskId(TASK_ID);
         taskTag.setTagName(tagName);
         return taskTag;
+    }
+
+    private UserEntity user(Long userId, String username, String displayName) {
+        UserEntity user = new UserEntity();
+        user.setId(userId);
+        user.setUsername(username);
+        user.setDisplayName(displayName);
+        return user;
     }
 
     private Task publishableDraftTask() {

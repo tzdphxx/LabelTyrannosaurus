@@ -202,17 +202,82 @@ class AssignmentClaimServiceTest {
     }
 
     @Test
-    void rejectsBulkQuantityForQuotaGrab() {
+    void quotaGrabClaimsRequestedQuantityWithinPersonalLimit() {
         Task task = publishedTask(1);
         task.setStrategy(ClaimStrategy.QUOTA_GRAB);
+        task.setQuota(10);
+        task.setMaxClaimsPerLabeler(5);
         when(taskMapper.selectById(TASK_ID)).thenReturn(task);
+        when(redisLockService.tryLock("lock:claim:task:10", 2000, 10000)).thenReturn(true);
+        when(assignmentMapper.countActiveByTaskAndLabeler(TASK_ID, LABELER_ID)).thenReturn(2);
+        when(taskMapper.tryIncrementClaimedCount(TASK_ID)).thenReturn(1, 1, 1);
+        when(datasetClaimService.reserveClaimableItem(TASK_ID, LABELER_ID, 1))
+                .thenReturn(
+                        Optional.of(new DatasetItemSnapshot(ITEM_ID, "{\"text\":\"one\"}")),
+                        Optional.of(new DatasetItemSnapshot(ITEM_ID + 1, "{\"text\":\"two\"}")),
+                        Optional.of(new DatasetItemSnapshot(ITEM_ID + 2, "{\"text\":\"three\"}")));
+        when(templateSchemaService.getTemplateSchema(TEMPLATE_VERSION_ID))
+                .thenReturn(new TemplateSchemaSnapshot(TEMPLATE_VERSION_ID, "{\"type\":\"object\"}"));
+        AtomicInteger assignmentId = new AtomicInteger(ASSIGNMENT_ID.intValue());
+        when(assignmentMapper.insert(any(Assignment.class))).thenAnswer(invocation -> {
+            Assignment assignment = invocation.getArgument(0);
+            assignment.setId((long) assignmentId.getAndIncrement());
+            return 1;
+        });
 
-        assertThatThrownBy(() -> assignmentClaimService.claim(TASK_ID, LABELER_ID, 2))
+        List<AssignmentClaimResponse> responses = assignmentClaimService.claim(TASK_ID, LABELER_ID, 3);
+
+        assertThat(responses).hasSize(3);
+        assertThat(responses)
+                .extracting(AssignmentClaimResponse::datasetItemId)
+                .containsExactly(ITEM_ID, ITEM_ID + 1, ITEM_ID + 2);
+        verify(taskMapper, times(3)).tryIncrementClaimedCount(TASK_ID);
+        verify(datasetClaimService, times(3)).reserveClaimableItem(TASK_ID, LABELER_ID, 1);
+        verify(assignmentMapper, times(3)).insert(any(Assignment.class));
+        verify(auditAppender, times(3)).append(any(AuditCommand.class));
+        verify(redisLockService).unlock("lock:claim:task:10");
+    }
+
+    @Test
+    void quotaGrabRejectsQuantityBeyondPersonalLimitBeforeIncrementingQuota() {
+        Task task = publishedTask(1);
+        task.setStrategy(ClaimStrategy.QUOTA_GRAB);
+        task.setQuota(10);
+        task.setMaxClaimsPerLabeler(5);
+        when(taskMapper.selectById(TASK_ID)).thenReturn(task);
+        when(redisLockService.tryLock("lock:claim:task:10", 2000, 10000)).thenReturn(true);
+        when(assignmentMapper.countActiveByTaskAndLabeler(TASK_ID, LABELER_ID)).thenReturn(3);
+
+        assertThatThrownBy(() -> assignmentClaimService.claim(TASK_ID, LABELER_ID, 3))
                 .isInstanceOfSatisfying(BusinessException.class,
-                        ex -> assertThat(ex.getCode()).isEqualTo(400001));
+                        ex -> assertThat(ex.getCode()).isEqualTo(409203));
 
-        verify(redisLockService, never()).tryLock(any(), any(Long.class), any(Long.class));
         verify(taskMapper, never()).tryIncrementClaimedCount(any());
+        verify(datasetClaimService, never()).reserveClaimableItem(any(), any(), any());
+        verify(redisLockService).unlock("lock:claim:task:10");
+    }
+
+    @Test
+    void quotaGrabBulkRejectsWhenTaskQuotaRunsOutAndCompensatesIncrements() {
+        Task task = publishedTask(1);
+        task.setStrategy(ClaimStrategy.QUOTA_GRAB);
+        task.setQuota(10);
+        task.setMaxClaimsPerLabeler(5);
+        when(taskMapper.selectById(TASK_ID)).thenReturn(task);
+        when(redisLockService.tryLock("lock:claim:task:10", 2000, 10000)).thenReturn(true);
+        when(assignmentMapper.countActiveByTaskAndLabeler(TASK_ID, LABELER_ID)).thenReturn(1);
+        when(taskMapper.tryIncrementClaimedCount(TASK_ID)).thenReturn(1, 1, 0);
+
+        assertThatThrownBy(() -> assignmentClaimService.claim(TASK_ID, LABELER_ID, 3))
+                .isInstanceOfSatisfying(BusinessException.class,
+                        ex -> assertThat(ex.getCode()).isEqualTo(409202));
+
+        verify(taskMapper, times(3)).tryIncrementClaimedCount(TASK_ID);
+        verify(taskMapper, times(2)).decrementClaimedCount(TASK_ID);
+        verify(datasetClaimService, never()).reserveClaimableItem(any(), any(), any());
+        verify(assignmentMapper, never()).insert(any(Assignment.class));
+        verify(auditAppender, never()).append(any(AuditCommand.class));
+        verify(redisLockService).unlock("lock:claim:task:10");
     }
 
     @Test
@@ -389,14 +454,14 @@ class AssignmentClaimServiceTest {
         task.setMaxClaimsPerLabeler(3);
         when(taskMapper.selectById(TASK_ID)).thenReturn(task);
         when(redisLockService.tryLock("lock:claim:task:10", 2000, 10000)).thenReturn(true);
-        when(taskMapper.tryIncrementClaimedCount(TASK_ID)).thenReturn(1);
         when(assignmentMapper.countActiveByTaskAndLabeler(TASK_ID, LABELER_ID)).thenReturn(3);
 
         assertThatThrownBy(() -> assignmentClaimService.claim(TASK_ID, LABELER_ID))
                 .isInstanceOfSatisfying(BusinessException.class,
                         ex -> assertThat(ex.getCode()).isEqualTo(409203));
 
-        verify(taskMapper).decrementClaimedCount(TASK_ID);
+        verify(taskMapper, never()).tryIncrementClaimedCount(any());
+        verify(taskMapper, never()).decrementClaimedCount(any());
         verify(datasetClaimService, never()).reserveClaimableItem(any(), any(), any());
         verify(redisLockService).unlock("lock:claim:task:10");
     }

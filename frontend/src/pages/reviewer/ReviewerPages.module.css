@@ -1,0 +1,565 @@
+.page {
+  --reviewer-bg: #f6f7f9;
+  --reviewer-panel: #ffffff;
+  --reviewer-panel-muted: #f9fafb;
+  --reviewer-border: #dfe3e8;
+  --reviewer-border-strong: #c6ced8;
+  --reviewer-text: #17202a;
+  --reviewer-muted: #667085;
+  --reviewer-accent: #1f6feb;
+  --reviewer-accent-soft: #eef4ff;
+  --reviewer-success: #188557;
+  --reviewer-warning: #b7791f;
+  --reviewer-danger: #c93b3b;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin: -8px;
+  padding: 8px;
+  color: var(--reviewer-text);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.88), rgba(246, 247, 249, 0.94)),
+    var(--reviewer-bg);
+}
+
+.page :global(.ant-card-head) {
+  min-height: 44px;
+  border-bottom-color: var(--reviewer-border);
+  background: linear-gradient(180deg, #ffffff, #fbfcfd);
+}
+
+.page :global(.ant-card-head-title) {
+  color: var(--reviewer-text);
+  font-size: 14px;
+  font-weight: 650;
+  letter-spacing: 0;
+}
+
+.page :global(.ant-card-body) {
+  padding: 16px;
+}
+
+.page :global(.ant-table) {
+  color: var(--reviewer-text);
+  background: transparent;
+}
+
+.page :global(.ant-table-thead > tr > th) {
+  border-bottom: 1px solid var(--reviewer-border);
+  background: #f8fafc;
+  color: var(--reviewer-muted);
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.page :global(.ant-table-tbody > tr > td) {
+  border-bottom-color: #edf0f3;
+}
+
+.page :global(.ant-table-tbody > tr:hover > td) {
+  background: #f7faff;
+}
+
+.page :global(.ant-input),
+.page :global(.ant-select-selector),
+.page :global(.ant-input-affix-wrapper) {
+  border-color: var(--reviewer-border);
+  border-radius: 6px;
+  background: #ffffff;
+}
+
+.page :global(.ant-input:focus),
+.page :global(.ant-input-focused),
+.page :global(.ant-select-focused .ant-select-selector),
+.page :global(.ant-input-affix-wrapper-focused) {
+  border-color: #84aef2;
+  box-shadow: 0 0 0 3px rgba(31, 111, 235, 0.1);
+}
+
+.page :global(.ant-btn) {
+  border-radius: 6px;
+  box-shadow: none;
+}
+
+.page :global(.ant-tag) {
+  margin-inline-end: 4px;
+  border-radius: 999px;
+  font-size: 12px;
+  line-height: 20px;
+}
+
+.tableCard:global(.ant-card),
+.workbench :global(.ant-card),
+.aiQueue:global(.ant-card),
+.aiDetail :global(.ant-card),
+.claimSummary :global(.ant-card),
+.claimTaskCard:global(.ant-card) {
+  overflow: hidden;
+  border: 1px solid var(--reviewer-border);
+  border-radius: 8px;
+  background: var(--reviewer-panel);
+  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.04);
+}
+
+.filterToolbar {
+  align-items: center;
+}
+
+.workbench {
+  display: grid;
+  grid-template-columns: 280px minmax(520px, 1fr) 320px;
+  gap: 16px;
+  align-items: start;
+}
+
+.workbenchLeft,
+.workbenchCenter,
+.workbenchRight,
+.panelStack {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.workbenchLeft,
+.workbenchRight {
+  position: sticky;
+  top: 12px;
+}
+
+.statusCard {
+  display: flex;
+  min-height: 112px;
+  flex-direction: column;
+  gap: 8px;
+  justify-content: center;
+  padding: 14px;
+  border: 1px solid var(--reviewer-border);
+  border-radius: 8px;
+  background: var(--reviewer-panel-muted);
+}
+
+.statusCardActive {
+  border-color: #9bb8ef;
+  background: linear-gradient(180deg, #f7faff, #eef4ff);
+}
+
+.statGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.statGrid :global(.ant-statistic) {
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid var(--reviewer-border);
+  border-radius: 8px;
+  background: var(--reviewer-panel-muted);
+}
+
+.aiShell {
+  display: grid;
+  grid-template-columns: 360px minmax(560px, 1fr);
+  gap: 16px;
+  align-items: start;
+}
+
+.aiQueue :global(.ant-card-body) {
+  padding: 12px;
+}
+
+.aiDetail {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.aiItem:global(.ant-list-item) {
+  padding: 12px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  cursor: pointer;
+  transition:
+    border-color 0.16s ease,
+    background 0.16s ease,
+    transform 0.16s ease;
+}
+
+.aiItem:global(.ant-list-item:hover) {
+  border-color: var(--reviewer-border-strong);
+  background: #f8fafc;
+}
+
+.aiItemActive:global(.ant-list-item) {
+  border-color: #9bb8ef;
+  background: var(--reviewer-accent-soft);
+}
+
+.aiItemContent {
+  width: 100%;
+}
+
+.aiDetailGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.scoreRow {
+  display: grid;
+  grid-template-columns: minmax(96px, 160px) minmax(120px, 1fr);
+  gap: 12px;
+  align-items: center;
+}
+
+.codeBlock {
+  max-height: 260px;
+  margin: 0;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: #d7e2ec;
+  font-family:
+    "Cascadia Code",
+    Consolas,
+    monospace;
+  font-size: 12px;
+  line-height: 1.6;
+  padding: 12px;
+  border-radius: 8px;
+  background: #111827;
+}
+
+.detailGrid {
+  display: grid;
+  grid-template-columns: minmax(360px, 0.9fr) minmax(460px, 1.1fr);
+  gap: 16px;
+  align-items: start;
+}
+
+.detailGrid :global(.ant-card:last-child) {
+  grid-column: 1 / -1;
+}
+
+.answerList {
+  margin-top: 16px;
+}
+
+.answerList,
+.actionPanel {
+  width: 100%;
+}
+
+.readonlyForm {
+  margin-top: 16px;
+}
+
+.nextButton:global(.ant-btn) {
+  margin-top: 12px;
+  padding-left: 0;
+}
+
+.claimResult:global(.ant-alert) {
+  border-radius: 8px;
+}
+
+.claimSummary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.claimTaskGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 12px;
+}
+
+.claimTaskHeader {
+  width: 100%;
+  justify-content: space-between;
+}
+
+.claimTaskHeader :global(.ant-typography) {
+  margin-bottom: 0;
+}
+
+.taskBoard {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 16px;
+}
+
+.taskCard {
+  position: relative;
+  min-height: 260px;
+  overflow: hidden;
+  border: 1px solid rgba(31, 111, 235, 0.16);
+  border-radius: 8px;
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.96), rgba(248, 252, 255, 0.92)),
+    repeating-linear-gradient(135deg, rgba(34, 197, 94, 0.06) 0 8px, transparent 8px 18px);
+  box-shadow: 0 14px 34px rgba(15, 23, 42, 0.08);
+  cursor: pointer;
+  transition:
+    border-color 0.18s ease,
+    box-shadow 0.18s ease,
+    transform 0.18s ease;
+}
+
+.taskCard:hover {
+  border-color: rgba(31, 111, 235, 0.38);
+  box-shadow: 0 18px 42px rgba(15, 23, 42, 0.12);
+  transform: translateY(-3px);
+}
+
+.taskCardSelected {
+  border-color: #1f6feb;
+  box-shadow: 0 0 0 3px rgba(31, 111, 235, 0.12), 0 18px 42px rgba(15, 23, 42, 0.12);
+}
+
+.taskCardQueue {
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.96), rgba(255, 251, 235, 0.88)),
+    repeating-linear-gradient(135deg, rgba(251, 191, 36, 0.08) 0 8px, transparent 8px 18px);
+}
+
+.taskCardTopline {
+  height: 6px;
+  background: linear-gradient(90deg, #1f6feb, #22c55e 46%, #f97316);
+}
+
+.taskCardContent {
+  width: 100%;
+  padding: 16px;
+}
+
+.taskCardHeader,
+.taskItemsHeader,
+.taskItemHeader {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  justify-content: space-between;
+}
+
+.taskCardHeader :global(.ant-typography),
+.taskItemsHeader :global(.ant-typography),
+.taskItemHeader :global(.ant-typography) {
+  margin: 0;
+}
+
+.taskEyebrow {
+  display: block;
+  color: #1f6feb;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.taskMetricGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.taskMetric {
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid rgba(31, 111, 235, 0.12);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.78);
+}
+
+.taskMetric span {
+  display: block;
+  color: #17202a;
+  font-size: 22px;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.taskMetric small {
+  display: block;
+  margin-top: 6px;
+  color: var(--reviewer-muted);
+  font-size: 12px;
+}
+
+.taskMetricHot {
+  border-color: rgba(249, 115, 22, 0.28);
+  background: #fff7ed;
+}
+
+.taskCardActions {
+  width: 100%;
+  justify-content: space-between;
+}
+
+.taskItemsPanel {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 18px;
+  border: 1px solid rgba(31, 111, 235, 0.16);
+  border-radius: 8px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(250, 252, 255, 0.96)),
+    #ffffff;
+  box-shadow: 0 14px 34px rgba(15, 23, 42, 0.06);
+}
+
+.taskItemGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 14px;
+}
+
+.taskItemCard {
+  min-width: 0;
+  border: 1px solid var(--reviewer-border);
+  border-radius: 8px;
+  background: #ffffff;
+  box-shadow: 0 8px 18px rgba(15, 23, 42, 0.05);
+}
+
+.queueItemList {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.queueItemRow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 180px;
+  gap: 16px;
+  padding: 14px;
+  border: 1px solid var(--reviewer-border);
+  border-radius: 8px;
+  background: #ffffff;
+  box-shadow: 0 8px 18px rgba(15, 23, 42, 0.05);
+}
+
+.queueItemMain,
+.queueItemSide {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.queueItemMain :global(.ant-typography),
+.queueItemSide :global(.ant-typography) {
+  margin: 0;
+}
+
+.queueItemSide {
+  align-items: flex-end;
+  justify-content: center;
+}
+
+.taskSidebarList {
+  display: flex;
+  max-height: calc(100vh - 220px);
+  flex-direction: column;
+  gap: 10px;
+  overflow: auto;
+  padding-right: 2px;
+}
+
+.taskSidebarItem {
+  display: flex;
+  width: 100%;
+  min-height: 94px;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid var(--reviewer-border);
+  border-radius: 8px;
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.96), rgba(248, 252, 255, 0.92)),
+    #ffffff;
+  color: var(--reviewer-text);
+  cursor: pointer;
+  text-align: left;
+  transition:
+    border-color 0.16s ease,
+    box-shadow 0.16s ease,
+    transform 0.16s ease;
+}
+
+.taskSidebarItem:hover {
+  border-color: rgba(31, 111, 235, 0.38);
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.08);
+  transform: translateY(-1px);
+}
+
+.taskSidebarItem:disabled {
+  cursor: not-allowed;
+}
+
+.taskSidebarItemActive {
+  border-color: #1f6feb;
+  background:
+    linear-gradient(135deg, #eef4ff, #f0fdf4),
+    #ffffff;
+  box-shadow: 0 0 0 3px rgba(31, 111, 235, 0.1);
+}
+
+.taskSidebarItemDisabled {
+  opacity: 0.62;
+}
+
+.taskSidebarTitle {
+  font-size: 14px;
+  font-weight: 750;
+  line-height: 1.35;
+}
+
+.taskSidebarMeta {
+  color: var(--reviewer-muted);
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.taskSidebarStatus {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.emptyStage {
+  grid-column: 1 / -1;
+  padding: 48px 16px;
+  border: 1px dashed rgba(31, 111, 235, 0.22);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.72);
+}
+
+@media (max-width: 960px) {
+  .detailGrid,
+  .workbench,
+  .aiShell,
+  .aiDetailGrid,
+  .claimSummary,
+  .queueItemRow {
+    grid-template-columns: 1fr;
+  }
+
+  .queueItemSide {
+    align-items: stretch;
+  }
+
+  .workbenchLeft,
+  .workbenchRight {
+    position: static;
+  }
+
+  .filterToolbar {
+    display: flex;
+  }
+}

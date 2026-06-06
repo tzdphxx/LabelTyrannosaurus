@@ -11,7 +11,8 @@ import { OwnerTasksPage } from '../pages/owner/OwnerTasksPage'
 import { OwnerTemplateDesignerPage } from '../pages/owner/templates/OwnerTemplateDesignerPage'
 import { OwnerTemplatesPage } from '../pages/owner/templates/OwnerTemplatesPage'
 import { ReviewerQueuePage } from '../pages/reviewer/ReviewerQueuePage'
-import { ReviewerHistoryPage } from '../pages/reviewer/ReviewerHistoryPage'
+import { ReviewerClaimPage } from '../pages/reviewer/ReviewerClaimPage'
+import { ReviewerAiReviewQueuePage } from '../pages/reviewer/ReviewerAiReviewQueuePage'
 import { ReviewerReviewDetailPage } from '../pages/reviewer/ReviewerReviewDetailPage'
 import { RoleHomePage } from '../pages/roles/RoleHomePage'
 import { useAuthStore } from '../stores/authStore'
@@ -80,9 +81,10 @@ export function AppRouter() {
           </Route>
           <Route path="reviewer">
             <Route index element={<RoleHomePage role="REVIEWER" />} />
+            <Route element={<ReviewerClaimPage />} path="claim" />
             <Route element={<ReviewerQueuePage />} path="queue" />
-            <Route element={<ReviewerHistoryPage />} path="history" />
-            <Route element={<ReviewerReviewDetailPage />} path="tasks/:reviewId" />
+            <Route element={<ReviewerAiReviewQueuePage />} path="ai-reviews" />
+            <Route element={<ReviewerReviewDetailPage />} path="tasks/:taskId" />
             <Route
               element={<StatePlaceholder status="empty" message="该入口已预留，后续阶段接入业务页面。" />}
               path="*"

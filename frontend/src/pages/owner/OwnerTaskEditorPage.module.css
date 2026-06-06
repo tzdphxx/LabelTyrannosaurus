@@ -2,8 +2,12 @@
   display: flex;
   min-height: 100dvh;
   flex-direction: column;
-  gap: clamp(10px, 1.4vw, 14px);
+  gap: clamp(14px, 1.6vw, 20px);
   overflow: visible;
+  background:
+    linear-gradient(135deg, rgba(51, 188, 183, 0.14), transparent 32%),
+    linear-gradient(225deg, rgba(255, 199, 87, 0.15), transparent 28%),
+    #f6fbf8;
 }
 
 .headerShell {
@@ -12,30 +16,36 @@
 
 .workspace {
   display: flex;
-  width: min(1120px, 100%);
+  width: 100%;
   flex: 1 1 auto;
   flex-direction: column;
-  gap: clamp(10px, 1.4vw, 14px);
-  margin: 0 auto;
+  gap: clamp(14px, 1.6vw, 20px);
   overflow: visible;
 }
 
 .formCard {
   flex: 0 0 auto;
   min-width: 0;
-  border: 1px solid #d9e1e8;
+  overflow: hidden;
+  border: 1px solid rgba(101, 191, 172, 0.28);
   border-radius: 8px;
-  box-shadow: 0 12px 30px rgba(20, 34, 48, 0.04);
+  background: rgba(255, 255, 255, 0.92);
+  box-shadow: 0 16px 40px rgba(20, 95, 87, 0.08);
+  animation: cardEnter 220ms ease-out both;
 }
 
 .formCard :global(.ant-card-head) {
-  min-height: 44px;
-  background: #fbfcfd;
+  min-height: 48px;
+  border-bottom-color: rgba(101, 191, 172, 0.18);
+  background:
+    linear-gradient(90deg, rgba(29, 181, 166, 0.12), rgba(255, 204, 92, 0.1)),
+    #ffffff;
 }
 
 .formCard :global(.ant-card-head-title) {
   font-size: 15px;
   font-weight: 700;
+  color: #163d3b;
 }
 
 .formCard :global(.ant-card-body) {
@@ -44,8 +54,8 @@
 
 .formGrid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 230px), 1fr));
-  gap: clamp(10px, 1.2vw, 14px);
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr));
+  gap: clamp(12px, 1.3vw, 18px);
 }
 
 .field {
@@ -53,7 +63,7 @@
   min-width: 0;
   flex-direction: column;
   gap: 6px;
-  color: #34495e;
+  color: #2f4d50;
   font-size: 13px;
   font-weight: 600;
 }
@@ -64,6 +74,18 @@
 
 .assignmentField {
   justify-content: flex-start;
+}
+
+.assignmentControl {
+  min-width: 0;
+}
+
+.rewardVisibilityField {
+  max-width: 180px;
+}
+
+.rewardVisibilityField :global(.ant-switch) {
+  max-width: 68px;
 }
 
 .field :global(.ant-input),
@@ -77,7 +99,14 @@
 .field :global(.ant-input-number-input),
 .field :global(.ant-picker),
 .field :global(.ant-select-selector) {
-  min-height: 34px;
+  min-height: 36px;
+}
+
+.field :global(.ant-input:hover),
+.field :global(.ant-input-number:hover),
+.field :global(.ant-picker:hover),
+.field :global(.ant-select-selector:hover) {
+  border-color: #2fb8a6;
 }
 
 .uploadDragger :global(.ant-upload-drag-container) {
@@ -108,9 +137,9 @@
   gap: 12px;
   margin-top: 12px;
   padding: 10px 12px;
-  border: 1px solid #e5ebf0;
+  border: 1px solid rgba(47, 184, 166, 0.22);
   border-radius: 8px;
-  background: #f8fafc;
+  background: linear-gradient(135deg, rgba(234, 251, 247, 0.95), rgba(255, 249, 230, 0.9));
 }
 
 .quotaSummary :global(.ant-statistic-title) {
@@ -131,9 +160,9 @@
 .datasetSummary :global(.ant-statistic) {
   min-width: 0;
   padding: 10px 12px;
-  border: 1px solid #e5ebf0;
+  border: 1px solid rgba(47, 184, 166, 0.2);
   border-radius: 8px;
-  background: #f8fafc;
+  background: #fbfefd;
 }
 
 .datasetSummary :global(.ant-statistic-title) {
@@ -164,12 +193,88 @@
 
 .assigneeDrawerBody {
   display: flex;
-  min-height: 260px;
   flex-direction: column;
-  align-items: center;
-  justify-content: center;
+  gap: 14px;
+}
+
+.assigneeSearch {
+  width: 100%;
+}
+
+.assigneeList {
+  min-height: 360px;
+}
+
+.assigneeList :global(.ant-list-items) {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.assigneeItem {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
   gap: 12px;
-  text-align: center;
+  padding: 14px 16px !important;
+  border: 1px solid rgba(47, 184, 166, 0.2) !important;
+  border-radius: 8px;
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.98), rgba(237, 252, 249, 0.9));
+  cursor: pointer;
+  transition:
+    border-color 180ms ease,
+    box-shadow 180ms ease,
+    transform 180ms ease;
+}
+
+.assigneeItem:hover {
+  border-color: rgba(47, 184, 166, 0.58) !important;
+  box-shadow: 0 12px 26px rgba(20, 95, 87, 0.1);
+  transform: translateY(-1px);
+}
+
+.assigneeItemSelected {
+  border-color: #22b7a5 !important;
+  background:
+    linear-gradient(135deg, rgba(221, 250, 244, 0.98), rgba(255, 247, 220, 0.92));
+  box-shadow: 0 12px 30px rgba(34, 183, 165, 0.16);
+}
+
+.assigneeNameBlock {
+  min-width: 0;
+}
+
+.assigneeNameBlock :global(.ant-typography) {
+  display: block;
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.assigneeMetrics {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 10px;
+}
+
+.assigneeMetrics > span {
+  display: flex;
+  min-width: 82px;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.assigneeMetrics :global(.ant-typography-secondary) {
+  font-size: 12px;
+}
+
+.assigneePagination {
+  align-self: flex-end;
 }
 
 .previewPanel :global(.ant-typography) {
@@ -253,26 +358,21 @@
   background: #f7f0ff;
 }
 
-@media (min-width: 1024px) and (min-height: 760px) {
-  .page {
-    height: calc(100dvh - 96px);
-    min-height: 0;
-    overflow: hidden;
+@keyframes cardEnter {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
   }
 
-  .workspace {
-    min-height: 0;
-    overflow: auto;
-    padding-right: 4px;
+  to {
+    opacity: 1;
+    transform: translateY(0);
   }
+}
 
-  .workspace::-webkit-scrollbar {
-    width: 6px;
-  }
-
-  .workspace::-webkit-scrollbar-thumb {
-    border-radius: 999px;
-    background: #c9d3dc;
+@media (min-width: 1280px) {
+  .formGrid {
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
   }
 }
 
@@ -296,6 +396,10 @@
     padding: 12px;
   }
 
+  .rewardVisibilityField {
+    max-width: 100%;
+  }
+
   .fieldWide {
     grid-column: auto;
   }
@@ -308,6 +412,20 @@
   .datasetTitlebar {
     align-items: flex-start;
     flex-direction: column;
+  }
+
+  .assigneeItem {
+    align-items: flex-start !important;
+    flex-direction: column;
+  }
+
+  .assigneeMetrics {
+    width: 100%;
+  }
+
+  .assigneeMetrics > span {
+    flex: 1 1 0;
+    min-width: 0;
   }
 
   .previewDrawer :global(.ant-drawer-body) {

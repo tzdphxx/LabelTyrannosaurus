@@ -5,7 +5,7 @@ export type OwnerTaskStatus = 'draft' | 'published' | 'paused' | 'ended'
 export type OwnerTaskApiStatus = 'DRAFT' | 'PUBLISHED' | 'PAUSED' | 'ENDED'
 
 export type DistributionStrategy = '先到先得' | '配额分发' | '指派'
-export type DistributionStrategyCode = 'FCFS' | 'QUOTA' | 'ASSIGN'
+export type DistributionStrategyCode = 'FCFS' | 'QUOTA_GRAB' | 'ASSIGNED'
 export type AiReviewStrategy = 'LIGHTWEIGHT'
 export type RewardMode = 'APPROVED_ITEM'
 export type RewardCurrency = 'POINT'
@@ -74,6 +74,7 @@ export interface OwnerTask {
   reviewLevelCount: number
   overlapCount: number
   maxClaimsPerLabeler: number
+  assignedLabelerId?: string | null
   datasetFileId?: string | null
   ownerId?: string
   publishedAt?: string | null
@@ -219,6 +220,7 @@ export interface TaskDetailResponse {
   reviewLevelCount?: number
   overlapCount?: number
   maxClaimsPerLabeler?: number
+  assignedLabelerId?: number | null
   aiReviewStrategy?: AiReviewStrategy
   rewardRule?: {
     rewardMode?: RewardMode
@@ -231,7 +233,7 @@ export interface TaskDetailResponse {
   createdAt: string
   updatedAt: string
   reward: string
-  strategy: DistributionStrategy
+  strategy: DistributionStrategyCode
 }
 
 export interface CreateTaskRequest {
@@ -253,6 +255,7 @@ export interface CreateTaskRequest {
   aiReviewStrategy: AiReviewStrategy
   reviewLevelCount?: number
   maxClaimsPerLabeler: number
+  assignedLabelerId?: number
   datasetFileId?: number
   rewardRule: {
     rewardMode: RewardMode
@@ -285,4 +288,37 @@ export interface TaskStatisticsResponse {
   rejectedCount: number
   pendingReviewCount: number
   passRate: string
+}
+
+export interface OwnerLabelerQuery {
+  keyword?: string
+  page: number
+  size: number
+}
+
+export interface OwnerLabelerOption {
+  labelerId: number
+  username: string
+  email: string
+  displayName: string
+  avatarUrl: string
+  enabled: boolean
+  loginEnabled: boolean
+  claimedCount: number
+  submittedCount: number
+  pendingReviewCount: number
+  approvedCount: number
+  rejectedCount: number
+  totalReward: number
+  todaySubmittedCount: number
+  lastSubmitDate: string
+  statsUpdatedAt: string
+  approvalRate: number
+}
+
+export interface OwnerLabelerPageResponse {
+  items: OwnerLabelerOption[]
+  page: number
+  pageSize: number
+  total: number
 }

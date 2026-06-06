@@ -14,6 +14,8 @@ import type {
   OwnerTask,
   OwnerTaskApiStatus,
   OwnerTaskDetail,
+  OwnerLabelerPageResponse,
+  OwnerLabelerQuery,
   OwnerTaskPage,
   OwnerTaskPageResponse,
   OwnerTaskStatus,
@@ -46,14 +48,14 @@ const ownerStatusToApiStatus: Record<OwnerTaskStatus, OwnerTaskApiStatus> = {
 
 const distributionStrategyToApi: Record<DistributionStrategy, DistributionStrategyCode> = {
   先到先得: 'FCFS',
-  配额分发: 'QUOTA',
-  指派: 'ASSIGN',
+  配额分发: 'QUOTA_GRAB',
+  指派: 'ASSIGNED',
 }
 
 const apiToDistributionStrategy: Partial<Record<DistributionStrategyCode, DistributionStrategy>> = {
   FCFS: '先到先得',
-  QUOTA: '配额分发',
-  ASSIGN: '指派',
+  QUOTA_GRAB: '配额分发',
+  ASSIGNED: '指派',
 }
 
 const tasks: OwnerTask[] = mockTasks.map(cloneTask)
@@ -350,6 +352,7 @@ function mapDetailResponse(response: TaskDetailResponse): OwnerTask {
     reviewLevelCount: response.reviewLevelCount ?? 1,
     overlapCount: response.overlapCount ?? 1,
     maxClaimsPerLabeler: response.maxClaimsPerLabeler ?? 10,
+    assignedLabelerId: response.assignedLabelerId ? String(response.assignedLabelerId) : null,
     publishedAt: response.publishedAt ?? null,
     endedAt: response.endedAt ?? null,
   }
@@ -390,6 +393,14 @@ function buildTaskRequest(payload: TaskDraftInput, includeDatasetFileId: boolean
 
   if (aiProviderId) {
     requestPayload.aiProviderId = aiProviderId
+  }
+
+  if (requestPayload.strategy === 'ASSIGNED') {
+    const assignedLabelerId = toNumberId(payload.assignedLabelerId)
+
+    if (assignedLabelerId) {
+      requestPayload.assignedLabelerId = assignedLabelerId
+    }
   }
 
   if (includeDatasetFileId && datasetFileId) {
@@ -518,6 +529,19 @@ async function refreshTaskAfterLifecycle(response: TaskLifecycleResponse) {
 }
 
 export const ownerTaskService = {
+  async listAssignableLabelers(query: OwnerLabelerQuery): Promise<OwnerLabelerPageResponse> {
+    const params: Record<string, string | number> = {
+      page: query.page,
+      size: query.size,
+    }
+
+    if (query.keyword?.trim()) {
+      params.keyword = query.keyword.trim()
+    }
+
+    return request.get<OwnerLabelerPageResponse>('/v1/owner/labelers/assignable', { params })
+  },
+
   validateDraftForPublish(payload: TaskDraftInput, taskId: string | null): PublishValidationResult {
     return validateTaskForPublish(payload, Boolean(taskId))
   },

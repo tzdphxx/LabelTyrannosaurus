@@ -27,7 +27,7 @@ import { PageHeader } from '../../components/page/PageHeader'
 import { ownerModelService, ownerTemplateService } from '../../services'
 import { useOwnerDraftStore } from '../../stores/ownerDraftStore'
 import { useOwnerTaskStore } from '../../stores/ownerTaskStore'
-import type { DatasetItemResponse, OwnerModelOptionResponse } from '../../types/task'
+import type { DatasetItemResponse, OwnerLabelerOption, OwnerModelOptionResponse } from '../../types/task'
 import type { TemplateSummary } from '../../types/template'
 import { distributionStrategyLabels, formatCount } from '../../utils/ownerTasks'
 import styles from './OwnerTaskEditorPage.module.css'
@@ -95,6 +95,7 @@ export function OwnerTaskEditorPage() {
   const [previewDatasetPageSize, setPreviewDatasetPageSize] = useState(10)
   const [isPreviewDrawerOpen, setIsPreviewDrawerOpen] = useState(false)
   const [isAssigneeDrawerOpen, setIsAssigneeDrawerOpen] = useState(false)
+  const [selectedAssigneeName, setSelectedAssigneeName] = useState('')
 
   const loadTemplateOptions = useCallback(async () => {
     if (isLoadingTemplatesRef.current) {
@@ -151,6 +152,12 @@ export function OwnerTaskEditorPage() {
       updateDraft({ quota: Math.max(importPreview.validRows, 1) })
     }
   }, [draft.quota, importPreview, taskId, updateDraft])
+
+  useEffect(() => {
+    if (!draft.assignedLabelerId) {
+      setSelectedAssigneeName('')
+    }
+  }, [draft.assignedLabelerId])
 
   const templateOptions = templates.map((template) => ({
     label: `${template.name} ${template.version}`,
@@ -393,11 +400,6 @@ export function OwnerTaskEditorPage() {
     }
 
     messageApi.success('草稿已保存')
-    await loadTasks()
-
-    if (!taskId) {
-      navigate(`/app/owner/tasks/${task.id}/edit`, { replace: true })
-    }
   }
 
   const publishCurrentDraft = async () => {
@@ -553,7 +555,7 @@ export function OwnerTaskEditorPage() {
                   }
                 />
               </label>
-              <label className={styles.field}>
+              <label className={`${styles.field} ${styles.rewardVisibilityField}`}>
                 <span>展示奖励</span>
                 <Switch
                   checked={draft.rewardRule.rewardVisible}
@@ -572,7 +574,12 @@ export function OwnerTaskEditorPage() {
                 <Select
                   options={Object.entries(distributionStrategyLabels).map(([value, label]) => ({ value, label }))}
                   value={draft.distributionStrategy}
-                  onChange={(distributionStrategy) => updateDraft({ distributionStrategy })}
+                  onChange={(distributionStrategy) => {
+                    updateDraft({
+                      distributionStrategy,
+                      assignedLabelerId: distributionStrategy === '指派' ? draft.assignedLabelerId : null,
+                    })
+                  }}
                 />
               </label>
               {draft.distributionStrategy === '配额分发' ? (
@@ -589,8 +596,12 @@ export function OwnerTaskEditorPage() {
               {draft.distributionStrategy === '指派' ? (
                 <div className={`${styles.field} ${styles.assignmentField}`}>
                   <span>指派标注员</span>
-                  <Button onClick={() => setIsAssigneeDrawerOpen(true)}>选择标注员</Button>
-                  <Typography.Text type="secondary">标注员列表接口待接入</Typography.Text>
+                  <Space className={styles.assignmentControl} wrap>
+                    <Button onClick={() => setIsAssigneeDrawerOpen(true)}>选择标注员</Button>
+                    <Typography.Text type={draft.assignedLabelerId ? undefined : 'secondary'}>
+                      {draft.assignedLabelerId ? selectedAssigneeName || `标注员 ID：${draft.assignedLabelerId}` : '请选择一位标注员'}
+                    </Typography.Text>
+                  </Space>
                 </div>
               ) : null}
               <label className={styles.field}>
@@ -811,7 +822,16 @@ export function OwnerTaskEditorPage() {
         </div>
       </Drawer>
 
-      <AssigneePickerDrawer open={isAssigneeDrawerOpen} onClose={() => setIsAssigneeDrawerOpen(false)} />
+      <AssigneePickerDrawer
+        open={isAssigneeDrawerOpen}
+        selectedLabelerId={draft.assignedLabelerId}
+        onClose={() => setIsAssigneeDrawerOpen(false)}
+        onSelect={(labeler: OwnerLabelerOption) => {
+          updateDraft({ assignedLabelerId: String(labeler.labelerId) })
+          setSelectedAssigneeName(labeler.username)
+          setIsAssigneeDrawerOpen(false)
+        }}
+      />
     </main>
   )
 }

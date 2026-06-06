@@ -67,6 +67,7 @@ const emptyDraft: TaskDraftInput = {
   reviewLevelCount: 1,
   overlapCount: 1,
   maxClaimsPerLabeler: 10,
+  assignedLabelerId: null,
   datasetFileId: null,
 }
 
@@ -85,6 +86,7 @@ function toDraftInput(task: OwnerTask): TaskDraftInput {
     reviewLevelCount: task.reviewLevelCount,
     overlapCount: task.overlapCount,
     maxClaimsPerLabeler: task.maxClaimsPerLabeler,
+    assignedLabelerId: task.assignedLabelerId ?? null,
     datasetFileId: task.datasetFileId,
   }
 }

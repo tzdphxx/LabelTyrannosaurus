@@ -42,6 +42,7 @@ export function cloneQuestion(question: LabelingQuestion): LabelingQuestion {
   }
 }
 
+
 export function cloneDraft(draft: LabelingDraft): LabelingDraft {
   return {
     ...draft,
@@ -286,3 +287,10 @@ export function getTaskStatusFromSubmission(submission: LabelingSubmission): Lab
 
   return 'submitted'
 }
+
+
+
+
+
+
+

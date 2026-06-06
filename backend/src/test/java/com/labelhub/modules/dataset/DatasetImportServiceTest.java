@@ -10,9 +10,11 @@ import com.labelhub.infrastructure.async.AsyncJobService;
 import com.labelhub.infrastructure.storage.ObjectStorageService;
 import com.labelhub.modules.dataset.domain.DatasetFileEntity;
 import com.labelhub.modules.dataset.domain.DatasetImportJobEntity;
+import com.labelhub.modules.dataset.dto.BatchAppendJsonItemsRequest;
 import com.labelhub.modules.dataset.domain.DatasetItem;
 import com.labelhub.modules.dataset.dto.DatasetImportRequest;
 import com.labelhub.modules.dataset.mapper.DatasetItemMapper;
+import com.labelhub.modules.dataset.dto.DatasetItemAppendRequest;
 import com.labelhub.modules.dataset.repository.DatasetFileMapper;
 import com.labelhub.modules.dataset.repository.DatasetImportJobMapper;
 import com.labelhub.modules.dataset.repository.DatasetItemChangeLogMapper;
@@ -35,6 +37,7 @@ import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicLong;
 
@@ -146,6 +149,65 @@ class DatasetImportServiceTest {
     }
 
     @Test
+    void appendImportRejectsFileOwnedByAnotherUser() {
+        CurrentUserContext.set(new CurrentUser(10L, "owner", "owner@example.com", Set.of(RoleCode.OWNER), 1));
+        stubTask(TaskStatus.DRAFT);
+        stubSourceFile("qa_quality.jsonl", 20L);
+
+        assertThatThrownBy(() -> service.createAppendImport(1L, new DatasetImportRequest(99L)))
+                .isInstanceOf(BusinessException.class)
+                .extracting("code")
+                .isEqualTo(403001);
+        verify(datasetFileMapper, never()).insert(any(DatasetFileEntity.class));
+    }
+
+    @Test
+    void adminCanImportFileOwnedByAnotherUser() throws Exception {
+        CurrentUserContext.set(new CurrentUser(1L, "admin", "admin@example.com", Set.of(RoleCode.ADMIN), 1));
+        stubTask(TaskStatus.DRAFT);
+        stubSourceFile("qa_quality.jsonl", 20L);
+        stubIds();
+        when(objectStorageService.openReadStream("labelhub-test", "uploads/dataset/qa_quality.jsonl"))
+                .thenReturn(new ByteArrayInputStream("""
+                        {"externalId":"q1","question":"one"}
+                        """.getBytes(StandardCharsets.UTF_8)));
+        when(datasetItemMapper.countActiveByTaskIdAndExternalId(eq(1L), any())).thenReturn(0);
+
+        var response = service.createAppendImport(1L, new DatasetImportRequest(99L));
+
+        assertThat(response.jobId()).isEqualTo(300L);
+        verify(datasetItemMapper).insert(any(DatasetItem.class));
+    }
+
+
+
+    @Test
+    void appendImportFromJsonCreatesErrorReportForDuplicateExternalId() throws Exception {
+        CurrentUserContext.set(new CurrentUser(10L, "owner", "owner@example.com", Set.of(RoleCode.OWNER), 1));
+        stubTask(TaskStatus.DRAFT);
+        stubIds();
+        when(datasetItemMapper.countActiveByTaskIdAndExternalId(1L, "q1")).thenReturn(0);
+        when(objectStorageService.generatePresignedDownloadUrl(eq("labelhub-test"), any(), eq("dataset-import-300-errors.jsonl"), any()))
+                .thenReturn(new URL("https://cos.example.com/errors"));
+
+        service.createAppendImportFromJson(1L, new BatchAppendJsonItemsRequest(List.of(
+                new DatasetItemAppendRequest("q1", Map.of("question", "one"), Map.of()),
+                new DatasetItemAppendRequest("q1", Map.of("question", "duplicate"), Map.of())
+        )));
+
+        verify(datasetItemMapper, org.mockito.Mockito.times(1)).insert(any(DatasetItem.class));
+        verify(objectStorageService).upload(eq("labelhub-test"), org.mockito.Mockito.contains("dataset-import-300-errors.jsonl"),
+                eq("application/x-ndjson"), any(), anyLong());
+        ArgumentCaptor<DatasetImportJobEntity> jobCaptor = ArgumentCaptor.forClass(DatasetImportJobEntity.class);
+        verify(importJobMapper, org.mockito.Mockito.atLeastOnce()).updateById(jobCaptor.capture());
+        DatasetImportJobEntity finalJob = jobCaptor.getAllValues().get(jobCaptor.getAllValues().size() - 1);
+        assertThat(finalJob.getStatus()).isEqualTo("PARTIAL_SUCCESS");
+        assertThat(finalJob.getSuccessCount()).isEqualTo(1);
+        assertThat(finalJob.getFailedCount()).isEqualTo(1);
+        assertThat(finalJob.getErrorReportFileId()).isNotNull();
+    }
+
+    @Test
     void overwriteImportDoesNotDeleteExistingRowsWhenSourceReadFails() throws Exception {
         CurrentUserContext.set(new CurrentUser(10L, "owner", "owner@example.com", Set.of(RoleCode.OWNER), 1));
         stubTask(TaskStatus.DRAFT);
@@ -198,9 +260,13 @@ class DatasetImportServiceTest {
     }
 
     private void stubSourceFile(String filename) {
+        stubSourceFile(filename, 10L);
+    }
+
+    private void stubSourceFile(String filename, Long ownerId) {
         ObjectFileEntity file = new ObjectFileEntity();
         file.setId(99L);
-        file.setOwnerId(10L);
+        file.setOwnerId(ownerId);
         file.setBucketName("labelhub-test");
         file.setObjectKey("uploads/dataset/" + filename);
         file.setOriginalFilename(filename);

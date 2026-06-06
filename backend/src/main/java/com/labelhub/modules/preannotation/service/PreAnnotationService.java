@@ -8,6 +8,7 @@ import com.labelhub.common.audit.AuditAppender;
 import com.labelhub.common.audit.AuditCommand;
 import com.labelhub.common.exception.BusinessException;
 import com.labelhub.common.security.CurrentUser;
+import com.labelhub.common.security.CurrentUserContext;
 import com.labelhub.common.security.RoleCode;
 import com.labelhub.common.web.TraceIdProvider;
 import com.labelhub.infrastructure.llm.LlmGateway;
@@ -163,9 +164,11 @@ public class PreAnnotationService {
     }
 
     public PreAnnotationResponse run(Long assignmentId, Long labelerId, PreAnnotationRunRequest request) {
-        Assignment assignment = assignmentMapper.selectOwnedAssignment(assignmentId, labelerId);
+        Assignment assignment = CurrentUserContext.isAdmin()
+                ? assignmentMapper.selectById(assignmentId)
+                : assignmentMapper.selectOwnedAssignment(assignmentId, labelerId);
         if (assignment == null) {
-            throw new BusinessException(FORBIDDEN, "Forbidden");
+            throw new BusinessException(FORBIDDEN, "当前账号没有权限执行该操作");
         }
         validateRequest(assignment, request);
 
@@ -291,7 +294,7 @@ public class PreAnnotationService {
                         "Pre-annotation output is incomplete");
                 record.setStatus(PreAnnotationStatus.MANUAL_REQUIRED);
                 record.setErrorCode("MISSING_PRE_ANNOTATION_OUTPUT");
-                record.setErrorMessage("Pre-annotation output is incomplete");
+                record.setErrorMessage("预标注输出不完整");
                 record.setRawResponse(gatewayResponse.rawResponse());
             }
         } else {
@@ -310,7 +313,7 @@ public class PreAnnotationService {
         } catch (Exception persistEx) {
             if (record.getStatus() == PreAnnotationStatus.SUCCESS) {
                 agentRunService.fail(record.getAgentRunId(), AgentRunStatus.FAILED,
-                        "PreAnnotation persist failed: " + persistEx.getMessage());
+                        "预标注结果持久化失败：" + persistEx.getMessage());
             }
             throw persistEx;
         }
@@ -344,9 +347,11 @@ public class PreAnnotationService {
     }
 
     public PreAnnotationResponse latest(Long assignmentId, Long labelerId) {
-        Assignment assignment = assignmentMapper.selectOwnedAssignment(assignmentId, labelerId);
+        Assignment assignment = CurrentUserContext.isAdmin()
+                ? assignmentMapper.selectById(assignmentId)
+                : assignmentMapper.selectOwnedAssignment(assignmentId, labelerId);
         if (assignment == null) {
-            throw new BusinessException(FORBIDDEN, "Forbidden");
+            throw new BusinessException(FORBIDDEN, "当前账号没有权限执行该操作");
         }
         PreAnnotation record = preAnnotationMapper.selectLatestByAssignmentId(assignmentId);
         return record == null ? null : toResponse(record, false);
@@ -355,7 +360,7 @@ public class PreAnnotationService {
     public PreAnnotationResponse getDetail(Long preAnnotationId, CurrentUser currentUser) {
         PreAnnotation record = preAnnotationMapper.selectById(preAnnotationId);
         if (record == null) {
-            throw new BusinessException(NOT_FOUND, "Pre-annotation not found");
+            throw new BusinessException(NOT_FOUND, "预标注记录不存在");
         }
         Assignment assignment = assignmentMapper.selectById(record.getAssignmentId());
         Task task = taskMapper.selectById(record.getTaskId());
@@ -364,29 +369,32 @@ public class PreAnnotationService {
     }
 
     private boolean requireAccess(PreAnnotation record, Assignment assignment, Task task, CurrentUser currentUser) {
-        if (currentUser.roles().contains(RoleCode.LABELER)
+        if (currentUser.isAdmin()) {
+            return true;
+        }
+        if (currentUser.hasRole(RoleCode.LABELER)
                 && assignment != null
                 && currentUser.userId().equals(assignment.getLabelerId())) {
             return false;
         }
-        if (currentUser.roles().contains(RoleCode.OWNER)
+        if (currentUser.hasRole(RoleCode.OWNER)
                 && task != null
                 && currentUser.userId().equals(task.getOwnerId())) {
             return true;
         }
-        if (currentUser.roles().contains(RoleCode.REVIEWER)) {
+        if (currentUser.hasRole(RoleCode.REVIEWER)) {
             return true;
         }
-        throw new BusinessException(FORBIDDEN, "Forbidden");
+        throw new BusinessException(FORBIDDEN, "当前账号没有权限执行该操作");
     }
 
     private AiReviewConfig loadConfig(Task task) {
         if (task == null || task.getAiReviewConfigId() == null) {
-            throw new BusinessException(CONFIG_NOT_FOUND, "AI review config not found");
+            throw new BusinessException(CONFIG_NOT_FOUND, "AI 审核配置不存在");
         }
         AiReviewConfig config = aiReviewConfigMapper.selectById(task.getAiReviewConfigId());
         if (config == null || !task.getId().equals(config.getTaskId())) {
-            throw new BusinessException(CONFIG_NOT_FOUND, "AI review config not found");
+            throw new BusinessException(CONFIG_NOT_FOUND, "AI 审核配置不存在");
         }
         return config;
     }
@@ -394,7 +402,7 @@ public class PreAnnotationService {
     private LlmProvider loadProvider(Long providerId) {
         Optional<LlmProvider> provider = llmProviderService.findEnabledById(providerId);
         if (provider.isEmpty()) {
-            throw new BusinessException(CONFIG_NOT_FOUND, "Enabled LLM provider is required");
+            throw new BusinessException(CONFIG_NOT_FOUND, "需要配置已启用的 LLM Provider");
         }
         return provider.get();
     }
@@ -405,15 +413,15 @@ public class PreAnnotationService {
         }
         if (request.mode() != null && !request.mode().isBlank()
                 && !"SUGGEST_ONLY".equals(request.mode())) {
-            throw new BusinessException(INVALID_REQUEST, "Pre-annotation mode must be SUGGEST_ONLY");
+            throw new BusinessException(INVALID_REQUEST, "预标注模式必须为 SUGGEST_ONLY");
         }
         if (request.templateVersionId() != null
                 && !request.templateVersionId().equals(assignment.getTemplateVersionId())) {
-            throw new BusinessException(INVALID_REQUEST, "Template version does not match assignment");
+            throw new BusinessException(INVALID_REQUEST, "模板版本与领取记录不匹配");
         }
         if (request.datasetItemId() != null
                 && !request.datasetItemId().equals(assignment.getDatasetItemId())) {
-            throw new BusinessException(INVALID_REQUEST, "Dataset item does not match assignment");
+            throw new BusinessException(INVALID_REQUEST, "数据项与领取记录不匹配");
         }
     }
 

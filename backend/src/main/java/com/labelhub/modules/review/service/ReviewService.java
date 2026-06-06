@@ -4,7 +4,9 @@ import com.labelhub.common.audit.AuditAppender;
 import com.labelhub.common.audit.AuditCommand;
 import com.labelhub.common.exception.BusinessException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.labelhub.common.security.CurrentUserContext;
 import com.labelhub.common.util.AnswerCanonicalizer;
+import com.labelhub.common.web.TraceIdProvider;
 import com.labelhub.modules.assignment.domain.Assignment;
 import com.labelhub.modules.assignment.domain.AssignmentStatus;
 import com.labelhub.modules.assignment.mapper.AssignmentMapper;
@@ -52,6 +54,7 @@ public class ReviewService {
     private final DatasetClaimService datasetClaimService;
     private final ReviewLevelEscalationService escalationService;
     private final ObjectMapper objectMapper;
+    private final TraceIdProvider traceIdProvider;
 
     public ReviewService(SubmissionMapper submissionMapper,
                          AssignmentMapper assignmentMapper,
@@ -62,7 +65,8 @@ public class ReviewService {
                          AuditAppender auditAppender,
                          DatasetClaimService datasetClaimService,
                          ReviewLevelEscalationService escalationService,
-                         ObjectMapper objectMapper) {
+                         ObjectMapper objectMapper,
+                         TraceIdProvider traceIdProvider) {
         this.submissionMapper = submissionMapper;
         this.assignmentMapper = assignmentMapper;
         this.reviewRecordMapper = reviewRecordMapper;
@@ -73,6 +77,7 @@ public class ReviewService {
         this.datasetClaimService = datasetClaimService;
         this.escalationService = escalationService;
         this.objectMapper = objectMapper;
+        this.traceIdProvider = traceIdProvider;
     }
 
     public List<SubmissionReviewItem> listPendingFinal() {
@@ -115,7 +120,7 @@ public class ReviewService {
 
         Assignment assignment = assignmentMapper.selectById(submission.getAssignmentId());
         if (assignment == null) {
-            throw new BusinessException(ASSIGNMENT_NOT_FOUND, "Associated assignment not found");
+            throw new BusinessException(ASSIGNMENT_NOT_FOUND, "关联的领取记录不存在");
         }
         assignment.setStatus(AssignmentStatus.APPROVED);
         assignment.setApprovedAt(LocalDateTime.now());
@@ -165,7 +170,7 @@ public class ReviewService {
     @Transactional
     public ReviewActionResponse reject(Long submissionId, Long reviewerId, RejectRequest request) {
         if (request.reason() == null || request.reason().isBlank()) {
-            throw new BusinessException(REJECT_REASON_REQUIRED, "Reject reason is required");
+            throw new BusinessException(REJECT_REASON_REQUIRED, "打回原因不能为空");
         }
         Submission submission = requirePendingFinal(submissionId);
         requireAssignedReviewer(submissionId, reviewerId);
@@ -180,7 +185,7 @@ public class ReviewService {
 
         Assignment assignment = assignmentMapper.selectById(submission.getAssignmentId());
         if (assignment == null) {
-            throw new BusinessException(ASSIGNMENT_NOT_FOUND, "Associated assignment not found");
+            throw new BusinessException(ASSIGNMENT_NOT_FOUND, "关联的领取记录不存在");
         }
         assignment.setStatus(AssignmentStatus.RETURNED);
         assignment.setReturnedAt(LocalDateTime.now());
@@ -196,7 +201,7 @@ public class ReviewService {
     private Submission requirePendingFinal(Long submissionId) {
         Submission submission = submissionMapper.selectById(submissionId);
         if (submission == null) {
-            throw new BusinessException(SUBMISSION_NOT_FOUND, "Submission not found");
+            throw new BusinessException(SUBMISSION_NOT_FOUND, "提交记录不存在");
         }
         if (submission.getStatus() != SubmissionStatus.PENDING_FINAL) {
             throw new BusinessException(SUBMISSION_STATUS_NOT_REVIEWABLE,
@@ -206,6 +211,9 @@ public class ReviewService {
     }
 
     private void requireAssignedReviewer(Long submissionId, Long reviewerId) {
+        if (CurrentUserContext.isAdmin()) {
+            return;
+        }
         Submission submission = submissionMapper.selectById(submissionId);
         if (submission == null || !reviewerId.equals(submission.getAssignedReviewerId())) {
             throw new BusinessException(REVIEWER_NOT_ASSIGNED,
@@ -251,6 +259,6 @@ public class ReviewService {
 
         auditAppender.append(new AuditCommand(USER_ACTOR_TYPE, reviewerId,
                 SUBMISSION_BIZ_TYPE, submission.getId(),
-                action, before, after, null, null));
+                action, before, after, traceIdProvider.currentTraceId(), null));
     }
 }

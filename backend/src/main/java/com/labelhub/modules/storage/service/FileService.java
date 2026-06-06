@@ -64,7 +64,7 @@ public class FileService {
             objectStorageService.upload(properties.bucket(), objectKey, contentType,
                     new java.io.ByteArrayInputStream(bytes), file.getSize());
         } catch (IOException ex) {
-            throw new BusinessException(500001, "File upload failed");
+            throw new BusinessException(500001, "文件上传失败");
         }
         String checksum = sha256(bytes);
 
@@ -93,10 +93,10 @@ public class FileService {
         CurrentUser currentUser = CurrentUserContext.requireCurrentUser();
         ObjectFileEntity file = objectFileMapper.selectById(fileId);
         if (file == null) {
-            throw new BusinessException(400102, "File not found");
+            throw new BusinessException(400102, "文件不存在");
         }
         if (!canRead(currentUser, file)) {
-            throw new BusinessException(403001, "Forbidden");
+            throw new BusinessException(403001, "当前账号没有权限执行该操作");
         }
         URL downloadUrl = objectStorageService.generatePresignedDownloadUrl(
                 file.getBucketName(),
@@ -109,10 +109,10 @@ public class FileService {
 
     private void validate(MultipartFile file, String businessType) {
         if (file == null || file.isEmpty()) {
-            throw new BusinessException(400102, "File is empty");
+            throw new BusinessException(400102, "文件不能为空");
         }
         if (file.getSize() > properties.maxFileSizeBytes()) {
-            throw new BusinessException(400102, "File is too large");
+            throw new BusinessException(400102, "文件大小超出限制");
         }
         if (!SUPPORTED_BUSINESS_TYPES.contains(normalize(businessType))) {
             throw new BusinessException(400102, "Invalid business type");
@@ -120,7 +120,7 @@ public class FileService {
         String filename = StringUtils.cleanPath(file.getOriginalFilename());
         String extension = extensionOf(filename);
         if (!SUPPORTED_EXTENSIONS.contains(extension)) {
-            throw new BusinessException(400102, "Unsupported file type");
+            throw new BusinessException(400102, "不支持的文件类型");
         }
     }
 

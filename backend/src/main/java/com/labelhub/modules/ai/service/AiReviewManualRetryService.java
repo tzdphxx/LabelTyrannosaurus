@@ -55,12 +55,12 @@ public class AiReviewManualRetryService {
     public AiReviewResultResponse retry(Long submissionId, Long reviewerId) {
         Submission submission = submissionMapper.selectById(submissionId);
         if (submission == null) {
-            throw new BusinessException(NOT_FOUND, "Submission not found");
+            throw new BusinessException(NOT_FOUND, "提交记录不存在");
         }
 
         AiReviewResult existing = aiReviewResultMapper.selectBySubmissionId(submissionId);
         if (existing == null) {
-            throw new BusinessException(NOT_FOUND, "AI review result not found");
+            throw new BusinessException(NOT_FOUND, "AI 审核结果不存在");
         }
         if (!RETRYABLE_STATUSES.contains(existing.getStatus())) {
             throw new BusinessException(NOT_RETRYABLE,

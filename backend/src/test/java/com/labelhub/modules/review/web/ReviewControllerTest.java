@@ -18,6 +18,7 @@ import com.labelhub.modules.review.dto.BatchReviewResponse;
 import com.labelhub.modules.review.dto.BatchReviewItemResult;
 import com.labelhub.modules.review.dto.RejectRequest;
 import com.labelhub.modules.review.dto.ReviewActionResponse;
+import com.labelhub.modules.review.dto.ReviewerSubmissionDetailResponse;
 import com.labelhub.modules.review.dto.ReviewerSubmissionListItem;
 import com.labelhub.modules.review.dto.SubmissionReviewItem;
 import com.labelhub.modules.review.mapper.ReviewerSubmissionListMapper;
@@ -100,6 +101,19 @@ class ReviewControllerTest {
 
         assertThat(response.data()).isEqualTo(serviceResponse);
         assertThat(response.data().submissionStatus()).isEqualTo(SubmissionStatus.REJECTED);
+    }
+
+    @Test
+    void adminCanReadReviewerSubmissionDetail() {
+        CurrentUserContext.set(new CurrentUser(9L, "admin", "admin@labelhub.dev", Set.of(RoleCode.ADMIN), 1));
+        ReviewerSubmissionDetailResponse serviceResponse = new ReviewerSubmissionDetailResponse(
+                100L, 10L, 20L, 30L, 40L, 1, SubmissionStatus.PENDING_FINAL,
+                "{}", "{}", 50L, "{}", null, null, List.of(), List.of(), null);
+        when(reviewerQueryService.getDetail(100L)).thenReturn(serviceResponse);
+
+        ApiResponse<ReviewerSubmissionDetailResponse> response = controller.getDetail(100L);
+
+        assertThat(response.data()).isEqualTo(serviceResponse);
     }
 
     @Test

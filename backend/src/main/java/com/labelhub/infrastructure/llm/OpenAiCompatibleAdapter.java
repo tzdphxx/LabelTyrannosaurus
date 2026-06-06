@@ -88,18 +88,18 @@ public class OpenAiCompatibleAdapter {
                 return OpenAiCompatibleResponse.success(response.statusCode(), response.body(), latencyMs);
             }
             return OpenAiCompatibleResponse.failure(response.statusCode(), response.body(), latencyMs,
-                    sanitize("Provider call failed with status " + response.statusCode() + ": " + response.body(),
+                    sanitize("Provider 调用失败，HTTP 状态码 " + response.statusCode() + "：" + response.body(),
                             config.apiKey()),
                     false);
         } catch (HttpConnectTimeoutException ex) {
-            return failed(startedAt, "Provider call timed out", config.apiKey(), true);
+            return failed(startedAt, "Provider 调用超时", config.apiKey(), true);
         } catch (IOException ex) {
-            return failed(startedAt, "Provider call I/O failure: " + ex.getMessage(), config.apiKey(), isTimeout(ex));
+            return failed(startedAt, "Provider 调用发生 I/O 异常：" + ex.getMessage(), config.apiKey(), isTimeout(ex));
         } catch (InterruptedException ex) {
             Thread.currentThread().interrupt();
-            return failed(startedAt, "Provider call was interrupted", config.apiKey(), false);
+            return failed(startedAt, "Provider 调用被中断", config.apiKey(), false);
         } catch (RuntimeException ex) {
-            return failed(startedAt, "Provider call failed: " + ex.getMessage(), config.apiKey(), false);
+            return failed(startedAt, "Provider 调用失败：" + ex.getMessage(), config.apiKey(), false);
         }
     }
 
@@ -113,9 +113,6 @@ public class OpenAiCompatibleAdapter {
                 .uri(requestUri)
                 .timeout(containsImagePart(messages) ? visionTimeout : timeout)
                 .header("Content-Type", "application/json");
-        if (requestUri != originalUri) {
-            builder.header("Host", originalUri.getHost());
-        }
         if (config.customHeaders() != null) {
             config.customHeaders().forEach((key, value) -> {
                 if (!BLOCKED_HEADER_KEYS.contains(key.toLowerCase(Locale.ROOT))
@@ -249,7 +246,7 @@ public class OpenAiCompatibleAdapter {
     }
 
     private String sanitize(String message, String apiKey) {
-        String sanitized = message == null ? "Provider call failed" : message;
+        String sanitized = message == null ? "Provider 调用失败" : message;
         if (apiKey != null && !apiKey.isBlank()) {
             sanitized = sanitized.replace(apiKey, "***");
         }
@@ -278,14 +275,11 @@ public class OpenAiCompatibleAdapter {
                 throw new IllegalArgumentException(
                         "LLM baseUrl must not resolve to a private/loopback address");
             }
-            int port = originalUri.getPort();
-            String resolvedAuthority = addr.getHostAddress() + (port > 0 ? ":" + port : "");
-            return new URI(originalUri.getScheme(), resolvedAuthority,
-                    originalUri.getPath(), originalUri.getQuery(), null);
+            return new URI(originalUri.toString());
         } catch (UnknownHostException e) {
             throw new IllegalArgumentException("LLM baseUrl host cannot be resolved: " + host);
         } catch (java.net.URISyntaxException e) {
-            throw new IllegalArgumentException("LLM baseUrl produces invalid resolved URI: " + host);
+            throw new IllegalArgumentException("LLM baseUrl 解析后的 URI 不合法：" + host);
         }
     }
 }

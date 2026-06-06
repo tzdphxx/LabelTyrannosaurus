@@ -38,7 +38,7 @@ public class AiReviewResultQueryService {
         Submission submission = submissionMapper.selectById(submissionId);
         AiReviewResult result = aiReviewResultMapper.selectBySubmissionId(submissionId);
         if (submission == null || result == null) {
-            throw new BusinessException(AI_REVIEW_RESULT_NOT_FOUND, "AI review result not found");
+            throw new BusinessException(AI_REVIEW_RESULT_NOT_FOUND, "AI 审核结果不存在");
         }
         requireAccess(currentUser, submission);
         return aiAutoReviewService.toResponse(result);
@@ -55,6 +55,6 @@ public class AiReviewResultQueryService {
                 return;
             }
         }
-        throw new BusinessException(FORBIDDEN, "No permission to read AI review result");
+        throw new BusinessException(FORBIDDEN, "无权查看 AI 审核结果");
     }
 }

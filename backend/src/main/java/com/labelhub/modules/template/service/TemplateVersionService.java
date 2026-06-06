@@ -90,7 +90,7 @@ public class TemplateVersionService {
     private TemplateVersionEntity requireVersion(Long versionId) {
         TemplateVersionEntity version = templateVersionMapper.selectById(versionId);
         if (version == null) {
-            throw new BusinessException(400102, "Template version not found");
+            throw new BusinessException(400102, "模板版本不存在");
         }
         return version;
     }
@@ -99,7 +99,7 @@ public class TemplateVersionService {
         CurrentUser currentUser = CurrentUserContext.requireCurrentUser();
         Long ownerId = resolveOwnerId(version);
         if (!currentUser.roles().contains(RoleCode.ADMIN) && !currentUser.userId().equals(ownerId)) {
-            throw new BusinessException(403001, "Forbidden");
+            throw new BusinessException(403001, "当前账号没有权限执行该操作");
         }
     }
 
@@ -109,7 +109,7 @@ public class TemplateVersionService {
         }
         TemplateEntity template = templateMapper.selectById(version.getTemplateId());
         if (template == null) {
-            throw new BusinessException(400102, "Template not found");
+            throw new BusinessException(400102, "模板不存在");
         }
         return template.getOwnerId();
     }
@@ -118,7 +118,7 @@ public class TemplateVersionService {
         try {
             return objectMapper.readTree(json);
         } catch (JsonProcessingException ex) {
-            throw new BusinessException(500001, "Invalid template schema stored");
+            throw new BusinessException(500001, "已存储的模板 Schema 不合法");
         }
     }
 }

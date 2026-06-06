@@ -1,5 +1,6 @@
 package com.labelhub.modules.task.dto;
 
+import com.labelhub.modules.ai.dto.AiReviewConfigResponse;
 import com.labelhub.modules.reward.dto.RewardRuleResponse;
 import com.labelhub.modules.task.domain.ClaimStrategy;
 import com.labelhub.modules.task.domain.TaskStatus;
@@ -47,8 +48,8 @@ public record TaskResponse(
         Integer maxClaimsPerLabeler,
         @Schema(description = "已发布模板版本 ID", example = "20")
         Long publishedTemplateVersionId,
-        @Schema(description = "AI 审核配置 ID", example = "30")
-        Long aiReviewConfigId,
+        @Schema(description = "AI 审核配置")
+        AiReviewConfigResponse aiReview,
         @Schema(description = "审核级别数", example = "3")
         Integer reviewLevelCount,
         @Schema(description = "奖励是否可见")

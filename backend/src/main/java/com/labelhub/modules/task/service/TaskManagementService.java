@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.labelhub.common.audit.AuditAppender;
 import com.labelhub.common.audit.AuditCommand;
 import com.labelhub.common.exception.BusinessException;
+import com.labelhub.common.security.CurrentUserContext;
 import com.labelhub.common.web.TraceIdProvider;
 import com.labelhub.modules.assignment.mapper.AssignmentMapper;
 import com.labelhub.modules.dataset.mapper.DatasetItemMapper;
@@ -63,9 +64,10 @@ public class TaskManagementService {
         int normalizedSize = Math.min(Math.max(1, size), 100);
         int offset = (normalizedPage - 1) * normalizedSize;
 
-        long total = taskMapper.countOwnerTasks(ownerId, status, keyword);
+        Long effectiveOwnerId = CurrentUserContext.isAdmin() ? null : ownerId;
+        long total = taskMapper.countOwnerTasks(effectiveOwnerId, status, keyword);
         List<TaskSummaryResponse> items = taskMapper
-                .selectOwnerTasksPage(ownerId, status, keyword, normalizedSize, offset)
+                .selectOwnerTasksPage(effectiveOwnerId, status, keyword, normalizedSize, offset)
                 .stream()
                 .map(task -> new TaskSummaryResponse(
                         task.getId(), task.getTitle(), task.getStatus(),
@@ -154,8 +156,8 @@ public class TaskManagementService {
 
     private Task loadOwnedTask(Long ownerId, Long taskId) {
         Task task = taskMapper.selectById(taskId);
-        if (task == null || !ownerId.equals(task.getOwnerId())) {
-            throw new BusinessException(TASK_NOT_FOUND, "Task not found");
+        if (task == null || (!CurrentUserContext.isAdmin() && !ownerId.equals(task.getOwnerId()))) {
+            throw new BusinessException(TASK_NOT_FOUND, "任务不存在");
         }
         return task;
     }

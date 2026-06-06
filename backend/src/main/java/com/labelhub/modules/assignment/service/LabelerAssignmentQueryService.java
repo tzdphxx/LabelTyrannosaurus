@@ -73,7 +73,7 @@ public class LabelerAssignmentQueryService {
                                                            int size) {
         Map<String, Object> row = assignmentMapper.selectLabelerClaimedTask(labelerId, taskId);
         if (row == null || row.isEmpty()) {
-            throw new BusinessException(CLAIMED_TASK_NOT_FOUND, "Claimed task not found");
+            throw new BusinessException(CLAIMED_TASK_NOT_FOUND, "已领取任务不存在");
         }
         return toClaimedTask(labelerId, row, status, page, size, loadTags(List.of(taskId)));
     }

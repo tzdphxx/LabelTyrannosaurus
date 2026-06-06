@@ -72,7 +72,7 @@ public class JwtTokenService {
     public TokenClaims parseAccessToken(String token) {
         TokenClaims claims = parse(token);
         if (claims.refresh()) {
-            throw new BusinessException(401001, "Invalid access token");
+            throw new BusinessException(401001, "访问令牌无效");
         }
         return claims;
     }
@@ -83,7 +83,7 @@ public class JwtTokenService {
     public TokenClaims parseRefreshToken(String token) {
         TokenClaims claims = parse(token);
         if (!claims.refresh()) {
-            throw new BusinessException(401001, "Invalid refresh token");
+            throw new BusinessException(401001, "刷新令牌无效");
         }
         return claims;
     }
@@ -103,7 +103,7 @@ public class JwtTokenService {
                     .collect(Collectors.toSet());
             return new TokenClaims(userId, username, roles, tokenVersion, Boolean.TRUE.equals(refresh));
         } catch (RuntimeException ex) {
-            throw new BusinessException(401001, "Invalid token");
+            throw new BusinessException(401001, "令牌无效");
         }
     }
 

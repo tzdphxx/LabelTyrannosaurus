@@ -185,7 +185,7 @@ public class AiAutoReviewService {
             if (existing != null) {
                 return toResponse(existing);
             }
-            throw new BusinessException(409101, "AI review already in progress");
+            throw new BusinessException(409101, "AI 审核正在执行中，请勿重复触发");
         }
         try {
             return doReviewSubmission(submissionId, queuedAgentRunId);
@@ -603,7 +603,7 @@ public class AiAutoReviewService {
                                          AgentRun agentRun, MediaPromptResult prompt, String systemPrompt) {
         if (!rateLimiter.acquire(submission.getTaskId(), config.getProviderId())) {
             agentRunService.fail(agentRun.getId(), AgentRunStatus.RATE_LIMITED, "AI review rate limited");
-            return AttemptOutcome.failure("RATE_LIMITED", "AI review rate limited", null);
+            return AttemptOutcome.failure("RATE_LIMITED", "AI 审核触发过于频繁，请稍后重试", null);
         }
 
         List<LlmMessage> messages = java.util.stream.Stream.concat(
@@ -629,7 +629,7 @@ public class AiAutoReviewService {
                                              AgentRun agentRun, String promptSnapshot) {
         if (!rateLimiter.acquire(submission.getTaskId(), config.getProviderId())) {
             agentRunService.fail(agentRun.getId(), AgentRunStatus.RATE_LIMITED, "AI review rate limited");
-            return AttemptOutcome.failure("RATE_LIMITED", "AI review rate limited", null);
+            return AttemptOutcome.failure("RATE_LIMITED", "AI 审核触发过于频繁，请稍后重试", null);
         }
 
         List<String> enabledTools = parseEnabledTools(config.getEnabledToolsJson());
@@ -753,7 +753,7 @@ public class AiAutoReviewService {
                                          MediaPromptResult prompt, LlmGatewayResponse response) {
         Map<String, Object> structuredJson = response.structuredJson();
         if (structuredJson == null || !structuredJson.containsKey("decision")) {
-            throw new BusinessException(AI_REVIEW_INVALID, "AI review decision is required");
+            throw new BusinessException(AI_REVIEW_INVALID, "AI 审核结论不能为空");
         }
         AiReviewResult result = baseResult(submission, config, agentRunId, prompt.promptSnapshot());
         result.setStatus(AiReviewStatus.SUCCESS);
@@ -816,18 +816,18 @@ public class AiAutoReviewService {
     private Submission loadSubmission(Long submissionId) {
         Submission submission = submissionMapper.selectById(submissionId);
         if (submission == null) {
-            throw new BusinessException(SUBMISSION_NOT_FOUND, "Submission not found");
+            throw new BusinessException(SUBMISSION_NOT_FOUND, "提交记录不存在");
         }
         return submission;
     }
 
     private AiReviewConfig loadConfig(Task task) {
         if (task == null || task.getAiReviewConfigId() == null) {
-            throw new BusinessException(AI_REVIEW_CONFIG_NOT_FOUND, "AI review config not found");
+            throw new BusinessException(AI_REVIEW_CONFIG_NOT_FOUND, "AI 审核配置不存在");
         }
         AiReviewConfig config = aiReviewConfigMapper.selectById(task.getAiReviewConfigId());
         if (config == null || !task.getId().equals(config.getTaskId())) {
-            throw new BusinessException(AI_REVIEW_CONFIG_NOT_FOUND, "AI review config not found");
+            throw new BusinessException(AI_REVIEW_CONFIG_NOT_FOUND, "AI 审核配置不存在");
         }
         return config;
     }
@@ -1075,7 +1075,7 @@ public class AiAutoReviewService {
         try {
             return objectMapper.readValue(json, Object.class);
         } catch (JsonProcessingException ex) {
-            throw new BusinessException(AI_REVIEW_INVALID, "AI review JSON is invalid");
+            throw new BusinessException(AI_REVIEW_INVALID, "AI 审核 JSON 格式不合法");
         }
     }
 
@@ -1084,7 +1084,7 @@ public class AiAutoReviewService {
         try {
             return objectMapper.readValue(json, STRING_LIST);
         } catch (JsonProcessingException ex) {
-            throw new BusinessException(AI_REVIEW_INVALID, "AI review scoring dimensions are invalid");
+            throw new BusinessException(AI_REVIEW_INVALID, "AI 审核评分维度不合法");
         }
     }
 
@@ -1093,7 +1093,7 @@ public class AiAutoReviewService {
         try {
             return objectMapper.readValue(json, OBJECT_MAP);
         } catch (JsonProcessingException ex) {
-            throw new BusinessException(AI_REVIEW_INVALID, "AI review output schema is invalid");
+            throw new BusinessException(AI_REVIEW_INVALID, "AI 审核输出结构不合法");
         }
     }
 
@@ -1119,7 +1119,7 @@ public class AiAutoReviewService {
         try {
             return objectMapper.writeValueAsString(value);
         } catch (JsonProcessingException ex) {
-            throw new BusinessException(AI_REVIEW_INVALID, "AI review payload JSON is invalid");
+            throw new BusinessException(AI_REVIEW_INVALID, "AI 审核请求 JSON 格式不合法");
         }
     }
 

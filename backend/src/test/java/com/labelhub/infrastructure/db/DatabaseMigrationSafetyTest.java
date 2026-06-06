@@ -101,6 +101,29 @@ class DatabaseMigrationSafetyTest {
     }
 
     @Test
+    void quotaRelaxMigrationGuardsCheckConstraintReplacement() throws IOException {
+        String migration = Files.readString(MIGRATION_DIR.resolve("V32__relax_quota_check.sql"));
+
+        assertThat(migration).contains("information_schema.table_constraints");
+        assertThat(migration).contains("constraint_name = 'chk_tasks_quota'");
+        assertThat(migration).contains("ALTER TABLE tasks DROP CHECK chk_tasks_quota");
+        assertThat(migration).contains("ALTER TABLE tasks ADD CONSTRAINT chk_tasks_quota CHECK (quota >= 0)");
+        assertThat(migration.indexOf("DROP CHECK chk_tasks_quota"))
+                .isLessThan(migration.indexOf("ADD CONSTRAINT chk_tasks_quota"));
+    }
+
+    @Test
+    void aiReviewConfigUniqueTaskMigrationGuardsIndexCreation() throws IOException {
+        String migration = Files.readString(MIGRATION_DIR.resolve("V35__ai_review_config_unique_task.sql"));
+
+        assertThat(migration).contains("information_schema.statistics");
+        assertThat(migration).contains("index_name = 'uk_ai_review_configs_task'");
+        assertThat(migration).contains("ALTER TABLE ai_review_configs ADD UNIQUE KEY uk_ai_review_configs_task");
+        assertThat(migration.indexOf("DELETE FROM ai_review_configs"))
+                .isLessThan(migration.indexOf("ADD UNIQUE KEY uk_ai_review_configs_task"));
+    }
+
+    @Test
     void ownerTemplateMigrationBackfillsBeforeEnforcingOwner() throws IOException {
         String migration = Files.readString(MIGRATION_DIR.resolve("V27__owner_template_library.sql"));
 

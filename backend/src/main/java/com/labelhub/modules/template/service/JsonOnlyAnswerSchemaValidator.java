@@ -21,7 +21,7 @@ public class JsonOnlyAnswerSchemaValidator implements AnswerSchemaValidator {
         try {
             objectMapper.readTree(answerJson);
         } catch (JsonProcessingException ex) {
-            throw new BusinessException(INVALID_ANSWER_JSON, "Answer JSON is invalid");
+            throw new BusinessException(INVALID_ANSWER_JSON, "作答 JSON 格式不合法");
         }
     }
 }

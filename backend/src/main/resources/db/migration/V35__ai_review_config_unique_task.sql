@@ -9,5 +9,15 @@ WHERE id NOT IN (
     ) AS kept
 );
 
-ALTER TABLE ai_review_configs
-    ADD UNIQUE KEY `uk_ai_review_configs_task` (`task_id`);
+SET @add_ai_review_configs_task_unique = (
+    SELECT IF(COUNT(*) = 0,
+        'ALTER TABLE ai_review_configs ADD UNIQUE KEY uk_ai_review_configs_task (task_id)',
+        'SELECT 1')
+    FROM information_schema.statistics
+    WHERE table_schema = DATABASE()
+      AND table_name = 'ai_review_configs'
+      AND index_name = 'uk_ai_review_configs_task'
+);
+PREPARE stmt FROM @add_ai_review_configs_task_unique;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;

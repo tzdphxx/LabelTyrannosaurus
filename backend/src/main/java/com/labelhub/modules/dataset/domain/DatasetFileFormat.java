@@ -27,6 +27,6 @@ public enum DatasetFileFormat {
         if (normalized.endsWith(".csv")) {
             return CSV;
         }
-        throw new IllegalArgumentException("Unsupported dataset file format");
+        throw new IllegalArgumentException("不支持的数据集文件格式");
     }
 }

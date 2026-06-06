@@ -1,13 +1,8 @@
 package com.labelhub.modules.dataset.controller;
 
 import com.labelhub.common.api.ApiResponse;
-import com.labelhub.modules.dataset.dto.BatchAppendItemsRequest;
-import com.labelhub.modules.dataset.dto.BatchDeleteItemsRequest;
-import com.labelhub.modules.dataset.dto.BatchItemResult;
-import com.labelhub.modules.dataset.dto.BatchUpdateItemsRequest;
+import com.labelhub.modules.dataset.dto.*;
 import com.labelhub.common.api.PageResponse;
-import com.labelhub.modules.dataset.dto.DatasetItemQuery;
-import com.labelhub.modules.dataset.dto.ItemResponse;
 import com.labelhub.modules.dataset.service.DatasetItemService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -61,6 +56,17 @@ public class DatasetItemController {
     public ApiResponse<List<BatchItemResult>> batchAppend(@PathVariable Long taskId,
                                                           @Valid @RequestBody BatchAppendItemsRequest request) {
         return ApiResponse.ok(datasetItemService.batchAppend(taskId, request));
+    }
+
+    /**
+     * Batch append JSON dataset items.
+     */
+    @PostMapping("/batch-append-json")
+    @Operation(summary = "批量追加 JSON 数据项",
+            description = "前端直接提交 externalId、itemJson 和 metadataJson，并追加到任务数据集。")
+    public ApiResponse<List<BatchItemResult>> batchAppendJson(@PathVariable Long taskId,
+                                                              @Valid @RequestBody BatchAppendJsonItemsRequest request) {
+        return ApiResponse.ok(datasetItemService.batchAppend(taskId, new BatchAppendItemsRequest(request.items())));
     }
 
     /**

@@ -1,4 +1,4 @@
-import { Alert, Button, Card, Input, Progress, Select, Space, Table, Tag, Typography, message } from 'antd'
+import { Alert, Button, Card, Input, InputNumber, Modal, Progress, Select, Space, Table, Tag, Typography, message } from 'antd'
 import { ArrowRightOutlined, ReloadOutlined } from '@ant-design/icons'
 import { useEffect } from 'react'
 import { useNavigate } from 'react-router'
@@ -14,29 +14,30 @@ import {
 } from '../../utils/labeling'
 
 const statusOptions = [
-  { label: '全部状态', value: 'all' },
-  { label: '可领取', value: 'available' },
-  { label: '已领取', value: 'claimed' },
-  { label: '进行中', value: 'in_progress' },
-  { label: '待修改', value: 'rejected' },
-  { label: '已结束', value: 'ended' },
+  { label: 'All statuses', value: 'all' },
+  { label: 'Available', value: 'available' },
+  { label: 'Claimed', value: 'claimed' },
+  { label: 'In progress', value: 'in_progress' },
+  { label: 'Returned', value: 'rejected' },
+  { label: 'Ended', value: 'ended' },
 ]
 
 function getActionLabel(status: LabelerTaskStatus) {
   if (status === 'available') {
-    return '领取任务'
+    return 'Claim task'
   }
 
   if (status === 'claimed' || status === 'in_progress' || status === 'rejected') {
-    return '进入工作台'
+    return 'Open workbench'
   }
 
-  return '查看记录'
+  return 'View records'
 }
 
 export function LabelerMarketPage() {
   const navigate = useNavigate()
   const [messageApi, contextHolder] = message.useMessage()
+  const [modal, modalContextHolder] = Modal.useModal()
   const marketTasks = useLabelingStore((state) => state.marketTasks)
   const marketTags = useLabelingStore((state) => state.marketTags)
   const filters = useLabelingStore((state) => state.filters)
@@ -56,33 +57,80 @@ export function LabelerMarketPage() {
     void loadMarket()
   }
 
-  const handleTaskAction = async (taskId: string, status: LabelerTaskStatus) => {
-    if (status === 'submitted' || status === 'approved') {
+  const getMaxClaimQuantity = (task: LabelerTaskSummary) => {
+    const availableLimit = Math.max(task.availableCount ?? Math.max(task.totalQuestions - task.completedQuestions, 1), 0)
+    const quotaGrabLimit =
+      task.strategy === 'QUOTA_GRAB' && typeof task.maxClaimsPerLabeler === 'number'
+        ? Math.max(task.maxClaimsPerLabeler - (task.currentUserClaimedCount ?? 0), 0)
+        : Number.POSITIVE_INFINITY
+
+    return Math.max(Math.min(availableLimit, quotaGrabLimit), 0)
+  }
+
+  const openClaimQuantityModal = (task: LabelerTaskSummary) => {
+    const maxQuantity = getMaxClaimQuantity(task)
+    let quantity = maxQuantity > 0 ? 1 : 0
+
+    if (maxQuantity <= 0) {
+      messageApi.warning('No claimable items for this task')
+      return
+    }
+
+    modal.confirm({
+      title: 'Select claim quantity',
+      content: (
+        <Space direction="vertical" size={8}>
+          <Typography.Text type="secondary">Max claimable items: {maxQuantity}</Typography.Text>
+          <InputNumber
+            autoFocus
+            defaultValue={quantity}
+            max={maxQuantity}
+            min={1}
+            precision={0}
+            onChange={(value) => {
+              quantity = Math.trunc(Number(value) || 1)
+            }}
+          />
+        </Space>
+      ),
+      okText: 'Claim',
+      cancelText: 'Cancel',
+      onOk: async () => {
+        const normalizedQuantity = Math.min(Math.max(quantity, 1), maxQuantity)
+        const taskAfterClaim = await claimTask(task.id, { quantity: normalizedQuantity })
+
+        if (!taskAfterClaim) {
+          messageApi.error('Task claim failed')
+          throw new Error('Claim task failed')
+        }
+
+        messageApi.success('Task claimed')
+        navigate(`/app/labeler/workbench/${task.id}`)
+      },
+    })
+  }
+
+  const handleTaskAction = (task: LabelerTaskSummary) => {
+    if (task.status === 'submitted' || task.status === 'approved') {
       navigate('/app/labeler/submissions')
       return
     }
 
-    if (status === 'ended') {
-      messageApi.info('该任务已结束，暂不能进入标注。')
+    if (task.status === 'ended') {
+      messageApi.info('This task has ended')
       return
     }
 
-    if (status === 'available') {
-      const task = await claimTask(taskId)
-
-      if (!task) {
-        messageApi.error('任务领取失败')
-        return
-      }
-
-      messageApi.success('任务已领取')
+    if (task.status === 'available') {
+      openClaimQuantityModal(task)
+      return
     }
 
-    navigate(`/app/labeler/workbench/${taskId}`)
+    navigate(`/app/labeler/workbench/${task.id}`)
   }
 
   const tagOptions = [
-    { label: '全部标签', value: 'all' },
+    { label: 'All tags', value: 'all' },
     ...marketTags.map((tag) => ({
       label: tag,
       value: tag,
@@ -92,13 +140,14 @@ export function LabelerMarketPage() {
   return (
     <main className="labeler-page">
       {contextHolder}
+      {modalContextHolder}
       <ContentShell className="labeler-hero">
         <PageHeader
-          title="任务广场"
-          description="筛选可参与的标注任务，领取后进入工作台继续作答。P1 覆盖搜索、标签筛选、状态筛选和领取流程。"
+          title="Task Market"
+          description="Browse available labeling tasks, claim items, and continue work in the labeling workbench."
           extra={
             <Button icon={<ReloadOutlined />} loading={isMarketLoading} onClick={() => void loadMarket()}>
-              刷新
+              Refresh
             </Button>
           }
         />
@@ -111,7 +160,7 @@ export function LabelerMarketPage() {
           <Input.Search
             allowClear
             className="labeler-toolbar__search"
-            placeholder="搜索任务标题、描述或标签"
+            placeholder="Search task title, description, or tag"
             value={filters.keyword}
             onChange={(event) => reloadWithFilter({ keyword: event.target.value })}
             onSearch={(keyword) => reloadWithFilter({ keyword })}
@@ -135,7 +184,7 @@ export function LabelerMarketPage() {
         <Table<LabelerTaskSummary>
           columns={[
             {
-              title: '任务',
+              title: 'Task',
               dataIndex: 'title',
               render: (_, task) => (
                 <Space direction="vertical" size={4}>
@@ -150,41 +199,41 @@ export function LabelerMarketPage() {
               ),
             },
             {
-              title: '状态',
+              title: 'Status',
               dataIndex: 'status',
               width: 110,
               render: (status: LabelerTaskStatus) => <Tag color={labelerTaskStatusColors[status]}>{labelerTaskStatusLabels[status]}</Tag>,
             },
             {
-              title: '模板',
+              title: 'Template',
               dataIndex: 'templateName',
               width: 180,
             },
             {
-              title: '进度',
+              title: 'Progress',
               width: 220,
               render: (_, task) => (
                 <Space className="labeler-table-progress" direction="vertical" size={4}>
                   <Progress percent={getTaskProgressPercent(task.completedQuestions, task.totalQuestions)} size="small" />
                   <Typography.Text type="secondary">
-                    {getTaskProgressLabel(task.completedQuestions, task.totalQuestions)} 题
+                    {getTaskProgressLabel(task.completedQuestions, task.totalQuestions)} items
                   </Typography.Text>
                 </Space>
               ),
             },
             {
-              title: '报酬',
+              title: 'Reward',
               dataIndex: 'rewardText',
               width: 120,
               render: (rewardText: string) => <Typography.Text className="labeler-reward-text">{rewardText}</Typography.Text>,
             },
             {
-              title: '截止时间',
+              title: 'Deadline',
               dataIndex: 'deadline',
               width: 130,
             },
             {
-              title: '操作',
+              title: 'Action',
               width: 150,
               render: (_, task) => (
                 <Button
@@ -193,7 +242,7 @@ export function LabelerMarketPage() {
                   loading={isClaiming}
                   size="small"
                   type={task.status === 'available' ? 'primary' : 'default'}
-                  onClick={() => void handleTaskAction(task.id, task.status)}
+                  onClick={() => handleTaskAction(task)}
                 >
                   {getActionLabel(task.status)}
                 </Button>

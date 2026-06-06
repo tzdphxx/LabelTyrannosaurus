@@ -10,6 +10,7 @@ import type {
   LabelerAssignmentStats,
   LabelerAssignmentStatus,
   LabelerAssignmentSummary,
+  LabelerClaimOptions,
   LabelerSubmissionStats,
   LabelerTaskListQuery,
   LabelerTaskSummary,
@@ -228,7 +229,7 @@ export const mockLabelingService = {
     return task ? cloneTask(task) : null
   },
 
-  async claimTask(taskId: string): Promise<LabelerTaskSummary | null> {
+  async claimTask(taskId: string, options: LabelerClaimOptions): Promise<LabelerTaskSummary | null> {
     const taskIndex = getTaskIndex(taskId)
 
     if (taskIndex < 0) {
@@ -241,6 +242,8 @@ export const mockLabelingService = {
       tasks[taskIndex] = {
         ...task,
         status: 'claimed',
+        availableCount: Math.max((task.availableCount ?? task.totalQuestions) - options.quantity, 0),
+        currentUserClaimedCount: (task.currentUserClaimedCount ?? 0) + options.quantity,
         claimedAt: getNowLabel(),
       }
     }

@@ -4,6 +4,7 @@ import type {
   LabelerAssignmentListQuery,
   LabelerAssignmentStats,
   LabelerAssignmentSummary,
+  LabelerClaimOptions,
   LabelerSubmissionStats,
   LabelerTaskListQuery,
   LabelerTaskSummary,
@@ -41,7 +42,7 @@ interface LabelingStore {
   setFilters: (filters: Partial<LabelerTaskListQuery>) => void
   setCurrentQuestion: (questionId: string) => void
   loadMarket: () => Promise<void>
-  claimTask: (taskId: string) => Promise<LabelerTaskSummary | null>
+  claimTask: (taskId: string, options: LabelerClaimOptions) => Promise<LabelerTaskSummary | null>
   loadWorkbench: (taskId: string) => Promise<void>
   loadDraft: (taskId: string, questionId: string, userId: string) => Promise<void>
   saveDraft: (payload: Omit<LabelingDraft, 'id' | 'updatedAt'>) => Promise<LabelingDraft | null>
@@ -122,11 +123,11 @@ export const useLabelingStore = create<LabelingStore>((set, get) => ({
       isMarketLoading: false,
     }))
   },
-  claimTask: async (taskId) => {
+  claimTask: async (taskId, options) => {
     set({ isClaiming: true, error: null })
 
     try {
-      const task = await labelingService.claimTask(taskId)
+      const task = await labelingService.claimTask(taskId, options)
       await get().loadMarket()
 
       return task

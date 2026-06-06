@@ -38,6 +38,10 @@ export interface LabelerTaskSummary {
   rewardText: string
   totalQuestions: number
   completedQuestions: number
+  strategy?: string
+  availableCount?: number
+  currentUserClaimedCount?: number
+  maxClaimsPerLabeler?: number
   claimedAt?: string
   submittedAt?: string
   reviewedAt?: string
@@ -52,6 +56,10 @@ export interface LabelerTaskListQuery {
   keyword: string
   tag: string
   status: LabelerTaskQueryStatus
+}
+
+export interface LabelerClaimOptions {
+  quantity: number
 }
 
 export interface LabelerAssignmentListQuery {

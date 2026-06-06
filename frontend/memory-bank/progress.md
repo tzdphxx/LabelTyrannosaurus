@@ -410,3 +410,45 @@
   - `src/components/navigation/RoleBadge.tsx` 中角色 key 大小写与 `Role` 类型不匹配。
   - `src/features/dynamic-form/utils/designerDrag.ts` 中若干 `never` 类型访问。
   - `src/pages/owner/templates/OwnerTemplateDesignerPage.tsx` 中若干 `never` 类型访问。
+
+
+
+## 2026-06-02 - Reviewer queue empty state and AI review status API update
+
+### Implemented
+
+- Fixed reviewer manual queue empty-data behavior:
+  - When `queue` is empty, not loading, and has no error, the page keeps the header context and shows `暂无数据`.
+  - Empty state hides batch actions, refresh action, filters, table, and batch reject modal entry.
+  - `reviewService` now accepts both `[]` and `{ items: [] }` list responses for reviewer submissions to avoid `.map` failures on empty paged responses.
+- Changed reviewer AI review queue list API:
+  - New endpoint: `GET /api/v1/reviewer/ai-review-status`.
+  - Frontend request path is `/v1/reviewer/ai-review-status` because the API base URL is `/api`.
+- Added/extended review types:
+  - Added `ReviewerAiReviewStatusItem`.
+  - Extended `AiReviewResultResponse` with `taskTitle`, `submissionStatus`, and `submittedAt`.
+- Updated `reviewService.listAllAiReviewLogs`:
+  - Maps `aiDecision` to the existing `decision` field.
+  - Applies status/decision filtering on the client.
+  - Applies page/pageSize pagination on the client.
+  - Still returns `{ items, page, pageSize, total }` so the store/page contract stays stable.
+- Updated `reviewStore` AI review queue state handling:
+  - Reloading, filtering, or paging clears stale selected records when they are no longer in the current list.
+  - Detail and retry responses are merged with lightweight list fields so `taskTitle`, `submissionStatus`, and `submittedAt` are preserved.
+- Updated `ReviewerAiReviewQueuePage` display:
+  - Queue items show task title, submission ID, AI status, AI decision, average score, and submitted time/status.
+  - Detail summary now includes task title, submission status, and submitted time.
+
+### Current Constraints
+
+- `GET /api/v1/reviewer/ai-review-status` is a lightweight list API and does not directly provide `dimensionScores`, `riskFlags`, `promptSnapshot`, or `rawResponse`.
+- Selecting a record still depends on `GET /api/v1/submissions/{submissionId}/ai-review` to load detailed AI review fields.
+- Status filtering and pagination are currently client-side because the new endpoint spec does not define query parameters.
+
+### Verification
+
+- Ran `nvm list`; current Node version is `22.14.0`.
+- Ran `npm run build`; build still fails due to existing unrelated TypeScript errors outside the changed reviewer files:
+  - `src/components/navigation/RoleBadge.tsx` role key mismatch.
+  - `src/features/dynamic-form/utils/designerDrag.ts` `never` type property access.
+  - `src/pages/owner/templates/OwnerTemplateDesignerPage.tsx` `never` type property access.

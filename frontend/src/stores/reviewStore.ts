@@ -7,18 +7,31 @@ import type {
   BatchManualReviewResult,
   ManualReviewActionPayload,
   ManualReviewRecord,
+  ReviewClaimResponse,
   ReviewDetail,
+  ReviewerClaimFilters,
   ReviewQueueItem,
   ReviewQueueQuery,
+  ReviewerSubmissionListItem,
+  ReviewerTaskItemPageResponse,
+  ReviewerTaskItemQuery,
+  ReviewerTaskSummary,
   SubmissionVersion,
 } from '../types/review'
 
 interface ReviewStore {
   queue: ReviewQueueItem[]
+  reviewerTasks: ReviewerTaskSummary[]
+  claimableSubmissions: ReviewerSubmissionListItem[]
   history: ReviewQueueItem[]
   filters: ReviewQueueQuery
+  claimFilters: ReviewerClaimFilters
   currentDetail: ReviewDetail | null
+  selectedReviewerTask: ReviewerTaskSummary | null
+  taskItemsPage: ReviewerTaskItemPageResponse | null
+  taskItemQuery: ReviewerTaskItemQuery
   currentAiResult: AiReviewResult | null
+  latestClaimResult: ReviewClaimResponse | null
   manualReviewRecords: ManualReviewRecord[]
   submissionVersions: SubmissionVersion[]
   aiReviewLogs: AiReviewResultResponse[]
@@ -28,6 +41,9 @@ interface ReviewStore {
   selectedReviewIds: string[]
   todayReviewedCount: number
   isQueueLoading: boolean
+  isReviewerTasksLoading: boolean
+  isTaskItemsLoading: boolean
+  isClaimableSubmissionsLoading: boolean
   isDetailLoading: boolean
   isVersionsLoading: boolean
   isAiResultLoading: boolean
@@ -36,12 +52,20 @@ interface ReviewStore {
   isBatchSubmitting: boolean
   isAiReviewLogsLoading: boolean
   isAiReviewRetrying: boolean
+  isClaimingSubmissions: boolean
   error: string | null
   setFilters: (filters: Partial<ReviewQueueQuery>) => void
+  setClaimFilters: (filters: Partial<ReviewerClaimFilters>) => void
   setAiReviewLogQuery: (query: Partial<AiReviewLogQuery>) => void
   setCurrentAiReviewLog: (log: AiReviewResultResponse | null) => void
+  setSelectedReviewerTask: (task: ReviewerTaskSummary | null) => void
+  setTaskItemQuery: (query: Partial<ReviewerTaskItemQuery>) => void
   setSelectedReviewIds: (reviewIds: string[]) => void
+  loadReviewerTasks: () => Promise<void>
+  loadReviewerTaskItems: (taskId: string | number, query?: Partial<ReviewerTaskItemQuery>) => Promise<ReviewerTaskItemPageResponse | null>
   loadQueue: () => Promise<void>
+  loadClaimableSubmissions: () => Promise<void>
+  claimReviewerSubmissions: (taskId: string) => Promise<ReviewClaimResponse | null>
   loadHistory: () => Promise<void>
   loadAllAiReviewLogs: () => Promise<void>
   loadSubmissionAiReview: (submissionId: string) => Promise<AiReviewResultResponse | null>
@@ -65,12 +89,39 @@ const initialAiReviewLogQuery: AiReviewLogQuery = {
   pageSize: 20,
 }
 
+const initialTaskItemQuery: ReviewerTaskItemQuery = {
+  page: 1,
+  size: 10,
+}
+
+const initialClaimFilters: ReviewerClaimFilters = {
+  keyword: '',
+  taskId: '',
+  submissionStatus: 'all',
+  aiDecision: 'all',
+  aiReviewStatus: 'all',
+  conflictStatus: 'all',
+  reviewLevel: 'all',
+  assignedReviewerId: '',
+}
+
+function getAiReviewLogKey(log: AiReviewResultResponse | null) {
+  return log?.submissionId ?? log?.agentRunId ?? null
+}
+
 export const useReviewStore = create<ReviewStore>((set, get) => ({
   queue: [],
+  reviewerTasks: [],
+  claimableSubmissions: [],
   history: [],
   filters: initialFilters,
+  claimFilters: initialClaimFilters,
   currentDetail: null,
+  selectedReviewerTask: null,
+  taskItemsPage: null,
+  taskItemQuery: initialTaskItemQuery,
   currentAiResult: null,
+  latestClaimResult: null,
   manualReviewRecords: [],
   submissionVersions: [],
   aiReviewLogs: [],
@@ -80,6 +131,9 @@ export const useReviewStore = create<ReviewStore>((set, get) => ({
   selectedReviewIds: [],
   todayReviewedCount: 0,
   isQueueLoading: false,
+  isReviewerTasksLoading: false,
+  isTaskItemsLoading: false,
+  isClaimableSubmissionsLoading: false,
   isDetailLoading: false,
   isVersionsLoading: false,
   isAiResultLoading: false,
@@ -88,12 +142,32 @@ export const useReviewStore = create<ReviewStore>((set, get) => ({
   isBatchSubmitting: false,
   isAiReviewLogsLoading: false,
   isAiReviewRetrying: false,
+  isClaimingSubmissions: false,
   error: null,
   setFilters: (filters) => {
     set((state) => ({
       filters: {
         ...state.filters,
         ...filters,
+      },
+    }))
+  },
+  setClaimFilters: (filters) => {
+    set((state) => ({
+      claimFilters: {
+        ...state.claimFilters,
+        ...filters,
+      },
+    }))
+  },
+  setSelectedReviewerTask: (task) => {
+    set({ selectedReviewerTask: task })
+  },
+  setTaskItemQuery: (query) => {
+    set((state) => ({
+      taskItemQuery: {
+        ...state.taskItemQuery,
+        ...query,
       },
     }))
   },
@@ -111,6 +185,43 @@ export const useReviewStore = create<ReviewStore>((set, get) => ({
   setSelectedReviewIds: (reviewIds) => {
     set({ selectedReviewIds: reviewIds })
   },
+  loadReviewerTasks: async () => {
+    set({ isReviewerTasksLoading: true, error: null })
+
+    try {
+      const reviewerTasks = await reviewService.listReviewerTasks()
+      set((state) => ({
+        reviewerTasks,
+        selectedReviewerTask: state.selectedReviewerTask
+          ? reviewerTasks.find((task) => task.taskId === state.selectedReviewerTask?.taskId) ?? state.selectedReviewerTask
+          : null,
+      }))
+    } catch {
+      set({ error: '审核任务加载失败', reviewerTasks: [] })
+    } finally {
+      set({ isReviewerTasksLoading: false })
+    }
+  },
+  loadReviewerTaskItems: async (taskId, query) => {
+    const taskItemQuery = {
+      ...get().taskItemQuery,
+      ...query,
+    }
+    set({ isTaskItemsLoading: true, error: null, taskItemQuery })
+
+    try {
+      const taskItemsPage = await reviewService.listReviewerTaskItems(taskId, taskItemQuery)
+      set({ taskItemsPage })
+
+      return taskItemsPage
+    } catch {
+      set({ error: '任务题目加载失败', taskItemsPage: null })
+
+      return null
+    } finally {
+      set({ isTaskItemsLoading: false })
+    }
+  },
   loadQueue: async () => {
     set({ isQueueLoading: true, error: null })
 
@@ -121,6 +232,35 @@ export const useReviewStore = create<ReviewStore>((set, get) => ({
       set({ error: '人工复核队列加载失败' })
     } finally {
       set({ isQueueLoading: false })
+    }
+  },
+  loadClaimableSubmissions: async () => {
+    set({ isClaimableSubmissionsLoading: true, error: null })
+
+    try {
+      const claimableSubmissions = await reviewService.listClaimableReviewerSubmissions()
+      set({ claimableSubmissions })
+    } catch {
+      set({ error: '待领取审核提交加载失败', claimableSubmissions: [] })
+    } finally {
+      set({ isClaimableSubmissionsLoading: false })
+    }
+  },
+  claimReviewerSubmissions: async (taskId) => {
+    set({ isClaimingSubmissions: true, error: null, latestClaimResult: null })
+
+    try {
+      const latestClaimResult = await reviewService.claimReviewerSubmissions(taskId)
+      set({ latestClaimResult })
+      await get().loadReviewerTasks()
+
+      return latestClaimResult
+    } catch {
+      set({ error: '待审提交领取失败' })
+
+      return null
+    } finally {
+      set({ isClaimingSubmissions: false })
     }
   },
   loadHistory: async () => {
@@ -143,7 +283,16 @@ export const useReviewStore = create<ReviewStore>((set, get) => ({
       set((state) => ({
         aiReviewLogs: result.items,
         aiReviewLogTotal: result.total,
-        currentAiReviewLog: state.currentAiReviewLog ?? result.items[0] ?? null,
+        currentAiReviewLog: (() => {
+          const currentKey = getAiReviewLogKey(state.currentAiReviewLog)
+          const currentItem = result.items.find((item) => getAiReviewLogKey(item) === currentKey)
+
+          if (currentItem && state.currentAiReviewLog) {
+            return { ...state.currentAiReviewLog, ...currentItem }
+          }
+
+          return result.items[0] ?? null
+        })(),
       }))
     } catch {
       set({ error: 'AI 审核队列加载失败', aiReviewLogs: [], aiReviewLogTotal: 0, currentAiReviewLog: null })
@@ -156,7 +305,9 @@ export const useReviewStore = create<ReviewStore>((set, get) => ({
 
     try {
       const currentAiReviewLog = await reviewService.getSubmissionAiReview(submissionId)
-      set({ currentAiReviewLog })
+      set((state) => ({
+        currentAiReviewLog: state.currentAiReviewLog ? { ...state.currentAiReviewLog, ...currentAiReviewLog } : currentAiReviewLog,
+      }))
 
       return currentAiReviewLog
     } catch {
@@ -173,9 +324,9 @@ export const useReviewStore = create<ReviewStore>((set, get) => ({
     try {
       const currentAiReviewLog = await reviewService.retrySubmissionAiReview(submissionId)
       set((state) => ({
-        currentAiReviewLog,
+        currentAiReviewLog: state.currentAiReviewLog ? { ...state.currentAiReviewLog, ...currentAiReviewLog } : currentAiReviewLog,
         aiReviewLogs: state.aiReviewLogs.map((log) =>
-          String(log.submissionId) === submissionId ? currentAiReviewLog : log,
+          String(log.submissionId) === submissionId ? { ...log, ...currentAiReviewLog } : log,
         ),
       }))
 
@@ -193,7 +344,7 @@ export const useReviewStore = create<ReviewStore>((set, get) => ({
 
     try {
       const currentDetail = await reviewService.getReviewDetail(reviewId)
-      set({ currentDetail })
+      set({ currentDetail, submissionVersions: currentDetail?.rawSubmission?.versionHistory ?? [] })
 
       return currentDetail
     } catch {

@@ -20,6 +20,7 @@ import { ContentShell } from '../../components/page/ContentShell'
 import { PageHeader } from '../../components/page/PageHeader'
 import { useReviewStore } from '../../stores/reviewStore'
 import type { AiReviewLogQuery, AiReviewQueueStatusFilter, AiReviewResultResponse } from '../../types/review'
+import styles from './ReviewerPages.module.css'
 
 const statusOptions: Array<{ label: string; value: AiReviewQueueStatusFilter }> = [
   { label: '全部', value: 'all' },
@@ -94,6 +95,24 @@ function isRetryable(record: AiReviewResultResponse | null) {
   return Boolean(record?.submissionId && (record.aiReviewStatus === 'FAILED' || record.aiReviewStatus === 'MANUAL_REQUIRED'))
 }
 
+function getRiskFlags(record: AiReviewResultResponse | null) {
+  if (!record?.riskFlags) {
+    return []
+  }
+
+  if (Array.isArray(record.riskFlags)) {
+    return record.riskFlags
+  }
+
+  try {
+    const parsed = JSON.parse(record.riskFlags)
+
+    return Array.isArray(parsed) ? parsed.map(String) : [record.riskFlags]
+  } catch {
+    return [record.riskFlags]
+  }
+}
+
 export function ReviewerAiReviewQueuePage() {
   const [messageApi, contextHolder] = message.useMessage()
   const [statusFilter, setStatusFilter] = useState<AiReviewQueueStatusFilter>('all')
@@ -118,6 +137,7 @@ export function ReviewerAiReviewQueuePage() {
     () => Object.entries(currentAiReviewLog?.dimensionScores ?? {}),
     [currentAiReviewLog?.dimensionScores],
   )
+  const riskFlags = useMemo(() => getRiskFlags(currentAiReviewLog), [currentAiReviewLog])
 
   const selectRecord = (record: AiReviewResultResponse) => {
     setCurrentAiReviewLog(record)
@@ -153,7 +173,7 @@ export function ReviewerAiReviewQueuePage() {
   }
 
   return (
-    <main className="reviewer-page">
+    <main className={styles.page}>
       {contextHolder}
       <ContentShell>
         <PageHeader
@@ -169,9 +189,9 @@ export function ReviewerAiReviewQueuePage() {
 
       {error ? <Alert message={error} showIcon type="error" /> : null}
 
-      <div className="reviewer-ai-shell">
-        <Card className="reviewer-ai-shell__queue" title="题目队列">
-          <Space direction="vertical" size={12} className="reviewer-panel-stack">
+      <div className={styles.aiShell}>
+        <Card className={styles.aiQueue} title="题目队列">
+          <Space direction="vertical" size={12} className={styles.panelStack}>
             <Segmented
               block
               options={statusOptions}
@@ -185,15 +205,17 @@ export function ReviewerAiReviewQueuePage() {
               renderItem={(record, index) => {
                 const recordKey = getRecordKey(record, index)
                 const selectedKey = currentAiReviewLog ? getRecordKey(currentAiReviewLog, index) : ''
+                const recordTitle = record.taskTitle ? `${record.taskTitle} / 提交 ${formatValue(record.submissionId)}` : `提交 ${formatValue(record.submissionId ?? record.agentRunId)}`
+                const recordSummary = record.suggestion ?? (record.submittedAt ? `提交时间：${record.submittedAt}` : `提交状态：${formatValue(record.submissionStatus)}`)
 
                 return (
                   <List.Item
-                    className={`reviewer-ai-item ${recordKey === selectedKey ? 'reviewer-ai-item--active' : ''}`}
+                    className={`${styles.aiItem} ${recordKey === selectedKey ? styles.aiItemActive : ''}`}
                     onClick={() => selectRecord(record)}
                   >
-                    <Space direction="vertical" size={6} className="reviewer-ai-item__content">
+                    <Space direction="vertical" size={6} className={styles.aiItemContent}>
                       <Space wrap>
-                        <Typography.Text strong>提交 {formatValue(record.submissionId ?? record.agentRunId)}</Typography.Text>
+                        <Typography.Text strong>{recordTitle}</Typography.Text>
                         <Tag color={statusColors[record.aiReviewStatus] ?? 'default'}>{formatValue(record.aiReviewStatus)}</Tag>
                       </Space>
                       <Space wrap>
@@ -201,7 +223,7 @@ export function ReviewerAiReviewQueuePage() {
                         <Typography.Text type="secondary">平均分 {formatValue(record.averageScore)}</Typography.Text>
                       </Space>
                       <Typography.Text type="secondary" ellipsis>
-                        {formatValue(record.suggestion)}
+                        {recordSummary}
                       </Typography.Text>
                     </Space>
                   </List.Item>
@@ -219,7 +241,7 @@ export function ReviewerAiReviewQueuePage() {
           </Space>
         </Card>
 
-        <section className="reviewer-ai-shell__detail">
+        <section className={styles.aiDetail}>
           <Card
             title="AI 评语"
             extra={
@@ -237,10 +259,13 @@ export function ReviewerAiReviewQueuePage() {
             }
           >
             {currentAiReviewLog ? (
-              <Space direction="vertical" size={16} className="reviewer-panel-stack">
+              <Space direction="vertical" size={16} className={styles.panelStack}>
                 <Descriptions bordered column={3} size="small">
+                  <Descriptions.Item label="任务标题">{formatValue(currentAiReviewLog.taskTitle)}</Descriptions.Item>
                   <Descriptions.Item label="提交 ID">{formatValue(currentAiReviewLog.submissionId)}</Descriptions.Item>
                   <Descriptions.Item label="任务 ID">{formatValue(currentAiReviewLog.taskId)}</Descriptions.Item>
+                  <Descriptions.Item label="提交状态">{formatValue(currentAiReviewLog.submissionStatus)}</Descriptions.Item>
+                  <Descriptions.Item label="提交时间">{formatValue(currentAiReviewLog.submittedAt)}</Descriptions.Item>
                   <Descriptions.Item label="AgentRun">{formatValue(currentAiReviewLog.agentRunId)}</Descriptions.Item>
                   <Descriptions.Item label="状态">{formatValue(currentAiReviewLog.aiReviewStatus)}</Descriptions.Item>
                   <Descriptions.Item label="结论">{formatValue(currentAiReviewLog.decision)}</Descriptions.Item>
@@ -253,13 +278,13 @@ export function ReviewerAiReviewQueuePage() {
             )}
           </Card>
 
-          <div className="reviewer-ai-detail-grid">
+          <div className={styles.aiDetailGrid}>
             <Card title="AI评分维度">
               {dimensionEntries.length > 0 ? (
-                <Space direction="vertical" size={12} className="reviewer-panel-stack">
+                <Space direction="vertical" size={12} className={styles.panelStack}>
                   <Progress percent={toPercent(currentAiReviewLog?.averageScore)} size="small" status="active" />
                   {dimensionEntries.map(([name, score]) => (
-                    <div key={name} className="reviewer-score-row">
+                    <div key={name} className={styles.scoreRow}>
                       <Typography.Text>{name}</Typography.Text>
                       <Progress percent={toPercent(score)} size="small" />
                     </div>
@@ -271,9 +296,9 @@ export function ReviewerAiReviewQueuePage() {
             </Card>
 
             <Card title="风险标记">
-              {currentAiReviewLog?.riskFlags?.length ? (
+              {riskFlags.length ? (
                 <Space wrap>
-                  {currentAiReviewLog.riskFlags.map((flag) => (
+                  {riskFlags.map((flag) => (
                     <Tag key={flag} color="warning">
                       {flag}
                     </Tag>
@@ -285,7 +310,7 @@ export function ReviewerAiReviewQueuePage() {
             </Card>
           </div>
 
-          <div className="reviewer-ai-detail-grid">
+          <div className={styles.aiDetailGrid}>
             <Card title="标注内容">
               <Empty description="暂无标注内容" />
             </Card>
@@ -314,12 +339,12 @@ export function ReviewerAiReviewQueuePage() {
             )}
           </Card>
 
-          <div className="reviewer-ai-detail-grid">
+          <div className={styles.aiDetailGrid}>
             <Card title="Prompt 快照">
-              <pre className="reviewer-ai-code">{formatValue(currentAiReviewLog?.promptSnapshot)}</pre>
+              <pre className={styles.codeBlock}>{formatValue(currentAiReviewLog?.promptSnapshot)}</pre>
             </Card>
             <Card title="LLM 原始响应">
-              <pre className="reviewer-ai-code">{formatValue(currentAiReviewLog?.rawResponse)}</pre>
+              <pre className={styles.codeBlock}>{formatValue(currentAiReviewLog?.rawResponse)}</pre>
             </Card>
           </div>
         </section>

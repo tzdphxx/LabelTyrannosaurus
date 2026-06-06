@@ -7,7 +7,6 @@ import {
   InboxOutlined,
   ProfileOutlined,
   ProjectOutlined,
-  ReadOutlined,
 } from '@ant-design/icons'
 import type { Role } from '../types/auth'
 import type { NavItem } from '../types/navigation'
@@ -75,6 +74,13 @@ export const roleNavigation: Record<Role, NavItem[]> = {
       icon: <DashboardOutlined />,
     },
     {
+      key: 'reviewer-claim',
+      label: '领取待审',
+      path: '/app/reviewer/claim',
+      role: 'REVIEWER',
+      icon: <InboxOutlined />,
+    },
+    {
       key: 'reviewer-queue',
       label: '审核队列',
       path: '/app/reviewer/queue',
@@ -87,13 +93,6 @@ export const roleNavigation: Record<Role, NavItem[]> = {
       path: '/app/reviewer/ai-reviews',
       role: 'REVIEWER',
       icon: <ProfileOutlined />,
-    },
-    {
-      key: 'reviewer-history',
-      label: '审核历史',
-      path: '/app/reviewer/history',
-      role: 'REVIEWER',
-      icon: <ReadOutlined />,
     },
   ],
 }

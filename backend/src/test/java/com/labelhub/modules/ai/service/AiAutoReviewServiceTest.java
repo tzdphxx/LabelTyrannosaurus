@@ -10,11 +10,13 @@ import static org.mockito.Mockito.when;
 
 import com.labelhub.common.audit.AuditAppender;
 import com.labelhub.common.audit.AuditCommand;
+import com.labelhub.common.exception.BusinessException;
 import com.labelhub.common.web.TraceIdProvider;
 import com.labelhub.infrastructure.llm.LlmGateway;
 import com.labelhub.infrastructure.llm.LlmGatewayRequest;
 import com.labelhub.infrastructure.llm.LlmGatewayResponse;
 import com.labelhub.infrastructure.llm.LlmGatewayStatus;
+import com.labelhub.infrastructure.llm.LlmMessage;
 import com.labelhub.modules.agent.domain.AgentRun;
 import com.labelhub.modules.agent.domain.AgentRunStatus;
 import com.labelhub.modules.agent.domain.SystemActorContext;
@@ -114,6 +116,9 @@ class AiAutoReviewServiceTest {
         ReflectionTestUtils.setField(service, "redisLockService", redisLockService);
         ReflectionTestUtils.setField(service, "reviewOwnershipResolver", reviewOwnershipResolver);
         ReflectionTestUtils.setField(service, "promptTemplateEngine", promptTemplateEngine);
+        VoteAggregator voteAggregator = new VoteAggregator();
+        ReflectionTestUtils.setField(service, "voteAggregator", voteAggregator);
+        ReflectionTestUtils.setField(service, "dimensionAggregator", new DimensionAggregator(voteAggregator));
         org.mockito.Mockito.lenient()
                 .when(promptTemplateEngine.buildReviewPrompt(
                         org.mockito.ArgumentMatchers.any(),
@@ -374,6 +379,175 @@ class AiAutoReviewServiceTest {
         assertThat(response.errorCode()).isEqualTo("INVALID_AI_REVIEW_OUTPUT");
         verify(retryScheduler, never()).scheduleRetry(anyLong(), any(Duration.class));
         verify(agentRunService).fail(AGENT_RUN_ID, AgentRunStatus.MANUAL_REQUIRED, "AI 审核结论不能为空");
+    }
+
+    @Test
+    void thrownLlmKeyDecryptFailureStoresFailedResultInsteadOfLeavingSubmissionWithoutResult() {
+        when(aiReviewResultMapper.selectBySubmissionId(SUBMISSION_ID)).thenReturn(null);
+        when(submissionMapper.selectById(SUBMISSION_ID)).thenReturn(submission());
+        when(taskMapper.selectById(TASK_ID)).thenReturn(task());
+        when(datasetItemMapper.selectById(DATASET_ITEM_ID)).thenReturn(datasetItem());
+        when(aiReviewConfigMapper.selectById(CONFIG_ID)).thenReturn(config());
+        when(rateLimiter.acquire(TASK_ID, PROVIDER_ID)).thenReturn(true);
+        when(agentRunService.create(eq("AI_REVIEW"), eq(SUBMISSION_ID), eq(PROVIDER_ID), eq("qwen-plus"),
+                eq("v2"), any())).thenReturn(agentRun());
+        when(llmGateway.review(any(LlmGatewayRequest.class)))
+                .thenThrow(new BusinessException(500302, "LLM key decrypt failed"));
+
+        AiReviewResultResponse response = service.reviewSubmission(SUBMISSION_ID);
+
+        assertThat(response.status()).isEqualTo(AiReviewStatus.FAILED);
+        assertThat(response.errorCode()).isEqualTo("LLM_KEY_DECRYPT_FAILED");
+        ArgumentCaptor<AiReviewResult> resultCaptor = ArgumentCaptor.forClass(AiReviewResult.class);
+        verify(aiReviewResultMapper).insert(resultCaptor.capture());
+        assertThat(resultCaptor.getValue().getSubmissionId()).isEqualTo(SUBMISSION_ID);
+        assertThat(resultCaptor.getValue().getEffectiveRunId()).isEqualTo(AGENT_RUN_ID);
+        assertThat(resultCaptor.getValue().getProviderId()).isEqualTo(PROVIDER_ID);
+        assertThat(resultCaptor.getValue().getModelName()).isEqualTo("qwen-plus");
+        assertThat(resultCaptor.getValue().getStatus()).isEqualTo(AiReviewStatus.FAILED);
+        assertThat(resultCaptor.getValue().getNextRetryAt()).isNull();
+        assertThat(resultCaptor.getValue().getErrorCode()).isEqualTo("LLM_KEY_DECRYPT_FAILED");
+        verify(agentRunService).fail(AGENT_RUN_ID, AgentRunStatus.FAILED, "LLM key decrypt failed");
+        verify(retryScheduler, never()).scheduleRetry(anyLong(), any(Duration.class));
+    }
+
+    @Test
+    void parallelVoteLlmKeyDecryptFailureStoresFailedResult() {
+        AiReviewConfig parallelConfig = config();
+        parallelConfig.setReviewStrategy("PARALLEL_VOTE");
+        parallelConfig.setVoteModelsJson("""
+                [{"providerId":30,"modelName":"qwen-plus"},{"providerId":30,"modelName":"qwen-plus"}]
+                """);
+        parallelConfig.setVoteMinAgreement(2);
+        when(aiReviewResultMapper.selectBySubmissionId(SUBMISSION_ID)).thenReturn(null);
+        when(submissionMapper.selectById(SUBMISSION_ID)).thenReturn(submission());
+        when(taskMapper.selectById(TASK_ID)).thenReturn(task());
+        when(datasetItemMapper.selectById(DATASET_ITEM_ID)).thenReturn(datasetItem());
+        when(aiReviewConfigMapper.selectById(CONFIG_ID)).thenReturn(parallelConfig);
+        when(rateLimiter.acquire(TASK_ID, PROVIDER_ID)).thenReturn(true);
+        when(agentRunService.create(eq("AI_REVIEW"), eq(SUBMISSION_ID), eq(PROVIDER_ID), eq("qwen-plus"),
+                eq("v2"), any())).thenReturn(agentRun());
+        when(llmGateway.review(any(LlmGatewayRequest.class)))
+                .thenThrow(new BusinessException(500302, "LLM key decrypt failed"));
+
+        AiReviewResultResponse response = service.reviewSubmission(SUBMISSION_ID);
+
+        assertThat(response.status()).isEqualTo(AiReviewStatus.FAILED);
+        assertThat(response.errorCode()).isEqualTo("LLM_KEY_DECRYPT_FAILED");
+        ArgumentCaptor<AiReviewResult> resultCaptor = ArgumentCaptor.forClass(AiReviewResult.class);
+        verify(aiReviewResultMapper).insert(resultCaptor.capture());
+        assertThat(resultCaptor.getValue().getStatus()).isEqualTo(AiReviewStatus.FAILED);
+        assertThat(resultCaptor.getValue().getNextRetryAt()).isNull();
+        verify(retryScheduler, never()).scheduleRetry(anyLong(), any(Duration.class));
+    }
+
+    @Test
+    void parallelVoteAllAsyncBranchesFailDoesNotCreateSyntheticReject() {
+        AiReviewConfig parallelConfig = config();
+        parallelConfig.setReviewStrategy("PARALLEL_VOTE");
+        parallelConfig.setVoteModelsJson("""
+                [{"providerId":30,"modelName":"qwen-plus"},{"providerId":30,"modelName":"qwen-plus"}]
+                """);
+        parallelConfig.setVoteMinAgreement(2);
+        when(aiReviewResultMapper.selectBySubmissionId(SUBMISSION_ID)).thenReturn(null);
+        when(submissionMapper.selectById(SUBMISSION_ID)).thenReturn(submission());
+        when(taskMapper.selectById(TASK_ID)).thenReturn(task());
+        when(datasetItemMapper.selectById(DATASET_ITEM_ID)).thenReturn(datasetItem());
+        when(aiReviewConfigMapper.selectById(CONFIG_ID)).thenReturn(parallelConfig);
+        when(rateLimiter.acquire(TASK_ID, PROVIDER_ID)).thenReturn(true);
+        when(agentRunService.create(eq("AI_REVIEW"), eq(SUBMISSION_ID), eq(PROVIDER_ID), eq("qwen-plus"),
+                eq("v2"), any())).thenReturn(agentRun());
+        when(llmGateway.review(any(LlmGatewayRequest.class))).thenReturn(new LlmGatewayResponse(
+                LlmGatewayStatus.TIMEOUT,
+                null,
+                null,
+                null,
+                null,
+                "TIMEOUT",
+                "LLM request timed out"
+        ));
+
+        AiReviewResultResponse response = service.reviewSubmission(SUBMISSION_ID);
+
+        assertThat(response.status()).isEqualTo(AiReviewStatus.FAILED);
+        assertThat(response.decision()).isNull();
+        assertThat(response.errorCode()).isEqualTo("TIMEOUT");
+        ArgumentCaptor<AiReviewResult> resultCaptor = ArgumentCaptor.forClass(AiReviewResult.class);
+        verify(aiReviewResultMapper).insert(resultCaptor.capture());
+        assertThat(resultCaptor.getValue().getStatus()).isEqualTo(AiReviewStatus.FAILED);
+        assertThat(resultCaptor.getValue().getDecision()).isNull();
+    }
+
+    @Test
+    void deepDimensionLlmKeyDecryptFailureStoresFailedResult() {
+        AiReviewConfig deepConfig = config();
+        deepConfig.setReviewStrategy("DEEP_DIMENSION");
+        deepConfig.setScoringDimensionsJson("[\"accuracy\",\"completeness\"]");
+        deepConfig.setDimensionReviewersJson("""
+                {"accuracy":[{"providerId":30,"modelName":"qwen-plus"}],
+                 "completeness":[{"providerId":30,"modelName":"qwen-plus"}]}
+                """);
+        when(aiReviewResultMapper.selectBySubmissionId(SUBMISSION_ID)).thenReturn(null);
+        when(submissionMapper.selectById(SUBMISSION_ID)).thenReturn(submission());
+        when(taskMapper.selectById(TASK_ID)).thenReturn(task());
+        when(datasetItemMapper.selectById(DATASET_ITEM_ID)).thenReturn(datasetItem());
+        when(aiReviewConfigMapper.selectById(CONFIG_ID)).thenReturn(deepConfig);
+        when(rateLimiter.acquire(TASK_ID, PROVIDER_ID)).thenReturn(true);
+        when(agentRunService.create(eq("AI_REVIEW"), eq(SUBMISSION_ID), eq(PROVIDER_ID), eq("qwen-plus"),
+                eq("v2"), any())).thenReturn(agentRun());
+        when(llmGateway.review(any(LlmGatewayRequest.class)))
+                .thenThrow(new BusinessException(500302, "LLM key decrypt failed"));
+
+        AiReviewResultResponse response = service.reviewSubmission(SUBMISSION_ID);
+
+        assertThat(response.status()).isEqualTo(AiReviewStatus.FAILED);
+        assertThat(response.errorCode()).isEqualTo("LLM_KEY_DECRYPT_FAILED");
+        assertThat(response.decision()).isNull();
+        ArgumentCaptor<AiReviewResult> resultCaptor = ArgumentCaptor.forClass(AiReviewResult.class);
+        verify(aiReviewResultMapper).insert(resultCaptor.capture());
+        assertThat(resultCaptor.getValue().getStatus()).isEqualTo(AiReviewStatus.FAILED);
+        assertThat(resultCaptor.getValue().getNextRetryAt()).isNull();
+        verify(retryScheduler, never()).scheduleRetry(anyLong(), any(Duration.class));
+    }
+
+    @Test
+    void deepDimensionSuccessStoresImagePromptMetadata() {
+        AiReviewConfig deepConfig = config();
+        deepConfig.setReviewStrategy("DEEP_DIMENSION");
+        deepConfig.setScoringDimensionsJson("[\"accuracy\"]");
+        ReflectionTestUtils.setField(service, "mediaPromptContextBuilder", (MediaPromptContextBuilder) input ->
+                new MediaPromptResult(
+                        List.of(LlmMessage.userParts(List.of(
+                                new LlmMessage.TextPart("Review this image answer"),
+                                new LlmMessage.ImageUrlPart("https://www.w3schools.com/w3css/img_lights.jpg", "auto")
+                        ))),
+                        PromptMode.IMAGE_SINGLE,
+                        false,
+                        List.of(),
+                        "Review answer strictly\n[image]",
+                        Map.of("usedMedia", true, "imageCount", 1)
+                ));
+        when(aiReviewResultMapper.selectBySubmissionId(SUBMISSION_ID)).thenReturn(null);
+        when(submissionMapper.selectById(SUBMISSION_ID)).thenReturn(submission());
+        when(taskMapper.selectById(TASK_ID)).thenReturn(task());
+        when(datasetItemMapper.selectById(DATASET_ITEM_ID)).thenReturn(datasetItem());
+        when(aiReviewConfigMapper.selectById(CONFIG_ID)).thenReturn(deepConfig);
+        when(rateLimiter.acquire(TASK_ID, PROVIDER_ID)).thenReturn(true);
+        when(agentRunService.create(eq("AI_REVIEW"), eq(SUBMISSION_ID), eq(PROVIDER_ID), eq("qwen-plus"),
+                eq("v2"), any())).thenReturn(agentRun());
+        when(llmGateway.review(any(LlmGatewayRequest.class))).thenReturn(successGateway("PASS", 95.0, 0.95));
+        when(systemAgentProvider.get()).thenReturn(new SystemActorContext(900L));
+
+        AiReviewResultResponse response = service.reviewSubmission(SUBMISSION_ID);
+
+        assertThat(response.status()).isEqualTo(AiReviewStatus.SUCCESS);
+        ArgumentCaptor<AiReviewResult> resultCaptor = ArgumentCaptor.forClass(AiReviewResult.class);
+        verify(aiReviewResultMapper).insert(resultCaptor.capture());
+        AiReviewResult result = resultCaptor.getValue();
+        assertThat(result.getStatus()).isEqualTo(AiReviewStatus.SUCCESS);
+        assertThat(result.getPromptMode()).isEqualTo("IMAGE_SINGLE");
+        assertThat(result.getDegraded()).isFalse();
+        assertThat(result.getLimitations()).isEqualTo("[]");
     }
 
     @Test

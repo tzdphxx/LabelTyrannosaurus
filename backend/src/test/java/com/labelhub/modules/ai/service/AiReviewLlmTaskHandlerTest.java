@@ -11,6 +11,7 @@ import com.labelhub.modules.ai.domain.AiReviewResult;
 import com.labelhub.modules.ai.domain.AiReviewStatus;
 import com.labelhub.modules.ai.mapper.AiReviewResultMapper;
 import java.time.Instant;
+import java.time.LocalDateTime;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
@@ -31,11 +32,22 @@ class AiReviewLlmTaskHandlerTest {
     }
 
     @Test
-    void notCompletedWhenFailedOrRateLimitedResultCanBeRetried() {
+    void completedWhenFailedOrRateLimitedResultHasNoNextRetry() {
         AiReviewLlmTaskHandler handler = new AiReviewLlmTaskHandler(aiAutoReviewService, aiReviewResultMapper);
         when(aiReviewResultMapper.selectBySubmissionId(100L))
                 .thenReturn(result(AiReviewStatus.FAILED))
                 .thenReturn(result(AiReviewStatus.RATE_LIMITED));
+
+        assertThat(handler.isCompleted(message())).isTrue();
+        assertThat(handler.isCompleted(message())).isTrue();
+    }
+
+    @Test
+    void notCompletedWhenFailedOrRateLimitedResultCanBeRetried() {
+        AiReviewLlmTaskHandler handler = new AiReviewLlmTaskHandler(aiAutoReviewService, aiReviewResultMapper);
+        when(aiReviewResultMapper.selectBySubmissionId(100L))
+                .thenReturn(retryableResult(AiReviewStatus.FAILED))
+                .thenReturn(retryableResult(AiReviewStatus.RATE_LIMITED));
 
         assertThat(handler.isCompleted(message())).isFalse();
         assertThat(handler.isCompleted(message())).isFalse();
@@ -67,6 +79,12 @@ class AiReviewLlmTaskHandlerTest {
         AiReviewResult result = new AiReviewResult();
         result.setSubmissionId(100L);
         result.setStatus(status);
+        return result;
+    }
+
+    private AiReviewResult retryableResult(AiReviewStatus status) {
+        AiReviewResult result = result(status);
+        result.setNextRetryAt(LocalDateTime.now().plusMinutes(1));
         return result;
     }
 

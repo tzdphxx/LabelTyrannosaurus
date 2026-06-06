@@ -9,6 +9,7 @@ import com.labelhub.modules.dataset.dto.ItemSummaryResponse;
 import com.labelhub.modules.dataset.mapper.DatasetItemMapper;
 import com.labelhub.modules.dataset.service.DatasetMarketStatsService;
 import com.labelhub.modules.reward.service.RewardSummaryService;
+import com.labelhub.modules.task.domain.ClaimStrategy;
 import com.labelhub.modules.task.domain.Task;
 import com.labelhub.modules.task.domain.TaskTag;
 import com.labelhub.modules.task.dto.TaskSummaryResponse;
@@ -102,12 +103,17 @@ public class LabelerTaskWorkspaceService {
                 task.getClaimedCount(),
                 task.getOverlapCount(),
                 task.getStrategy(),
+                maxClaimsPerLabeler(task),
                 task.getDeadlineAt(),
                 task.getPublishedAt(),
                 task.getEndedAt(),
                 task.getCreatedAt(),
                 task.getUpdatedAt()
         );
+    }
+
+    private Integer maxClaimsPerLabeler(Task task) {
+        return task.getStrategy() == ClaimStrategy.QUOTA_GRAB ? task.getMaxClaimsPerLabeler() : null;
     }
 
     private List<String> listTags(Long taskId) {

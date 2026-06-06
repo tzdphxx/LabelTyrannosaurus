@@ -1,5 +1,6 @@
 package com.labelhub.modules.task.dto;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
 import com.labelhub.modules.task.domain.ClaimStrategy;
 import com.labelhub.modules.task.domain.TaskStatus;
 import io.swagger.v3.oas.annotations.media.Schema;
@@ -25,6 +26,9 @@ public record TaskSummaryResponse(
         Integer overlapCount,
         @Schema(description = "领取策略", example = "FCFS")
         ClaimStrategy strategy,
+        @JsonProperty("max_claims_per_labeler")
+        @Schema(description = "单人并发未完成上限（仅 QUOTA_GRAB 有效）", example = "10")
+        Integer maxClaimsPerLabeler,
         @Schema(description = "截止时间", example = "2026-06-30T23:59:59")
         LocalDateTime deadlineAt,
         @Schema(description = "发布时间")

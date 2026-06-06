@@ -121,12 +121,19 @@ public class LabelerAssignmentQueryService {
                 toInt(row.get("claimed_count")),
                 toInt(row.get("overlap_count")),
                 toStrategy(row.get("strategy")),
+                maxClaimsPerLabeler(row),
                 toLocalDateTime(row.get("deadline_at")),
                 toLocalDateTime(row.get("published_at")),
                 toLocalDateTime(row.get("ended_at")),
                 toLocalDateTime(row.get("created_at")),
                 toLocalDateTime(row.get("updated_at"))
         );
+    }
+
+    private Integer maxClaimsPerLabeler(Map<String, Object> row) {
+        return toStrategy(row.get("strategy")) == ClaimStrategy.QUOTA_GRAB
+                ? toInt(row.get("max_claims_per_labeler"))
+                : null;
     }
 
     private List<ClaimedItemResponse> listClaimedItems(Long labelerId,

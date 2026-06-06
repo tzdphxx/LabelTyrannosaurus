@@ -9,6 +9,7 @@ import com.labelhub.common.web.TraceIdProvider;
 import com.labelhub.modules.assignment.mapper.AssignmentMapper;
 import com.labelhub.modules.dataset.mapper.DatasetItemMapper;
 import com.labelhub.modules.submission.mapper.SubmissionMapper;
+import com.labelhub.modules.task.domain.ClaimStrategy;
 import com.labelhub.modules.task.domain.Task;
 import com.labelhub.modules.task.domain.TaskStatus;
 import com.labelhub.modules.task.domain.TaskTag;
@@ -74,6 +75,7 @@ public class TaskManagementService {
                         listTags(task.getId()), task.getQuota(),
                         task.getClaimedCount(), task.getOverlapCount(),
                         task.getStrategy(),
+                        maxClaimsPerLabeler(task),
                         task.getDeadlineAt(), task.getPublishedAt(),
                         task.getEndedAt(), task.getCreatedAt(), task.getUpdatedAt()))
                 .toList();
@@ -160,6 +162,10 @@ public class TaskManagementService {
             throw new BusinessException(TASK_NOT_FOUND, "任务不存在");
         }
         return task;
+    }
+
+    private Integer maxClaimsPerLabeler(Task task) {
+        return task.getStrategy() == ClaimStrategy.QUOTA_GRAB ? task.getMaxClaimsPerLabeler() : null;
     }
 
     private List<String> listTags(Long taskId) {

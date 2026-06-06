@@ -105,6 +105,7 @@ public class TaskLifecycleService {
                         task.getClaimedCount(),
                         task.getOverlapCount(),
                         task.getStrategy(),
+                        maxClaimsPerLabeler(task),
                         task.getDeadlineAt(),
                         task.getPublishedAt(),
                         task.getEndedAt(),
@@ -368,6 +369,10 @@ public class TaskLifecycleService {
                 task.getRewardVisible(),
                 rewardRuleService.findLatestRule(task.getId())
         );
+    }
+
+    private Integer maxClaimsPerLabeler(Task task) {
+        return task.getStrategy() == ClaimStrategy.QUOTA_GRAB ? task.getMaxClaimsPerLabeler() : null;
     }
 
     private List<String> listTags(Long taskId) {

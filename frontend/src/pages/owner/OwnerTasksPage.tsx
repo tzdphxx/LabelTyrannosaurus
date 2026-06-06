@@ -35,6 +35,23 @@ const statusOptions = [
   { label: '已结束', value: 'ended' },
 ]
 
+const statusPillClasses: Record<OwnerTaskStatus, string> = {
+  draft: styles.statusPillDraft,
+  published: styles.statusPillPublished,
+  paused: styles.statusPillPaused,
+  ended: styles.statusPillEnded,
+}
+
+function formatReward(task: OwnerTask) {
+  const reward = task.rewardRule
+
+  if (!reward.unitPrice) {
+    return '-'
+  }
+
+  return `${reward.unitPrice} ${reward.rewardCurrency}`
+}
+
 export function OwnerTasksPage() {
   const navigate = useNavigate()
   const [messageApi, contextHolder] = message.useMessage()
@@ -179,7 +196,11 @@ export function OwnerTasksPage() {
               title: '状态',
               dataIndex: 'status',
               width: 110,
-              render: (status: OwnerTaskStatus) => <Tag color={ownerTaskStatusColors[status]}>{ownerTaskStatusLabels[status]}</Tag>,
+              render: (status: OwnerTaskStatus) => (
+                <Tag className={`${styles.statusPill} ${statusPillClasses[status]}`} color={ownerTaskStatusColors[status]}>
+                  {ownerTaskStatusLabels[status]}
+                </Tag>
+              ),
             },
             {
               title: '模板',
@@ -187,23 +208,40 @@ export function OwnerTasksPage() {
               width: 180,
             },
             {
+              title: '奖励',
+              width: 120,
+              render: (_, task) => (
+                <span className={styles.rewardBadge}>
+                  <strong>{formatReward(task)}</strong>
+                  <span>单题</span>
+                </span>
+              ),
+            },
+            {
               title: '当前进度',
               width: 230,
-              render: (_, task) => (
-                <Space className={styles.tableProgress} direction="vertical" size={4}>
-                  <Progress percent={getProgressPercent(task.progress)} size="small" />
-                  <Typography.Text type="secondary">
-                    {formatCount(task.progress.completedItems)} / {formatCount(task.progress.totalItems)} 完成，待审核{' '}
-                    {formatCount(task.progress.pendingReviewItems)}
-                  </Typography.Text>
-                </Space>
-              ),
+              render: (_, task) => {
+                const percent = getProgressPercent(task.progress)
+
+                return (
+                  <Space className={styles.tableProgress} direction="vertical" size={6}>
+                    <div className={styles.progressLine}>
+                      <span className={styles.progressPercent}>{percent}%</span>
+                      <Progress percent={percent} showInfo={false} size="small" />
+                    </div>
+                    <div className={styles.progressMeta}>
+                      <span>{formatCount(task.progress.completedItems)} / {formatCount(task.progress.totalItems)} 完成</span>
+                      <span>{formatCount(task.progress.pendingReviewItems)} 待审</span>
+                    </div>
+                  </Space>
+                )
+              },
             },
             {
               title: '数据量',
               dataIndex: 'dataCount',
               width: 100,
-              render: (value: number) => formatCount(value),
+              render: (value: number) => <span className={styles.countBadge}>{formatCount(value)}</span>,
             },
             {
               title: '截止时间',

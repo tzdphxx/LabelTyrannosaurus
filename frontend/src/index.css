@@ -310,6 +310,83 @@ select {
   color: #34495e;
 }
 
+.breadcrumb-nav {
+  position: sticky;
+  top: 64px;
+  z-index: 99;
+  display: flex;
+  align-items: center;
+  min-height: 40px;
+  padding: 0 24px;
+  border-bottom: 1px solid #d9e1e8;
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 8px 20px rgba(20, 34, 48, 0.04);
+  backdrop-filter: blur(10px);
+}
+
+.breadcrumb-nav .ant-breadcrumb {
+  min-width: 0;
+  color: #5d6d7e;
+  font-size: 13px;
+}
+
+.breadcrumb-nav .ant-breadcrumb ol,
+.breadcrumb-nav .ant-breadcrumb li,
+.breadcrumb-nav .ant-breadcrumb-link,
+.breadcrumb-nav .ant-breadcrumb-separator {
+  display: inline-flex;
+  align-items: center;
+}
+
+.breadcrumb-nav .ant-breadcrumb ol {
+  flex-wrap: nowrap;
+}
+
+.breadcrumb-nav__link {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  line-height: 28px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #1f5c54;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 700;
+}
+
+.breadcrumb-nav__link:hover,
+.breadcrumb-nav__link:focus-visible {
+  color: #10a894;
+  text-decoration: underline;
+}
+
+.breadcrumb-nav__link:focus-visible {
+  border-radius: 6px;
+  outline: 2px solid rgba(16, 168, 148, 0.34);
+  outline-offset: 3px;
+}
+
+.breadcrumb-nav__current {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  line-height: 28px;
+  color: #152536;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.breadcrumb-nav__text {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  line-height: 28px;
+  color: #5d6d7e;
+  font-size: 13px;
+}
+
 .role-badge.ant-tag {
   margin-inline-end: 0;
   border-radius: 6px;
@@ -318,14 +395,14 @@ select {
 
 .app-shell__body {
   align-items: flex-start;
-  min-height: calc(100vh - 64px);
+  min-height: calc(100vh - 104px);
 }
 
 .side-nav.ant-layout-sider {
   position: sticky;
-  top: 64px;
+  top: 104px;
   z-index: 90;
-  height: calc(100dvh - 64px);
+  height: calc(100dvh - 104px);
   overflow: hidden;
   border-right: 1px solid #d9e1e8;
   background: #ffffff;
@@ -1052,7 +1129,15 @@ select {
 
   .app-shell__body {
     align-items: stretch;
-    min-height: calc(100vh - 88px);
+    min-height: calc(100vh - 128px);
+  }
+
+  .breadcrumb-nav {
+    top: 88px;
+    min-height: 40px;
+    overflow-x: auto;
+    padding: 0 16px;
+    white-space: nowrap;
   }
 
   .side-nav.ant-layout-sider {

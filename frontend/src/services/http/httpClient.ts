@@ -10,6 +10,8 @@ import { ApiError, type ApiResponseEnvelope, type RequestConfig } from './httpTy
 export const AUTH_TOKEN_STORAGE_KEY = 'labelhub_auth_token'
 export const REFRESH_TOKEN_STORAGE_KEY = 'labelhub_refresh_token'
 export const TOKEN_VERSION_STORAGE_KEY = 'labelhub_token_version'
+export const AUTH_ROLE_STORAGE_KEY = 'labelhub_auth_role'
+export const AUTH_USER_STORAGE_KEY = 'labelhub_auth_user'
 const DEFAULT_TIMEOUT = 15000
 const SUCCESS_CODES = new Set([0, 200])
 
@@ -73,6 +75,8 @@ export function clearAuthTokens() {
   window.localStorage.removeItem(AUTH_TOKEN_STORAGE_KEY)
   window.localStorage.removeItem(REFRESH_TOKEN_STORAGE_KEY)
   window.localStorage.removeItem(TOKEN_VERSION_STORAGE_KEY)
+  window.localStorage.removeItem(AUTH_ROLE_STORAGE_KEY)
+  window.localStorage.removeItem(AUTH_USER_STORAGE_KEY)
 }
 
 function isApiResponseEnvelope<T>(value: unknown): value is ApiResponseEnvelope<T> {

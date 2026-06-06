@@ -3,6 +3,8 @@ export { authService } from './auth'
 export { labelingService } from './labeler'
 export {
   AUTH_TOKEN_STORAGE_KEY,
+  AUTH_ROLE_STORAGE_KEY,
+  AUTH_USER_STORAGE_KEY,
   ApiError,
   REFRESH_TOKEN_STORAGE_KEY,
   TOKEN_VERSION_STORAGE_KEY,

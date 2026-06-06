@@ -51,17 +51,17 @@ export function OwnerDashboardPage() {
           </Card>
         </Col>
         <Col lg={5} md={12} xs={24}>
-          <Card className={styles.statCard}>
+          <Card className={`${styles.statCard} ${styles.statCardInfo}`}>
             <Statistic loading={isLoading} title="草稿任务" value={data?.stats.draftTasks ?? 0} />
           </Card>
         </Col>
         <Col lg={5} md={12} xs={24}>
-          <Card className={styles.statCard}>
+          <Card className={`${styles.statCard} ${styles.statCardSuccess}`}>
             <Statistic loading={isLoading} title="已发布" value={data?.stats.publishedTasks ?? 0} />
           </Card>
         </Col>
         <Col lg={5} md={12} xs={24}>
-          <Card className={styles.statCard}>
+          <Card className={`${styles.statCard} ${styles.statCardWarning}`}>
             <Statistic loading={isLoading} title="进行中" value={data?.stats.runningTasks ?? 0} />
           </Card>
         </Col>

@@ -4,48 +4,73 @@
   flex-direction: column;
   gap: clamp(14px, 1.8vw, 22px);
   background:
-    linear-gradient(135deg, rgba(40, 204, 179, 0.16), transparent 30%),
-    linear-gradient(225deg, rgba(255, 205, 75, 0.18), transparent 28%),
-    #f7fcf8;
+    linear-gradient(135deg, rgba(37, 99, 235, 0.1), transparent 32%),
+    linear-gradient(225deg, rgba(14, 165, 233, 0.1), transparent 30%),
+    #f6f9ff;
 }
 
 .hero:global(.content-shell) {
   overflow: hidden;
-  border-color: rgba(46, 190, 170, 0.28);
+  border-color: rgba(37, 99, 235, 0.18);
   background:
-    linear-gradient(120deg, rgba(35, 190, 168, 0.14), rgba(255, 210, 86, 0.16) 52%, rgba(255, 125, 96, 0.1)),
-    rgba(255, 255, 255, 0.94);
-  box-shadow: 0 18px 42px rgba(22, 94, 86, 0.08);
+    linear-gradient(120deg, rgba(37, 99, 235, 0.1), rgba(14, 165, 233, 0.08) 54%, rgba(255, 255, 255, 0.9)),
+    rgba(255, 255, 255, 0.96);
+  box-shadow: 0 18px 42px rgba(30, 64, 175, 0.08);
   animation: ownerPanelEnter 220ms ease-out both;
 }
 
 .hero :global(.page-header__title.ant-typography) {
-  color: #153f3b;
+  color: #0f1f3d;
 }
 
 .hero :global(.page-header__description.ant-typography) {
-  color: #54706f;
+  color: #5b6f92;
 }
 
 .hero :global(.ant-btn-primary) {
-  border-color: #10a894;
-  background: #10a894;
-  box-shadow: 0 12px 24px rgba(16, 168, 148, 0.18);
+  border-color: #2563eb;
+  background: #2563eb;
+  box-shadow: 0 12px 24px rgba(37, 99, 235, 0.18);
 }
 
 .statCard:global(.ant-card),
 .panelCard:global(.ant-card),
 .tableCard:global(.ant-card) {
   overflow: hidden;
-  border: 1px solid rgba(54, 184, 164, 0.24);
+  border: 1px solid rgba(37, 99, 235, 0.16);
   border-radius: 8px;
-  background: rgba(255, 255, 255, 0.94);
-  box-shadow: 0 14px 34px rgba(30, 82, 78, 0.07);
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 14px 34px rgba(30, 64, 175, 0.07);
   animation: ownerPanelEnter 220ms ease-out both;
+  transition:
+    border-color 180ms ease,
+    box-shadow 180ms ease,
+    transform 180ms ease;
+}
+
+.statCard:global(.ant-card):hover,
+.panelCard:global(.ant-card):hover,
+.tableCard:global(.ant-card):hover {
+  border-color: rgba(37, 99, 235, 0.3);
+  box-shadow: 0 18px 42px rgba(30, 64, 175, 0.1);
+  transform: translateY(-1px);
 }
 
 .statCard:global(.ant-card) {
   min-height: 104px;
+  border-top: 3px solid #2563eb;
+}
+
+.statCardInfo:global(.ant-card) {
+  border-top-color: #0ea5e9;
+}
+
+.statCardSuccess:global(.ant-card) {
+  border-top-color: #10b981;
+}
+
+.statCardWarning:global(.ant-card) {
+  border-top-color: #f59e0b;
 }
 
 .statCard :global(.ant-card-body) {
@@ -53,33 +78,34 @@
 }
 
 .statCard :global(.ant-statistic-title) {
-  color: #5f7776;
+  color: #5b6f92;
   font-weight: 700;
 }
 
 .statCard :global(.ant-statistic-content) {
-  color: #173f3d;
+  color: #0f1f3d;
   font-weight: 800;
 }
 
 .statCardAlert:global(.ant-card) {
-  border-color: rgba(255, 128, 96, 0.35);
+  border-color: rgba(239, 68, 68, 0.28);
+  border-top-color: #ef4444;
   background:
-    linear-gradient(135deg, rgba(255, 246, 238, 0.98), rgba(255, 255, 255, 0.94));
+    linear-gradient(135deg, rgba(254, 242, 242, 0.98), rgba(255, 255, 255, 0.95));
 }
 
 .panelCard :global(.ant-card-head),
 .tableCard :global(.ant-card-head) {
   min-height: 50px;
-  border-bottom-color: rgba(46, 190, 170, 0.18);
+  border-bottom-color: rgba(37, 99, 235, 0.14);
   background:
-    linear-gradient(90deg, rgba(37, 201, 177, 0.1), rgba(255, 214, 92, 0.1)),
+    linear-gradient(90deg, rgba(37, 99, 235, 0.08), rgba(14, 165, 233, 0.06)),
     #ffffff;
 }
 
 .panelCard :global(.ant-card-head-title),
 .tableCard :global(.ant-card-head-title) {
-  color: #173f3d;
+  color: #0f1f3d;
   font-weight: 800;
 }
 
@@ -100,13 +126,13 @@
 .progressGrid :global(.ant-statistic) {
   min-width: 0;
   padding: 12px;
-  border: 1px solid rgba(46, 190, 170, 0.18);
+  border: 1px solid rgba(37, 99, 235, 0.14);
   border-radius: 8px;
-  background: linear-gradient(135deg, #f2fffb, #fff9e7);
+  background: linear-gradient(135deg, #eff6ff, #ffffff);
 }
 
 .progressGrid :global(.ant-statistic-title) {
-  color: #5f7776;
+  color: #5b6f92;
   font-weight: 700;
 }
 
@@ -127,22 +153,22 @@
 }
 
 .dataTable :global(.ant-table) {
-  color: #203c3b;
+  color: #172033;
 }
 
 .dataTable :global(.ant-table-thead > tr > th) {
-  border-bottom-color: rgba(46, 190, 170, 0.2);
-  background: #f3fbf8;
-  color: #254c49;
+  border-bottom-color: rgba(37, 99, 235, 0.14);
+  background: #f1f6ff;
+  color: #1e3a8a;
   font-weight: 800;
 }
 
 .dataTable :global(.ant-table-tbody > tr > td) {
-  border-bottom-color: rgba(36, 73, 71, 0.08);
+  border-bottom-color: rgba(37, 99, 235, 0.08);
 }
 
 .dataTable :global(.ant-table-tbody > tr:hover > td) {
-  background: #f8fffb;
+  background: #f8fbff;
 }
 
 .dataTable :global(.ant-tag) {
@@ -150,8 +176,100 @@
   font-weight: 700;
 }
 
+.statusPill:global(.ant-tag) {
+  display: inline-flex;
+  min-width: 68px;
+  justify-content: center;
+  border-width: 0;
+  padding: 3px 10px;
+  line-height: 1.5;
+}
+
+.statusPillDraft:global(.ant-tag) {
+  background: #eef2ff;
+  color: #4f46e5;
+}
+
+.statusPillPublished:global(.ant-tag) {
+  background: #e9f8ff;
+  color: #0284c7;
+}
+
+.statusPillPaused:global(.ant-tag) {
+  background: #fff7ed;
+  color: #ea580c;
+}
+
+.statusPillEnded:global(.ant-tag) {
+  background: #f1f5f9;
+  color: #475569;
+}
+
+.rewardBadge,
+.countBadge {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid rgba(37, 99, 235, 0.14);
+  border-radius: 7px;
+  background: #f8fbff;
+  color: #1e3a8a;
+  font-weight: 800;
+}
+
+.rewardBadge {
+  flex-direction: column;
+  min-width: 76px;
+  padding: 6px 10px;
+  gap: 2px;
+}
+
+.rewardBadge span {
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.countBadge {
+  min-width: 58px;
+  justify-content: center;
+  padding: 5px 10px;
+}
+
 .tableProgress {
   width: 100%;
+}
+
+.progressLine {
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr);
+  gap: 8px;
+  align-items: center;
+}
+
+.progressPercent {
+  color: #2563eb;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.progressLine :global(.ant-progress-bg) {
+  background: linear-gradient(90deg, #2563eb, #0ea5e9);
+}
+
+.progressMeta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.progressMeta span {
+  border-radius: 7px;
+  background: #eff6ff;
+  color: #475569;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.5;
+  padding: 2px 7px;
 }
 
 .templateActions :global(.ant-btn) {
@@ -176,6 +294,7 @@
   .panelCard:global(.ant-card),
   .tableCard:global(.ant-card) {
     animation: none;
+    transition: none;
   }
 }
 

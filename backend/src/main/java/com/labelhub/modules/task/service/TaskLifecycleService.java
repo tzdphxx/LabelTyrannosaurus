@@ -10,6 +10,7 @@ import com.labelhub.common.web.TraceIdProvider;
 import com.labelhub.modules.ai.dto.AiReviewConfigRequest;
 import com.labelhub.modules.ai.service.AiReviewConfigService;
 import com.labelhub.modules.assignment.mapper.AssignmentDispatchMapper;
+import com.labelhub.modules.assignment.service.AssignedAutoAssignmentService;
 import com.labelhub.modules.auth.domain.UserEntity;
 import com.labelhub.modules.auth.repository.UserMapper;
 import com.labelhub.modules.auth.repository.UserRoleMapper;
@@ -60,6 +61,7 @@ public class TaskLifecycleService {
     private final AiReviewConfigService aiReviewConfigService;
     private final RewardRuleService rewardRuleService;
     private final AssignmentDispatchMapper dispatchMapper;
+    private final AssignedAutoAssignmentService assignedAutoAssignmentService;
     private final UserMapper userMapper;
     private final UserRoleMapper userRoleMapper;
     private final org.springframework.context.ApplicationEventPublisher applicationEventPublisher;
@@ -73,6 +75,7 @@ public class TaskLifecycleService {
                                 AiReviewConfigService aiReviewConfigService,
                                 RewardRuleService rewardRuleService,
                                 AssignmentDispatchMapper dispatchMapper,
+                                AssignedAutoAssignmentService assignedAutoAssignmentService,
                                 UserMapper userMapper,
                                 UserRoleMapper userRoleMapper,
                                 org.springframework.context.ApplicationEventPublisher applicationEventPublisher) {
@@ -85,6 +88,7 @@ public class TaskLifecycleService {
         this.aiReviewConfigService = aiReviewConfigService;
         this.rewardRuleService = rewardRuleService;
         this.dispatchMapper = dispatchMapper;
+        this.assignedAutoAssignmentService = assignedAutoAssignmentService;
         this.userMapper = userMapper;
         this.userRoleMapper = userRoleMapper;
         this.applicationEventPublisher = applicationEventPublisher;
@@ -243,6 +247,7 @@ public class TaskLifecycleService {
         Task task = loadOwnedTask(ownerId, taskId);
         requireStatus(task, Set.of(TaskStatus.DRAFT));
         validatePublishRequirements(task);
+        autoClaimAssignedTask(task);
         task.setStatus(TaskStatus.PUBLISHED);
         task.setPublishedAt(LocalDateTime.now());
         return updateStatus(task, ownerId, "TASK_PUBLISHED", TaskStatus.DRAFT);
@@ -328,7 +333,7 @@ public class TaskLifecycleService {
                 && (task.getQuota() == null || task.getQuota() <= 0)) {
             throw missingPublishRequirement("Task quota is required");
         }
-        if (strategy == ClaimStrategy.ASSIGNED) {
+        if (strategy == ClaimStrategy.ASSIGNED && task.getAssignedLabelerId() == null) {
             int dispatchCount = dispatchMapper.countByTaskId(task.getId());
             if (dispatchCount == 0) {
                 throw missingPublishRequirement(
@@ -340,6 +345,20 @@ public class TaskLifecycleService {
 
     private BusinessException missingPublishRequirement(String message) {
         return new BusinessException(TASK_PUBLISH_REQUIREMENT_MISSING, message);
+    }
+
+    private void autoClaimAssignedTask(Task task) {
+        ClaimStrategy strategy = task.getStrategy() == null ? ClaimStrategy.FCFS : task.getStrategy();
+        Long assignedLabelerId = task.getAssignedLabelerId();
+        if (strategy != ClaimStrategy.ASSIGNED || assignedLabelerId == null) {
+            return;
+        }
+        int claimedCount = assignedAutoAssignmentService.autoClaimAll(task, assignedLabelerId);
+        if (claimedCount <= 0) {
+            throw missingPublishRequirement("No claimable items are available for assigned labeler");
+        }
+        task.setQuota(claimedCount);
+        task.setClaimedCount(claimedCount);
     }
 
     private TaskResponse toDetailResponse(Task task) {

@@ -27,6 +27,7 @@ import com.labelhub.modules.dataset.dto.DatasetImportRequest;
 import com.labelhub.modules.dataset.service.DatasetImportService;
 import com.labelhub.modules.dataset.mapper.DatasetItemMapper;
 import com.labelhub.modules.assignment.mapper.AssignmentDispatchMapper;
+import com.labelhub.modules.assignment.service.AssignedAutoAssignmentService;
 import com.labelhub.modules.ai.service.AiReviewConfigService;
 import com.labelhub.modules.reward.dto.RewardRuleRequest;
 import com.labelhub.modules.reward.dto.RewardRuleResponse;
@@ -97,6 +98,9 @@ class TaskLifecycleServiceTest {
     private AssignmentDispatchMapper dispatchMapper;
 
     @Mock
+    private AssignedAutoAssignmentService assignedAutoAssignmentService;
+
+    @Mock
     private LlmProviderService llmProviderService;
 
     @Mock
@@ -119,6 +123,7 @@ class TaskLifecycleServiceTest {
                 aiReviewConfigService,
                 rewardRuleService,
                 dispatchMapper,
+                assignedAutoAssignmentService,
                 userMapper,
                 userRoleMapper,
                 applicationEventPublisher
@@ -247,8 +252,15 @@ class TaskLifecycleServiceTest {
     }
 
     @Test
-    void rejectsAssignedLabelerWhenStrategyIsNotAssigned() {
+    void rejectsAssignedLabelerWhenStrategyIsFcfs() {
         assertThatThrownBy(() -> taskLifecycleService.create(OWNER_ID, createRequestWithAssignedLabeler(20L)))
+                .isInstanceOfSatisfying(BusinessException.class,
+                        ex -> assertThat(ex.getCode()).isEqualTo(400104));
+    }
+
+    @Test
+    void rejectsAssignedLabelerWhenStrategyIsQuotaGrab() {
+        assertThatThrownBy(() -> taskLifecycleService.create(OWNER_ID, createQuotaGrabRequestWithAssignedLabeler(20L)))
                 .isInstanceOfSatisfying(BusinessException.class,
                         ex -> assertThat(ex.getCode()).isEqualTo(400104));
     }
@@ -442,6 +454,88 @@ class TaskLifecycleServiceTest {
     }
 
     @Test
+    void publishAssignedTaskWithAssignedLabelerAutoClaimsItemsAndAlignsCounts() {
+        Task task = publishableDraftTask();
+        task.setStrategy(ClaimStrategy.ASSIGNED);
+        task.setAssignedLabelerId(20L);
+        task.setQuota(99);
+        task.setClaimedCount(0);
+        when(taskMapper.selectById(TASK_ID)).thenReturn(task);
+        when(taskMapper.updateById(any(Task.class))).thenReturn(1);
+        when(publishDependencyChecker.datasetReady(TASK_ID)).thenReturn(true);
+        when(publishDependencyChecker.templateVersionExists(100L)).thenReturn(true);
+        when(publishDependencyChecker.aiReviewConfigExists(TASK_ID, 200L)).thenReturn(true);
+        when(publishDependencyChecker.rewardRuleExists(TASK_ID)).thenReturn(true);
+        when(assignedAutoAssignmentService.autoClaimAll(task, 20L)).thenReturn(3);
+
+        TaskStatusResponse response = taskLifecycleService.publish(OWNER_ID, TASK_ID);
+
+        assertThat(response.status()).isEqualTo(TaskStatus.PUBLISHED);
+        assertThat(task.getQuota()).isEqualTo(3);
+        assertThat(task.getClaimedCount()).isEqualTo(3);
+        verify(assignedAutoAssignmentService).autoClaimAll(task, 20L);
+        ArgumentCaptor<Task> taskCaptor = ArgumentCaptor.forClass(Task.class);
+        verify(taskMapper).updateById(taskCaptor.capture());
+        assertThat(taskCaptor.getValue().getQuota()).isEqualTo(3);
+        assertThat(taskCaptor.getValue().getClaimedCount()).isEqualTo(3);
+    }
+
+    @Test
+    void publishFcfsTaskWithoutAssignedLabelerDoesNotAutoClaim() {
+        Task task = publishableDraftTask();
+        task.setStrategy(ClaimStrategy.FCFS);
+        when(taskMapper.selectById(TASK_ID)).thenReturn(task);
+        when(taskMapper.updateById(any(Task.class))).thenReturn(1);
+        when(publishDependencyChecker.datasetReady(TASK_ID)).thenReturn(true);
+        when(publishDependencyChecker.templateVersionExists(100L)).thenReturn(true);
+        when(publishDependencyChecker.aiReviewConfigExists(TASK_ID, 200L)).thenReturn(true);
+        when(publishDependencyChecker.rewardRuleExists(TASK_ID)).thenReturn(true);
+
+        TaskStatusResponse response = taskLifecycleService.publish(OWNER_ID, TASK_ID);
+
+        assertThat(response.status()).isEqualTo(TaskStatus.PUBLISHED);
+        verify(assignedAutoAssignmentService, never()).autoClaimAll(any(), any());
+    }
+
+    @Test
+    void rejectsPublishingAssignedTaskWithAssignedLabelerWhenNoItemCanBeClaimed() {
+        Task task = publishableDraftTask();
+        task.setStrategy(ClaimStrategy.ASSIGNED);
+        task.setAssignedLabelerId(20L);
+        when(taskMapper.selectById(TASK_ID)).thenReturn(task);
+        when(publishDependencyChecker.datasetReady(TASK_ID)).thenReturn(true);
+        when(publishDependencyChecker.templateVersionExists(100L)).thenReturn(true);
+        when(publishDependencyChecker.aiReviewConfigExists(TASK_ID, 200L)).thenReturn(true);
+        when(publishDependencyChecker.rewardRuleExists(TASK_ID)).thenReturn(true);
+        when(assignedAutoAssignmentService.autoClaimAll(task, 20L)).thenReturn(0);
+
+        assertThatThrownBy(() -> taskLifecycleService.publish(OWNER_ID, TASK_ID))
+                .isInstanceOfSatisfying(BusinessException.class,
+                        ex -> assertThat(ex.getCode()).isEqualTo(400102));
+
+        verify(taskMapper, never()).updateById(any(Task.class));
+    }
+
+    @Test
+    void rejectsPublishingAssignedTaskWithoutAssignedLabelerWhenNoDispatchExists() {
+        Task task = publishableDraftTask();
+        task.setStrategy(ClaimStrategy.ASSIGNED);
+        when(taskMapper.selectById(TASK_ID)).thenReturn(task);
+        when(publishDependencyChecker.datasetReady(TASK_ID)).thenReturn(true);
+        when(publishDependencyChecker.templateVersionExists(100L)).thenReturn(true);
+        when(publishDependencyChecker.aiReviewConfigExists(TASK_ID, 200L)).thenReturn(true);
+        when(publishDependencyChecker.rewardRuleExists(TASK_ID)).thenReturn(true);
+        when(dispatchMapper.countByTaskId(TASK_ID)).thenReturn(0);
+
+        assertThatThrownBy(() -> taskLifecycleService.publish(OWNER_ID, TASK_ID))
+                .isInstanceOfSatisfying(BusinessException.class,
+                        ex -> assertThat(ex.getCode()).isEqualTo(400102));
+
+        verify(assignedAutoAssignmentService, never()).autoClaimAll(any(), any());
+        verify(taskMapper, never()).updateById(any(Task.class));
+    }
+
+    @Test
     void rejectsIllegalTransition() {
         Task task = draftTask();
         when(taskMapper.selectById(TASK_ID)).thenReturn(task);
@@ -557,6 +651,27 @@ class TaskLifecycleServiceTest {
                 null, null, null, null, null, null,
                 null,
                 "FCFS", null,
+                1,
+                null,
+                null,
+                assignedLabelerId
+        );
+    }
+
+    private CreateTaskRequest createQuotaGrabRequestWithAssignedLabeler(Long assignedLabelerId) {
+        return new CreateTaskRequest(
+                "Quota grab task",
+                "Description",
+                "Instruction",
+                List.of("qa"),
+                10,
+                LocalDateTime.now().plusDays(1),
+                1,
+                100L,
+                200L,
+                null, null, null, null, null, null,
+                null,
+                "QUOTA_GRAB", 5,
                 1,
                 null,
                 null,

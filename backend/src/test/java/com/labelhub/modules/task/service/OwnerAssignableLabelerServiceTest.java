@@ -6,6 +6,9 @@ import static org.mockito.Mockito.when;
 
 import com.labelhub.modules.auth.repository.UserMapper;
 import com.labelhub.modules.task.dto.AssignableLabelerResponse;
+import java.math.BigDecimal;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 
@@ -17,7 +20,10 @@ class OwnerAssignableLabelerServiceTest {
     @Test
     void listAssignableLabelersNormalizesKeywordAndPagination() {
         AssignableLabelerResponse labeler = new AssignableLabelerResponse(
-                20L, "labeler-a", "labeler@example.com", "Labeler A", "/avatar.png", true, true);
+                20L, "labeler-a", "labeler@example.com", "Labeler A", "/avatar.png", true, true,
+                12, 10, 6, 3, 1, new BigDecimal("9.00"),
+                2, LocalDate.parse("2026-06-06"), LocalDateTime.parse("2026-06-06T10:00:00"),
+                new BigDecimal("0.7500"));
         when(userMapper.countAssignableLabelers("labeler", true)).thenReturn(1L);
         when(userMapper.selectAssignableLabelers("labeler", true, 0, 100)).thenReturn(List.of(labeler));
 
@@ -27,6 +33,8 @@ class OwnerAssignableLabelerServiceTest {
         assertThat(page.pageSize()).isEqualTo(100);
         assertThat(page.total()).isEqualTo(1L);
         assertThat(page.items()).containsExactly(labeler);
+        assertThat(page.items().get(0).submittedCount()).isEqualTo(10);
+        assertThat(page.items().get(0).approvalRate()).isEqualByComparingTo("0.7500");
         verify(userMapper).countAssignableLabelers("labeler", true);
         verify(userMapper).selectAssignableLabelers("labeler", true, 0, 100);
     }

@@ -51,15 +51,25 @@ Description: Lists labeler users that an OWNER can select when creating an ASSIG
 
 Response fields:
 
-```text
-labelerId
-username
-email
-displayName
-avatarUrl
-enabled
-loginEnabled
-```
+| Field | Type | 中文注释 |
+| --- | --- | --- |
+| labelerId | Long | 标注员用户 ID |
+| username | String | 用户名 |
+| email | String | 邮箱 |
+| displayName | String | 显示名称 |
+| avatarUrl | String | 头像 URL |
+| enabled | Boolean | 账号是否启用 |
+| loginEnabled | Boolean | 是否允许登录 |
+| claimedCount | Integer | 已领取题目总数量 |
+| submittedCount | Integer | 已提交题目总数量 |
+| pendingReviewCount | Integer | 待审核题目数量 |
+| approvedCount | Integer | 已通过题目数量 |
+| rejectedCount | Integer | 已驳回题目数量 |
+| totalReward | BigDecimal | 累计获得奖励 |
+| todaySubmittedCount | Integer | 今日提交题目数量 |
+| lastSubmitDate | LocalDate | 最近提交日期 |
+| statsUpdatedAt | LocalDateTime | 统计数据更新时间 |
+| approvalRate | BigDecimal | 通过率，按 `approvedCount / (approvedCount + rejectedCount)` 计算，保留 4 位小数；暂无已审核题目时为 `0.0000` |
 
 Rules:
 

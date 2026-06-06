@@ -53,9 +53,23 @@ public interface UserMapper extends BaseMapper<UserEntity> {
                    u.display_name AS displayName,
                    u.avatar_url AS avatarUrl,
                    u.enabled AS enabled,
-                   u.login_enabled AS loginEnabled
+                   u.login_enabled AS loginEnabled,
+                   COALESCE(lcs.claimed_count, 0) AS claimedCount,
+                   COALESCE(lcs.submitted_count, 0) AS submittedCount,
+                   COALESCE(lcs.pending_review_count, 0) AS pendingReviewCount,
+                   COALESCE(lcs.approved_count, 0) AS approvedCount,
+                   COALESCE(lcs.rejected_count, 0) AS rejectedCount,
+                   COALESCE(lcs.total_reward, 0.00) AS totalReward,
+                   COALESCE(lcs.today_submitted_count, 0) AS todaySubmittedCount,
+                   lcs.last_submit_date AS lastSubmitDate,
+                   lcs.updated_at AS statsUpdatedAt,
+                   CASE
+                     WHEN COALESCE(lcs.approved_count, 0) + COALESCE(lcs.rejected_count, 0) = 0 THEN 0.0000
+                     ELSE ROUND(COALESCE(lcs.approved_count, 0) * 1.0 / (COALESCE(lcs.approved_count, 0) + COALESCE(lcs.rejected_count, 0)), 4)
+                   END AS approvalRate
             FROM users u
             JOIN user_roles ur ON ur.user_id = u.id AND ur.role_code = 'LABELER'
+            LEFT JOIN labeler_contribution_stats lcs ON lcs.labeler_id = u.id
             WHERE u.user_type &lt;&gt; 'SYSTEM'
             <if test="enabledOnly">
               AND u.enabled = TRUE

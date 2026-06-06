@@ -211,7 +211,17 @@ AI never sets submission status to APPROVED.
 Description: Compatibility read endpoint for the same persisted AI review result.
 Permission: REVIEWER / ADMIN / task OWNER.
 
-Response fields are the same as `GET /api/v1/submissions/{submissionId}/ai-review`.
+Response fields are the same as `GET /api/v1/submissions/{submissionId}/ai-review`, plus:
+```Plaintext
+rawPrompt              AI review config promptTemplate for the submission task.
+answerJson             Labeler submitted answer JSON for this submission.
+```
+
+Notes:
+```Plaintext
+rawPrompt is the user-provided prompt template, not the fully assembled system prompt.
+answerJson is returned instead of rawResponse to avoid conflicting with ai_review_results.raw_response, which stores the LLM provider raw response internally.
+```
 
 ## POST /api/v1/submissions/{submissionId}/ai-review/retry
 

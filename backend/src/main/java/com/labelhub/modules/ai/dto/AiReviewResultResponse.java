@@ -24,7 +24,35 @@ public record AiReviewResultResponse(Long id,
                                      String errorCode,
                                      String errorMessage,
                                      LocalDateTime createdAt,
-                                     LocalDateTime updatedAt) {
+                                     LocalDateTime updatedAt,
+                                     String rawPrompt,
+                                     String answerJson) {
+    public AiReviewResultResponse(Long id,
+                                  Long submissionId,
+                                  Long agentRunId,
+                                  Long providerId,
+                                  String modelName,
+                                  AiReviewStatus status,
+                                  String decision,
+                                  String averageScore,
+                                  Map<String, Object> dimensionScores,
+                                  String riskFlags,
+                                  String suggestion,
+                                  String confidence,
+                                  String flowAction,
+                                  String promptMode,
+                                  Boolean degraded,
+                                  List<String> limitations,
+                                  String errorCode,
+                                  String errorMessage,
+                                  LocalDateTime createdAt,
+                                  LocalDateTime updatedAt) {
+        this(id, submissionId, agentRunId, providerId, modelName, status, decision, averageScore,
+                dimensionScores, riskFlags, suggestion, confidence, flowAction,
+                promptMode, degraded, limitations, errorCode, errorMessage, createdAt, updatedAt,
+                null, null);
+    }
+
     public AiReviewResultResponse(Long id, Long submissionId, Long agentRunId, Long providerId,
                                   String modelName, AiReviewStatus status, String decision,
                                   String averageScore, Map<String, Object> dimensionScores,
@@ -33,6 +61,7 @@ public record AiReviewResultResponse(Long id,
                                   LocalDateTime createdAt, LocalDateTime updatedAt) {
         this(id, submissionId, agentRunId, providerId, modelName, status, decision, averageScore,
                 dimensionScores, riskFlags, suggestion, confidence, flowAction,
-                null, false, List.of(), errorCode, errorMessage, createdAt, updatedAt);
+                null, false, List.of(), errorCode, errorMessage, createdAt, updatedAt,
+                null, null);
     }
 }

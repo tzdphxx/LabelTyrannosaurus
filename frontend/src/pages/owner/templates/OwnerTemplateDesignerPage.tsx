@@ -170,7 +170,7 @@ export function OwnerTemplateDesignerPage() {
   }
 
   return (
-    <main className={['owner-page', styles.page].join(' ')}>
+    <main className={styles.page}>
       {contextHolder}
       <ContentShell className={styles.headerShell}>
         <PageHeader

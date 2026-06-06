@@ -12,6 +12,21 @@
 
 .headerShell {
   flex: 0 0 auto;
+  border-color: rgba(46, 190, 170, 0.28);
+  background:
+    linear-gradient(120deg, rgba(35, 190, 168, 0.13), rgba(255, 210, 86, 0.13)),
+    rgba(255, 255, 255, 0.95);
+  box-shadow: 0 14px 34px rgba(22, 94, 86, 0.08);
+}
+
+.headerShell :global(.page-header__title.ant-typography) {
+  color: #153f3b;
+}
+
+.headerShell :global(.ant-btn-primary) {
+  border-color: #10a894;
+  background: #10a894;
+  box-shadow: 0 12px 24px rgba(16, 168, 148, 0.18);
 }
 
 .workspace {
@@ -107,6 +122,14 @@
 .field :global(.ant-picker:hover),
 .field :global(.ant-select-selector:hover) {
   border-color: #2fb8a6;
+}
+
+.field :global(.ant-input:focus),
+.field :global(.ant-input-number-focused),
+.field :global(.ant-picker-focused),
+.field :global(.ant-select-focused .ant-select-selector) {
+  border-color: #10a894;
+  box-shadow: 0 0 0 3px rgba(16, 168, 148, 0.12);
 }
 
 .uploadDragger :global(.ant-upload-drag-container) {
@@ -367,6 +390,16 @@
   to {
     opacity: 1;
     transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .formCard {
+    animation: none;
+  }
+
+  .assigneeItem {
+    transition: none;
   }
 }
 

@@ -25,6 +25,7 @@ import {
   ownerTaskStatusColors,
   ownerTaskStatusLabels,
 } from '../../utils/ownerTasks'
+import styles from './OwnerPages.module.css'
 
 const statusOptions = [
   { label: '全部状态', value: 'all' },
@@ -116,10 +117,10 @@ export function OwnerTasksPage() {
   }
 
   return (
-    <main className="owner-page">
+    <main className={styles.page}>
       {contextHolder}
       {modalContextHolder}
-      <ContentShell>
+      <ContentShell className={styles.hero}>
         <PageHeader
           title="任务管理"
           description="查看 Owner 负责的任务、进度和当前状态。支持搜索、状态筛选、编辑入口和状态操作。"
@@ -138,18 +139,18 @@ export function OwnerTasksPage() {
 
       {error ? <Alert message={error} showIcon type="error" /> : null}
 
-      <Card className="owner-table-card">
-        <div className="owner-toolbar">
+      <Card className={styles.tableCard}>
+        <div className={styles.toolbar}>
           <Input.Search
             allowClear
-            className="owner-toolbar__search"
+            className={styles.toolbarSearch}
             placeholder="搜索任务标题、描述或标签"
             value={filters.keyword}
             onChange={(event) => reloadWithFilter({ keyword: event.target.value })}
             onSearch={(keyword) => reloadWithFilter({ keyword })}
           />
           <Select
-            className="owner-toolbar__select"
+            className={styles.toolbarSelect}
             options={statusOptions}
             value={filters.status}
             onChange={(status) => reloadWithFilter({ status })}
@@ -157,6 +158,7 @@ export function OwnerTasksPage() {
         </div>
 
         <Table<OwnerTask>
+          className={styles.dataTable}
           columns={[
             {
               title: '任务',
@@ -188,7 +190,7 @@ export function OwnerTasksPage() {
               title: '当前进度',
               width: 230,
               render: (_, task) => (
-                <Space className="owner-table-progress" direction="vertical" size={4}>
+                <Space className={styles.tableProgress} direction="vertical" size={4}>
                   <Progress percent={getProgressPercent(task.progress)} size="small" />
                   <Typography.Text type="secondary">
                     {formatCount(task.progress.completedItems)} / {formatCount(task.progress.totalItems)} 完成，待审核{' '}

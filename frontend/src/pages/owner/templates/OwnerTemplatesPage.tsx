@@ -6,6 +6,7 @@ import { ContentShell } from '../../../components/page/ContentShell'
 import { PageHeader } from '../../../components/page/PageHeader'
 import { ownerTemplateService } from '../../../services'
 import type { TemplateSummary } from '../../../types/template'
+import styles from '../OwnerPages.module.css'
 
 const templateStatusMeta = {
   draft: { label: '草稿', color: 'warning' },
@@ -59,8 +60,8 @@ export function OwnerTemplatesPage() {
   }
 
   return (
-    <main className="owner-page">
-      <ContentShell>
+    <main className={styles.page}>
+      <ContentShell className={styles.hero}>
         <PageHeader
           title="模板管理"
           description="管理 Owner 可用的动态表单模板，P0 支持进入 Designer、编辑 schema 并预览运行态表单。"
@@ -72,8 +73,9 @@ export function OwnerTemplatesPage() {
         />
       </ContentShell>
 
-      <Card className="owner-table-card">
+      <Card className={styles.tableCard}>
         <Table<TemplateSummary>
+          className={styles.dataTable}
           columns={[
             {
               title: '模板',
@@ -109,7 +111,7 @@ export function OwnerTemplatesPage() {
               title: '操作',
               width: 190,
               render: (_, template) => (
-                <Space>
+                <Space className={styles.templateActions}>
                   <Button
                     icon={<EditOutlined />}
                     onClick={() => navigate(`/app/owner/templates/${template.id}/designer`)}

@@ -263,6 +263,9 @@ select {
 }
 
 .top-nav.ant-layout-header {
+  position: sticky;
+  top: 0;
+  z-index: 100;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -314,10 +317,16 @@ select {
 }
 
 .app-shell__body {
+  align-items: flex-start;
   min-height: calc(100vh - 64px);
 }
 
 .side-nav.ant-layout-sider {
+  position: sticky;
+  top: 64px;
+  z-index: 90;
+  height: calc(100dvh - 64px);
+  overflow: hidden;
   border-right: 1px solid #d9e1e8;
   background: #ffffff;
 }
@@ -329,11 +338,14 @@ select {
 }
 
 .side-nav__menu.ant-menu {
+  height: calc(100% - 52px);
+  overflow-y: auto;
   border-inline-end: 0;
 }
 
 .app-shell__content {
   min-width: 0;
+  flex: 1;
   padding: 24px;
 }
 
@@ -1085,6 +1097,7 @@ select {
   }
 
   .app-shell__body {
+    align-items: stretch;
     min-height: calc(100vh - 88px);
   }
 

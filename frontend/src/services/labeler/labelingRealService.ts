@@ -10,6 +10,7 @@ import type {
   LabelerAssignmentStats,
   LabelerAssignmentStatus,
   LabelerAssignmentSummary,
+  LabelerClaimOptions,
   LabelerSubmissionStats,
   LabelerTaskListQuery,
   LabelerTaskStatus,
@@ -34,6 +35,8 @@ interface TaskSnapshotResponse {
   status?: string
   strategy?: string
   claimedCount?: number
+  maxClaimsPerLabeler?: number
+  max_claims_per_labeler?: number
   overlapCount?: number
   publishedAt?: string
   endedAt?: string | null
@@ -69,6 +72,8 @@ interface MarketTaskResponse {
   status?: string
   availableCount?: number
   currentUserClaimedCount?: number
+  maxClaimsPerLabeler?: number
+  max_claims_per_labeler?: number
   itemsPreview?: MarketItemPreviewResponse[]
   rewardSummary?: {
     amount?: number
@@ -572,6 +577,10 @@ function getMarketTaskSnapshot(response: MarketTaskResponse): TaskSnapshotRespon
   }
 }
 
+function getMaxClaimsPerLabeler(response: MarketTaskResponse, task: TaskSnapshotResponse) {
+  return response.maxClaimsPerLabeler ?? response.max_claims_per_labeler ?? task.maxClaimsPerLabeler ?? task.max_claims_per_labeler
+}
+
 function mapMarketStatus(response: MarketTaskResponse): LabelerTaskStatus {
   const availableCount = response.availableCount ?? 0
 
@@ -675,6 +684,10 @@ function buildTaskSummaryFromMarket(response: MarketTaskResponse): LabelerTaskSu
     rewardText: buildRewardText(response.rewardSummary),
     totalQuestions,
     completedQuestions: Math.max(totalQuestions - availableCount, 0),
+    strategy: task.strategy,
+    availableCount,
+    currentUserClaimedCount: response.currentUserClaimedCount,
+    maxClaimsPerLabeler: getMaxClaimsPerLabeler(response, task),
   }
 }
 
@@ -699,6 +712,7 @@ function buildTaskSummaryFromClaimedTask(response: ClaimedTaskResponse): Labeler
     rewardText: '-',
     totalQuestions: response.myClaimedCount ?? items.length,
     completedQuestions,
+    strategy: task.strategy,
     claimedAt: items[0]?.updatedAt ? formatDateTime(items[0].updatedAt) : undefined,
     submittedAt: completedQuestions > 0 ? formatDateTime(items[0]?.updatedAt) : undefined,
     reviewedAt: formatDateTime(task.updatedAt),
@@ -1031,8 +1045,11 @@ export const realLabelingService = {
     }
   },
 
-  async claimTask(taskId: string): Promise<LabelerTaskSummary | null> {
-    const claimResponse = await request.post<AssignmentClaimResponse>(`/v1/tasks/${taskId}/items/claim`)
+  async claimTask(taskId: string, options: LabelerClaimOptions): Promise<LabelerTaskSummary | null> {
+    const claimResponse = await request.post<AssignmentClaimResponse, LabelerClaimOptions>(
+      `/v1/tasks/${taskId}/items/claim`,
+      options,
+    )
     const assignmentId = String(claimResponse.assignmentId)
     const question = claimResponse.schemaJson ? buildQuestion(claimResponse, taskId) : undefined
     const task = claimedTaskCache[taskId]?.task

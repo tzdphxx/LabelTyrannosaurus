@@ -33,7 +33,14 @@ public class AiReviewLlmTaskHandler implements LlmTaskHandler {
     @Override
     public boolean isCompleted(LlmTaskQueueMessage message) {
         AiReviewResult result = aiReviewResultMapper.selectBySubmissionId(message.submissionId());
-        return result != null && FINAL_STATUSES.contains(result.getStatus());
+        if (result == null) {
+            return false;
+        }
+        if (FINAL_STATUSES.contains(result.getStatus())) {
+            return true;
+        }
+        return (result.getStatus() == AiReviewStatus.FAILED || result.getStatus() == AiReviewStatus.RATE_LIMITED)
+                && result.getNextRetryAt() == null;
     }
 
     @Override

@@ -223,18 +223,19 @@ public class AiAutoReviewService {
         } catch (Exception ex) {
             transactionTemplate.executeWithoutResult(s ->
                     agentRunService.fail(prepared.agentRun().getId(), AgentRunStatus.FAILED, ex.getMessage()));
-            throw ex;
+            outcome = AttemptOutcome.failure(errorCodeForException(ex), safeErrorMessage(ex), null);
         }
+        AttemptOutcome finalOutcome = outcome;
 
         // 事务 2: 保存结果 + flowAction + 状态流转
         AiReviewResultResponse response = transactionTemplate.execute(status -> {
             AiReviewResult result;
-            if (outcome.success()) {
-                result = outcome.result();
-                agentRunService.complete(prepared.agentRun().getId(), toJson(outcome.responseSnapshot()));
+            if (finalOutcome.success()) {
+                result = finalOutcome.result();
+                agentRunService.complete(prepared.agentRun().getId(), toJson(finalOutcome.responseSnapshot()));
             } else {
                 result = handleFailure(prepared.submission(), prepared.config(),
-                        prepared.agentRun(), prepared.prompt().promptSnapshot(), outcome, 0);
+                        prepared.agentRun(), prepared.prompt().promptSnapshot(), finalOutcome, 0);
             }
             if (result.getStatus() == AiReviewStatus.SUCCESS && flowDecisionService != null) {
                 AiFlowAction flowAction = flowDecisionService.decide(result, prepared.config());
@@ -243,7 +244,7 @@ public class AiAutoReviewService {
             aiReviewResultMapper.insert(result);
             applyFlowAction(prepared.submission(), result, prepared.config());
             appendAudit(result);
-            recordAiReviewMetric(prepared.config(), result, outcome.responseSnapshot());
+            recordAiReviewMetric(prepared.config(), result, finalOutcome.responseSnapshot());
             return toResponse(result);
         });
 
@@ -379,26 +380,33 @@ public class AiAutoReviewService {
         List<LlmMessage> votingMessages = java.util.stream.Stream.concat(
                 java.util.stream.Stream.of(new LlmMessage("system", systemPrompt)),
                 prompt.messages().stream()).toList();
-        List<java.util.concurrent.CompletableFuture<Map<String, Object>>> futures = voteModels.stream()
+        List<java.util.concurrent.CompletableFuture<LlmBranchOutcome>> futures = voteModels.stream()
                 .map(vm -> java.util.concurrent.CompletableFuture.supplyAsync(() -> {
-                    LlmGatewayResponse r = callLlm(submission.getTaskId(), vm.providerId(), vm.modelName(),
-                            votingMessages);
-                    if (r.status() == LlmGatewayStatus.SUCCESS && r.structuredJson() != null) {
-                        return new java.util.LinkedHashMap<>(r.structuredJson());
-                    }
-                    return Map.<String, Object>of("decision", "UNCERTAIN", "confidence", 0.0);
+                    return callLlmBranch(submission.getTaskId(), vm.providerId(), vm.modelName(), votingMessages);
                 }))
                 .toList();
 
         java.util.concurrent.CompletableFuture.allOf(futures.toArray(new java.util.concurrent.CompletableFuture[0]))
                 .join();
 
-        List<Map<String, Object>> results = futures.stream()
+        List<LlmBranchOutcome> branchOutcomes = futures.stream()
                 .map(f -> {
-                    try { return f.get(); } catch (Exception e) { return Map.<String, Object>of(); }
+                    try {
+                        return f.get();
+                    } catch (Exception e) {
+                        return LlmBranchOutcome.failure(errorCodeForException(e), safeErrorMessage(e), null);
+                    }
                 })
-                .filter(r -> !r.isEmpty())
                 .toList();
+        List<Map<String, Object>> results = branchOutcomes.stream()
+                .filter(LlmBranchOutcome::success)
+                .map(LlmBranchOutcome::structuredJson)
+                .toList();
+        if (results.isEmpty()) {
+            LlmBranchOutcome failure = firstFailure(branchOutcomes);
+            agentRunService.fail(agentRun.getId(), AgentRunStatus.FAILED, failure.errorMessage());
+            return AttemptOutcome.failure(failure.errorCode(), failure.errorMessage(), failure.rawResponse());
+        }
 
         int minAgreement = config.getVoteMinAgreement() != null ? config.getVoteMinAgreement() : 2;
         VoteAggregator.AggregatedResult aggregated = voteAggregator.aggregate(results, minAgreement);
@@ -433,22 +441,25 @@ public class AiAutoReviewService {
         Map<String, List<Map<String, Object>>> dimResults = new LinkedHashMap<>();
 
         // 所有维度并行调用
-        List<java.util.concurrent.CompletableFuture<Void>> futures = new ArrayList<>();
+        List<java.util.concurrent.CompletableFuture<DimensionBranchOutcome>> futures = new ArrayList<>();
         for (Map.Entry<String, List<VoteModel>> entry : dimReviewers.entrySet()) {
             String dim = entry.getKey();
             List<VoteModel> reviewers = entry.getValue();
-            dimResults.put(dim, java.util.Collections.synchronizedList(new ArrayList<>()));
+            dimResults.put(dim, new ArrayList<>());
 
             for (VoteModel vm : reviewers) {
-                futures.add(java.util.concurrent.CompletableFuture.runAsync(() -> {
-                    List<LlmMessage> dimMessages = java.util.stream.Stream.concat(
-                            java.util.stream.Stream.of(new LlmMessage("system",
-                                    systemPrompt + "\n当前专注维度: " + dim)),
-                            prompt.messages().stream()).toList();
-                    LlmGatewayResponse r = callLlm(submission.getTaskId(), vm.providerId(), vm.modelName(),
-                            dimMessages);
-                    if (r.status() == LlmGatewayStatus.SUCCESS && r.structuredJson() != null) {
-                        dimResults.get(dim).add(new LinkedHashMap<>(r.structuredJson()));
+                futures.add(java.util.concurrent.CompletableFuture.supplyAsync(() -> {
+                    try {
+                        List<LlmMessage> dimMessages = java.util.stream.Stream.concat(
+                                java.util.stream.Stream.of(new LlmMessage("system",
+                                        systemPrompt + "\n当前专注维度: " + dim)),
+                                prompt.messages().stream()).toList();
+                        LlmBranchOutcome outcome = callLlmBranch(submission.getTaskId(), vm.providerId(), vm.modelName(),
+                                dimMessages);
+                        return new DimensionBranchOutcome(dim, outcome);
+                    } catch (Exception ex) {
+                        return new DimensionBranchOutcome(dim,
+                                LlmBranchOutcome.failure(errorCodeForException(ex), safeErrorMessage(ex), null));
                     }
                 }));
             }
@@ -456,6 +467,30 @@ public class AiAutoReviewService {
 
         java.util.concurrent.CompletableFuture.allOf(futures.toArray(new java.util.concurrent.CompletableFuture[0]))
                 .join();
+        List<LlmBranchOutcome> branchOutcomes = futures.stream()
+                .map(f -> {
+                    try {
+                        return f.get();
+                    } catch (Exception e) {
+                        return new DimensionBranchOutcome(null,
+                                LlmBranchOutcome.failure(errorCodeForException(e), safeErrorMessage(e), null));
+                    }
+                })
+                .peek(outcome -> {
+                    if (outcome.dimension() != null && outcome.branchOutcome().success()) {
+                        dimResults.get(outcome.dimension())
+                                .add(new LinkedHashMap<>(outcome.branchOutcome().structuredJson()));
+                    }
+                })
+                .map(DimensionBranchOutcome::branchOutcome)
+                .toList();
+
+        boolean hasStructuredResult = dimResults.values().stream().anyMatch(results -> !results.isEmpty());
+        if (!hasStructuredResult && !branchOutcomes.isEmpty()) {
+            LlmBranchOutcome failure = firstFailure(branchOutcomes);
+            agentRunService.fail(agentRun.getId(), AgentRunStatus.FAILED, failure.errorMessage());
+            return AttemptOutcome.failure(failure.errorCode(), failure.errorMessage(), failure.rawResponse());
+        }
 
         int minAgreement = config.getVoteMinAgreement() != null ? config.getVoteMinAgreement() : 1;
         BigDecimal passThreshold = config.getPassThreshold();
@@ -483,6 +518,35 @@ public class AiAutoReviewService {
     }
 
     // ── 辅助方法 ──
+
+    private LlmBranchOutcome callLlmBranch(Long taskId, Long providerId, String modelName,
+                                           List<LlmMessage> messages) {
+        try {
+            LlmGatewayResponse response = callLlm(taskId, providerId, modelName, messages);
+            if (response.status() == LlmGatewayStatus.SUCCESS && response.structuredJson() != null) {
+                return LlmBranchOutcome.success(new LinkedHashMap<>(response.structuredJson()));
+            }
+            if (response.status() == LlmGatewayStatus.SUCCESS) {
+                return LlmBranchOutcome.failure("INVALID_AI_REVIEW_OUTPUT",
+                        "AI 审核结果缺少结构化输出", response.rawResponse());
+            }
+            String errorCode = response.errorCode() != null && !response.errorCode().isBlank()
+                    ? response.errorCode() : response.status().name();
+            String errorMessage = response.errorMessage() != null && !response.errorMessage().isBlank()
+                    ? response.errorMessage() : response.status().name();
+            return LlmBranchOutcome.failure(errorCode, errorMessage, response.rawResponse());
+        } catch (Exception ex) {
+            return LlmBranchOutcome.failure(errorCodeForException(ex), safeErrorMessage(ex), null);
+        }
+    }
+
+    private LlmBranchOutcome firstFailure(List<LlmBranchOutcome> outcomes) {
+        return outcomes.stream()
+                .filter(outcome -> !outcome.success())
+                .findFirst()
+                .orElse(LlmBranchOutcome.failure("AI_REVIEW_EXECUTION_FAILED",
+                        "AI review execution failed", null));
+    }
 
     private LlmGatewayResponse callLlm(Long taskId, Long providerId, String modelName,
                                         List<LlmMessage> messages) {
@@ -571,6 +635,7 @@ public class AiAutoReviewService {
         result.setRiskFlags(toJson(aggregated.get("riskFlags")));
         result.setSuggestion(stringValue(aggregated.get("suggestion"), ""));
         result.setRawResponse(toJson(aggregated));
+        applyPromptMetadata(result, prompt, aggregated.get("limitations"));
         Object confidence = aggregated.get("confidence");
         if (confidence instanceof BigDecimal d) {
             result.setConfidence(d);
@@ -584,6 +649,22 @@ public class AiAutoReviewService {
         }
         return result;
     }
+
+    private record LlmBranchOutcome(boolean success, Map<String, Object> structuredJson,
+                                    String errorCode, String errorMessage, String rawResponse) {
+        static LlmBranchOutcome success(Map<String, Object> structuredJson) {
+            return new LlmBranchOutcome(true, structuredJson, null, null, null);
+        }
+
+        static LlmBranchOutcome failure(String errorCode, String errorMessage, String rawResponse) {
+            String safeCode = errorCode == null || errorCode.isBlank() ? "AI_REVIEW_EXECUTION_FAILED" : errorCode;
+            String safeMessage = errorMessage == null || errorMessage.isBlank()
+                    ? "AI review execution failed" : errorMessage;
+            return new LlmBranchOutcome(false, null, safeCode, safeMessage, rawResponse);
+        }
+    }
+
+    private record DimensionBranchOutcome(String dimension, LlmBranchOutcome branchOutcome) {}
 
     private record VoteModel(Long providerId, String modelName) {}
 
@@ -699,6 +780,14 @@ public class AiAutoReviewService {
                                          AgentRun agentRun, String promptSnapshot,
                                          AttemptOutcome outcome, int currentRetryCount) {
         int maxRetry = config.getMaxRetry() != null ? config.getMaxRetry() : DEFAULT_MAX_RETRY;
+        if (isTerminalFailure(outcome.errorCode())) {
+            AiReviewResult result = baseResult(submission, config, agentRun.getId(), promptSnapshot);
+            result.setStatus(AiReviewStatus.FAILED);
+            result.setRawResponse(outcome.rawResponse());
+            result.setErrorCode(outcome.errorCode());
+            result.setErrorMessage(outcome.errorMessage());
+            return result;
+        }
         boolean retryable = retryStrategy.isRetryable(outcome.errorCode());
         boolean hasRetries = retryStrategy.hasRetriesRemaining(currentRetryCount, maxRetry);
 
@@ -720,6 +809,38 @@ public class AiAutoReviewService {
 
         return manualRequired(submission, config, agentRun.getId(), promptSnapshot,
                 outcome.rawResponse(), outcome.errorCode(), outcome.errorMessage());
+    }
+
+    private boolean isTerminalFailure(String errorCode) {
+        return "LLM_KEY_SECRET_NOT_CONFIGURED".equals(errorCode)
+                || "LLM_KEY_DECRYPT_FAILED".equals(errorCode)
+                || "AI_REVIEW_EXECUTION_FAILED".equals(errorCode);
+    }
+
+    private String errorCodeForException(Exception ex) {
+        Throwable root = rootCause(ex);
+        if (root instanceof BusinessException businessException) {
+            return switch (businessException.getCode()) {
+                case 500301 -> "LLM_KEY_SECRET_NOT_CONFIGURED";
+                case 500302 -> "LLM_KEY_DECRYPT_FAILED";
+                default -> "AI_REVIEW_EXECUTION_FAILED";
+            };
+        }
+        return "AI_REVIEW_EXECUTION_FAILED";
+    }
+
+    private String safeErrorMessage(Exception ex) {
+        Throwable root = rootCause(ex);
+        String message = root.getMessage();
+        return message == null || message.isBlank() ? "AI review execution failed" : message;
+    }
+
+    private Throwable rootCause(Throwable throwable) {
+        Throwable current = throwable;
+        while (current.getCause() != null && current.getCause() != current) {
+            current = current.getCause();
+        }
+        return current;
     }
 
     private void handleRetryFailure(Long submissionId, AiReviewConfig config,
@@ -769,11 +890,15 @@ public class AiAutoReviewService {
         result.setDimensionScores(toJson(structuredJson.getOrDefault("dimensionScores", Map.of())));
         result.setRiskFlags(toJson(structuredJson.getOrDefault("riskFlags", List.of())));
         result.setSuggestion(asNullableText(structuredJson.get("suggestion")));
-        result.setPromptMode(prompt.promptMode().name());
-        result.setDegraded(prompt.degraded());
-        result.setLimitations(toJson(mergeLimitations(prompt.limitations(), structuredJson.get("limitations"))));
+        applyPromptMetadata(result, prompt, structuredJson.get("limitations"));
         result.setRawResponse(response.rawResponse());
         return result;
+    }
+
+    private void applyPromptMetadata(AiReviewResult result, MediaPromptResult prompt, Object responseLimitations) {
+        result.setPromptMode(prompt.promptMode().name());
+        result.setDegraded(prompt.degraded());
+        result.setLimitations(toJson(mergeLimitations(prompt.limitations(), responseLimitations)));
     }
 
     private AiReviewResult manualRequired(Submission submission, AiReviewConfig config, Long agentRunId,

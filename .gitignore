@@ -78,6 +78,9 @@ memory.md
 .codex-cache/
 codex-cache/
 codex-*.log
+
+# Archived discarded local changes
+bak/
 .opencode/
 .opencode-cache/
 opencode-cache/
@@ -89,3 +92,4 @@ claude-cache/
 .claude.local.json
 CLAUDE.local.md
 nul
+*.ps1

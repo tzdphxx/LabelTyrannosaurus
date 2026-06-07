@@ -45,8 +45,14 @@ public class SubmissionUserResolver {
             return Collections.emptyMap();
         }
         List<UserEntity> users = userMapper.selectBatchIds(userIds);
-        return users.stream()
-                .collect(Collectors.toMap(UserEntity::getId, UserEntity::getDisplayName));
+        // displayName 可空（本系统大量用户未设置），Collectors.toMap 遇到 null value 会抛 NPE，
+        // 因此手动构建并回退到 username（非空唯一），保证每个 creator 都有可显示名称。
+        Map<Long, String> names = new HashMap<>();
+        for (UserEntity user : users) {
+            String displayName = user.getDisplayName() != null ? user.getDisplayName() : user.getUsername();
+            names.put(user.getId(), displayName);
+        }
+        return names;
     }
 
     /**

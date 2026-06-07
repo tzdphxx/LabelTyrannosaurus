@@ -9,6 +9,8 @@ import com.labelhub.modules.auth.domain.UserRoleEntity;
 import com.labelhub.modules.auth.domain.UserType;
 import com.labelhub.modules.auth.repository.UserMapper;
 import com.labelhub.modules.auth.repository.UserRoleMapper;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -25,6 +27,10 @@ import java.util.Set;
 @Service
 public class AdminUserService {
 
+    private static final Logger log = LoggerFactory.getLogger(AdminUserService.class);
+    private static final List<RoleCode> ROLE_DISPLAY_PRIORITY = List.of(
+            RoleCode.ADMIN, RoleCode.OWNER, RoleCode.REVIEWER, RoleCode.LABELER);
+
     private final UserMapper userMapper;
     private final UserRoleMapper userRoleMapper;
     private final PasswordEncoder passwordEncoder;
@@ -40,7 +46,7 @@ public class AdminUserService {
      */
     public List<AdminUserResponse> listUsers(boolean includeSystem) {
         return userMapper.selectAdminUsers(includeSystem).stream()
-                .map(user -> toResponse(user, userRoleMapper.selectRoleCodesByUserId(user.getId())))
+                .map(user -> toResponse(user, userRoleMapper.selectRoleCodesByUserId(user.getId()), false))
                 .toList();
     }
 
@@ -100,7 +106,7 @@ public class AdminUserService {
         user.setTokenVersion(1);
         userMapper.insert(user);
         userRoleMapper.insert(new UserRoleEntity(user.getId(), RoleCode.REVIEWER));
-        return toResponse(user, Set.of(RoleCode.REVIEWER));
+        return toResponse(user, Set.of(RoleCode.REVIEWER), true);
     }
 
     private UserEntity requireUser(Long userId) {
@@ -111,7 +117,7 @@ public class AdminUserService {
         return user;
     }
 
-    private AdminUserResponse toResponse(UserEntity user, Set<RoleCode> roles) {
+    private AdminUserResponse toResponse(UserEntity user, Set<RoleCode> roles, boolean strict) {
         return new AdminUserResponse(
                 user.getId(),
                 user.getUsername(),
@@ -120,8 +126,23 @@ public class AdminUserService {
                 user.getEnabled(),
                 user.getLoginEnabled(),
                 user.getTokenVersion(),
-                requireSingleRole(roles)
+                strict ? requireSingleRole(roles) : displayRole(user, roles)
         );
+    }
+
+    private RoleCode displayRole(UserEntity user, Set<RoleCode> roles) {
+        if (roles != null && roles.size() == 1) {
+            return roles.iterator().next();
+        }
+        log.warn("User {} has invalid role data: {}", user.getId(), roles);
+        if (roles != null) {
+            for (RoleCode role : ROLE_DISPLAY_PRIORITY) {
+                if (roles.contains(role)) {
+                    return role;
+                }
+            }
+        }
+        return RoleCode.LABELER;
     }
 
     private RoleCode requireSingleRole(Set<RoleCode> roles) {

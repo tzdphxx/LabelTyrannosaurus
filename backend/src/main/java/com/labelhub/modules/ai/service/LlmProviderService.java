@@ -76,6 +76,14 @@ public class LlmProviderService {
                 .toList();
     }
 
+    public List<LlmProviderResponse> listAllForAdmin() {
+        return llmProviderMapper.selectList(new QueryWrapper<LlmProvider>()
+                        .orderByDesc("updated_at"))
+                .stream()
+                .map(this::toResponse)
+                .toList();
+    }
+
     @Transactional
     public LlmProviderResponse create(Long actorId, CreateLlmProviderRequest request) {
         LlmProvider provider = new LlmProvider();
@@ -192,12 +200,12 @@ public class LlmProviderService {
 
     private String normalizeStructuredOutputMode(String mode) {
         if (!hasText(mode)) {
-            return "NONE";
+            return null;
         }
         String normalized = mode.trim().toUpperCase(java.util.Locale.ROOT);
         return switch (normalized) {
             case "JSON_OBJECT", "JSON_SCHEMA", "NONE" -> normalized;
-            default -> "NONE";
+            default -> null;
         };
     }
 

@@ -2,6 +2,7 @@ package com.labelhub.modules.export;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.labelhub.common.audit.AuditAppender;
+import com.labelhub.common.audit.AuditCommand;
 import com.labelhub.common.exception.BusinessException;
 import com.labelhub.common.security.CurrentUser;
 import com.labelhub.common.security.CurrentUserContext;
@@ -9,6 +10,7 @@ import com.labelhub.common.security.RoleCode;
 import com.labelhub.infrastructure.async.AsyncJobExecutor;
 import com.labelhub.infrastructure.async.AsyncJobService;
 import com.labelhub.infrastructure.storage.ObjectStorageService;
+import com.labelhub.common.web.TraceIdProvider;
 import com.labelhub.modules.export.domain.ExportFormat;
 import com.labelhub.modules.export.domain.ExportJobEntity;
 import com.labelhub.modules.export.dto.CreateExportRequest;
@@ -56,6 +58,7 @@ class ExportJobServiceTest {
     private final ObjectStorageService objectStorageService = mock(ObjectStorageService.class);
     private final SubmissionExportQueryService submissionExportQueryService = mock(SubmissionExportQueryService.class);
     private final AuditAppender auditAppender = mock(AuditAppender.class);
+    private final TraceIdProvider traceIdProvider = mock(TraceIdProvider.class);
     private final ObjectMapper objectMapper = new ObjectMapper();
     private final ExportJobService exportJobService = new ExportJobService(
             taskMapper,
@@ -66,6 +69,7 @@ class ExportJobServiceTest {
             new AsyncJobService(new AsyncJobExecutor(Runnable::run, List.of())),
             submissionExportQueryService,
             auditAppender,
+            traceIdProvider,
             objectMapper,
             List.of(new JsonlExportFileWriter(objectMapper))
     );
@@ -78,6 +82,7 @@ class ExportJobServiceTest {
     @Test
     void createExportRunsAsyncJobAndStoresResultFile() throws Exception {
         CurrentUserContext.set(new CurrentUser(10L, "owner", "owner@example.com", Set.of(RoleCode.OWNER), 1));
+        when(traceIdProvider.currentTraceId()).thenReturn("trace-1");
         stubTask(10L);
         stubJobAndFileIds();
         when(submissionExportQueryService.queryExportableGoldenSubmissions(eq(1L), any(ExportPageRequest.class)))
@@ -117,6 +122,7 @@ class ExportJobServiceTest {
     @Test
     void failedUploadMarksJobFailedWithTraceId() {
         CurrentUserContext.set(new CurrentUser(10L, "owner", "owner@example.com", Set.of(RoleCode.OWNER), 1));
+        when(traceIdProvider.currentTraceId()).thenReturn("trace-3");
         stubTask(10L);
         stubJobAndFileIds();
         when(submissionExportQueryService.queryExportableGoldenSubmissions(eq(1L), any(ExportPageRequest.class)))
@@ -134,6 +140,25 @@ class ExportJobServiceTest {
         assertThat(finalJob.getTraceId()).isEqualTo("trace-3");
         assertThat(finalJob.getErrorMessage()).contains("storage unavailable");
         verify(objectFileMapper, never()).insert(any(ObjectFileEntity.class));
+    }
+
+    @Test
+    void createExportUsesGeneratedTraceIdWhenRequestHeaderIsMissing() {
+        CurrentUserContext.set(new CurrentUser(10L, "owner", "owner@example.com", Set.of(RoleCode.OWNER), 1));
+        when(traceIdProvider.currentTraceId()).thenReturn("generated-trace");
+        stubTask(10L);
+        stubJobAndFileIds();
+        when(submissionExportQueryService.queryExportableGoldenSubmissions(eq(1L), any(ExportPageRequest.class)))
+                .thenReturn(List.of());
+
+        var response = exportJobService.createExport(1L, request());
+
+        assertThat(response.traceId()).isEqualTo("generated-trace");
+        ArgumentCaptor<AuditCommand> auditCaptor = ArgumentCaptor.forClass(AuditCommand.class);
+        verify(auditAppender, org.mockito.Mockito.atLeastOnce()).append(auditCaptor.capture());
+        assertThat(auditCaptor.getAllValues())
+                .extracting(AuditCommand::traceId)
+                .contains("generated-trace");
     }
 
     private CreateExportRequest request() {

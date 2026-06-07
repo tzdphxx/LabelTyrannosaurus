@@ -310,6 +310,19 @@ public class LlmTriggerService {
         executeRun(run, task, run.getProviderId(), run.getModelName());
     }
 
+    public void failQueuedTrigger(Long triggerRunId, String errorCode, String errorMessage) {
+        if (llmTriggerRunMapper == null) {
+            return;
+        }
+        LlmTriggerRun run = llmTriggerRunMapper.selectById(triggerRunId);
+        if (run == null || isTerminalStatus(run.getStatus())) {
+            return;
+        }
+        agentRunService.fail(run.getAgentRunId(), AgentRunStatus.FAILED, safeErrorMessage(errorMessage));
+        fillFailure(run, LlmTaskStatus.FAILED.name(), errorCode, safeErrorMessage(errorMessage));
+        recordLlmTriggerMetric(run);
+    }
+
     private void executeRun(LlmTriggerRun run, Task task, Long providerId, String modelName) {
         if (!rateLimiter.acquire(run.getTaskId(), run.getCreatedBy(), providerId)) {
             agentRunService.fail(run.getAgentRunId(), AgentRunStatus.RATE_LIMITED, "LLM trigger rate limited");
@@ -334,14 +347,23 @@ public class LlmTriggerService {
                 run.getComponentId(), parseStringList(run.getTargetFieldsJson()),
                 run.getInputSnapshotJson());
 
-        LlmGatewayResponse gatewayResponse = llmGateway.review(new LlmGatewayRequest(
-                providerId,
-                modelName,
-                List.of(
-                        new LlmMessage("system", systemPrompt),
-                        new LlmMessage("user", run.getInputSnapshotJson())
-                )
-        ));
+        LlmGatewayResponse gatewayResponse;
+        try {
+            gatewayResponse = llmGateway.review(new LlmGatewayRequest(
+                    providerId,
+                    modelName,
+                    List.of(
+                            new LlmMessage("system", systemPrompt),
+                            new LlmMessage("user", run.getInputSnapshotJson())
+                    )
+            ));
+        } catch (Exception ex) {
+            agentRunService.fail(run.getAgentRunId(), AgentRunStatus.FAILED, safeErrorMessage(ex.getMessage()));
+            fillFailure(run, LlmTaskStatus.FAILED.name(), "LLM_EXCEPTION", safeErrorMessage(ex.getMessage()));
+            recordLlmTriggerMetric(run);
+            appendAudit(run.getCreatedBy(), task.getId(), null, run);
+            return;
+        }
         if (gatewayResponse.status() == LlmGatewayStatus.SUCCESS) {
             Map<String, Object> normalizedResult = normalizeStructuredPatch(
                     gatewayResponse.structuredJson(), run.getComponentId(), parseStringList(run.getTargetFieldsJson()));
@@ -565,6 +587,17 @@ public class LlmTriggerService {
         if (llmTriggerRunMapper != null) {
             llmTriggerRunMapper.updateById(run);
         }
+    }
+
+    private boolean isTerminalStatus(String status) {
+        return LlmTaskStatus.SUCCESS.name().equals(status)
+                || LlmTaskStatus.FAILED.name().equals(status)
+                || LlmTaskStatus.RATE_LIMITED.name().equals(status)
+                || LlmTaskStatus.MANUAL_REQUIRED.name().equals(status);
+    }
+
+    private String safeErrorMessage(String message) {
+        return message == null || message.isBlank() ? "LLM task failed" : message;
     }
 
     private void recordLlmTriggerMetric(LlmTriggerRun run) {

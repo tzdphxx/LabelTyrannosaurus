@@ -48,7 +48,7 @@ public class TaskLifecycleService {
     private static final int TASK_STATUS_NOT_ALLOWED = 400101;
     private static final int TASK_PUBLISH_REQUIREMENT_MISSING = 400102;
     private static final int INVALID_STRATEGY = 400103;
-    private static final int INVALID_ASSIGNED_LABELER = 400104;
+    private static final int TASK_AI_CONFIG_REQUIRED = 400104;
     private static final String TASK_BIZ_TYPE = "TASK";
     private static final String USER_ACTOR_TYPE = "USER";
 
@@ -157,6 +157,7 @@ public class TaskLifecycleService {
      * 3. 替换标签、记录审计快照
      */
     private CreatedTaskResult createTask(Long ownerId, CreateTaskRequest request) {
+        validateAiReviewRequired(request);
         Task task = new Task();
         task.setOwnerId(ownerId);
         task.setTitle(request.title());
@@ -180,14 +181,22 @@ public class TaskLifecycleService {
         taskMapper.insert(task);
 
         if (hasAiInlineConfig(request)) {
+            String aiFlowPolicy = request.aiFlowPolicy();
+            // 内联场景下用单一的 aiFlowPolicy 派生两个直接处置开关，避免前端配出
+            // “策略允许过审但开关未打开”的矛盾态；policy 为空时 save() 会默认 MANUAL_FIRST。
+            boolean allowDirectApprove = "AI_PASS_ONLY".equals(aiFlowPolicy)
+                    || "AI_PASS_AND_REJECT".equals(aiFlowPolicy);
+            boolean allowDirectReject = "AI_REJECT_ONLY".equals(aiFlowPolicy)
+                    || "AI_PASS_AND_REJECT".equals(aiFlowPolicy);
             AiReviewConfigRequest aiRequest = new AiReviewConfigRequest(
                     request.aiProviderId(),
                     request.aiModelName(),
                     request.aiPrompt(),
                     request.aiScoringDimensions(),
-                    request.aiPassThreshold(),
-                    request.aiManualReviewThreshold(),
-                    null, null, null, null, null, null, null,
+                    // 阈值可默认：缺省 pass=80 / manual=60，满足 manual<=pass 约束，避免下游 NPE
+                    request.aiPassThreshold() != null ? request.aiPassThreshold() : new java.math.BigDecimal("80.00"),
+                    request.aiManualReviewThreshold() != null ? request.aiManualReviewThreshold() : new java.math.BigDecimal("60.00"),
+                    null, aiFlowPolicy, allowDirectApprove, allowDirectReject, null, null, null,
                     request.aiReviewStrategy());
             var aiConfig = aiReviewConfigService.save(ownerId, task.getId(), aiRequest);
             task.setAiReviewConfigId(aiConfig.id());
@@ -236,6 +245,11 @@ public class TaskLifecycleService {
             task.setRewardVisible(rewardRule.rewardVisible());
         }
         taskMapper.updateById(task);
+        // 仅当传入 aiFlowPolicy 且该草稿已有 AI 配置时，更新其流转策略；无配置则忽略（no-op）。
+        if (request.aiFlowPolicy() != null
+                && aiReviewConfigService.findResponseByTaskId(taskId) != null) {
+            aiReviewConfigService.updateFlowPolicy(ownerId, taskId, request.aiFlowPolicy());
+        }
         taskTagMapper.delete(new QueryWrapper<TaskTag>().eq("task_id", taskId));
         replaceTags(taskId, request.tags());
         appendAudit(task, ownerId, "TASK_UPDATED", beforeJson, snapshot(task));
@@ -471,9 +485,24 @@ public class TaskLifecycleService {
     private boolean hasAiInlineConfig(CreateTaskRequest request) {
         return request.aiProviderId() != null
                 && request.aiPrompt() != null && !request.aiPrompt().isBlank()
-                && request.aiScoringDimensions() != null && !request.aiScoringDimensions().isEmpty()
-                && request.aiPassThreshold() != null
-                && request.aiManualReviewThreshold() != null;
+                && request.aiScoringDimensions() != null && !request.aiScoringDimensions().isEmpty();
+    }
+
+    /**
+     * B1：创建任务必须内联配置 AI 审核。aiReviewConfigId 只能在任务已创建后绑定到该任务，
+     * 新任务创建阶段没有可合法引用的同任务配置，因此不能作为创建校验的通过条件。
+     * 阈值/策略等可默认字段不在此强制。
+     */
+    private void validateAiReviewRequired(CreateTaskRequest request) {
+        if (request.aiProviderId() == null) {
+            throw new BusinessException(TASK_AI_CONFIG_REQUIRED, "创建任务必须配置 AI 审核：缺少 AI 模型供应商");
+        }
+        if (request.aiPrompt() == null || request.aiPrompt().isBlank()) {
+            throw new BusinessException(TASK_AI_CONFIG_REQUIRED, "创建任务必须配置 AI 审核：缺少 AI 审核 Prompt");
+        }
+        if (request.aiScoringDimensions() == null || request.aiScoringDimensions().isEmpty()) {
+            throw new BusinessException(TASK_AI_CONFIG_REQUIRED, "创建任务必须配置 AI 审核：缺少 AI 评分维度");
+        }
     }
 
     private TaskTag toTaskTag(Long taskId, String tagName) {
@@ -499,13 +528,13 @@ public class TaskLifecycleService {
             return null;
         }
         if (strategy != ClaimStrategy.ASSIGNED) {
-            throw new BusinessException(INVALID_ASSIGNED_LABELER,
+            throw new BusinessException(TASK_AI_CONFIG_REQUIRED,
                     "assignedLabelerId is only valid for ASSIGNED strategy");
         }
         Set<RoleCode> roles = userRoleMapper != null
                 ? userRoleMapper.selectRoleCodesByUserId(assignedLabelerId) : Set.of();
         if (roles == null || !roles.contains(RoleCode.LABELER)) {
-            throw new BusinessException(INVALID_ASSIGNED_LABELER,
+            throw new BusinessException(TASK_AI_CONFIG_REQUIRED,
                     "Assigned user must be a labeler");
         }
         return assignedLabelerId;

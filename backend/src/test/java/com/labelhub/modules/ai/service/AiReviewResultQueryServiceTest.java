@@ -1,16 +1,15 @@
 package com.labelhub.modules.ai.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.Mockito.verify;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.when;
 
+import com.labelhub.common.exception.BusinessException;
 import com.labelhub.common.security.CurrentUser;
 import com.labelhub.common.security.RoleCode;
-import com.labelhub.modules.ai.domain.AiReviewConfig;
 import com.labelhub.modules.ai.domain.AiReviewResult;
 import com.labelhub.modules.ai.domain.AiReviewStatus;
 import com.labelhub.modules.ai.dto.AiReviewResultResponse;
-import com.labelhub.modules.ai.mapper.AiReviewConfigMapper;
 import com.labelhub.modules.ai.mapper.AiReviewResultMapper;
 import com.labelhub.modules.submission.domain.Submission;
 import com.labelhub.modules.submission.mapper.SubmissionMapper;
@@ -19,86 +18,56 @@ import com.labelhub.modules.task.mapper.TaskMapper;
 import java.util.Map;
 import java.util.Set;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.Mock;
-import org.mockito.junit.jupiter.MockitoExtension;
 
-@ExtendWith(MockitoExtension.class)
 class AiReviewResultQueryServiceTest {
 
-    private static final Long SUBMISSION_ID = 70L;
-    private static final Long TASK_ID = 10L;
-    private static final Long CONFIG_ID = 20L;
-    private static final String PROMPT_TEMPLATE = "请评估标注结果的准确性和完整性";
-    private static final String ANSWER_JSON = "{\"category\":\"电子产品\",\"confidence\":\"high\"}";
-
-    @Mock
-    private AiReviewResultMapper aiReviewResultMapper;
-    @Mock
-    private SubmissionMapper submissionMapper;
-    @Mock
-    private TaskMapper taskMapper;
-    @Mock
-    private AiReviewConfigMapper aiReviewConfigMapper;
-    @Mock
-    private AiAutoReviewService aiAutoReviewService;
+    private final AiReviewResultMapper aiReviewResultMapper = org.mockito.Mockito.mock(AiReviewResultMapper.class);
+    private final SubmissionMapper submissionMapper = org.mockito.Mockito.mock(SubmissionMapper.class);
+    private final TaskMapper taskMapper = org.mockito.Mockito.mock(TaskMapper.class);
+    private final AiAutoReviewService aiAutoReviewService = org.mockito.Mockito.mock(AiAutoReviewService.class);
+    private final AiReviewResultQueryService service = new AiReviewResultQueryService(
+            aiReviewResultMapper, submissionMapper, taskMapper, aiAutoReviewService);
 
     @Test
-    void returnsPromptTemplateAndLabelerAnswerForSubmissionResult() {
-        AiReviewResultQueryService service = new AiReviewResultQueryService(
-                aiReviewResultMapper, submissionMapper, taskMapper, aiReviewConfigMapper, aiAutoReviewService);
-        CurrentUser owner = new CurrentUser(1L, "owner", "owner@labelhub.dev", Set.of(RoleCode.OWNER), 1);
-        Submission submission = submission();
-        Task task = task();
-        AiReviewConfig config = config();
-        AiReviewResult result = result();
-        AiReviewResultResponse expected = new AiReviewResultResponse(
-                100L, SUBMISSION_ID, 80L, 30L, "qwen-plus", AiReviewStatus.SUCCESS, "PASS",
-                "92.50", Map.of("accuracy", 95), "[]", "Looks good", null, null,
-                null, false, java.util.List.of(), null, null, null, null,
-                PROMPT_TEMPLATE, ANSWER_JSON);
+    void reviewerCannotReadAiReviewForUnassignedSubmission() {
+        Submission submission = submission(10L, 20L, 99L);
+        when(submissionMapper.selectById(10L)).thenReturn(submission);
+        when(aiReviewResultMapper.selectBySubmissionId(10L)).thenReturn(result(10L));
 
-        when(submissionMapper.selectById(SUBMISSION_ID)).thenReturn(submission);
-        when(aiReviewResultMapper.selectBySubmissionId(SUBMISSION_ID)).thenReturn(result);
-        when(taskMapper.selectById(TASK_ID)).thenReturn(task);
-        when(aiReviewConfigMapper.selectById(CONFIG_ID)).thenReturn(config);
-        when(aiAutoReviewService.toResponse(result, PROMPT_TEMPLATE, ANSWER_JSON)).thenReturn(expected);
-
-        AiReviewResultResponse response = service.getForSubmission(owner, SUBMISSION_ID);
-
-        assertThat(response.rawPrompt()).isEqualTo(PROMPT_TEMPLATE);
-        assertThat(response.answerJson()).isEqualTo(ANSWER_JSON);
-        verify(aiAutoReviewService).toResponse(result, PROMPT_TEMPLATE, ANSWER_JSON);
+        assertThatThrownBy(() -> service.getForSubmission(reviewer(30L), 10L))
+                .isInstanceOfSatisfying(BusinessException.class,
+                        ex -> assertThat(ex.getCode()).isEqualTo(403703));
     }
 
-    private Submission submission() {
+    @Test
+    void assignedReviewerCanReadAiReviewResult() {
+        Submission submission = submission(10L, 20L, 30L);
+        AiReviewResult result = result(10L);
+        AiReviewResultResponse response = new AiReviewResultResponse(
+                1L, 10L, 2L, 3L, "qwen", AiReviewStatus.SUCCESS, "PASS",
+                "90.00", Map.of(), "[]", "ok", null, null, null, null, null, null);
+        when(submissionMapper.selectById(10L)).thenReturn(submission);
+        when(aiReviewResultMapper.selectBySubmissionId(10L)).thenReturn(result);
+        when(aiAutoReviewService.toResponse(result)).thenReturn(response);
+
+        assertThat(service.getForSubmission(reviewer(30L), 10L)).isEqualTo(response);
+    }
+
+    private CurrentUser reviewer(Long userId) {
+        return new CurrentUser(userId, "reviewer", "r@test.dev", Set.of(RoleCode.REVIEWER), 1);
+    }
+
+    private Submission submission(Long id, Long taskId, Long assignedReviewerId) {
         Submission submission = new Submission();
-        submission.setId(SUBMISSION_ID);
-        submission.setTaskId(TASK_ID);
-        submission.setAnswerJson(ANSWER_JSON);
+        submission.setId(id);
+        submission.setTaskId(taskId);
+        submission.setAssignedReviewerId(assignedReviewerId);
         return submission;
     }
 
-    private Task task() {
-        Task task = new Task();
-        task.setId(TASK_ID);
-        task.setOwnerId(1L);
-        task.setAiReviewConfigId(CONFIG_ID);
-        return task;
-    }
-
-    private AiReviewConfig config() {
-        AiReviewConfig config = new AiReviewConfig();
-        config.setId(CONFIG_ID);
-        config.setTaskId(TASK_ID);
-        config.setPromptTemplate(PROMPT_TEMPLATE);
-        return config;
-    }
-
-    private AiReviewResult result() {
+    private AiReviewResult result(Long submissionId) {
         AiReviewResult result = new AiReviewResult();
-        result.setId(100L);
-        result.setSubmissionId(SUBMISSION_ID);
+        result.setSubmissionId(submissionId);
         result.setStatus(AiReviewStatus.SUCCESS);
         return result;
     }

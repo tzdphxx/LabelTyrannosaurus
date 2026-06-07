@@ -52,7 +52,11 @@ public class AiReviewResultQueryService {
 
     private void requireAccess(CurrentUser currentUser, Task task) {
         Set<RoleCode> roles = currentUser.roles();
-        if (roles.contains(RoleCode.ADMIN) || roles.contains(RoleCode.REVIEWER)) {
+        if (roles.contains(RoleCode.ADMIN)) {
+            return;
+        }
+        if (roles.contains(RoleCode.REVIEWER)
+                && currentUser.userId().equals(submission.getAssignedReviewerId())) {
             return;
         }
         if (roles.contains(RoleCode.OWNER)) {

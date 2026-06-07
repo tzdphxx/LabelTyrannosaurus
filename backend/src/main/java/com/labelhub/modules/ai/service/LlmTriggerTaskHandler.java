@@ -42,4 +42,10 @@ public class LlmTriggerTaskHandler implements LlmTaskHandler {
     public void handle(LlmTaskQueueMessage message) {
         llmTriggerService.executeQueuedTrigger(message.triggerRunId());
     }
+
+    @Override
+    public void onFailure(LlmTaskQueueMessage message, Exception exception) {
+        llmTriggerService.failQueuedTrigger(message.triggerRunId(),
+                "LLM_TASK_EXCEPTION", exception.getMessage());
+    }
 }

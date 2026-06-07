@@ -143,6 +143,42 @@ class LlmProviderServiceTest {
     }
 
     @Test
+    void adminListsAllProvidersWithoutFilteringDisabledOnes() {
+        LlmProvider enabled = persistedProvider();
+        LlmProvider disabled = persistedProvider();
+        disabled.setId(11L);
+        disabled.setProviderCode("openai");
+        disabled.setProviderName("OpenAI");
+        disabled.setEnabled(false);
+        when(llmProviderMapper.selectList(any(Wrapper.class))).thenReturn(List.of(enabled, disabled));
+
+        List<LlmProviderResponse> providers = service.listAllForAdmin();
+
+        assertThat(providers).extracting(LlmProviderResponse::enabled).containsExactly(true, false);
+        assertThat(providers.get(0).apiKeyConfigured()).isTrue();
+        assertThat(providers.get(0).customHeaders()).containsEntry("Authorization", "******");
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<Wrapper<LlmProvider>> wrapperCaptor = ArgumentCaptor.forClass(Wrapper.class);
+        verify(llmProviderMapper).selectList(wrapperCaptor.capture());
+        assertThat(wrapperCaptor.getValue().getSqlSegment()).doesNotContain("enabled");
+    }
+
+    @Test
+    void storesNullStructuredOutputModeWhenRequestValueIsInvalid() {
+        when(llmProviderMapper.insert(any(LlmProvider.class))).thenAnswer(invocation -> {
+            LlmProvider provider = invocation.getArgument(0);
+            provider.setId(PROVIDER_ID);
+            return 1;
+        });
+
+        service.create(ACTOR_ID, createRequestWithStructuredMode("json_mode"));
+
+        ArgumentCaptor<LlmProvider> providerCaptor = ArgumentCaptor.forClass(LlmProvider.class);
+        verify(llmProviderMapper).insert(providerCaptor.capture());
+        assertThat(providerCaptor.getValue().getStructuredOutputMode()).isNull();
+    }
+
+    @Test
     void testsProviderWithStoredApiKeyAndRequestOverrides() {
         LlmProvider provider = persistedProvider();
         when(llmProviderMapper.selectById(PROVIDER_ID)).thenReturn(provider);
@@ -184,6 +220,25 @@ class LlmProviderServiceTest {
                 true,
                 8,
                 "qwen-vl-plus"
+        );
+    }
+
+    private CreateLlmProviderRequest createRequestWithStructuredMode(String structuredOutputMode) {
+        return new CreateLlmProviderRequest(
+                "dashscope",
+                "DashScope",
+                "https://dashscope.aliyuncs.com/compatible-mode/v1",
+                "sk-test",
+                "qwen-plus",
+                Map.of("Authorization", "Bearer custom"),
+                60,
+                30,
+                10,
+                true,
+                true,
+                8,
+                "qwen-vl-plus",
+                structuredOutputMode
         );
     }
 

@@ -52,4 +52,10 @@ public class AiReviewLlmTaskHandler implements LlmTaskHandler {
         }
         aiAutoReviewService.retryReview(message.submissionId());
     }
+
+    @Override
+    public void onFailure(LlmTaskQueueMessage message, Exception exception) {
+        aiAutoReviewService.failQueuedReview(message.submissionId(), message.agentRunId(),
+                "LLM_TASK_EXCEPTION", exception.getMessage());
+    }
 }

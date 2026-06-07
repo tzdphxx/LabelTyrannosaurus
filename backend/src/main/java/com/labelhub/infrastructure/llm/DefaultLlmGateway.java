@@ -6,6 +6,8 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.labelhub.modules.ai.service.LlmProviderRuntimeConfig;
 import com.labelhub.modules.ai.service.LlmProviderService;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import org.slf4j.Logger;
@@ -22,6 +24,7 @@ public class DefaultLlmGateway implements LlmGateway {
     private static final String PROVIDER_ERROR = "PROVIDER_ERROR";
     private static final String TIMEOUT = "TIMEOUT";
     private static final String INVALID_JSON = "INVALID_JSON";
+    private static final int MAX_RETRY_CONTENT_LENGTH = 2000;
     private static final TypeReference<Map<String, Object>> OBJECT_MAP = new TypeReference<>() {
     };
 
@@ -65,9 +68,32 @@ public class DefaultLlmGateway implements LlmGateway {
         if (!adapterResponse.success()) {
             return recordAndReturn(request.providerId(), config.modelName(),
                     failure(LlmGatewayStatus.PROVIDER_ERROR, adapterResponse.rawResponse(), null, adapterResponse.latencyMs(),
-                            PROVIDER_ERROR, adapterResponse.errorMessage()));
+                    PROVIDER_ERROR, adapterResponse.errorMessage()));
         }
-        return recordAndReturn(request.providerId(), config.modelName(), extractStructuredJson(adapterResponse));
+        LlmGatewayResponse parsed = extractStructuredJson(adapterResponse);
+        if (parsed.status() == LlmGatewayStatus.INVALID_JSON && parsed.contentText() != null) {
+            OpenAiCompatibleResponse retryResponse = adapter.chat(config,
+                    messagesWithJsonRepairInstruction(request.messages(), parsed),
+                    null, null, responseFormat);
+            if (retryResponse.timedOut()) {
+                return recordAndReturn(request.providerId(), config.modelName(),
+                        failure(LlmGatewayStatus.TIMEOUT, retryResponse.rawResponse(), null, retryResponse.latencyMs(),
+                                TIMEOUT, retryResponse.errorMessage()));
+            }
+            if (!retryResponse.success()) {
+                return recordAndReturn(request.providerId(), config.modelName(),
+                        failure(LlmGatewayStatus.PROVIDER_ERROR, retryResponse.rawResponse(), null, retryResponse.latencyMs(),
+                                PROVIDER_ERROR, retryResponse.errorMessage()));
+            }
+            LlmGatewayResponse retryParsed = extractStructuredJson(retryResponse);
+            if (retryParsed.status() == LlmGatewayStatus.INVALID_JSON && retryParsed.contentText() != null) {
+                return recordAndReturn(request.providerId(), config.modelName(),
+                        new LlmGatewayResponse(LlmGatewayStatus.SUCCESS, retryParsed.rawResponse(),
+                                retryParsed.contentText(), Map.of(), retryParsed.latencyMs(), null, null));
+            }
+            return recordAndReturn(request.providerId(), config.modelName(), retryParsed);
+        }
+        return recordAndReturn(request.providerId(), config.modelName(), parsed);
     }
 
     private LlmProviderRuntimeConfig selectRuntimeModel(LlmProviderRuntimeConfig config, java.util.List<LlmMessage> messages) {
@@ -133,6 +159,34 @@ public class DefaultLlmGateway implements LlmGateway {
             return failure(LlmGatewayStatus.INVALID_JSON, adapterResponse.rawResponse(), contentText,
                     adapterResponse.latencyMs(), INVALID_JSON, "Model output is not valid JSON");
         }
+    }
+
+    private List<LlmMessage> messagesWithJsonRepairInstruction(List<LlmMessage> messages, LlmGatewayResponse parseFailure) {
+        List<LlmMessage> retryMessages = new ArrayList<>(messages == null ? List.of() : messages);
+        retryMessages.add(new LlmMessage("user", jsonRepairInstruction(parseFailure)));
+        return retryMessages;
+    }
+
+    private String jsonRepairInstruction(LlmGatewayResponse parseFailure) {
+        return """
+                上一次模型输出无法解析为合法 JSON。
+                解析错误：%s
+                上一次输出：
+                %s
+
+                请重新生成结果。要求：
+                1. 只返回一个合法 JSON 对象。
+                2. 不要 Markdown 代码块。
+                3. 不要解释文字。
+                4. 字段名、字段类型必须符合本轮任务要求。"""
+                .formatted(parseFailure.errorMessage(), truncate(parseFailure.contentText(), MAX_RETRY_CONTENT_LENGTH));
+    }
+
+    private String truncate(String value, int maxLength) {
+        if (value == null || value.length() <= maxLength) {
+            return value;
+        }
+        return value.substring(0, maxLength);
     }
 
     private String extractContentText(String rawResponse) {

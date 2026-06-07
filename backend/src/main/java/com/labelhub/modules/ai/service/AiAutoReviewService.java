@@ -312,7 +312,7 @@ public class AiAutoReviewService {
     private AttemptOutcome executeAttempt(Submission submission, AiReviewConfig config,
                                           AgentRun agentRun, MediaPromptResult prompt, Task task) {
         if ("SUPERVISOR".equals(config.getAgentMode())) {
-            return executeSupervisor(submission, config, agentRun, prompt.promptSnapshot());
+            return executeSupervisor(submission, config, agentRun, prompt);
         }
         String systemPrompt = buildReviewSystemPrompt(config, task, List.of());
         ReviewStrategy strategy = resolveReviewStrategy(config);
@@ -320,7 +320,7 @@ public class AiAutoReviewService {
             case LIGHTWEIGHT -> executeDirect(submission, config, agentRun, prompt, systemPrompt);
             case PARALLEL_VOTE -> executeParallelVote(submission, config, agentRun, prompt, systemPrompt);
             case DEEP_DIMENSION -> executeDeepDimension(submission, config, agentRun, prompt, systemPrompt);
-            case AGENT_DEBATE -> executeAgentDebate(submission, config, agentRun, prompt.promptSnapshot());
+            case AGENT_DEBATE -> executeAgentDebate(submission, config, agentRun, prompt);
         };
     }
 
@@ -512,9 +512,9 @@ public class AiAutoReviewService {
     // ── AGENT_DEBATE ──
 
     private AttemptOutcome executeAgentDebate(Submission submission, AiReviewConfig config,
-                                               AgentRun agentRun, String promptSnapshot) {
+                                               AgentRun agentRun, MediaPromptResult prompt) {
         // 暂用 SupervisorAgent 承载辩论模式, 后续可扩展为多 Agent 辩论
-        return executeSupervisor(submission, config, agentRun, promptSnapshot);
+        return executeSupervisor(submission, config, agentRun, prompt);
     }
 
     // ── 辅助方法 ──
@@ -538,6 +538,39 @@ public class AiAutoReviewService {
         } catch (Exception ex) {
             return LlmBranchOutcome.failure(errorCodeForException(ex), safeErrorMessage(ex), null);
         }
+    }
+
+    public void failQueuedReview(Long submissionId, Long agentRunId, String errorCode, String errorMessage) {
+        transactionTemplate.executeWithoutResult(status -> {
+            AiReviewResult existing = aiReviewResultMapper.selectBySubmissionId(submissionId);
+            if (existing != null) {
+                return;
+            }
+            Submission submission = loadSubmission(submissionId);
+            Task task = taskMapper.selectById(submission.getTaskId());
+            AiReviewConfig config = task != null && task.getAiReviewConfigId() != null
+                    ? aiReviewConfigMapper.selectById(task.getAiReviewConfigId()) : null;
+            if (agentRunId != null) {
+                agentRunService.fail(agentRunId, AgentRunStatus.FAILED, safeFailureMessage(errorMessage));
+            }
+            AiReviewResult result = new AiReviewResult();
+            result.setSubmissionId(submissionId);
+            result.setEffectiveRunId(agentRunId);
+            if (config != null) {
+                result.setProviderId(config.getProviderId());
+                result.setModelName(config.getModelName());
+                result.setPromptSnapshot(config.getPromptTemplate());
+            }
+            result.setStatus(AiReviewStatus.FAILED);
+            result.setRetryCount(0);
+            result.setErrorCode(errorCode);
+            result.setErrorMessage(safeFailureMessage(errorMessage));
+            result.setCreatedAt(LocalDateTime.now());
+            result.setUpdatedAt(LocalDateTime.now());
+            aiReviewResultMapper.insert(result);
+            moveSubmissionToPendingFinal(submission);
+            recordAiReviewMetric(config, result, null);
+        });
     }
 
     private LlmBranchOutcome firstFailure(List<LlmBranchOutcome> outcomes) {
@@ -707,7 +740,8 @@ public class AiAutoReviewService {
     }
 
     private AttemptOutcome executeSupervisor(Submission submission, AiReviewConfig config,
-                                             AgentRun agentRun, String promptSnapshot) {
+                                             AgentRun agentRun, MediaPromptResult prompt) {
+        String promptSnapshot = prompt.promptSnapshot();
         if (!rateLimiter.acquire(submission.getTaskId(), config.getProviderId())) {
             agentRunService.fail(agentRun.getId(), AgentRunStatus.RATE_LIMITED, "AI review rate limited");
             return AttemptOutcome.failure("RATE_LIMITED", "AI 审核触发过于频繁，请稍后重试", null);
@@ -721,7 +755,7 @@ public class AiAutoReviewService {
                 submission.getId(),
                 submission.getTaskId(),
                 buildSupervisorSystemPrompt(config),
-                promptSnapshot,
+                supervisorUserPrompt(prompt),
                 supervisorAgent.getToolRegistry().getToolDefinitions(enabledTools),
                 new com.labelhub.modules.ai.tool.ToolContext(
                         submission.getId(), submission.getTaskId(), submission.getDatasetItemId(),
@@ -763,6 +797,34 @@ public class AiAutoReviewService {
                 + "Scoring dimensions: " + config.getScoringDimensionsJson() + ". "
                 + "Pass threshold: " + config.getPassThreshold() + ". "
                 + "Manual review threshold: " + config.getManualReviewThreshold() + ".";
+    }
+
+    /**
+     * 从 MediaPromptResult 的消息列表中提取干净的用户文本作为 Supervisor 的 userPrompt。
+     * 此前误用 promptSnapshot（审计快照串）导致多重嵌套转义 JSON，模型无法产出结构化结论。
+     * 这里只取用户消息的纯文本（content 或 contentParts 中的 TextPart），与其他策略走 messages() 的方式一致。
+     */
+    private String supervisorUserPrompt(MediaPromptResult prompt) {
+        StringBuilder sb = new StringBuilder();
+        for (LlmMessage message : prompt.messages()) {
+            if (!"user".equals(message.role())) {
+                continue;
+            }
+            if (message.content() != null && !message.content().isBlank()) {
+                sb.append(message.content());
+            }
+            if (message.contentParts() != null) {
+                for (LlmMessage.ContentPart part : message.contentParts()) {
+                    if (part instanceof LlmMessage.TextPart textPart && textPart.text() != null) {
+                        if (sb.length() > 0) {
+                            sb.append('\n');
+                        }
+                        sb.append(textPart.text());
+                    }
+                }
+            }
+        }
+        return sb.length() > 0 ? sb.toString() : prompt.promptSnapshot();
     }
 
     private List<String> parseEnabledTools(String json) {
@@ -880,7 +942,7 @@ public class AiAutoReviewService {
         result.setStatus(AiReviewStatus.SUCCESS);
         result.setDecision(String.valueOf(structuredJson.get("decision")));
         result.setAverageScore(asBigDecimal(structuredJson.get("averageScore")));
-        BigDecimal confidence = asBigDecimal(structuredJson.get("confidence"));
+        BigDecimal confidence = asConfidence(structuredJson.get("confidence"));
         if (prompt.degraded() && confidence != null) {
             BigDecimal penalty = config.getDegradationPenalty() != null
                     ? config.getDegradationPenalty() : new BigDecimal("0.20");
@@ -1261,7 +1323,37 @@ public class AiAutoReviewService {
         if (value instanceof Number number) {
             return BigDecimal.valueOf(number.doubleValue());
         }
-        return new BigDecimal(String.valueOf(value));
+        // 模型偶尔把数值字段返回为非数字字符串（如视觉模型回 "high"）。
+        // 此处容错返回 null，由流转决策层按缺失值安全转人工，避免整次审核崩溃丢失 rawResponse。
+        try {
+            return new BigDecimal(String.valueOf(value).trim());
+        } catch (NumberFormatException ex) {
+            return null;
+        }
+    }
+
+    /**
+     * 解析置信度（0-1）。数字按原样取；非数字时按 high/medium/low（含中文高/中/低）语义映射，
+     * 既避免崩溃又保留视觉模型直接过审能力；无法识别时返回 null（由决策层转人工）。
+     */
+    private BigDecimal asConfidence(Object value) {
+        if (value == null) {
+            return null;
+        }
+        if (value instanceof Number number) {
+            return BigDecimal.valueOf(number.doubleValue());
+        }
+        String text = String.valueOf(value).trim();
+        try {
+            return new BigDecimal(text);
+        } catch (NumberFormatException ignored) {
+            return switch (text.toLowerCase(java.util.Locale.ROOT)) {
+                case "high", "高" -> new BigDecimal("0.9");
+                case "medium", "mid", "中" -> new BigDecimal("0.6");
+                case "low", "低" -> new BigDecimal("0.3");
+                default -> null;
+            };
+        }
     }
 
     private String asNullableText(Object value) {
@@ -1293,6 +1385,10 @@ public class AiAutoReviewService {
     private String resolveTraceId() {
         String traceId = traceIdProvider.currentTraceId();
         return traceId != null ? traceId : "retry-" + UUID.randomUUID();
+    }
+
+    private String safeFailureMessage(String message) {
+        return message == null || message.isBlank() ? "LLM task failed" : message;
     }
 
     record AttemptOutcome(boolean success, AiReviewResult result, Map<String, Object> responseSnapshot,

@@ -16,6 +16,7 @@ import com.labelhub.modules.ai.dto.LlmProviderTestResponse;
 import com.labelhub.modules.ai.dto.TestLlmProviderRequest;
 import com.labelhub.modules.ai.dto.UpdateLlmProviderRequest;
 import com.labelhub.modules.ai.service.LlmProviderService;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import org.junit.jupiter.api.AfterEach;
@@ -47,6 +48,19 @@ class AdminLlmProviderControllerTest {
 
         assertThat(response.data()).isEqualTo(serviceResponse);
         verify(llmProviderService).create(9L, request);
+    }
+
+    @Test
+    void adminCanListAllProviders() {
+        CurrentUserContext.set(admin());
+        AdminLlmProviderController controller = new AdminLlmProviderController(llmProviderService);
+        LlmProviderResponse serviceResponse = response();
+        when(llmProviderService.listAllForAdmin()).thenReturn(List.of(serviceResponse));
+
+        ApiResponse<List<LlmProviderResponse>> response = controller.list();
+
+        assertThat(response.data()).containsExactly(serviceResponse);
+        verify(llmProviderService).listAllForAdmin();
     }
 
     @Test

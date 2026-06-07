@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -124,19 +125,53 @@ class DefaultLlmGatewayTest {
     }
 
     @Test
-    void mapsNonJsonModelContentToInvalidJsonAndPreservesContent() {
+    void retriesWithParseErrorMessageWhenModelContentIsNotJson() {
         when(llmProviderService.findEnabledRuntimeConfig(PROVIDER_ID, null))
                 .thenReturn(Optional.of(config("qwen-plus")));
-        when(adapter.chat(any(), any(), any(), any(), any())).thenReturn(OpenAiCompatibleResponse.success(200,
-                "{\"choices\":[{\"message\":{\"content\":\"plain review text\"}}]}",
-                11L));
+        when(adapter.chat(any(), any(), any(), any(), any()))
+                .thenReturn(OpenAiCompatibleResponse.success(200,
+                        "{\"choices\":[{\"message\":{\"content\":\"plain review text\"}}]}",
+                        11L))
+                .thenReturn(OpenAiCompatibleResponse.success(200,
+                        "{\"choices\":[{\"message\":{\"content\":\"{\\\"decision\\\":\\\"PASS\\\"}\"}}]}",
+                        13L));
 
         LlmGatewayResponse response = gateway.review(request(PROVIDER_ID, null, "answer"));
 
-        assertThat(response.status()).isEqualTo(LlmGatewayStatus.INVALID_JSON);
-        assertThat(response.errorCode()).isEqualTo("INVALID_JSON");
-        assertThat(response.contentText()).isEqualTo("plain review text");
-        assertThat(response.rawResponse()).contains("plain review text");
+        assertThat(response.status()).isEqualTo(LlmGatewayStatus.SUCCESS);
+        assertThat(response.structuredJson()).containsEntry("decision", "PASS");
+        ArgumentCaptor<List<LlmMessage>> messagesCaptor = ArgumentCaptor.forClass(List.class);
+        verify(adapter, times(2)).chat(any(), messagesCaptor.capture(), any(), any(), any());
+        List<LlmMessage> retryMessages = messagesCaptor.getAllValues().get(1);
+        assertThat(retryMessages).hasSize(2);
+        assertThat(retryMessages.get(1).role()).isEqualTo("user");
+        assertThat(retryMessages.get(1).content())
+                .contains("无法解析为合法 JSON")
+                .contains("解析错误")
+                .contains("plain review text")
+                .contains("只返回一个合法 JSON 对象");
+    }
+
+    @Test
+    void returnsSuccessWithEmptyStructuredJsonWhenJsonRetryStillFails() {
+        when(llmProviderService.findEnabledRuntimeConfig(PROVIDER_ID, null))
+                .thenReturn(Optional.of(config("qwen-plus")));
+        when(adapter.chat(any(), any(), any(), any(), any()))
+                .thenReturn(OpenAiCompatibleResponse.success(200,
+                        "{\"choices\":[{\"message\":{\"content\":\"plain review text\"}}]}",
+                        11L))
+                .thenReturn(OpenAiCompatibleResponse.success(200,
+                        "{\"choices\":[{\"message\":{\"content\":\"still not json\"}}]}",
+                        13L));
+
+        LlmGatewayResponse response = gateway.review(request(PROVIDER_ID, null, "answer"));
+
+        assertThat(response.status()).isEqualTo(LlmGatewayStatus.SUCCESS);
+        assertThat(response.structuredJson()).isEmpty();
+        assertThat(response.errorCode()).isNull();
+        assertThat(response.errorMessage()).isNull();
+        assertThat(response.contentText()).isEqualTo("still not json");
+        verify(adapter, times(2)).chat(any(), any(), any(), any(), any());
     }
 
     @Test

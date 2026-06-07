@@ -34,7 +34,7 @@ public record UpdateLlmProviderRequest(
         @Min(0) Integer maxImageCount,
         @Schema(description = "视觉模型名；为空时视觉请求使用 defaultModel", example = "qwen-vl-plus")
         @Size(max = 100) String visionModel,
-        @Schema(description = "结构化输出模式：NONE、JSON_OBJECT、JSON_SCHEMA；未传或非法值按 NONE 处理", example = "JSON_OBJECT")
+        @Schema(description = "结构化输出模式：NONE、JSON_OBJECT、JSON_SCHEMA；未传或非法值保存为空，运行时按不强制结构化输出处理", example = "JSON_OBJECT")
         @Size(max = 20) String structuredOutputMode
 ) {
     public UpdateLlmProviderRequest(String providerCode, String providerName, String baseUrl, String apiKey,

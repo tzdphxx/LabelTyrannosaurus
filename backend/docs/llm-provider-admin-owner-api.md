@@ -11,7 +11,7 @@
 | 管理员 | 启用 LLM Provider | POST | `/api/v1/admin/llm-providers/{providerId}/enable` | 已实现 |
 | 管理员 | 停用 LLM Provider | POST | `/api/v1/admin/llm-providers/{providerId}/disable` | 已实现 |
 | 管理员 | 测试 LLM Provider | POST | `/api/v1/admin/llm-providers/{providerId}/test` | 已实现 |
-| 管理员 | 查看 LLM Provider 管理列表 | GET | `/api/v1/admin/llm-providers` | 当前未实现 |
+| 管理员 | 查看 LLM Provider 管理列表 | GET | `/api/v1/admin/llm-providers` | 已实现 |
 | 任务创建者 | 查看可选 LLM Provider / 模型 | GET | `/api/v1/llm-providers` | 已实现 |
 
 统一响应结构：
@@ -129,7 +129,7 @@
 | supportMultiImage | Boolean | 否 | - | 是否支持多图输入；未传按 `false` 处理 |
 | maxImageCount | Integer | 否 | `>= 0` | 单次请求最大图片数；未传按 `10` 处理 |
 | visionModel | String | 否 | 最大 100 | 视觉模型名 |
-| structuredOutputMode | String | 否 | 最大 20 | `NONE`、`JSON_OBJECT`、`JSON_SCHEMA`；未传或非法值按 `NONE` 处理 |
+| structuredOutputMode | String | 否 | 最大 20 | `NONE`、`JSON_OBJECT`、`JSON_SCHEMA`；未传或非法值保存为空，运行时按不强制结构化输出处理 |
 
 请求示例：
 
@@ -290,7 +290,69 @@
 
 ---
 
-## 8. 任务创建者查看可选 LLM Provider / 模型
+## 8. 管理员查看 LLM Provider 管理列表
+
+管理员后台用于展示全部 Provider 配置，包括已启用和已停用记录。
+
+**GET** `/api/v1/admin/llm-providers`
+
+权限：`ADMIN`
+
+查询参数：无。
+
+请求体：无。
+
+当前查询规则：
+
+- 返回全部 Provider，不按 `enabled` 过滤。
+- 按 `updated_at DESC` 排序。
+- 响应复用 `LlmProviderResponse[]`。
+- 不返回 API Key 明文或密文；敏感 Header 继续显示为 `******`。
+
+响应示例：
+
+```json
+{
+  "code": 0,
+  "message": "OK",
+  "data": [
+    {
+      "id": 30,
+      "providerCode": "dashscope",
+      "providerName": "DashScope Qwen Plus",
+      "baseUrl": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+      "defaultModel": "qwen-plus",
+      "customHeaders": {
+        "Authorization": "******"
+      },
+      "enabled": false,
+      "platformRateLimitPerMinute": 100,
+      "taskRateLimitPerMinute": 50,
+      "userRateLimitPerMinute": 20,
+      "supportVision": false,
+      "supportMultiImage": false,
+      "maxImageCount": 10,
+      "visionModel": null,
+      "structuredOutputMode": null,
+      "apiKeyConfigured": true,
+      "createdBy": 1,
+      "createdAt": "2026-06-06T20:00:00",
+      "updatedAt": "2026-06-06T20:00:00"
+    }
+  ],
+  "traceId": null
+}
+```
+
+前端对接建议：
+
+- 管理后台列表使用 `enabled` 展示启用/停用状态。
+- 不要把 `apiKeyConfigured` 当作密钥内容展示；它只是布尔状态。
+- `structuredOutputMode = null` 表示该 Provider 不强制结构化输出。
+
+---
+
+## 9. 任务创建者查看可选 LLM Provider / 模型
 
 任务创建者创建或编辑任务 AI 设置时调用该接口，获取管理员已启用的 Provider 列表。
 
@@ -355,7 +417,7 @@
 
 ---
 
-## 9. 管理员数据看板接口
+## 10. 管理员数据看板接口
 
 管理员数据看板当前有一个聚合接口，返回管理后台首页需要的 KPI、趋势、分布、排行榜和异常提醒。
 
@@ -597,85 +659,19 @@
 - 任务编辑页如果没有 AI 配置，传 `aiFlowPolicy` 不会创建配置；应先引导用户配置 AI 审核。
 - 如果使用完整 AI 配置接口，仍可传 `allowAiDirectApprove` / `allowAiDirectReject`，但建议与 `aiFlowPolicy` 保持一致。
 
-### 12.3 AI 审核配置 `modelName` 改为可选
+### 12.3 结构化输出解析失败纠错重试
 
-涉及接口：
+涉及后端 LLM Gateway，不新增前端请求路径。
 
-| 方法 | 路径 |
-| --- | --- |
-| POST | `/api/v1/tasks/{taskId}/ai-review-configs` |
-| PUT | `/api/v1/tasks/{taskId}/ai-review-configs/{configId}` |
+当前行为：
 
-`modelName` 当前可缺省或传空白；后端会使用所选 LLM Provider 的 `defaultModel`。这与 Owner 查询 Provider 列表中的 `data[].defaultModel` 对应。
-
-前端建议：
-
-- 模型下拉默认选中 Provider `defaultModel`。
-- 如果前端没有提供模型切换能力，可以只传 `providerId`，不传 `modelName`。
-- 如果传了 `modelName`，应优先使用 `/api/v1/llm-providers` 返回的 `defaultModel`，避免与 Provider 能力不匹配。
-
-### 12.4 导出创建不再要求前端透传 `X-Trace-Id`
-
-**POST** `/api/v1/tasks/{taskId}/exports`
-
-控制器已不再从 `HttpServletRequest` 读取 `X-Trace-Id` 参数传入服务。服务端会通过 `TraceIdProvider` 解析或生成 traceId。
-
-前端对接不变：
-
-- 请求路径不变。
-- 请求体不变。
-- 前端可以继续传 `X-Trace-Id`，但不应依赖它作为必填字段。
-
-### 12.5 Reviewer 提交详情读取权限收紧
-
-**GET** `/api/v1/reviewer/submissions/{submissionId}`
-
-当前 Reviewer 只有在 `submission.assignedReviewerId` 等于当前用户 ID 时才能读取详情；Admin 可读取全部。
-
-未分配 Reviewer 访问会返回：
-
-```json
-{
-  "code": 403601,
-  "message": "Reviewer is not assigned to this submission",
-  "data": null,
-  "traceId": "..."
-}
-```
+- Provider 配置的 `structuredOutputMode` 仅接受 `NONE`、`JSON_OBJECT`、`JSON_SCHEMA`。
+- `structuredOutputMode` 未传或非法时保存为空；运行时等价于不强制结构化输出。
+- 如果 Provider 调用成功但模型输出不是合法 JSON，后端会追加一条用户消息，携带解析错误和上一次输出片段，要求模型只返回合法 JSON 对象并重试一次。
+- 第二次解析成功时返回正常结构化结果。
+- 第二次仍解析失败时返回空 `structuredJson`，由下游 AI 审核、预标注或 LLM Trigger 流程按缺字段逻辑转人工或降级处理。
 
 前端建议：
 
-- Reviewer 工作台列表应只展示分配给自己的提交。
-- 详情页遇到 `403601` 时跳回审核列表或显示“该提交未分配给你”。
-- 不要通过手动拼接 submissionId 直接进入详情页绕过列表。
-
-### 12.6 LLM 异步任务失败兜底
-
-涉及后端异步任务，不新增前端请求路径：
-
-| 类型 | 影响 |
-| --- | --- |
-| AI 审核任务 | Worker 捕获异常后会写入 `FAILED` 的 AI 审核结果，并把提交转入待人工终审 |
-| LLM Trigger | Worker 捕获异常后会把 Trigger Run 标记为 `FAILED` |
-| AI 预标注 | Worker 捕获异常后会把预标注任务标记为 `FAILED` |
-
-前端建议：
-
-- 轮询 AI 审核、预标注、LLM Trigger 结果时，需要处理 `FAILED`，不要只等待 `SUCCESS`。
-- `FAILED` 时展示 `errorMessage` 的脱敏摘要，并提供“重试”或“转人工处理”的入口。
-
----
-
-## 13. 与代码存在的产品缺口
-
-以下不是文档错误，而是当前代码实现与理想产品接口之间的差异：
-
-- 当前没有 `GET /api/v1/admin/llm-providers` 管理员列表接口。管理员后台如果需要展示全部 Provider，需要补充该接口。
-
-- 当前 Owner 查看接口返回完整 `LlmProviderResponse`，不是精简模型选项 DTO。它不会泄漏 API Key，但会返回 `baseUrl`、masked `customHeaders`、限流和 `apiKeyConfigured`。
-
-- 当前 `structuredOutputMode` 非法值不会报错，而是静默归一化为 `NONE`。
-
-- 当前没有独立的 `GET /api/v1/owner/dashboard` 聚合接口；Owner 看板需要由任务列表和单任务统计组合。
-
-  
+- 不要依赖非法 `structuredOutputMode` 被服务端转换成 `NONE`；前端下拉只提供 `NONE`、`JSON_OBJECT`、`JSON_SCHEMA`。
+- 展示 AI 结果时仍需兼容空结构化结果，避免直接读取必有字段导致页面报错。

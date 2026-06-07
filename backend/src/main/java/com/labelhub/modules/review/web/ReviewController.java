@@ -79,7 +79,9 @@ public class ReviewController {
     }
 
     @GetMapping("/{submissionId}")
-    @Operation(summary = "提交审核详情", description = "查询指定提交的审核详情，包含标注答案、AI 评分、审核历史、冲突信息等。")
+    @Operation(summary = "提交审核详情", description = """
+            查询指定提交的审核详情，包含标注答案、AI 评分、审核历史、冲突信息等。
+            Reviewer 只能读取已分配给自己的提交；未分配时返回 403601。""")
     public ApiResponse<ReviewerSubmissionDetailResponse> getDetail(
             @Parameter(description = "提交 ID") @PathVariable Long submissionId) {
         CurrentUserContext.requireRole(RoleCode.REVIEWER);

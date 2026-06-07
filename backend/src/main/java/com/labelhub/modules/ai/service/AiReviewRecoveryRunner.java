@@ -37,6 +37,7 @@ public class AiReviewRecoveryRunner implements ApplicationRunner {
     private final SystemAgentProvider systemAgentProvider;
     private final AuditAppender auditAppender;
     private final com.labelhub.modules.review.service.ReviewOwnershipResolver reviewOwnershipResolver;
+    private final AiReviewSchemaReadiness schemaReadiness;
 
     public AiReviewRecoveryRunner(SubmissionMapper submissionMapper,
                                   AiReviewResultMapper aiReviewResultMapper,
@@ -44,7 +45,8 @@ public class AiReviewRecoveryRunner implements ApplicationRunner {
                                   AiAutoReviewService aiAutoReviewService,
                                   SystemAgentProvider systemAgentProvider,
                                   AuditAppender auditAppender,
-                                  com.labelhub.modules.review.service.ReviewOwnershipResolver reviewOwnershipResolver) {
+                                  com.labelhub.modules.review.service.ReviewOwnershipResolver reviewOwnershipResolver,
+                                  AiReviewSchemaReadiness schemaReadiness) {
         this.submissionMapper = submissionMapper;
         this.aiReviewResultMapper = aiReviewResultMapper;
         this.dispatcher = dispatcher;
@@ -52,10 +54,15 @@ public class AiReviewRecoveryRunner implements ApplicationRunner {
         this.systemAgentProvider = systemAgentProvider;
         this.auditAppender = auditAppender;
         this.reviewOwnershipResolver = reviewOwnershipResolver;
+        this.schemaReadiness = schemaReadiness;
     }
 
     @Override
     public void run(ApplicationArguments args) {
+        if (!schemaReadiness.isReady()) {
+            log.warn("Skipping AI review recovery because required database tables are not ready");
+            return;
+        }
         List<Submission> stuck = submissionMapper.selectList(
                 new LambdaQueryWrapper<Submission>()
                         .eq(Submission::getStatus, SubmissionStatus.AI_REVIEWING));

@@ -67,15 +67,17 @@ class LlmTaskWorkerTest {
     }
 
     @Test
-    void pollDoesNotAckMessageWhenHandlerThrows() {
+    void pollMarksFailureAndAcknowledgesMessageWhenHandlerThrows() {
         LlmTaskQueueRecord record = record();
         when(queueService.read(eq(LlmTaskType.AI_REVIEW), any(), eq(10), any())).thenReturn(List.of(record));
         when(handler.isCompleted(record.message())).thenReturn(false);
-        doThrow(new IllegalStateException("boom")).when(handler).handle(record.message());
+        IllegalStateException failure = new IllegalStateException("boom");
+        doThrow(failure).when(handler).handle(record.message());
 
         worker.poll();
 
-        verify(queueService, never()).ack(LlmTaskType.AI_REVIEW, "1-0");
+        verify(handler).onFailure(record.message(), failure);
+        verify(queueService).ack(LlmTaskType.AI_REVIEW, "1-0");
     }
 
     private LlmTaskQueueRecord record() {

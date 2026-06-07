@@ -7,4 +7,7 @@ public interface LlmTaskHandler {
     boolean isCompleted(LlmTaskQueueMessage message);
 
     void handle(LlmTaskQueueMessage message);
+
+    default void onFailure(LlmTaskQueueMessage message, Exception exception) {
+    }
 }

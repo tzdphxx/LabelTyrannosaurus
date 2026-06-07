@@ -22,22 +22,40 @@
 
 ## 目标
 
-让用户在编辑草稿任务时，能够修改该任务 AI 配置的流转策略
-（`aiFlowPolicy`），且尽量兼顾现有 `updateDraft` 逻辑、不引入大改。
+1. 创建任务时强制配置 AI 审核：`aiProviderId` + `aiPrompt` +
+   `aiScoringDimensions` 为必填项，不允许创建“无 AI 审核”的任务。
+2. 创建时 `aiFlowPolicy` 可自定义；不传则默认 `MANUAL_FIRST`（AI 只提建议）。
+   其余可默认字段（阈值、maxRetry、strategy 等）不传则补默认。
+3. 编辑草稿任务时，能够修改该任务 AI 配置的流转策略（`aiFlowPolicy`），
+   兼顾现有 `updateDraft` 逻辑、不引入大改。
 
 ## 非目标
 
-- 不把整套内联 AI 配置（provider/prompt/维度/阈值）搬进 `updateDraft`。
-  那是更重的“完全对称”方案，本设计明确不做。
-- 不改变任务创建侧的行为（创建侧已完成，保持不变）。
+- 不把整套内联 AI 配置（provider/prompt/维度/阈值）搬进 `updateDraft`；
+  编辑侧只允许改 `aiFlowPolicy`，不改 provider/prompt/维度。
 - 不新增或改动任何 REST 端点的 URL。
-- 不强制所有任务都必须配置 AI 审核（保持创建侧的向后兼容）。
+- 不提供“系统级默认 provider/prompt 兜底自动生成配置”的能力（B2 方案，已否决）。
 
 ## 设计
 
+### 创建侧：强制 AI 配置（B1）
+
+`POST /api/v1/tasks` 的内联 AI 配置由“可选”改为“必填”：
+
+- 校验规则：`aiProviderId` + `aiPrompt`（非空）+ `aiScoringDimensions`
+  （非空）三者必填，缺任一则拒绝创建（返回参数校验错误）。
+- `aiFlowPolicy` 不传 → 默认 `MANUAL_FIRST`（AI 只提建议）；可自定义。
+- 其余可默认字段（`aiPassThreshold` / `aiManualReviewThreshold` /
+  `maxRetry` / `aiReviewStrategy` 等）不传则由 `save()` 现有逻辑补默认。
+- 现有 `hasAiInlineConfig`（“全有才触发”的可选判定）改为强制校验：
+  不再是“凑齐才建配置”，而是“必须凑齐，否则建任务失败”。
+
+> 影响：所有当前不带 AI 字段创建任务的代码/测试将被拒，需同步改造
+> （见“影响面”）。这是 B1 的直接后果，已与用户确认接受。
+
 ### 整体形态
 
-仅针对 `aiFlowPolicy` 做最小改动，不引入整套内联 AI 配置：
+编辑侧仅针对 `aiFlowPolicy` 做最小改动，不引入整套内联 AI 配置：
 
 - `UpdateTaskRequest` 只新增一个可选字段 `aiFlowPolicy`。
 - `updateDraft` 中加一小段逻辑：当传入了 `aiFlowPolicy` 且该草稿任务
@@ -67,8 +85,10 @@ PUT /api/v1/tasks/{taskId}
 `AiReviewConfigService.updateFlowPolicy(Long ownerId, Long taskId, String aiFlowPolicy)`：
 
 - 校验 owner + 草稿状态（复用现有 `loadOwnedDraftTask`）。
-- 读取该任务的 AI 配置；不存在则抛 `AI_REVIEW_CONFIG_NOT_FOUND`
-  （由 `updateDraft` 在调用前先判存在性，避免对“无 AI 草稿”报错）。
+- 调用契约：本方法假定配置已存在（由 `updateDraft` 在调用前用
+  `findByTaskId` 判存在性，无配置时根本不调用本方法，从而实现“无 AI 草稿
+  传 policy = no-op”的边界行为）。作为防御，若进入本方法时配置仍不存在，
+  抛 `AI_REVIEW_CONFIG_NOT_FOUND`（正常流程不会触发）。
 - 更新三个字段并持久化：
   - `aiFlowPolicy`
   - `allowAiDirectApprove`（由 policy 派生）
@@ -121,11 +141,25 @@ PUT /api/v1/tasks/{taskId}
 
 ### 影响面
 
-- 后端：`UpdateTaskRequest`（+1 字段）、`TaskLifecycleService.updateDraft`
-  （+一小段）、`AiReviewConfigService`（+`updateFlowPolicy` 方法）。
-- 前端：编辑草稿表单新增一个“AI 流转策略”下拉，仅在该任务已有 AI 配置时显示；
-  保存时随 `PUT /tasks/{id}` 一并提交。
+- 后端：
+  - `CreateTaskRequest` 校验：provider/prompt/维度 由可选改为必填
+    （DTO 层 `@NotNull`/`@NotBlank`/`@NotEmpty` 或 service 层显式校验）。
+  - `TaskLifecycleService.hasAiInlineConfig`：从“凑齐才建配置”的可选判定，
+    反转为“必须凑齐，否则建任务失败”的强制前置校验。
+  - `UpdateTaskRequest`（+`aiFlowPolicy` 字段）、
+    `TaskLifecycleService.updateDraft`（+一小段调用 `updateFlowPolicy`）、
+    `AiReviewConfigService`（+`updateFlowPolicy` 方法）。
+- 测试改造（B1 的直接后果）：
+  - `TaskLifecycleServiceTest`：3 处 `new CreateTaskRequest` 当前不带 AI
+    字段，需补全 provider/prompt/维度，否则创建被拒。
+  - `ApiContractMappingTest`：涉及建任务契约的用例需同步带上 AI 字段。
+  - 新增用例：缺 AI 字段建任务 → 返回校验错误；editDraft 改 policy 的正反例。
+- 前端：
+  - 建任务表单：provider/prompt/维度 标记为必填；AI 流转策略下拉可选
+    （不填默认 MANUAL_FIRST）。
+  - 编辑草稿表单：新增“AI 流转策略”下拉，随 `PUT /tasks/{id}` 一并提交。
 - 数据库：无 schema 变更（复用现有 `ai_review_configs` 字段）。
-- 兼容性：纯增量，不破坏任何现有调用与测试。
+- 兼容性：**破坏性变更**——不再允许创建无 AI 审核的任务；所有现存
+  “无 AI 建任务”的调用方（含前端、测试、脚本）必须改造。已与用户确认接受。
 
 

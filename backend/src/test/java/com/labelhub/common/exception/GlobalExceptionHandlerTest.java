@@ -8,6 +8,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.validation.BeanPropertyBindingResult;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.method.HandlerMethod;
 
 import java.lang.reflect.Method;
@@ -56,6 +57,31 @@ class GlobalExceptionHandlerTest {
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.INTERNAL_SERVER_ERROR);
         assertThat(response.getBody()).isNotNull();
         assertThat(response.getBody().message()).isEqualTo("系统异常，请稍后重试");
+    }
+
+    @Test
+    void mapsBusinessExceptionStatusByCodePrefix() {
+        HttpServletRequest request = requestWithTraceId("trace-4");
+
+        ResponseEntity<ApiResponse<Void>> forbidden = handler.handleBusinessException(
+                new BusinessException(403703, "无权查看 AI 审核结果"), request);
+        ResponseEntity<ApiResponse<Void>> notFound = handler.handleBusinessException(
+                new BusinessException(404703, "AI 审核结果不存在"), request);
+
+        assertThat(forbidden.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
+        assertThat(notFound.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
+    }
+
+    @Test
+    void returnsBadRequestForMalformedJsonBody() {
+        HttpServletRequest request = requestWithTraceId("trace-5");
+
+        ResponseEntity<ApiResponse<Void>> response = handler.handleUnreadableMessage(
+                new HttpMessageNotReadableException("JSON parse error"), request);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+        assertThat(response.getBody()).isNotNull();
+        assertThat(response.getBody().code()).isEqualTo(400102);
     }
 
     private HttpServletRequest requestWithTraceId(String traceId) {

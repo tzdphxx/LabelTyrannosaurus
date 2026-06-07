@@ -70,6 +70,21 @@ class AdminUserServiceTest {
     }
 
     @Test
+    void listUsersToleratesInvalidRoleDataWithoutFailingWholePage() {
+        when(userMapper.selectAdminUsers(false)).thenReturn(List.of(user(10L, 1), user(11L, 1), user(12L, 1)));
+        when(userRoleMapper.selectRoleCodesByUserId(10L)).thenReturn(Set.of(RoleCode.LABELER));
+        when(userRoleMapper.selectRoleCodesByUserId(11L)).thenReturn(Set.of(RoleCode.REVIEWER, RoleCode.OWNER));
+        when(userRoleMapper.selectRoleCodesByUserId(12L)).thenReturn(Set.of());
+
+        var responses = adminUserService.listUsers(false);
+
+        assertThat(responses).hasSize(3);
+        assertThat(responses.get(0).role()).isEqualTo(RoleCode.LABELER);
+        assertThat(responses.get(1).role()).isEqualTo(RoleCode.OWNER);
+        assertThat(responses.get(2).role()).isEqualTo(RoleCode.LABELER);
+    }
+
+    @Test
     void createReviewerCreatesEnabledReviewerAccount() {
         when(userMapper.selectByUsername("reviewer")).thenReturn(null);
         when(userMapper.selectByEmail("reviewer@example.com")).thenReturn(null);

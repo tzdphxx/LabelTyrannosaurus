@@ -139,6 +139,14 @@ class DatabaseMigrationSafetyTest {
                 .isLessThan(migration.indexOf("MODIFY COLUMN task_id BIGINT NULL"));
     }
 
+    @Test
+    void localProfileDoesNotDisableFlywayMigrations() throws IOException {
+        String localConfig = Files.readString(Path.of("src/main/resources/application-local.yml"));
+
+        assertThat(localConfig).doesNotContain("flyway:");
+        assertThat(localConfig).doesNotContain("enabled: false");
+    }
+
     private static String tableDefinition(String sql, String tableName) {
         int start = sql.indexOf("CREATE TABLE `" + tableName + "`");
         assertThat(start).isNotNegative();

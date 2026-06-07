@@ -7,7 +7,6 @@ import com.labelhub.modules.export.dto.ExportJobResponse;
 import com.labelhub.modules.export.service.ExportJobService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
-import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -39,11 +38,13 @@ public class ExportController {
      * 创建导出任务。
      */
     @PostMapping
-    @Operation(summary = "创建导出任务", description = "按任务创建异步导出任务。")
+    @Operation(summary = "创建导出任务", description = """
+            按任务创建异步导出任务。
+            前端不需要强制传 X-Trace-Id；服务端会通过 TraceIdProvider 解析或生成 traceId，
+            并提交异步导出作业。""")
     public ApiResponse<ExportJobResponse> create(@PathVariable Long taskId,
-                                                 @Valid @RequestBody CreateExportRequest request,
-                                                 HttpServletRequest httpServletRequest) {
-        return ApiResponse.ok(exportJobService.createExport(taskId, request, httpServletRequest.getHeader("X-Trace-Id")));
+                                                 @Valid @RequestBody CreateExportRequest request) {
+        return ApiResponse.ok(exportJobService.createExport(taskId, request));
     }
 
     /**

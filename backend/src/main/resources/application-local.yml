@@ -1,0 +1,13 @@
+springdoc:
+  api-docs:
+    enabled: true
+  swagger-ui:
+    enabled: true
+
+knife4j:
+  enable: true
+
+labelhub:
+  llm:
+    key-encryption-secret: ${LABELHUB_LLM_KEY_ENCRYPTION_SECRET:${JWT_SECRET:labelhub-local-llm-key-encryption-secret-change-me}}
+

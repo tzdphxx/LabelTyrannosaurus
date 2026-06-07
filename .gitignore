@@ -48,6 +48,10 @@ node_modules/
 # Local sample data
 datasets/
 
+# Local development planning and SQL drafts
+docs/development-plan/
+backend/sql/
+
 # OS / editor metadata
 .DS_Store
 **/.DS_Store
@@ -65,11 +69,18 @@ __MACOSX/
 .env.*
 !.env.example
 
+# Local agent memory
+memory.md
+
 # AI coding tools local state / temporary files
+.worktrees/
 .codex/
 .codex-cache/
 codex-cache/
 codex-*.log
+
+# Archived discarded local changes
+bak/
 .opencode/
 .opencode-cache/
 opencode-cache/
@@ -80,3 +91,5 @@ claude-cache/
 .claude.json
 .claude.local.json
 CLAUDE.local.md
+nul
+*.ps1

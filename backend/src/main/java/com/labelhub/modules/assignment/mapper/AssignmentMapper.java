@@ -1,0 +1,258 @@
+package com.labelhub.modules.assignment.mapper;
+
+import com.baomidou.mybatisplus.core.mapper.BaseMapper;
+import com.labelhub.modules.assignment.domain.Assignment;
+import com.labelhub.modules.assignment.domain.AssignmentStatus;
+import org.apache.ibatis.annotations.Mapper;
+import org.apache.ibatis.annotations.Param;
+import org.apache.ibatis.annotations.Select;
+import org.apache.ibatis.annotations.Update;
+
+@Mapper
+public interface AssignmentMapper extends BaseMapper<Assignment> {
+
+    @Select("""
+            SELECT COUNT(1)
+            FROM assignments
+            WHERE task_id = #{taskId}
+              AND labeler_id = #{labelerId}
+            """)
+    Integer countByTaskAndLabeler(@Param("taskId") Long taskId, @Param("labelerId") Long labelerId);
+
+    @Select("""
+            SELECT *
+            FROM assignments
+            WHERE id = #{assignmentId}
+              AND labeler_id = #{labelerId}
+            """)
+    Assignment selectOwnedAssignment(@Param("assignmentId") Long assignmentId,
+                                     @Param("labelerId") Long labelerId);
+
+    @Select("""
+            SELECT *
+            FROM assignments
+            WHERE id = #{assignmentId}
+            FOR UPDATE
+            """)
+    Assignment selectByIdForUpdate(@Param("assignmentId") Long assignmentId);
+
+    @Update("""
+            UPDATE assignments
+            SET draft_answer_json = #{answerJson},
+                draft_version = #{nextDraftVersion},
+                status = #{nextStatus},
+                updated_at = CURRENT_TIMESTAMP(3)
+            WHERE id = #{assignmentId}
+              AND labeler_id = #{labelerId}
+              AND draft_version = #{expectedDraftVersion}
+              AND status IN ('CLAIMED', 'DRAFTING', 'RETURNED')
+            """)
+    int updateDraftIfVersionMatches(@Param("assignmentId") Long assignmentId,
+                                    @Param("labelerId") Long labelerId,
+                                    @Param("answerJson") String answerJson,
+                                    @Param("expectedDraftVersion") Integer expectedDraftVersion,
+                                    @Param("nextDraftVersion") Integer nextDraftVersion,
+                                    @Param("nextStatus") AssignmentStatus nextStatus);
+
+    @Update("""
+            UPDATE assignments
+            SET status = #{nextStatus},
+                submitted_at = CURRENT_TIMESTAMP(3),
+                updated_at = CURRENT_TIMESTAMP(3)
+            WHERE id = #{assignmentId}
+              AND labeler_id = #{labelerId}
+              AND draft_version = #{expectedDraftVersion}
+              AND status IN ('CLAIMED', 'DRAFTING', 'RETURNED')
+            """)
+    int markSubmittedIfCurrent(@Param("assignmentId") Long assignmentId,
+                               @Param("labelerId") Long labelerId,
+                               @Param("expectedDraftVersion") Integer expectedDraftVersion,
+                               @Param("nextStatus") AssignmentStatus nextStatus);
+
+    @Select("""
+            <script>
+            SELECT a.*, t.title AS task_title
+            FROM assignments a
+            INNER JOIN tasks t ON t.id = a.task_id
+            WHERE a.labeler_id = #{labelerId}
+            <if test="taskId != null">
+              AND a.task_id = #{taskId}
+            </if>
+            <if test="status != null">
+              AND a.status = #{status}
+            </if>
+            ORDER BY a.updated_at DESC
+            LIMIT #{limit} OFFSET #{offset}
+            </script>
+            """)
+    java.util.List<java.util.Map<String, Object>> selectLabelerAssignments(
+            @Param("labelerId") Long labelerId,
+            @Param("taskId") Long taskId,
+            @Param("status") String status,
+            @Param("limit") int limit,
+            @Param("offset") int offset);
+
+    @Select("""
+            <script>
+            SELECT COUNT(1)
+            FROM assignments a
+            WHERE a.labeler_id = #{labelerId}
+            <if test="taskId != null">
+              AND a.task_id = #{taskId}
+            </if>
+            <if test="status != null">
+              AND a.status = #{status}
+            </if>
+            </script>
+            """)
+    long countLabelerAssignments(@Param("labelerId") Long labelerId,
+                                 @Param("taskId") Long taskId,
+                                 @Param("status") String status);
+
+    @Select("""
+            SELECT t.id AS task_id,
+                   t.title,
+                   t.description,
+                   t.instruction_rich_text,
+                   t.status,
+                   t.quota,
+                   t.claimed_count,
+                   t.overlap_count,
+                   t.strategy,
+                   t.deadline_at,
+                   t.published_at,
+                   t.ended_at,
+                   t.created_at,
+                   t.published_template_version_id,
+                   COUNT(a.id) AS claimed_item_count,
+                   SUM(CASE WHEN a.status = 'SUBMITTED' THEN 1 ELSE 0 END) AS submitted_count,
+                   SUM(CASE WHEN a.status = 'APPROVED' THEN 1 ELSE 0 END) AS approved_count,
+                   MAX(a.updated_at) AS updated_at
+            FROM assignments a
+            INNER JOIN tasks t ON t.id = a.task_id
+            WHERE a.labeler_id = #{labelerId}
+            GROUP BY t.id, t.title, t.description, t.instruction_rich_text, t.status, t.quota,
+                     t.claimed_count, t.overlap_count, t.strategy, t.deadline_at, t.published_at,
+                     t.ended_at, t.created_at, t.published_template_version_id
+            ORDER BY updated_at DESC
+            LIMIT #{limit} OFFSET #{offset}
+            """)
+    java.util.List<java.util.Map<String, Object>> selectLabelerClaimedTasks(
+            @Param("labelerId") Long labelerId,
+            @Param("limit") int limit,
+            @Param("offset") int offset);
+
+    @Select("""
+            SELECT t.id AS task_id,
+                   t.title,
+                   t.description,
+                   t.instruction_rich_text,
+                   t.status,
+                   t.quota,
+                   t.claimed_count,
+                   t.overlap_count,
+                   t.strategy,
+                   t.deadline_at,
+                   t.published_at,
+                   t.ended_at,
+                   t.created_at,
+                   t.published_template_version_id,
+                   COUNT(a.id) AS claimed_item_count,
+                   SUM(CASE WHEN a.status = 'SUBMITTED' THEN 1 ELSE 0 END) AS submitted_count,
+                   SUM(CASE WHEN a.status = 'APPROVED' THEN 1 ELSE 0 END) AS approved_count,
+                   MAX(a.updated_at) AS updated_at
+            FROM assignments a
+            INNER JOIN tasks t ON t.id = a.task_id
+            WHERE a.labeler_id = #{labelerId}
+              AND a.task_id = #{taskId}
+            GROUP BY t.id, t.title, t.description, t.instruction_rich_text, t.status, t.quota,
+                     t.claimed_count, t.overlap_count, t.strategy, t.deadline_at, t.published_at,
+                     t.ended_at, t.created_at, t.published_template_version_id
+            """)
+    java.util.Map<String, Object> selectLabelerClaimedTask(@Param("labelerId") Long labelerId,
+                                                           @Param("taskId") Long taskId);
+
+    @Select("""
+            <script>
+            SELECT a.id AS assignment_id,
+                   a.dataset_item_id,
+                   a.status AS assignment_status,
+                   di.item_json,
+                   di.metadata_json,
+                   a.draft_version,
+                   (
+                     SELECT s.status
+                     FROM submissions s
+                     WHERE s.assignment_id = a.id
+                       AND s.status != 'SUPERSEDED'
+                     ORDER BY s.version_no DESC
+                     LIMIT 1
+                   ) AS latest_submission_status,
+                   a.updated_at
+            FROM assignments a
+            INNER JOIN dataset_items di ON di.id = a.dataset_item_id
+            WHERE a.labeler_id = #{labelerId}
+              AND a.task_id = #{taskId}
+            <if test="status != null">
+              AND a.status = #{status}
+            </if>
+            ORDER BY a.updated_at DESC
+            LIMIT #{limit} OFFSET #{offset}
+            </script>
+            """)
+    java.util.List<java.util.Map<String, Object>> selectLabelerClaimedItems(
+            @Param("labelerId") Long labelerId,
+            @Param("taskId") Long taskId,
+            @Param("status") String status,
+            @Param("limit") int limit,
+            @Param("offset") int offset);
+
+    @Update("""
+            UPDATE assignments
+            SET status = 'CANCELLED',
+                cancelled_at = CURRENT_TIMESTAMP(3),
+                updated_at = CURRENT_TIMESTAMP(3)
+            WHERE id = #{assignmentId}
+              AND labeler_id = #{labelerId}
+              AND status IN ('CLAIMED', 'DRAFTING', 'RETURNED')
+            """)
+    int markCancelled(@Param("assignmentId") Long assignmentId,
+                      @Param("labelerId") Long labelerId);
+
+    @Select("""
+            SELECT a.labeler_id,
+                   u.username,
+                   u.display_name,
+                   SUM(CASE WHEN a.status = 'CLAIMED' OR a.status = 'DRAFTING' THEN 1 ELSE 0 END) AS claimed_count,
+                   SUM(CASE WHEN a.status = 'SUBMITTED' THEN 1 ELSE 0 END) AS submitted_count,
+                   SUM(CASE WHEN a.status = 'APPROVED' THEN 1 ELSE 0 END) AS approved_count,
+                   SUM(CASE WHEN a.status = 'RETURNED' THEN 1 ELSE 0 END) AS rejected_count,
+                   SUM(CASE WHEN a.status = 'CANCELLED' THEN 1 ELSE 0 END) AS cancelled_count,
+                   MIN(a.claimed_at) AS first_claimed_at,
+                   MAX(a.updated_at) AS last_activity_at
+            FROM assignments a
+            INNER JOIN users u ON u.id = a.labeler_id
+            WHERE a.task_id = #{taskId}
+            GROUP BY a.labeler_id, u.username, u.display_name
+            ORDER BY last_activity_at DESC
+            """)
+    java.util.List<java.util.Map<String, Object>> selectLabelersByTask(@Param("taskId") Long taskId);
+
+    @Select("""
+            SELECT DISTINCT labeler_id
+            FROM assignments
+            WHERE task_id = #{taskId}
+              AND status <> 'CANCELLED'
+            """)
+    java.util.List<Long> selectDistinctLabelersByTask(@Param("taskId") Long taskId);
+
+    @Select("""
+            SELECT COUNT(1)
+            FROM assignments
+            WHERE task_id = #{taskId}
+              AND labeler_id = #{labelerId}
+              AND status IN ('CLAIMED', 'DRAFTING', 'RETURNED')
+            """)
+    int countActiveByTaskAndLabeler(@Param("taskId") Long taskId,
+                                    @Param("labelerId") Long labelerId);
+}

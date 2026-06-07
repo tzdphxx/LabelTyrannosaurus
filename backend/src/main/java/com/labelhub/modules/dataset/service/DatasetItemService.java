@@ -1,0 +1,298 @@
+package com.labelhub.modules.dataset.service;
+
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.labelhub.common.exception.BusinessException;
+import com.labelhub.common.security.CurrentUser;
+import com.labelhub.common.security.CurrentUserContext;
+import com.labelhub.common.security.RoleCode;
+import com.labelhub.modules.dataset.domain.DatasetItem;
+import com.labelhub.modules.dataset.domain.DatasetItemChangeLogEntity;
+import com.labelhub.common.api.PageResponse;
+import com.labelhub.modules.dataset.dto.BatchAppendItemsRequest;
+import com.labelhub.modules.dataset.dto.BatchDeleteItemsRequest;
+import com.labelhub.modules.dataset.dto.BatchItemResult;
+import com.labelhub.modules.dataset.dto.BatchUpdateItemsRequest;
+import com.labelhub.modules.dataset.dto.DatasetItemAppendRequest;
+import com.labelhub.modules.dataset.dto.DatasetItemQuery;
+import com.labelhub.modules.dataset.dto.DatasetItemUpdateRequest;
+import com.labelhub.modules.dataset.dto.ItemResponse;
+import com.labelhub.modules.dataset.dto.ItemStatus;
+import com.labelhub.modules.dataset.mapper.DatasetItemMapper;
+import com.labelhub.modules.dataset.repository.DatasetItemChangeLogMapper;
+import com.labelhub.modules.media.service.MediaProcessingService;
+import com.labelhub.modules.task.domain.Task;
+import com.labelhub.modules.task.mapper.TaskMapper;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+
+/**
+ * 题目数据资产编辑服务。
+ *
+ * <p>本服务只维护 BE-B 拥有的 {@code dataset_items} 和变更日志。已领取或已提交的题目
+ * 可能已被 BE-A 的 assignment/submission 引用，因此禁止直接修改或删除，避免破坏标注链路快照。</p>
+ */
+@Service
+public class DatasetItemService {
+
+    private final TaskMapper taskMapper;
+    private final DatasetItemMapper datasetItemMapper;
+    private final DatasetItemChangeLogMapper changeLogMapper;
+    private final ObjectMapper objectMapper;
+    private final MediaProcessingService mediaProcessingService;
+
+    @Autowired
+    public DatasetItemService(TaskMapper taskMapper,
+                              DatasetItemMapper datasetItemMapper,
+                              DatasetItemChangeLogMapper changeLogMapper,
+                              ObjectMapper objectMapper,
+                              MediaProcessingService mediaProcessingService) {
+        this.taskMapper = taskMapper;
+        this.datasetItemMapper = datasetItemMapper;
+        this.changeLogMapper = changeLogMapper;
+        this.objectMapper = objectMapper;
+        this.mediaProcessingService = mediaProcessingService;
+    }
+
+    public DatasetItemService(TaskMapper taskMapper,
+                              DatasetItemMapper datasetItemMapper,
+                              DatasetItemChangeLogMapper changeLogMapper,
+                              ObjectMapper objectMapper) {
+        this(taskMapper, datasetItemMapper, changeLogMapper, objectMapper, null);
+    }
+
+    /**
+     * 查询任务下未删除题目列表。
+     */
+    public PageResponse<ItemResponse> listItems(Long taskId, DatasetItemQuery query) {
+        requireOwnedTask(taskId);
+        DatasetItemQuery effectiveQuery = query == null ? new DatasetItemQuery(null, null, null) : query;
+        List<DatasetItem> entities = datasetItemMapper.selectActivePage(
+                taskId,
+                effectiveQuery.externalId(),
+                effectiveQuery.normalizedPageSize(),
+                effectiveQuery.offset()
+        );
+        long total = datasetItemMapper.countActivePage(taskId, effectiveQuery.externalId());
+        return new PageResponse<ItemResponse>(
+                entities.stream().map(this::toResponse).toList(),
+                effectiveQuery.normalizedPage(),
+                effectiveQuery.normalizedPageSize(),
+                total
+        );
+    }
+
+    /**
+     * 批量追加题目。单条失败不会回滚其他成功题目。
+     */
+    @Transactional
+    public List<BatchItemResult> batchAppend(Long taskId, BatchAppendItemsRequest request) {
+        Task task = requireOwnedTask(taskId);
+        CurrentUser actor = CurrentUserContext.requireCurrentUser();
+        List<BatchItemResult> results = new ArrayList<>();
+        Set<String> seenExternalIds = new HashSet<>();
+        for (DatasetItemAppendRequest itemRequest : request.items()) {
+            results.add(appendOne(task, actor.userId(), itemRequest, seenExternalIds));
+        }
+        return results;
+    }
+
+    /**
+     * 批量更新题目内容。已领取或已提交题目不允许修改。
+     */
+    @Transactional
+    public List<BatchItemResult> batchUpdate(Long taskId, BatchUpdateItemsRequest request) {
+        Task task = requireOwnedTask(taskId);
+        CurrentUser actor = CurrentUserContext.requireCurrentUser();
+        List<BatchItemResult> results = new ArrayList<>();
+        for (DatasetItemUpdateRequest itemRequest : request.items()) {
+            results.add(updateOne(task, actor.userId(), itemRequest));
+        }
+        return results;
+    }
+
+    /**
+     * 批量软删除题目。已进入标注链路的题目必须保留，避免 BE-B 破坏 BE-A 引用。
+     */
+    @Transactional
+    public List<BatchItemResult> batchDelete(Long taskId, BatchDeleteItemsRequest request) {
+        Task task = requireOwnedTask(taskId);
+        CurrentUser actor = CurrentUserContext.requireCurrentUser();
+        List<BatchItemResult> results = new ArrayList<>();
+        for (Long itemId : request.itemIds()) {
+            results.add(deleteOne(task, actor.userId(), itemId));
+        }
+        return results;
+    }
+
+    private BatchItemResult appendOne(Task task,
+                                      Long actorId,
+                                      DatasetItemAppendRequest request,
+                                      Set<String> seenExternalIds) {
+        String externalId = request.externalId();
+        try {
+            if (!seenExternalIds.add(externalId)
+                    || datasetItemMapper.selectActiveByTaskIdAndExternalId(task.getId(), externalId) != null) {
+                return BatchItemResult.failure(null, externalId, 400102, "externalId already exists in this task");
+            }
+            DatasetItem entity = new DatasetItem();
+            entity.setTaskId(task.getId());
+            entity.setExternalId(externalId);
+            entity.setItemJson(writeJson(request.itemJson()));
+            entity.setMetadataJson(writeJson(request.metadataJson()));
+            entity.setAssignedCount(0);
+            entity.setSubmittedCount(0);
+            entity.setApprovedCount(0);
+            entity.setDeleted(false);
+            datasetItemMapper.insert(entity);
+            refreshMediaContext(task.getId(), entity.getId(), entity.getItemJson(), actorId);
+            appendChangeLog(task.getId(), entity.getId(), "BATCH_APPEND", null, entity.getItemJson(), actorId);
+            return BatchItemResult.success(entity.getId(), externalId);
+        } catch (RuntimeException ex) {
+            return BatchItemResult.failure(null, externalId, 500001, ex.getMessage());
+        }
+    }
+
+    private BatchItemResult updateOne(Task task, Long actorId, DatasetItemUpdateRequest request) {
+        DatasetItem entity = datasetItemMapper.selectById(request.itemId());
+        BatchItemResult validation = validateEditableItem(task, entity, request.itemId());
+        if (validation != null) {
+            return validation;
+        }
+        try {
+            String beforeJson = entity.getItemJson();
+            String itemJson = writeJson(request.itemJson());
+            String metadataJson = writeJson(request.metadataJson());
+            int updated = datasetItemMapper.updateEditableJsonById(entity.getId(), task.getId(), itemJson, metadataJson);
+            if (updated == 0) {
+                return BatchItemResult.failure(entity.getId(), entity.getExternalId(), 400101,
+                        "Claimed or submitted item cannot be changed");
+            }
+            refreshMediaContext(task.getId(), entity.getId(), itemJson, actorId);
+            appendChangeLog(task.getId(), entity.getId(), "BATCH_UPDATE", beforeJson, itemJson, actorId);
+            return BatchItemResult.success(entity.getId(), entity.getExternalId());
+        } catch (RuntimeException ex) {
+            return BatchItemResult.failure(entity.getId(), entity.getExternalId(), 500001, ex.getMessage());
+        }
+    }
+
+    private BatchItemResult deleteOne(Task task, Long actorId, Long itemId) {
+        DatasetItem entity = datasetItemMapper.selectById(itemId);
+        BatchItemResult validation = validateEditableItem(task, entity, itemId);
+        if (validation != null) {
+            return validation;
+        }
+        int deleted = datasetItemMapper.softDeleteById(entity.getId());
+        if (deleted == 0) {
+            return BatchItemResult.failure(entity.getId(), entity.getExternalId(), 400101,
+                    "Claimed or submitted item cannot be changed");
+        }
+        appendChangeLog(task.getId(), entity.getId(), "BATCH_DELETE", entity.getItemJson(), null, actorId);
+        return BatchItemResult.success(entity.getId(), entity.getExternalId());
+    }
+
+    private BatchItemResult validateEditableItem(Task task, DatasetItem entity, Long itemId) {
+        if (entity == null || Boolean.TRUE.equals(entity.getDeleted()) || !task.getId().equals(entity.getTaskId())) {
+            return BatchItemResult.failure(itemId, null, 400102, "数据项不存在");
+        }
+        if (positive(entity.getAssignedCount()) || positive(entity.getSubmittedCount())) {
+            return BatchItemResult.failure(entity.getId(), entity.getExternalId(), 400101,
+                    "Claimed or submitted item cannot be changed");
+        }
+        return null;
+    }
+
+    private Task requireOwnedTask(Long taskId) {
+        CurrentUser currentUser = CurrentUserContext.requireCurrentUser();
+        Task task = taskMapper.selectById(taskId);
+        if (task == null) {
+            throw new BusinessException(400102, "任务不存在");
+        }
+        if (!currentUser.roles().contains(RoleCode.ADMIN) && !currentUser.userId().equals(task.getOwnerId())) {
+            throw new BusinessException(403001, "当前账号没有权限执行该操作");
+        }
+        return task;
+    }
+
+    private void appendChangeLog(Long taskId,
+                                 Long itemId,
+                                 String changeType,
+                                 String beforeJson,
+                                 String afterJson,
+                                 Long actorId) {
+        DatasetItemChangeLogEntity changeLog = new DatasetItemChangeLogEntity();
+        changeLog.setTaskId(taskId);
+        changeLog.setItemId(itemId);
+        changeLog.setChangeType(changeType);
+        changeLog.setBeforeJson(beforeJson);
+        changeLog.setAfterJson(afterJson);
+        changeLog.setActorId(actorId);
+        changeLogMapper.insert(changeLog);
+    }
+
+    private void refreshMediaContext(Long taskId, Long itemId, String itemJson, Long actorId) {
+        if (mediaProcessingService != null) {
+            mediaProcessingService.refreshContext(taskId, itemId, itemJson, actorId);
+        }
+    }
+
+    private ItemResponse toResponse(DatasetItem entity) {
+        return new ItemResponse(
+                entity.getId(),
+                entity.getTaskId(),
+                entity.getExternalId(),
+                readJson(entity.getItemJson()),
+                readJson(entity.getMetadataJson()),
+                entity.getAssignedCount(),
+                entity.getSubmittedCount(),
+                entity.getApprovedCount(),
+                toItemStatus(entity.getAssignmentStatus()),
+                entity.getLabelerId(),
+                entity.getCreatedAt(),
+                entity.getUpdatedAt()
+        );
+    }
+
+    private ItemStatus toItemStatus(String assignmentStatus) {
+        if (assignmentStatus == null || assignmentStatus.isBlank()) {
+            return ItemStatus.UNCLAIMED;
+        }
+        return switch (assignmentStatus) {
+            case "CLAIMED" -> ItemStatus.CLAIMED;
+            case "DRAFTING" -> ItemStatus.DRAFT;
+            case "SUBMITTED" -> ItemStatus.SUBMITTED;
+            case "AI_RETURNED", "RETURNED" -> ItemStatus.RETURNED;
+            case "APPROVED" -> ItemStatus.APPROVED;
+            case "CANCELLED" -> ItemStatus.UNCLAIMED;
+            default -> throw new BusinessException(500001, "Unknown assignment status for dataset item");
+        };
+    }
+
+    private String writeJson(Map<String, Object> json) {
+        try {
+            return objectMapper.writeValueAsString(json == null ? Map.of() : json);
+        } catch (JsonProcessingException ex) {
+            throw new BusinessException(400102, "JSON 请求内容不合法");
+        }
+    }
+
+    private JsonNode readJson(String json) {
+        try {
+            return json == null ? objectMapper.nullNode() : objectMapper.readTree(json);
+        } catch (JsonProcessingException ex) {
+            throw new BusinessException(500001, "已存储的数据集 JSON 不合法");
+        }
+    }
+
+    private boolean positive(Integer value) {
+        return value != null && value > 0;
+    }
+}

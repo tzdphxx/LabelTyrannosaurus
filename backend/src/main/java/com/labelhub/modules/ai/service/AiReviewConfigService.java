@@ -1,0 +1,509 @@
+package com.labelhub.modules.ai.service;
+
+import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.labelhub.common.audit.AuditAppender;
+import com.labelhub.common.audit.AuditCommand;
+import com.labelhub.common.exception.BusinessException;
+import com.labelhub.common.security.CurrentUserContext;
+import com.labelhub.common.web.TraceIdProvider;
+import java.util.List;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import com.labelhub.infrastructure.llm.LlmGateway;
+import com.labelhub.infrastructure.llm.LlmGatewayRequest;
+import com.labelhub.infrastructure.llm.LlmGatewayResponse;
+import com.labelhub.infrastructure.llm.LlmGatewayStatus;
+import com.labelhub.infrastructure.llm.LlmMessage;
+import com.labelhub.modules.agent.domain.AgentRun;
+import com.labelhub.modules.agent.domain.AgentRunStatus;
+import com.labelhub.modules.agent.service.AgentRunService;
+import com.labelhub.modules.ai.domain.AiReviewConfig;
+import com.labelhub.modules.ai.domain.LlmProvider;
+import com.labelhub.modules.ai.dto.AiReviewConfigRequest;
+import com.labelhub.modules.ai.dto.AiReviewConfigResponse;
+import com.labelhub.modules.ai.dto.AiReviewPromptTestRequest;
+import com.labelhub.modules.ai.dto.AiReviewPromptTestResponse;
+import com.labelhub.modules.ai.mapper.AiReviewConfigMapper;
+import com.labelhub.modules.task.domain.Task;
+import com.labelhub.modules.task.domain.TaskStatus;
+import com.labelhub.modules.task.mapper.TaskMapper;
+import java.math.BigDecimal;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+@Service
+public class AiReviewConfigService {
+
+    private static final Logger log = LoggerFactory.getLogger(AiReviewConfigService.class);
+
+    private static final int TASK_NOT_FOUND = 404001;
+    private static final int AI_REVIEW_PROVIDER_DISABLED = 400401;
+    private static final int AI_REVIEW_CONFIG_INVALID = 400402;
+    private static final int AI_REVIEW_CONFIG_NOT_FOUND = 404401;
+    private static final String BIZ_TYPE = "AI_REVIEW_CONFIG";
+    private static final String USER_ACTOR_TYPE = "USER";
+    private static final String TEST_AGENT_TYPE = "AI_REVIEW_CONFIG_TEST";
+    private static final TypeReference<List<String>> STRING_LIST = new TypeReference<>() {
+    };
+    private static final TypeReference<Map<String, Object>> OBJECT_MAP = new TypeReference<>() {
+    };
+
+    private final AiReviewConfigMapper aiReviewConfigMapper;
+    private final TaskMapper taskMapper;
+    private final LlmProviderService llmProviderService;
+    private final LlmGateway llmGateway;
+    private final AgentRunService agentRunService;
+    private final AuditAppender auditAppender;
+    private final TraceIdProvider traceIdProvider;
+    private final ObjectMapper objectMapper;
+    @Autowired
+    private PromptTemplateEngine promptTemplateEngine;
+
+    @Autowired
+    public AiReviewConfigService(AiReviewConfigMapper aiReviewConfigMapper,
+                                 TaskMapper taskMapper,
+                                 LlmProviderService llmProviderService,
+                                 LlmGateway llmGateway,
+                                 AgentRunService agentRunService,
+                                 AuditAppender auditAppender,
+                                 TraceIdProvider traceIdProvider) {
+        this(aiReviewConfigMapper, taskMapper, llmProviderService, llmGateway, agentRunService,
+                auditAppender, traceIdProvider, new ObjectMapper());
+    }
+
+    AiReviewConfigService(AiReviewConfigMapper aiReviewConfigMapper,
+                          TaskMapper taskMapper,
+                          LlmProviderService llmProviderService,
+                          LlmGateway llmGateway,
+                          AgentRunService agentRunService,
+                          AuditAppender auditAppender,
+                          TraceIdProvider traceIdProvider,
+                          ObjectMapper objectMapper) {
+        this.aiReviewConfigMapper = aiReviewConfigMapper;
+        this.taskMapper = taskMapper;
+        this.llmProviderService = llmProviderService;
+        this.llmGateway = llmGateway;
+        this.agentRunService = agentRunService;
+        this.auditAppender = auditAppender;
+        this.traceIdProvider = traceIdProvider;
+        this.objectMapper = objectMapper;
+    }
+
+    @Transactional
+    public AiReviewConfigResponse save(Long ownerId, Long taskId, AiReviewConfigRequest request) {
+        Task task = loadOwnedDraftTask(ownerId, taskId);
+        LlmProvider provider = requireEnabledProvider(request.providerId());
+        validateRequest(request, provider);
+        AiReviewConfig existing = findByTaskId(taskId);
+        if (existing != null) {
+            return updateExisting(ownerId, task, existing, request, "AI_REVIEW_CONFIG_UPDATED", provider);
+        }
+
+        AiReviewConfig config = new AiReviewConfig();
+        applyRequest(config, taskId, request, provider);
+        config.setPromptVersion("v1");
+        config.setCreatedBy(ownerId);
+        aiReviewConfigMapper.insert(config);
+        task.setAiReviewConfigId(config.getId());
+        taskMapper.updateById(task);
+        auditAppender.append(new AuditCommand(USER_ACTOR_TYPE, ownerId, BIZ_TYPE, config.getId(), "AI_REVIEW_CONFIG_CREATED",
+                null, auditSnapshot(config), traceIdProvider.currentTraceId(), null));
+        return toResponse(config);
+    }
+
+    @Transactional
+    public AiReviewConfigResponse update(Long ownerId, Long taskId, Long configId, AiReviewConfigRequest request) {
+        Task task = loadOwnedDraftTask(ownerId, taskId);
+        AiReviewConfig config = loadTaskConfig(taskId, configId);
+        LlmProvider provider = requireEnabledProvider(request.providerId());
+        validateRequest(request, provider);
+        return updateExisting(ownerId, task, config, request, "AI_REVIEW_CONFIG_UPDATED", provider);
+    }
+
+    /**
+     * 轻量更新：仅修改已有 AI 配置的流转策略（aiFlowPolicy）及其派生的两个直接处置开关，
+     * 不触碰 provider/prompt/维度/阈值，因此无需整体校验。供编辑草稿任务（updateDraft）调用。
+     * 调用方需保证该任务已存在配置（无配置时不应调用本方法）。
+     */
+    @Transactional
+    public AiReviewConfigResponse updateFlowPolicy(Long ownerId, Long taskId, String aiFlowPolicy) {
+        Task task = loadOwnedDraftTask(ownerId, taskId);
+        AiReviewConfig config = findByTaskId(taskId);
+        if (config == null) {
+            throw new BusinessException(AI_REVIEW_CONFIG_NOT_FOUND, "AI 审核配置不存在");
+        }
+        Map<String, Object> beforeJson = auditSnapshot(config);
+        config.setAiFlowPolicy(aiFlowPolicy);
+        config.setAllowAiDirectApprove("AI_PASS_ONLY".equals(aiFlowPolicy)
+                || "AI_PASS_AND_REJECT".equals(aiFlowPolicy));
+        config.setAllowAiDirectReject("AI_REJECT_ONLY".equals(aiFlowPolicy)
+                || "AI_PASS_AND_REJECT".equals(aiFlowPolicy));
+        aiReviewConfigMapper.updateById(config);
+        auditAppender.append(new AuditCommand(USER_ACTOR_TYPE, ownerId, BIZ_TYPE, config.getId(),
+                "AI_REVIEW_CONFIG_UPDATED", beforeJson, auditSnapshot(config),
+                traceIdProvider.currentTraceId(), null));
+        return toResponse(config);
+    }
+
+    public AiReviewConfigResponse get(Long ownerId, Long taskId) {
+        loadOwnedTask(ownerId, taskId);
+        AiReviewConfig config = findByTaskId(taskId);
+        if (config == null) {
+            throw new BusinessException(AI_REVIEW_CONFIG_NOT_FOUND, "AI 审核配置不存在");
+        }
+        return toResponse(config);
+    }
+
+    public AiReviewConfigResponse findResponseByTaskId(Long taskId) {
+        if (taskId == null) {
+            return null;
+        }
+        AiReviewConfig config = findByTaskId(taskId);
+        return config != null ? toResponse(config) : null;
+    }
+
+    public boolean existsForTask(Long taskId, Long configId) {
+        if (taskId == null || configId == null) {
+            return false;
+        }
+        AiReviewConfig config = aiReviewConfigMapper.selectById(configId);
+        return config != null && taskId.equals(config.getTaskId());
+    }
+
+    @Transactional
+    public AiReviewPromptTestResponse testPrompt(Long ownerId, Long taskId, Long configId,
+                                                 AiReviewPromptTestRequest request) {
+        Task task = taskMapper.selectById(taskId);
+        if (task == null || !ownerId.equals(task.getOwnerId())) {
+            throw new BusinessException(TASK_NOT_FOUND, "Task not found");
+        }
+        AiReviewConfig config = loadTaskConfig(taskId, configId);
+        String inputSnapshot = toJson(promptTestSnapshot(config, request));
+        AgentRun run = agentRunService.create(TEST_AGENT_TYPE, null, config.getProviderId(), config.getModelName(),
+                config.getPromptVersion(), inputSnapshot);
+        agentRunService.start(run.getId());
+
+        String systemPrompt = buildTestSystemPrompt(config, task);
+        LlmGatewayResponse gatewayResponse = llmGateway.review(new LlmGatewayRequest(
+                config.getProviderId(),
+                config.getModelName(),
+                List.of(
+                        new LlmMessage("system", systemPrompt),
+                        new LlmMessage("user", buildPrompt(config, request))
+                )
+        ));
+        if (gatewayResponse.status() == LlmGatewayStatus.SUCCESS) {
+            agentRunService.complete(run.getId(), toJson(gatewayResponseSnapshot(gatewayResponse)));
+        } else {
+            agentRunService.fail(run.getId(), AgentRunStatus.FAILED, gatewayResponse.errorMessage());
+        }
+        return new AiReviewPromptTestResponse(
+                run.getId(),
+                gatewayResponse.status(),
+                gatewayResponse.contentText(),
+                gatewayResponse.structuredJson(),
+                gatewayResponse.rawResponse(),
+                gatewayResponse.latencyMs(),
+                gatewayResponse.errorCode(),
+                gatewayResponse.errorMessage()
+        );
+    }
+
+    private String buildTestSystemPrompt(AiReviewConfig config, Task task) {
+        PromptTemplateEngine.TaskPromptContext ctx = new PromptTemplateEngine.TaskPromptContext(
+                task.getTitle(),
+                task.getDescription(),
+                task.getInstructionRichText(),
+                config.getScoringDimensionsJson(),
+                config.getPassThreshold() != null ? config.getPassThreshold().toString() : "-",
+                config.getManualReviewThreshold() != null ? config.getManualReviewThreshold().toString() : "-",
+                config.getPromptVersion()
+        );
+        String userTemplate = config.getPromptTemplate() != null ? config.getPromptTemplate() : "";
+        return promptTemplateEngine.buildReviewPrompt(userTemplate, ctx, List.of());
+    }
+
+    private AiReviewConfigResponse updateExisting(Long ownerId, Task task, AiReviewConfig config,
+                                                  AiReviewConfigRequest request, String action, LlmProvider provider) {
+        Map<String, Object> beforeJson = auditSnapshot(config);
+        applyRequest(config, task.getId(), request, provider);
+        config.setPromptVersion(nextPromptVersion(config.getPromptVersion()));
+        aiReviewConfigMapper.updateById(config);
+        if (!config.getId().equals(task.getAiReviewConfigId())) {
+            task.setAiReviewConfigId(config.getId());
+            taskMapper.updateById(task);
+        }
+        auditAppender.append(new AuditCommand(USER_ACTOR_TYPE, ownerId, BIZ_TYPE, config.getId(), action,
+                beforeJson, auditSnapshot(config), traceIdProvider.currentTraceId(), null));
+        return toResponse(config);
+    }
+
+    private void applyRequest(AiReviewConfig config, Long taskId, AiReviewConfigRequest request, LlmProvider provider) {
+        config.setTaskId(taskId);
+        config.setProviderId(request.providerId());
+        // modelName 可选：未提供时回退到 Provider 的 defaultModel，避免 NPE
+        String modelName = request.modelName() != null && !request.modelName().isBlank()
+                ? request.modelName().trim()
+                : provider.getDefaultModel();
+        config.setModelName(modelName);
+        config.setPromptTemplate(request.promptTemplate().trim());
+        config.setScoringDimensionsJson(toJson(normalizeDimensions(request.scoringDimensions())));
+        config.setPassThreshold(request.passThreshold());
+        config.setManualReviewThreshold(request.manualReviewThreshold());
+        config.setMaxRetry(request.maxRetry() != null ? request.maxRetry() : 3);
+        config.setAiFlowPolicy(request.aiFlowPolicy() != null ? request.aiFlowPolicy() : "MANUAL_FIRST");
+        config.setAllowAiDirectApprove(Boolean.TRUE.equals(request.allowAiDirectApprove()));
+        config.setAllowAiDirectReject(Boolean.TRUE.equals(request.allowAiDirectReject()));
+        config.setRejectThreshold(request.rejectThreshold());
+        config.setConfidenceThreshold(request.confidenceThreshold());
+        config.setRiskFlagsForceManual(request.riskFlagsForceManual() != null
+                ? toJson(request.riskFlagsForceManual()) : null);
+        config.setMultimodalEnabled(request.multimodalEnabled() == null || Boolean.TRUE.equals(request.multimodalEnabled()));
+        config.setDegradationPenalty(request.degradationPenalty() != null
+                ? request.degradationPenalty() : new BigDecimal("0.20"));
+        config.setVisionDetail(request.visionDetail() != null && !request.visionDetail().isBlank()
+                ? request.visionDetail().trim() : "auto");
+        config.setMaxImagesPerRequest(request.maxImagesPerRequest() != null ? request.maxImagesPerRequest() : 5);
+        config.setAllowAiDirectApproveWhenDegraded(Boolean.TRUE.equals(request.allowAiDirectApproveWhenDegraded()));
+        config.setReviewStrategy(request.reviewStrategy() != null && !request.reviewStrategy().isBlank()
+                ? request.reviewStrategy() : "LIGHTWEIGHT");
+        config.setVoteModelsJson(request.voteModels() != null ? toJson(request.voteModels()) : null);
+        config.setVoteMinAgreement(request.voteMinAgreement() != null ? request.voteMinAgreement() : 2);
+        config.setDimensionReviewersJson(request.dimensionReviewers() != null
+                ? toJson(request.dimensionReviewers()) : null);
+    }
+
+    private void validateRequest(AiReviewConfigRequest request, LlmProvider provider) {
+        if (request.manualReviewThreshold().compareTo(request.passThreshold()) > 0) {
+            throw new BusinessException(AI_REVIEW_CONFIG_INVALID,
+                    "Manual review threshold must not be greater than pass threshold");
+        }
+        if (normalizeDimensions(request.scoringDimensions()).isEmpty()) {
+            throw new BusinessException(AI_REVIEW_CONFIG_INVALID, "AI 审核评分维度不能为空");
+        }
+        String visionDetail = request.visionDetail();
+        if (visionDetail != null && !visionDetail.isBlank()
+                && !List.of("auto", "low", "high").contains(visionDetail.trim())) {
+            throw new BusinessException(AI_REVIEW_CONFIG_INVALID,
+                    "Vision detail must be one of auto, low or high");
+        }
+        Integer maxImages = request.maxImagesPerRequest();
+        Integer providerMaxImages = provider.getMaxImageCount() != null ? provider.getMaxImageCount() : 10;
+        if (maxImages != null && maxImages > providerMaxImages) {
+            throw new BusinessException(AI_REVIEW_CONFIG_INVALID,
+                    "Max images per request exceeds provider capability");
+        }
+    }
+
+    private LlmProvider requireEnabledProvider(Long providerId) {
+        return llmProviderService.findEnabledById(providerId)
+                .orElseThrow(() -> new BusinessException(AI_REVIEW_PROVIDER_DISABLED,
+                        "需要配置已启用的 LLM Provider"));
+    }
+
+    private Task loadOwnedDraftTask(Long ownerId, Long taskId) {
+        Task task = loadOwnedTask(ownerId, taskId);
+        if (task.getStatus() != TaskStatus.DRAFT) {
+            throw new BusinessException(AI_REVIEW_CONFIG_INVALID, "只有草稿状态的任务可以更新 AI 审核配置");
+        }
+        return task;
+    }
+
+    private Task loadOwnedTask(Long ownerId, Long taskId) {
+        Task task = taskMapper.selectById(taskId);
+        if (task == null || (!CurrentUserContext.isAdmin() && !ownerId.equals(task.getOwnerId()))) {
+            throw new BusinessException(TASK_NOT_FOUND, "任务不存在");
+        }
+        return task;
+    }
+
+    private AiReviewConfig loadTaskConfig(Long taskId, Long configId) {
+        AiReviewConfig config = aiReviewConfigMapper.selectById(configId);
+        if (config == null || !taskId.equals(config.getTaskId())) {
+            throw new BusinessException(AI_REVIEW_CONFIG_NOT_FOUND, "AI 审核配置不存在");
+        }
+        return config;
+    }
+
+    private AiReviewConfig findByTaskId(Long taskId) {
+        List<AiReviewConfig> configs = aiReviewConfigMapper.selectList(
+                new QueryWrapper<AiReviewConfig>().eq("task_id", taskId));
+        if (configs.isEmpty()) {
+            return null;
+        }
+        if (configs.size() > 1) {
+            log.warn("Multiple AiReviewConfig rows for task {} ({} rows); using id={}",
+                    taskId, configs.size(), configs.get(0).getId());
+        }
+        return configs.get(0);
+    }
+
+    private AiReviewConfigResponse toResponse(AiReviewConfig config) {
+        return new AiReviewConfigResponse(
+                config.getId(),
+                config.getTaskId(),
+                config.getProviderId(),
+                config.getModelName(),
+                config.getPromptTemplate(),
+                parseDimensions(config.getScoringDimensionsJson()),
+                config.getPassThreshold(),
+                config.getManualReviewThreshold(),
+                config.getOutputSchemaJson() != null ? parseObjectMap(config.getOutputSchemaJson()) : null,
+                config.getPromptVersion(),
+                config.getMaxRetry(),
+                config.getAiFlowPolicy(),
+                config.getAllowAiDirectApprove(),
+                config.getAllowAiDirectReject(),
+                config.getRejectThreshold(),
+                config.getConfidenceThreshold(),
+                parseStringListOrNull(config.getRiskFlagsForceManual()),
+                config.getMultimodalEnabled() == null || Boolean.TRUE.equals(config.getMultimodalEnabled()),
+                config.getDegradationPenalty() != null ? config.getDegradationPenalty() : new BigDecimal("0.20"),
+                config.getVisionDetail() != null ? config.getVisionDetail() : "auto",
+                config.getMaxImagesPerRequest() != null ? config.getMaxImagesPerRequest() : 5,
+                Boolean.TRUE.equals(config.getAllowAiDirectApproveWhenDegraded()),
+                config.getReviewStrategy() != null ? config.getReviewStrategy() : "LIGHTWEIGHT",
+                config.getVoteModelsJson() != null ? parseListMap(config.getVoteModelsJson()) : null,
+                config.getVoteMinAgreement() != null ? config.getVoteMinAgreement() : 2,
+                config.getDimensionReviewersJson() != null
+                        ? parseStringListOfMapMap(config.getDimensionReviewersJson()) : null
+        );
+    }
+
+    private Map<String, Object> auditSnapshot(AiReviewConfig config) {
+        Map<String, Object> snapshot = new LinkedHashMap<>();
+        snapshot.put("id", config.getId());
+        snapshot.put("taskId", config.getTaskId());
+        snapshot.put("providerId", config.getProviderId());
+        snapshot.put("modelName", config.getModelName());
+        snapshot.put("promptTemplate", config.getPromptTemplate());
+        snapshot.put("scoringDimensions", parseDimensions(config.getScoringDimensionsJson()));
+        snapshot.put("passThreshold", config.getPassThreshold());
+        snapshot.put("manualReviewThreshold", config.getManualReviewThreshold());
+        snapshot.put("outputSchema", config.getOutputSchemaJson() != null
+                ? parseObjectMap(config.getOutputSchemaJson()) : null);
+        snapshot.put("promptVersion", config.getPromptVersion());
+        snapshot.put("multimodalEnabled", config.getMultimodalEnabled());
+        snapshot.put("degradationPenalty", config.getDegradationPenalty());
+        snapshot.put("visionDetail", config.getVisionDetail());
+        snapshot.put("maxImagesPerRequest", config.getMaxImagesPerRequest());
+        return snapshot;
+    }
+
+    private Map<String, Object> promptTestSnapshot(AiReviewConfig config, AiReviewPromptTestRequest request) {
+        Map<String, Object> snapshot = new LinkedHashMap<>();
+        snapshot.put("config", auditSnapshot(config));
+        snapshot.put("itemSnapshot", request.itemSnapshot());
+        snapshot.put("answerJson", request.answerJson());
+        return snapshot;
+    }
+
+    private Map<String, Object> gatewayResponseSnapshot(LlmGatewayResponse response) {
+        Map<String, Object> snapshot = new LinkedHashMap<>();
+        snapshot.put("status", response.status());
+        snapshot.put("rawResponse", response.rawResponse());
+        snapshot.put("contentText", response.contentText());
+        snapshot.put("structuredJson", response.structuredJson());
+        snapshot.put("latencyMs", response.latencyMs());
+        snapshot.put("errorCode", response.errorCode());
+        snapshot.put("errorMessage", response.errorMessage());
+        return snapshot;
+    }
+
+    private String buildPrompt(AiReviewConfig config, AiReviewPromptTestRequest request) {
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("promptTemplate", config.getPromptTemplate());
+        payload.put("scoringDimensions", parseDimensions(config.getScoringDimensionsJson()));
+        payload.put("passThreshold", config.getPassThreshold());
+        payload.put("manualReviewThreshold", config.getManualReviewThreshold());
+        payload.put("outputSchema", config.getOutputSchemaJson() != null
+                ? parseObjectMap(config.getOutputSchemaJson()) : null);
+        payload.put("itemSnapshot", request.itemSnapshot());
+        payload.put("answerJson", request.answerJson());
+        return toJson(payload);
+    }
+
+    private List<String> normalizeDimensions(List<String> dimensions) {
+        if (dimensions == null) {
+            return List.of();
+        }
+        return dimensions.stream()
+                .filter(value -> value != null && !value.isBlank())
+                .map(String::trim)
+                .distinct()
+                .toList();
+    }
+
+    private String nextPromptVersion(String currentVersion) {
+        if (currentVersion == null || !currentVersion.startsWith("v")) {
+            return "v1";
+        }
+        try {
+            return "v" + (Integer.parseInt(currentVersion.substring(1)) + 1);
+        } catch (NumberFormatException ex) {
+            return "v1";
+        }
+    }
+
+    private List<String> parseDimensions(String json) {
+        try {
+            return objectMapper.readValue(json, STRING_LIST);
+        } catch (JsonProcessingException ex) {
+            throw new BusinessException(AI_REVIEW_CONFIG_INVALID, "AI 审核评分维度不合法");
+        }
+    }
+
+    private List<String> parseStringListOrNull(String json) {
+        if (json == null || json.isBlank()) {
+            return null;
+        }
+        try {
+            return objectMapper.readValue(json, STRING_LIST);
+        } catch (JsonProcessingException ex) {
+            return null;
+        }
+    }
+
+    private Map<String, Object> parseObjectMap(String json) {
+        try {
+            return objectMapper.readValue(json, OBJECT_MAP);
+        } catch (JsonProcessingException ex) {
+            throw new BusinessException(AI_REVIEW_CONFIG_INVALID, "AI 审核输出结构不合法");
+        }
+    }
+
+    private String toJson(Object value) {
+        try {
+            return objectMapper.writeValueAsString(value);
+        } catch (JsonProcessingException ex) {
+            throw new BusinessException(AI_REVIEW_CONFIG_INVALID, "AI 审核配置 JSON 格式不合法");
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    private List<Map<String, Object>> parseListMap(String json) {
+        if (json == null || json.isBlank()) return null;
+        try {
+            return objectMapper.readValue(json, new TypeReference<>() {});
+        } catch (JsonProcessingException ex) {
+            return null;
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    private Map<String, List<Map<String, Object>>> parseStringListOfMapMap(String json) {
+        if (json == null || json.isBlank()) return null;
+        try {
+            return objectMapper.readValue(json, new TypeReference<>() {});
+        } catch (JsonProcessingException ex) {
+            return null;
+        }
+    }
+}

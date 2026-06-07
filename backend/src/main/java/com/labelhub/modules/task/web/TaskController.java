@@ -42,7 +42,12 @@ public class TaskController {
     }
 
     @PostMapping
-    @Operation(summary = "创建任务", description = "创建草稿任务，归属当前 OWNER 用户。")
+    @Operation(summary = "创建任务", description = """
+            创建草稿任务，归属当前 OWNER 用户。
+            当前要求创建时必须内联配置 AI 审核：需传 aiProviderId、aiPrompt、aiScoringDimensions 创建配置。
+            aiReviewConfigId 会在任务创建并保存 AI 配置后由后端自动回写，创建新任务时不作为通过条件。
+            内联场景下 aiPassThreshold/aiManualReviewThreshold 可缺省，后端默认 80.00/60.00；
+            aiFlowPolicy 可缺省，默认 MANUAL_FIRST。""")
     public ApiResponse<CreateTaskResponse> create(@Valid @RequestBody CreateTaskRequest request) {
         return ApiResponse.ok(taskLifecycleService.createWithDataset(
                 CurrentUserContext.getUserId(), request));
@@ -56,7 +61,10 @@ public class TaskController {
     }
 
     @PutMapping("/{taskId}")
-    @Operation(summary = "编辑草稿任务", description = "仅允许编辑 DRAFT 状态任务。")
+    @Operation(summary = "编辑草稿任务", description = """
+            仅允许编辑 DRAFT 状态任务。
+            如果传入 aiFlowPolicy 且任务已有 AI 审核配置，后端会同步更新该配置的 AI 流转策略；
+            如果任务尚无 AI 配置，aiFlowPolicy 不会创建新配置。""")
     public ApiResponse<TaskStatusResponse> updateDraft(
             @PathVariable Long taskId,
             @Valid @RequestBody UpdateTaskRequest request) {

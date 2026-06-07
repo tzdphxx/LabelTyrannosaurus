@@ -111,6 +111,8 @@ class TaskLifecycleServiceTest {
                 dispatchMapper,
                 applicationEventPublisher
         );
+        Mockito.lenient().when(aiReviewConfigService.save(eq(OWNER_ID), eq(TASK_ID), any()))
+                .thenReturn(aiReviewConfigResponse());
     }
 
     @AfterEach
@@ -193,6 +195,14 @@ class TaskLifecycleServiceTest {
 
         assertThat(response.taskId()).isEqualTo(TASK_ID);
         verify(taskMapper).insert(any(Task.class));
+    }
+
+    @Test
+    void rejectsTaskCreationWithoutInlineAiReviewConfig() {
+        assertThatThrownBy(() -> taskLifecycleService.create(OWNER_ID, createRequestWithoutAiReviewConfig()))
+                .isInstanceOfSatisfying(BusinessException.class,
+                        ex -> assertThat(ex.getCode()).isEqualTo(400104));
+        verify(taskMapper, never()).insert(any(Task.class));
     }
 
     @Test
@@ -453,8 +463,9 @@ class TaskLifecycleServiceTest {
                 LocalDateTime.now().plusDays(1),
                 overlapCount,
                 100L,
-                200L,
-                null, null, null, null, null, null,
+                null,
+                300L, null, "Review prompt", List.of("accuracy"), null, null,
+                null,
                 null,
                 null, null,
                 1,
@@ -473,8 +484,9 @@ class TaskLifecycleServiceTest {
                 LocalDateTime.now().plusDays(1),
                 1,
                 100L,
-                200L,
-                null, null, null, null, null, null,
+                null,
+                300L, null, "Review prompt", List.of("accuracy"), null, null,
+                null,
                 null,
                 null, null,
                 1,
@@ -493,13 +505,35 @@ class TaskLifecycleServiceTest {
                 LocalDateTime.now().plusDays(1),
                 1,
                 100L,
-                200L,
-                null, null, null, null, null, null,
+                null,
+                300L, null, "Review prompt", List.of("accuracy"), null, null,
+                null,
                 null,
                 null, null,
                 1,
                 null,
                 rewardRule
+        );
+    }
+
+    private CreateTaskRequest createRequestWithoutAiReviewConfig() {
+        return new CreateTaskRequest(
+                "New task",
+                "Description",
+                "Instruction",
+                List.of("qa"),
+                10,
+                LocalDateTime.now().plusDays(1),
+                1,
+                100L,
+                200L,
+                null, null, null, null, null, null,
+                null,
+                null,
+                null, null,
+                1,
+                null,
+                null
         );
     }
 
@@ -518,6 +552,7 @@ class TaskLifecycleServiceTest {
                 overlapCount,
                 100L,
                 200L,
+                null,
                 1,
                 null,
                 null,
@@ -536,6 +571,7 @@ class TaskLifecycleServiceTest {
                 1,
                 100L,
                 200L,
+                null,
                 1,
                 null,
                 null,

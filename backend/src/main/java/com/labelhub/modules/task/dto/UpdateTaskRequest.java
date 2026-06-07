@@ -40,6 +40,14 @@ public record UpdateTaskRequest(
         Long publishedTemplateVersionId,
         @Schema(description = "AI 审核配置 ID", example = "30")
         Long aiReviewConfigId,
+        @Schema(description = """
+                AI 流转策略（仅当任务已有 AI 配置时生效，用于调整直接处置开关）:
+                MANUAL_FIRST — AI 只提建议，结果一律转人工（默认）
+                AI_PASS_ONLY — 允许 AI 直接过审，打回仍转人工
+                AI_REJECT_ONLY — 允许 AI 直接打回，通过仍转人工
+                AI_PASS_AND_REJECT — 允许 AI 直接过审与直接打回
+                ALWAYS_MANUAL — 始终转人工""",
+                example = "MANUAL_FIRST") String aiFlowPolicy,
         @Schema(description = "审核级别数（1=单级审核，2=初审+终审，3=初审+复审+终审）", example = "3")
         @Min(1)
         Integer reviewLevelCount,

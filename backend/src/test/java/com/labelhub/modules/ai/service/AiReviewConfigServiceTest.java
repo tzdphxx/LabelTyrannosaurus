@@ -126,6 +126,31 @@ class AiReviewConfigServiceTest {
     }
 
     @Test
+    void backfillsModelNameFromProviderDefaultWhenOmitted() {
+        Task task = draftTask();
+        when(taskMapper.selectById(TASK_ID)).thenReturn(task);
+        when(llmProviderService.findEnabledById(PROVIDER_ID)).thenReturn(Optional.of(provider()));
+        when(aiReviewConfigMapper.selectList(any(Wrapper.class))).thenReturn(List.of());
+        when(traceIdProvider.currentTraceId()).thenReturn("trace-1");
+        when(aiReviewConfigMapper.insert(any(AiReviewConfig.class))).thenAnswer(invocation -> {
+            AiReviewConfig config = invocation.getArgument(0);
+            config.setId(CONFIG_ID);
+            return 1;
+        });
+
+        AiReviewConfigRequest noModel = new AiReviewConfigRequest(
+                PROVIDER_ID, null, "Review this answer.", List.of("accuracy"),
+                new BigDecimal("85.00"), new BigDecimal("60.00"),
+                3, null, null, null, null, null, null, null);
+
+        service.save(OWNER_ID, TASK_ID, noModel);
+
+        ArgumentCaptor<AiReviewConfig> captor = ArgumentCaptor.forClass(AiReviewConfig.class);
+        verify(aiReviewConfigMapper).insert(captor.capture());
+        assertThat(captor.getValue().getModelName()).isEqualTo("qwen-plus");
+    }
+
+    @Test
     void rejectsDisabledProvider() {
         when(taskMapper.selectById(TASK_ID)).thenReturn(draftTask());
         when(llmProviderService.findEnabledById(PROVIDER_ID)).thenReturn(Optional.empty());

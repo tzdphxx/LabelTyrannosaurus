@@ -103,11 +103,11 @@ public class AiReviewConfigService {
         validateRequest(request, provider);
         AiReviewConfig existing = findByTaskId(taskId);
         if (existing != null) {
-            return updateExisting(ownerId, task, existing, request, "AI_REVIEW_CONFIG_UPDATED");
+            return updateExisting(ownerId, task, existing, request, "AI_REVIEW_CONFIG_UPDATED", provider);
         }
 
         AiReviewConfig config = new AiReviewConfig();
-        applyRequest(config, taskId, request);
+        applyRequest(config, taskId, request, provider);
         config.setPromptVersion("v1");
         config.setCreatedBy(ownerId);
         aiReviewConfigMapper.insert(config);
@@ -124,7 +124,32 @@ public class AiReviewConfigService {
         AiReviewConfig config = loadTaskConfig(taskId, configId);
         LlmProvider provider = requireEnabledProvider(request.providerId());
         validateRequest(request, provider);
-        return updateExisting(ownerId, task, config, request, "AI_REVIEW_CONFIG_UPDATED");
+        return updateExisting(ownerId, task, config, request, "AI_REVIEW_CONFIG_UPDATED", provider);
+    }
+
+    /**
+     * 轻量更新：仅修改已有 AI 配置的流转策略（aiFlowPolicy）及其派生的两个直接处置开关，
+     * 不触碰 provider/prompt/维度/阈值，因此无需整体校验。供编辑草稿任务（updateDraft）调用。
+     * 调用方需保证该任务已存在配置（无配置时不应调用本方法）。
+     */
+    @Transactional
+    public AiReviewConfigResponse updateFlowPolicy(Long ownerId, Long taskId, String aiFlowPolicy) {
+        Task task = loadOwnedDraftTask(ownerId, taskId);
+        AiReviewConfig config = findByTaskId(taskId);
+        if (config == null) {
+            throw new BusinessException(AI_REVIEW_CONFIG_NOT_FOUND, "AI 审核配置不存在");
+        }
+        Map<String, Object> beforeJson = auditSnapshot(config);
+        config.setAiFlowPolicy(aiFlowPolicy);
+        config.setAllowAiDirectApprove("AI_PASS_ONLY".equals(aiFlowPolicy)
+                || "AI_PASS_AND_REJECT".equals(aiFlowPolicy));
+        config.setAllowAiDirectReject("AI_REJECT_ONLY".equals(aiFlowPolicy)
+                || "AI_PASS_AND_REJECT".equals(aiFlowPolicy));
+        aiReviewConfigMapper.updateById(config);
+        auditAppender.append(new AuditCommand(USER_ACTOR_TYPE, ownerId, BIZ_TYPE, config.getId(),
+                "AI_REVIEW_CONFIG_UPDATED", beforeJson, auditSnapshot(config),
+                traceIdProvider.currentTraceId(), null));
+        return toResponse(config);
     }
 
     public AiReviewConfigResponse get(Long ownerId, Long taskId) {
@@ -206,9 +231,9 @@ public class AiReviewConfigService {
     }
 
     private AiReviewConfigResponse updateExisting(Long ownerId, Task task, AiReviewConfig config,
-                                                  AiReviewConfigRequest request, String action) {
+                                                  AiReviewConfigRequest request, String action, LlmProvider provider) {
         Map<String, Object> beforeJson = auditSnapshot(config);
-        applyRequest(config, task.getId(), request);
+        applyRequest(config, task.getId(), request, provider);
         config.setPromptVersion(nextPromptVersion(config.getPromptVersion()));
         aiReviewConfigMapper.updateById(config);
         if (!config.getId().equals(task.getAiReviewConfigId())) {
@@ -220,10 +245,14 @@ public class AiReviewConfigService {
         return toResponse(config);
     }
 
-    private void applyRequest(AiReviewConfig config, Long taskId, AiReviewConfigRequest request) {
+    private void applyRequest(AiReviewConfig config, Long taskId, AiReviewConfigRequest request, LlmProvider provider) {
         config.setTaskId(taskId);
         config.setProviderId(request.providerId());
-        config.setModelName(request.modelName().trim());
+        // modelName 可选：未提供时回退到 Provider 的 defaultModel，避免 NPE
+        String modelName = request.modelName() != null && !request.modelName().isBlank()
+                ? request.modelName().trim()
+                : provider.getDefaultModel();
+        config.setModelName(modelName);
         config.setPromptTemplate(request.promptTemplate().trim());
         config.setScoringDimensionsJson(toJson(normalizeDimensions(request.scoringDimensions())));
         config.setPassThreshold(request.passThreshold());

@@ -72,6 +72,9 @@ class ReviewServiceTest {
     void setUp() {
         lenient().when(escalationService.getMaxReviewLevel(any())).thenReturn(1);
         lenient().when(submissionMapper.casUpdateStatus(any(), any(), any())).thenReturn(1);
+        lenient().when(submissionMapper.markApprovedIfPendingFinal(anyLong())).thenReturn(1);
+        lenient().when(submissionMapper.markRejectedIfPendingFinal(anyLong())).thenReturn(1);
+        lenient().when(assignmentMapper.selectByIdForUpdate(anyLong())).thenReturn(submittedAssignment());
         lenient().when(traceIdProvider.currentTraceId()).thenReturn("trace-review-action");
         reviewService = new ReviewService(
                 submissionMapper, assignmentMapper, reviewRecordMapper,
@@ -336,6 +339,20 @@ class ReviewServiceTest {
         reviewService.reject(SUBMISSION_ID, REVIEWER_ID, new RejectRequest("Bad label", 1));
 
         verify(eventPublisher, never()).publishApproved(any(), any());
+    }
+
+    @Test
+    void rejectCasFailureDoesNotPublishRejectedEvent() {
+        when(submissionMapper.selectById(SUBMISSION_ID)).thenReturn(pendingFinalSubmission());
+        when(submissionMapper.markRejectedIfPendingFinal(SUBMISSION_ID)).thenReturn(0);
+
+        assertThatThrownBy(() -> reviewService.reject(
+                SUBMISSION_ID, REVIEWER_ID, new RejectRequest("Bad label", 1)))
+                .isInstanceOfSatisfying(BusinessException.class,
+                        ex -> assertThat(ex.getCode()).isEqualTo(400601));
+
+        verify(assignmentMapper, never()).updateById(any(Assignment.class));
+        verify(eventPublisher, never()).publishRejected(any(), any(), any());
     }
 
     // --- listPendingFinal ---

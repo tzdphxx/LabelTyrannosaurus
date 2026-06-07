@@ -18,10 +18,14 @@ import com.labelhub.modules.task.dto.TaskStatisticsResponse;
 import com.labelhub.modules.task.dto.TaskSummaryResponse;
 import com.labelhub.modules.task.mapper.TaskMapper;
 import com.labelhub.modules.task.mapper.TaskTagMapper;
+import java.util.Collections;
+import java.util.HashMap;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -66,12 +70,14 @@ public class TaskManagementService {
 
         Long effectiveOwnerId = CurrentUserContext.isAdmin() ? null : ownerId;
         long total = taskMapper.countOwnerTasks(effectiveOwnerId, status, keyword);
-        List<TaskSummaryResponse> items = taskMapper
-                .selectOwnerTasksPage(effectiveOwnerId, status, keyword, normalizedSize, offset)
-                .stream()
+        List<Task> tasks = taskMapper
+                .selectOwnerTasksPage(effectiveOwnerId, status, keyword, normalizedSize, offset);
+        Map<Long, List<String>> tagsByTaskId = loadTagsByTaskId(
+                tasks.stream().map(Task::getId).toList());
+        List<TaskSummaryResponse> items = tasks.stream()
                 .map(task -> new TaskSummaryResponse(
                         task.getId(), task.getTitle(), task.getStatus(),
-                        listTags(task.getId()), task.getQuota(),
+                        tagsByTaskId.getOrDefault(task.getId(), List.of()), task.getQuota(),
                         task.getClaimedCount(), task.getOverlapCount(),
                         task.getStrategy(),
                         task.getDeadlineAt(), task.getPublishedAt(),
@@ -84,10 +90,15 @@ public class TaskManagementService {
     public TaskStatisticsResponse getStatistics(Long ownerId, Long taskId) {
         Task task = loadOwnedTask(ownerId, taskId);
         int totalItems = datasetItemMapper.countByTaskId(taskId);
-        int submitted = submissionMapper.countByTaskIdAndStatus(taskId, "PENDING_FINAL");
-        int approved = submissionMapper.countByTaskIdAndStatus(taskId, "APPROVED");
-        int rejected = submissionMapper.countByTaskIdAndStatus(taskId, "REJECTED");
-        int pendingReview = submissionMapper.countByTaskIdAndStatus(taskId, "PENDING_FINAL");
+        Map<String, Integer> counts = submissionMapper.selectStatusCountsByTaskId(taskId).stream()
+                .collect(Collectors.toMap(
+                        row -> String.valueOf(row.get("status")),
+                        row -> toInt(row.get("count")),
+                        Integer::sum));
+        int submitted = counts.getOrDefault("PENDING_FINAL", 0);
+        int approved = counts.getOrDefault("APPROVED", 0);
+        int rejected = counts.getOrDefault("REJECTED", 0);
+        int pendingReview = submitted;
 
         String passRate = "0.00%";
         int total = approved + rejected;
@@ -160,6 +171,16 @@ public class TaskManagementService {
             throw new BusinessException(TASK_NOT_FOUND, "任务不存在");
         }
         return task;
+    }
+
+    private Map<Long, List<String>> loadTagsByTaskId(Collection<Long> taskIds) {
+        if (taskIds == null || taskIds.isEmpty()) {
+            return Collections.emptyMap();
+        }
+        Map<Long, List<String>> grouped = taskTagMapper.selectByTaskIds(taskIds).stream()
+                .collect(Collectors.groupingBy(TaskTag::getTaskId,
+                        Collectors.mapping(TaskTag::getTagName, Collectors.toList())));
+        return new HashMap<>(grouped);
     }
 
     private List<String> listTags(Long taskId) {

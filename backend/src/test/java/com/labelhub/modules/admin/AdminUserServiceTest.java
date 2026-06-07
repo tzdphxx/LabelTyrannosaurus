@@ -12,6 +12,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -33,7 +34,8 @@ class AdminUserServiceTest {
     @Test
     void listUsersReturnsSingleRole() {
         when(userMapper.selectAdminUsers(false)).thenReturn(List.of(user(10L, 1)));
-        when(userRoleMapper.selectRoleCodesByUserId(10L)).thenReturn(Set.of(RoleCode.ADMIN));
+        when(userRoleMapper.selectRoleCodesByUserIds(List.of(10L)))
+                .thenReturn(List.of(Map.of("userId", 10L, "roleCode", RoleCode.ADMIN)));
 
         var responses = adminUserService.listUsers(false);
 
@@ -72,9 +74,11 @@ class AdminUserServiceTest {
     @Test
     void listUsersToleratesInvalidRoleDataWithoutFailingWholePage() {
         when(userMapper.selectAdminUsers(false)).thenReturn(List.of(user(10L, 1), user(11L, 1), user(12L, 1)));
-        when(userRoleMapper.selectRoleCodesByUserId(10L)).thenReturn(Set.of(RoleCode.LABELER));
-        when(userRoleMapper.selectRoleCodesByUserId(11L)).thenReturn(Set.of(RoleCode.REVIEWER, RoleCode.OWNER));
-        when(userRoleMapper.selectRoleCodesByUserId(12L)).thenReturn(Set.of());
+        when(userRoleMapper.selectRoleCodesByUserIds(List.of(10L, 11L, 12L)))
+                .thenReturn(List.of(
+                        Map.of("userId", 10L, "roleCode", RoleCode.LABELER),
+                        Map.of("userId", 11L, "roleCode", RoleCode.REVIEWER),
+                        Map.of("userId", 11L, "roleCode", RoleCode.OWNER)));
 
         var responses = adminUserService.listUsers(false);
 

@@ -16,7 +16,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 /**
  * Admin 用户管理服务。
@@ -45,8 +47,15 @@ public class AdminUserService {
      * 查询用户列表，默认由 Controller 传入 {@code includeSystem=false} 过滤系统用户。
      */
     public List<AdminUserResponse> listUsers(boolean includeSystem) {
-        return userMapper.selectAdminUsers(includeSystem).stream()
-                .map(user -> toResponse(user, userRoleMapper.selectRoleCodesByUserId(user.getId()), false))
+        List<UserEntity> users = userMapper.selectAdminUsers(includeSystem);
+        Map<Long, Set<RoleCode>> rolesByUserId = userRoleMapper.selectRoleCodesByUserIds(
+                        users.stream().map(UserEntity::getId).toList())
+                .stream()
+                .collect(Collectors.groupingBy(
+                        row -> toLong(row.get("userId")),
+                        Collectors.mapping(row -> toRoleCode(row.get("roleCode")), Collectors.toSet())));
+        return users.stream()
+                .map(user -> toResponse(user, rolesByUserId.getOrDefault(user.getId(), Set.of()), false))
                 .toList();
     }
 
@@ -150,5 +159,19 @@ public class AdminUserService {
             throw new BusinessException(400102, "用户必须且只能拥有一个角色");
         }
         return roles.iterator().next();
+    }
+
+    private Long toLong(Object value) {
+        if (value instanceof Number number) {
+            return number.longValue();
+        }
+        return Long.valueOf(String.valueOf(value));
+    }
+
+    private RoleCode toRoleCode(Object value) {
+        if (value instanceof RoleCode roleCode) {
+            return roleCode;
+        }
+        return RoleCode.valueOf(String.valueOf(value));
     }
 }

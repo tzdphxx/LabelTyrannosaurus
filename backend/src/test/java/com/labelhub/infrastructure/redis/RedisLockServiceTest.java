@@ -25,7 +25,7 @@ class RedisLockServiceTest {
         assertThat(RedisKeyBuilder.claimLock(7L, 9L))
                 .isEqualTo("lock:claim:task:7:item:9");
         assertThat(RedisKeyBuilder.assignmentDraft(11L))
-                .isEqualTo("draft:assignment:11");
+                .isEqualTo("cache:assignment:draft:11");
         assertThat(RedisKeyBuilder.llmRate("task", 13L))
                 .isEqualTo("llm:rate:task:13");
         assertThat(RedisKeyBuilder.eventDedup("SubmissionApproved", "evt-15"))

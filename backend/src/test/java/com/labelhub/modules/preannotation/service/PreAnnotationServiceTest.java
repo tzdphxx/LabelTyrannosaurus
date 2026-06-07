@@ -13,6 +13,8 @@ import static org.mockito.Mockito.when;
 import com.labelhub.common.audit.AuditAppender;
 import com.labelhub.common.audit.AuditCommand;
 import com.labelhub.common.exception.BusinessException;
+import com.labelhub.common.security.CurrentUser;
+import com.labelhub.common.security.RoleCode;
 import com.labelhub.common.web.TraceIdProvider;
 import com.labelhub.infrastructure.llm.LlmGateway;
 import com.labelhub.infrastructure.llm.LlmGatewayRequest;
@@ -51,6 +53,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.function.Supplier;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -248,6 +251,34 @@ class PreAnnotationServiceTest {
                         ex -> assertThat(ex.getCode()).isEqualTo(403801));
     }
 
+    @Test
+    void reviewerCannotReadPreAnnotationForUnassignedSubmission() {
+        PreAnnotation record = preAnnotationRecord();
+        when(preAnnotationMapper.selectById(99L)).thenReturn(record);
+        when(assignmentMapper.selectById(ASSIGNMENT_ID)).thenReturn(assignment());
+        when(taskMapper.selectById(TASK_ID)).thenReturn(task());
+        when(submissionMapper.selectLatestActiveByAssignmentId(ASSIGNMENT_ID)).thenReturn(submission(88L));
+
+        assertThatThrownBy(() -> service.getDetail(99L,
+                new CurrentUser(30L, "reviewer", "r@test.dev", Set.of(RoleCode.REVIEWER), 1)))
+                .isInstanceOfSatisfying(BusinessException.class,
+                        ex -> assertThat(ex.getCode()).isEqualTo(403801));
+    }
+
+    @Test
+    void assignedReviewerCanReadPreAnnotationDetail() {
+        PreAnnotation record = preAnnotationRecord();
+        when(preAnnotationMapper.selectById(99L)).thenReturn(record);
+        when(assignmentMapper.selectById(ASSIGNMENT_ID)).thenReturn(assignment());
+        when(taskMapper.selectById(TASK_ID)).thenReturn(task());
+        when(submissionMapper.selectLatestActiveByAssignmentId(ASSIGNMENT_ID)).thenReturn(submission(30L));
+
+        PreAnnotationResponse response = service.getDetail(99L,
+                new CurrentUser(30L, "reviewer", "r@test.dev", Set.of(RoleCode.REVIEWER), 1));
+
+        assertThat(response.preAnnotationId()).isEqualTo(99L);
+    }
+
     private Assignment assignment() {
         Assignment assignment = new Assignment();
         assignment.setId(ASSIGNMENT_ID);
@@ -257,6 +288,31 @@ class PreAnnotationServiceTest {
         assignment.setTemplateVersionId(80L);
         assignment.setStatus(AssignmentStatus.DRAFTING);
         return assignment;
+    }
+
+    private PreAnnotation preAnnotationRecord() {
+        PreAnnotation record = new PreAnnotation();
+        record.setId(99L);
+        record.setAssignmentId(ASSIGNMENT_ID);
+        record.setTaskId(TASK_ID);
+        record.setDatasetItemId(70L);
+        record.setLabelerId(LABELER_ID);
+        record.setStatus(PreAnnotationStatus.SUCCESS);
+        record.setSuggestedAnswerJson("{}");
+        record.setFieldSuggestions("[]");
+        record.setRiskFlags("[]");
+        record.setLimitations("[]");
+        record.setIgnoredFieldsJson("[]");
+        record.setMediaUnderstandingJson("{}");
+        return record;
+    }
+
+    private Submission submission(Long assignedReviewerId) {
+        Submission submission = new Submission();
+        submission.setId(100L);
+        submission.setAssignmentId(ASSIGNMENT_ID);
+        submission.setAssignedReviewerId(assignedReviewerId);
+        return submission;
     }
 
     private Task task() {

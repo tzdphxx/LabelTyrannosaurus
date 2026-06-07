@@ -38,7 +38,7 @@ public record CreateTaskRequest(
         Integer overlapCount,
         @Schema(description = "已发布模板版本 ID", example = "20")
         Long publishedTemplateVersionId,
-        @Schema(description = "AI 审核配置 ID（引用已创建的配置，与内联 aiPrompt 互斥）", example = "30")
+        @Schema(description = "AI 审核配置 ID。创建新任务时不建议传该字段；当前创建接口要求内联提供 aiProviderId、aiPrompt、aiScoringDimensions，创建成功后后端会自动回写配置 ID", example = "30")
         Long aiReviewConfigId,
         @Schema(description = "AI 模型供应商 ID（内联创建 AI 配置时必填）")
         Long aiProviderId,
@@ -61,6 +61,14 @@ public record CreateTaskRequest(
                 DEEP_DIMENSION — 维度专项模型 + 维度内投票
                 AGENT_DEBATE — 多 Agent 辩论""",
                 example = "LIGHTWEIGHT") String aiReviewStrategy,
+        @Schema(description = """
+                AI 流转策略（内联创建 AI 配置时可选，仅在内联创建时生效）:
+                MANUAL_FIRST — AI 只提建议，结果一律转人工（默认）
+                AI_PASS_ONLY — 允许 AI 直接过审，打回仍转人工
+                AI_REJECT_ONLY — 允许 AI 直接打回，通过仍转人工
+                AI_PASS_AND_REJECT — 允许 AI 直接过审与直接打回
+                ALWAYS_MANUAL — 始终转人工""",
+                example = "MANUAL_FIRST") String aiFlowPolicy,
         @Schema(description = "领取策略", example = "FCFS", allowableValues = {"FCFS", "QUOTA_GRAB", "ASSIGNED"})
         String strategy,
         @Schema(description = "单人并发未完成上限（仅 QUOTA_GRAB 有效）", example = "10")

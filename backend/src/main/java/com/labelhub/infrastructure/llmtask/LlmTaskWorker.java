@@ -81,6 +81,13 @@ public class LlmTaskWorker {
         } catch (Exception ex) {
             log.warn("LLM task execution failed: type={}, bizId={}, messageId={}",
                     message.taskType(), message.bizId(), record.messageId(), ex);
+            try {
+                handler.onFailure(message, ex);
+                queueService.ack(message.taskType(), record.messageId());
+            } catch (Exception failureEx) {
+                log.warn("LLM task failure callback failed: type={}, bizId={}, messageId={}",
+                        message.taskType(), message.bizId(), record.messageId(), failureEx);
+            }
         }
     }
 }

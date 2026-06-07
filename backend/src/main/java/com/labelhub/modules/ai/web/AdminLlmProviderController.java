@@ -12,6 +12,8 @@ import com.labelhub.modules.ai.service.LlmProviderService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import java.util.List;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
@@ -28,6 +30,14 @@ public class AdminLlmProviderController {
 
     public AdminLlmProviderController(LlmProviderService llmProviderService) {
         this.llmProviderService = llmProviderService;
+    }
+
+    @GetMapping
+    @Operation(summary = "Provider 管理列表",
+            description = "ADMIN 查看全部 LLM Provider，包括已启用和已停用配置；响应不会返回 API Key 明文或密文。")
+    public ApiResponse<List<LlmProviderResponse>> list() {
+        CurrentUserContext.requireRole(RoleCode.ADMIN);
+        return ApiResponse.ok(llmProviderService.listAllForAdmin());
     }
 
     @PostMapping

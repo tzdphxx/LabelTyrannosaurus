@@ -24,12 +24,11 @@ public class AiFlowDecisionService {
             return AiFlowAction.AI_ASSIGN_MANUAL_REVIEW;
         }
 
-        if (hasForceManualRiskFlags(result, config)) {
+        if (hasAnyRiskFlags(result) || hasForceManualRiskFlags(result, config)) {
             return AiFlowAction.AI_ASSIGN_MANUAL_REVIEW;
         }
 
-        if (Boolean.TRUE.equals(result.getDegraded())
-                && !Boolean.TRUE.equals(config.getAllowAiDirectApproveWhenDegraded())) {
+        if (Boolean.TRUE.equals(result.getDegraded())) {
             return AiFlowAction.AI_ASSIGN_MANUAL_REVIEW;
         }
 
@@ -110,6 +109,18 @@ public class AiFlowDecisionService {
             return riskFlags.stream().anyMatch(forceManual::contains);
         } catch (Exception e) {
             return false;
+        }
+    }
+
+    private boolean hasAnyRiskFlags(AiReviewResult result) {
+        String riskFlagsJson = result.getRiskFlags();
+        if (riskFlagsJson == null || riskFlagsJson.isBlank()) {
+            return false;
+        }
+        try {
+            return !objectMapper.readValue(riskFlagsJson, STRING_LIST).isEmpty();
+        } catch (Exception e) {
+            return true;
         }
     }
 }

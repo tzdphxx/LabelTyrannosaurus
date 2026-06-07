@@ -321,6 +321,22 @@ public class PreAnnotationService {
         appendAudit(labelerId, task, record);
     }
 
+    public void failQueuedPreAnnotation(Long preAnnotationId, String errorCode, String errorMessage) {
+        PreAnnotation record = preAnnotationMapper.selectById(preAnnotationId);
+        if (record == null || isTerminal(record.getStatus())) {
+            return;
+        }
+        if (record.getAgentRunId() != null) {
+            agentRunService.fail(record.getAgentRunId(), AgentRunStatus.FAILED, safeErrorMessage(errorMessage));
+        }
+        record.setStatus(PreAnnotationStatus.FAILED);
+        record.setErrorCode(errorCode);
+        record.setErrorMessage(safeErrorMessage(errorMessage));
+        record.setUpdatedAt(LocalDateTime.now());
+        preAnnotationMapper.updateById(record);
+        recordPreAnnotationMetric(null, record, null);
+    }
+
     private boolean isTerminal(PreAnnotationStatus status) {
         return status == PreAnnotationStatus.SUCCESS
                 || status == PreAnnotationStatus.FAILED
@@ -383,7 +399,10 @@ public class PreAnnotationService {
             return true;
         }
         if (currentUser.hasRole(RoleCode.REVIEWER)) {
-            return true;
+            Submission latest = submissionMapper.selectLatestActiveByAssignmentId(record.getAssignmentId());
+            if (latest != null && currentUser.userId().equals(latest.getAssignedReviewerId())) {
+                return true;
+            }
         }
         throw new BusinessException(FORBIDDEN, "当前账号没有权限执行该操作");
     }
@@ -743,6 +762,10 @@ public class PreAnnotationService {
         } catch (JsonProcessingException e) {
             return "{}";
         }
+    }
+
+    private String safeErrorMessage(String message) {
+        return message == null || message.isBlank() ? "LLM task failed" : message;
     }
 
     private BigDecimal asBigDecimal(Object value) {

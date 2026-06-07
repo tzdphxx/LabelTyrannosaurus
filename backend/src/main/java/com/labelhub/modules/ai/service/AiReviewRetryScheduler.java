@@ -24,15 +24,18 @@ public class AiReviewRetryScheduler {
     private final SubmissionMapper submissionMapper;
     private final LlmTaskQueueService queueService;
     private final TraceIdProvider traceIdProvider;
+    private final AiReviewSchemaReadiness schemaReadiness;
 
     public AiReviewRetryScheduler(AiReviewResultMapper aiReviewResultMapper,
                                   SubmissionMapper submissionMapper,
                                   LlmTaskQueueService queueService,
-                                  TraceIdProvider traceIdProvider) {
+                                  TraceIdProvider traceIdProvider,
+                                  AiReviewSchemaReadiness schemaReadiness) {
         this.aiReviewResultMapper = aiReviewResultMapper;
         this.submissionMapper = submissionMapper;
         this.queueService = queueService;
         this.traceIdProvider = traceIdProvider;
+        this.schemaReadiness = schemaReadiness;
     }
 
     public void scheduleRetry(Long submissionId, java.time.Duration delay) {
@@ -41,6 +44,10 @@ public class AiReviewRetryScheduler {
 
     @Scheduled(fixedDelayString = "${labelhub.ai.retry-scan-delay-ms:5000}")
     public void enqueueDueRetries() {
+        if (!schemaReadiness.isReady()) {
+            log.warn("Skipping AI review retry scan because required database tables are not ready");
+            return;
+        }
         List<AiReviewResult> pending = aiReviewResultMapper.selectPendingRetries();
         if (pending.isEmpty()) {
             return;

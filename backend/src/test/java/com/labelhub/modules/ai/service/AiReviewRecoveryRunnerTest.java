@@ -2,6 +2,8 @@ package com.labelhub.modules.ai.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -36,6 +38,7 @@ class AiReviewRecoveryRunnerTest {
     @Mock private SystemAgentProvider systemAgentProvider;
     @Mock private AuditAppender auditAppender;
     @Mock private com.labelhub.modules.review.service.ReviewOwnershipResolver reviewOwnershipResolver;
+    @Mock private AiReviewSchemaReadiness schemaReadiness;
 
     private AiReviewRecoveryRunner runner;
     private final ArgumentCaptor<Submission> submissionCaptor = ArgumentCaptor.forClass(Submission.class);
@@ -44,8 +47,20 @@ class AiReviewRecoveryRunnerTest {
     @BeforeEach
     void setUp() {
         runner = new AiReviewRecoveryRunner(submissionMapper, aiReviewResultMapper, dispatcher,
-                aiAutoReviewService, systemAgentProvider, auditAppender, reviewOwnershipResolver);
-        when(systemAgentProvider.get()).thenReturn(new SystemActorContext(900L));
+                aiAutoReviewService, systemAgentProvider, auditAppender, reviewOwnershipResolver,
+                schemaReadiness);
+        when(schemaReadiness.isReady()).thenReturn(true);
+        lenient().when(systemAgentProvider.get()).thenReturn(new SystemActorContext(900L));
+    }
+
+    @Test
+    void skipsRecoveryWhenSchemaIsNotReady() {
+        when(schemaReadiness.isReady()).thenReturn(false);
+
+        runner.run(null);
+
+        verify(submissionMapper, never()).selectList(any(LambdaQueryWrapper.class));
+        verify(aiReviewResultMapper, never()).selectBySubmissionId(any());
     }
 
     @Test

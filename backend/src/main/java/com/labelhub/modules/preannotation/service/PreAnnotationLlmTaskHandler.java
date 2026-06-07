@@ -42,4 +42,10 @@ public class PreAnnotationLlmTaskHandler implements LlmTaskHandler {
     public void handle(LlmTaskQueueMessage message) {
         preAnnotationService.executeQueuedPreAnnotation(message.preAnnotationId());
     }
+
+    @Override
+    public void onFailure(LlmTaskQueueMessage message, Exception exception) {
+        preAnnotationService.failQueuedPreAnnotation(message.preAnnotationId(),
+                "LLM_TASK_EXCEPTION", exception.getMessage());
+    }
 }

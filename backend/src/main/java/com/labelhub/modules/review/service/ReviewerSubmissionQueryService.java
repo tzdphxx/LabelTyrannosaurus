@@ -2,6 +2,7 @@ package com.labelhub.modules.review.service;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.labelhub.common.exception.BusinessException;
+import com.labelhub.common.security.CurrentUserContext;
 import com.labelhub.modules.agent.domain.AgentRun;
 import com.labelhub.modules.agent.mapper.AgentRunMapper;
 import com.labelhub.modules.ai.domain.AiReviewResult;
@@ -33,6 +34,7 @@ import org.springframework.stereotype.Service;
 public class ReviewerSubmissionQueryService {
 
     private static final int SUBMISSION_NOT_FOUND = 404601;
+    private static final int REVIEWER_NOT_ASSIGNED = 403601;
 
     private final SubmissionMapper submissionMapper;
     private final AssignmentMapper assignmentMapper;
@@ -66,6 +68,7 @@ public class ReviewerSubmissionQueryService {
         if (submission == null) {
             throw new BusinessException(SUBMISSION_NOT_FOUND, "提交记录不存在");
         }
+        requireReadAccess(submission);
 
         Assignment assignment = assignmentMapper.selectById(submission.getAssignmentId());
         DatasetItem item = datasetItemMapper.selectById(submission.getDatasetItemId());
@@ -132,6 +135,18 @@ public class ReviewerSubmissionQueryService {
                 versionHistory,
                 latestPreAnnotation
         );
+    }
+
+    private void requireReadAccess(Submission submission) {
+        if (CurrentUserContext.isAdmin()) {
+            return;
+        }
+        Long reviewerId = CurrentUserContext.getUserId();
+        if (reviewerId != null && reviewerId.equals(submission.getAssignedReviewerId())) {
+            return;
+        }
+        throw new BusinessException(REVIEWER_NOT_ASSIGNED,
+                "Reviewer is not assigned to this submission");
     }
 
     private LatestPreAnnotationSummary latestPreAnnotation(Submission submission) {

@@ -22,6 +22,10 @@ public record ClaimedItemResponse(
         Integer draftVersion,
         @Schema(description = "最新提交状态")
         String latestSubmissionStatus,
+        @Schema(description = "上一轮打回原因")
+        String returnedReason,
+        @Schema(description = "上一轮打回时间")
+        LocalDateTime returnedAt,
         @Schema(description = "更新时间")
         LocalDateTime updatedAt
 ) {}

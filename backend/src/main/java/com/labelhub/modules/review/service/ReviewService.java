@@ -107,8 +107,7 @@ public class ReviewService {
             return new ReviewActionResponse(submissionId, submission.getStatus(), record.getId());
         }
 
-        int affected = submissionMapper.casUpdateStatus(submissionId,
-                SubmissionStatus.PENDING_FINAL.name(), SubmissionStatus.APPROVED.name());
+        int affected = submissionMapper.markApprovedIfPendingFinal(submissionId);
         if (affected == 0) {
             throw new BusinessException(SUBMISSION_STATUS_NOT_REVIEWABLE,
                     "Submission was already reviewed by another reviewer");
@@ -116,7 +115,6 @@ public class ReviewService {
         submission.setStatus(SubmissionStatus.APPROVED);
         submission.setIsGolden(true);
         submission.setReviewFlowStatus("FINAL_APPROVED");
-        submissionMapper.updateById(submission);
 
         Assignment assignment = assignmentMapper.selectById(submission.getAssignmentId());
         if (assignment == null) {
@@ -143,6 +141,10 @@ public class ReviewService {
         String newHash = AnswerCanonicalizer.sha256(canonical);
         if (Objects.equals(original.getAnswerHash(), newHash)) {
             return original;
+        }
+        Assignment lockedAssignment = assignmentMapper.selectByIdForUpdate(original.getAssignmentId());
+        if (lockedAssignment == null) {
+            throw new BusinessException(ASSIGNMENT_NOT_FOUND, "关联的领取记录不存在");
         }
         submissionMapper.supersedeActiveByAssignmentId(original.getAssignmentId());
         Submission latest = submissionMapper.selectLatestByAssignmentId(original.getAssignmentId());
@@ -180,8 +182,12 @@ public class ReviewService {
                 submissionId, reviewerId, ReviewAction.REJECT,
                 request.reviewLevel(), request.reason(), null);
 
+        int affected = submissionMapper.markRejectedIfPendingFinal(submissionId);
+        if (affected == 0) {
+            throw new BusinessException(SUBMISSION_STATUS_NOT_REVIEWABLE,
+                    "Submission was already reviewed by another reviewer");
+        }
         submission.setStatus(SubmissionStatus.REJECTED);
-        submissionMapper.updateById(submission);
 
         Assignment assignment = assignmentMapper.selectById(submission.getAssignmentId());
         if (assignment == null) {

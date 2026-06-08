@@ -121,7 +121,9 @@ public interface AdminReviewAssignmentMapper {
             LEFT JOIN (
                 SELECT reviewer_id, COUNT(1) AS today_reviewed_count
                 FROM review_records
-                WHERE action IN ('APPROVE', 'REJECT') AND DATE(created_at) = CURDATE()
+                WHERE action IN ('APPROVE', 'REJECT')
+                  AND created_at >= CURRENT_DATE()
+                  AND created_at < CURRENT_DATE() + INTERVAL 1 DAY
                 GROUP BY reviewer_id
             ) td ON td.reviewer_id = u.id
             LEFT JOIN (
@@ -179,7 +181,9 @@ public interface AdminReviewAssignmentMapper {
             LEFT JOIN (
                 SELECT reviewer_id, COUNT(1) AS today_reviewed_count
                 FROM review_records
-                WHERE action IN ('APPROVE', 'REJECT') AND DATE(created_at) = CURDATE()
+                WHERE action IN ('APPROVE', 'REJECT')
+                  AND created_at >= CURRENT_DATE()
+                  AND created_at < CURRENT_DATE() + INTERVAL 1 DAY
                 GROUP BY reviewer_id
             ) td ON td.reviewer_id = u.id
             LEFT JOIN (

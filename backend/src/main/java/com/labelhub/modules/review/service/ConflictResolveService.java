@@ -108,7 +108,10 @@ public class ConflictResolveService {
 
         golden.setIsGolden(true);
         golden.setStatus(SubmissionStatus.APPROVED);
-        submissionMapper.updateById(golden);
+        if (submissionMapper.markApprovedIfPendingFinal(golden.getId()) == 0) {
+            throw new BusinessException(SUBMISSION_NOT_REVIEWABLE,
+                    "Submission is not in reviewable status");
+        }
 
         List<Submission> siblings = submissionMapper.selectPendingFinalByTaskAndItem(
                 group.getTaskId(), group.getDatasetItemId());
@@ -116,7 +119,7 @@ public class ConflictResolveService {
             if (!s.getId().equals(golden.getId())) {
                 s.setStatus(SubmissionStatus.REJECTED);
                 s.setIsGolden(false);
-                submissionMapper.updateById(s);
+                submissionMapper.markConflictRejectedIfPendingFinal(s.getId());
             }
         }
 

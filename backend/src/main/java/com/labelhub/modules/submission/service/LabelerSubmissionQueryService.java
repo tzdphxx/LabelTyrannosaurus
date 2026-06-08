@@ -1,6 +1,7 @@
 package com.labelhub.modules.submission.service;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.labelhub.common.api.PageResponse;
 import com.labelhub.common.exception.BusinessException;
 import com.labelhub.common.security.CurrentUserContext;
@@ -24,8 +25,11 @@ import com.labelhub.modules.submission.mapper.SubmissionMapper;
 import com.labelhub.modules.template.domain.TemplateVersion;
 import com.labelhub.modules.template.mapper.TemplateVersionMapper;
 import java.util.List;
+import java.util.Collections;
+import java.util.function.Function;
 import java.util.Map;
 import java.util.Set;
+import java.util.stream.Collectors;
 import org.springframework.stereotype.Service;
 
 @Service
@@ -65,42 +69,42 @@ public class LabelerSubmissionQueryService {
                                                            SubmissionStatus submissionStatus,
                                                            AssignmentStatus assignmentStatus,
                                                            int page, int size) {
-        LambdaQueryWrapper<Submission> countWrapper = new LambdaQueryWrapper<Submission>()
-                .eq(!CurrentUserContext.isAdmin(), Submission::getLabelerId, labelerId)
-                .ne(Submission::getStatus, SubmissionStatus.SUPERSEDED)
-                .eq(taskId != null, Submission::getTaskId, taskId)
-                .eq(submissionStatus != null, Submission::getStatus, submissionStatus);
-        long total = submissionMapper.selectCount(countWrapper);
+        boolean includeAllLabelers = CurrentUserContext.isAdmin();
+        int normalizedPage = Math.max(1, page);
+        int normalizedSize = Math.max(1, size);
+        int offset = (normalizedPage - 1) * normalizedSize;
+        String submissionStatusName = submissionStatus != null ? submissionStatus.name() : null;
+        String assignmentStatusName = assignmentStatus != null ? assignmentStatus.name() : null;
+        long total = submissionMapper.countLabelerSubmissions(
+                labelerId, taskId, submissionStatusName, assignmentStatusName, includeAllLabelers);
 
-        LambdaQueryWrapper<Submission> wrapper = new LambdaQueryWrapper<Submission>()
-                .eq(!CurrentUserContext.isAdmin(), Submission::getLabelerId, labelerId)
-                .ne(Submission::getStatus, SubmissionStatus.SUPERSEDED)
-                .eq(taskId != null, Submission::getTaskId, taskId)
-                .eq(submissionStatus != null, Submission::getStatus, submissionStatus)
-                .orderByDesc(Submission::getSubmittedAt)
-                .last("LIMIT " + size + " OFFSET " + ((page - 1) * size));
+        List<Submission> submissions = submissionMapper.selectLabelerSubmissionsPage(
+                labelerId, taskId, submissionStatusName, assignmentStatusName,
+                includeAllLabelers, normalizedSize, offset);
+        List<Long> submissionIds = submissions.stream().map(Submission::getId).toList();
+        List<Long> assignmentIds = submissions.stream().map(Submission::getAssignmentId).distinct().toList();
 
-        List<Submission> submissions = submissionMapper.selectList(wrapper);
+        Map<Long, AiReviewResult> aiResults = submissionIds.isEmpty()
+                ? Collections.emptyMap()
+                : aiReviewResultMapper.selectBySubmissionIds(submissionIds).stream()
+                .collect(Collectors.toMap(AiReviewResult::getSubmissionId,
+                        Function.identity(), (first, second) -> first));
+        Map<Long, Assignment> assignments = assignmentIds.isEmpty()
+                ? Collections.emptyMap()
+                : assignmentMapper.selectList(Wrappers.<Assignment>lambdaQuery()
+                                .in(Assignment::getId, assignmentIds))
+                        .stream()
+                        .collect(Collectors.toMap(Assignment::getId,
+                                Function.identity(), (first, second) -> first));
+        Map<Long, String> rejectReasons = submissionIds.isEmpty()
+                ? Collections.emptyMap()
+                : reviewRecordMapper.selectLatestRejectBySubmissionIds(submissionIds).stream()
+                        .collect(Collectors.toMap(ReviewRecord::getSubmissionId,
+                                ReviewRecord::getReason, (first, second) -> first));
 
         List<LabelerSubmissionListItem> items = submissions.stream().map(s -> {
-            AiReviewResult aiResult = aiReviewResultMapper.selectBySubmissionId(s.getId());
-            Assignment assignment = assignmentMapper.selectById(s.getAssignmentId());
-
-            if (assignmentStatus != null && assignment != null
-                    && assignment.getStatus() != assignmentStatus) {
-                return null;
-            }
-
-            String rejectReason = null;
-            if (s.getStatus() == SubmissionStatus.REJECTED) {
-                ReviewRecord rr = reviewRecordMapper.selectOne(
-                        new LambdaQueryWrapper<ReviewRecord>()
-                                .eq(ReviewRecord::getSubmissionId, s.getId())
-                                .eq(ReviewRecord::getAction, ReviewAction.REJECT)
-                                .orderByDesc(ReviewRecord::getCreatedAt)
-                                .last("LIMIT 1"));
-                if (rr != null) rejectReason = rr.getReason();
-            }
+            AiReviewResult aiResult = aiResults.get(s.getId());
+            Assignment assignment = assignments.get(s.getAssignmentId());
 
             return new LabelerSubmissionListItem(
                     s.getId(),
@@ -113,13 +117,13 @@ public class LabelerSubmissionQueryService {
                     aiResult != null ? aiResult.getStatus() : null,
                     aiResult != null ? aiResult.getDecision() : null,
                     null,
-                    rejectReason,
+                    rejectReasons.get(s.getId()),
                     s.getIsGolden(),
                     s.getSubmittedAt(),
                     s.getUpdatedAt()
             );
-        }).filter(item -> item != null).toList();
-        return new PageResponse<>(items, page, size, total);
+        }).toList();
+        return new PageResponse<>(items, normalizedPage, normalizedSize, total);
     }
 
     public LabelerSubmissionDetailResponse getDetail(Long submissionId, Long labelerId) {

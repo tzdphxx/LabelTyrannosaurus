@@ -1,6 +1,7 @@
 package com.labelhub.modules.template.service;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.labelhub.common.exception.BusinessException;
@@ -22,11 +23,13 @@ import java.util.regex.PatternSyntaxException;
  * 模板 schema 与答案 JSON 的统一校验服务。
  *
  * <p>保存模板版本时通过 {@link TemplateSchemaValidator} 校验 schema；BE-A 提交答案时通过
- * {@link #validateAnswer(Long, Map)} 获取字段级错误明细。</p>
+ * {@link AnswerSchemaValidator} 入口复用同一套字段级规则。</p>
  */
 @Service
 @Primary
-public class SchemaValidationService implements TemplateSchemaValidator {
+public class SchemaValidationService implements TemplateSchemaValidator, AnswerSchemaValidator {
+
+    private static final int INVALID_ANSWER_JSON = 400402;
 
     private final ObjectMapper objectMapper;
     private final TemplateVersionService templateVersionService;
@@ -53,6 +56,28 @@ public class SchemaValidationService implements TemplateSchemaValidator {
      */
     public List<SchemaValidationError> validateAnswer(Long schemaVersionId, Map<String, Object> answerJson) {
         JsonNode schema = templateVersionService.getVersion(schemaVersionId).schemaJson();
+        return validateAnswerAgainstSchema(schema, answerJson);
+    }
+
+    /**
+     * BE-A 提交主链路使用的校验入口。
+     *
+     * <p>提交链路已经通过 assignment 校验了 labeler 对题目的访问权限，因此这里读取内部
+     * schema 快照，避免复用 Owner 侧 schema 查询权限导致标注员提交被误拒绝。</p>
+     */
+    @Override
+    public void validateAnswer(Long templateVersionId, String answerJson) {
+        Map<String, Object> parsedAnswer = readAnswerObject(answerJson);
+        JsonNode schema = templateVersionService.getTemplateSchema(templateVersionId).schemaJson();
+        List<SchemaValidationError> errors = validateAnswerAgainstSchema(schema, parsedAnswer);
+        if (!errors.isEmpty()) {
+            SchemaValidationError first = errors.get(0);
+            throw new BusinessException(INVALID_ANSWER_JSON,
+                    first.path() + " " + first.errorMessage());
+        }
+    }
+
+    private List<SchemaValidationError> validateAnswerAgainstSchema(JsonNode schema, Map<String, Object> answerJson) {
         SchemaRules rules = parseSchema(schema);
         if (!rules.errors().isEmpty()) {
             SchemaValidationError first = rules.errors().get(0);
@@ -75,6 +100,17 @@ public class SchemaValidationService implements TemplateSchemaValidator {
             validateFieldAnswer(rule, answer, errors);
         }
         return errors;
+    }
+
+    private Map<String, Object> readAnswerObject(String answerJson) {
+        try {
+            Map<String, Object> parsed = objectMapper.readValue(answerJson,
+                    new TypeReference<Map<String, Object>>() {
+                    });
+            return parsed == null ? Map.of() : parsed;
+        } catch (JsonProcessingException ex) {
+            throw new BusinessException(INVALID_ANSWER_JSON, "作答 JSON 格式不合法");
+        }
     }
 
     private void validateFieldAnswer(ComponentRule rule, JsonNode answer, List<SchemaValidationError> errors) {

@@ -972,3 +972,37 @@
 - Ran `npm run build`; build still fails due to existing unrelated TypeScript errors:
   - `src/features/dynamic-form/utils/designerDrag.ts` `never` type property access.
   - `src/pages/owner/templates/OwnerTemplateDesignerPage.tsx` `never` type property access.
+
+
+
+## 2026-06-08 - Owner template designer choice options editor optimization
+
+### Implemented
+
+- Added `ChoiceOptionsEditor` for dynamic-form choice option editing:
+  - File: `src/features/dynamic-form/components/designer/ChoiceOptionsEditor.tsx`.
+  - Uses local `draftText` state so textarea editing keeps intermediate text states such as blank lines and unfinished `label=` input.
+  - Debounces global schema commits with a `300ms` trailing timer.
+  - Flushes the latest draft on blur and normalizes the displayed text after blur.
+  - Clears pending timers on unmount to avoid stale delayed commits.
+- Updated `PropertyPanel` choice option editing:
+  - File: `src/features/dynamic-form/components/designer/PropertyPanel.tsx`.
+  - Replaced direct `Input.TextArea -> textToOptions -> onUpdate` binding with `ChoiceOptionsEditor`.
+  - Keeps the existing `label=value` option text format.
+  - Applies to `radio`, `checkbox`, and `select` through the existing `isChoiceNode` branch.
+- Documented the optimization plan and behavior:
+  - File: `memory-bank/owner-template-choice-options-editor-optimization.md`.
+
+### Current Constraints
+
+- Canvas option preview is now updated after a short debounce instead of every keystroke; textarea input remains immediate.
+- `textToOptions()` still filters blank lines at commit time, so persisted schema options remain clean.
+- Choice linkage still supports only the first `linkedOptions?.[0]` case; this was not changed in this optimization.
+
+### Verification
+
+- Ran `nvm list`; current Node version is `22.14.0`.
+- Ran `npm run build`; build still fails due to existing unrelated TypeScript errors:
+  - `src/features/dynamic-form/utils/designerDrag.ts` `never` type property access.
+  - `src/pages/owner/templates/OwnerTemplateDesignerPage.tsx` `never` type property access.
+  - The new `ChoiceOptionsEditor.tsx` and updated `PropertyPanel.tsx` were not listed in the TypeScript error output.

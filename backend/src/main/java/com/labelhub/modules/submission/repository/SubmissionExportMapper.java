@@ -16,6 +16,62 @@ public interface SubmissionExportMapper {
 
     @Select("""
             <script>
+            select s.task_id as taskId,
+                   s.id as submissionId,
+                   s.dataset_item_id as datasetItemId,
+                   s.labeler_id as labelerId,
+                   s.version_no as versionNo,
+                   s.submitted_at as submittedAt,
+                   di.item_json as itemJson,
+                   s.answer_json as answerJson,
+                   case when #{includeAiReview} and ar.id is not null then cast(json_object(
+                       'status', ar.status,
+                       'decision', ar.decision,
+                       'averageScore', ar.average_score,
+                       'dimensionScores', ar.dimension_scores,
+                       'riskFlags', ar.risk_flags,
+                       'suggestion', ar.suggestion,
+                       'promptSnapshot', ar.prompt_snapshot,
+                       'providerId', ar.provider_id,
+                       'modelName', ar.model_name,
+                       'retryCount', ar.retry_count,
+                       'createdAt', ar.created_at,
+                       'updatedAt', ar.updated_at
+                   ) as char) else null end as aiReviewJson,
+                   case when #{includeReviewComment} then (
+                       select coalesce(rr.comment, rr.reason)
+                       from review_records rr
+                       where rr.submission_id = s.id
+                         and (rr.comment is not null or rr.reason is not null)
+                       order by rr.created_at desc, rr.id desc
+                       limit 1
+                   ) else null end as reviewComment
+            from submissions s
+            join dataset_items di on di.id = s.dataset_item_id
+            left join ai_review_results ar on ar.id = (
+                select ar2.id
+                from ai_review_results ar2
+                where ar2.submission_id = s.id
+                order by ar2.created_at desc, ar2.id desc
+                limit 1
+            )
+            where s.task_id = #{taskId}
+              and s.status = 'APPROVED'
+              <if test="afterSubmissionId != null">
+                and s.id &gt; #{afterSubmissionId}
+              </if>
+            order by s.id asc
+            limit #{pageSize}
+            </script>
+            """)
+    List<ApprovedSubmissionExportRecord> selectApprovedSubmissionsForExport(@Param("taskId") Long taskId,
+                                                                            @Param("afterSubmissionId") Long afterSubmissionId,
+                                                                            @Param("pageSize") int pageSize,
+                                                                            @Param("includeAiReview") boolean includeAiReview,
+                                                                            @Param("includeReviewComment") boolean includeReviewComment);
+
+    @Select("""
+            <script>
             select s.id as submissionId,
                    s.dataset_item_id as datasetItemId,
                    di.item_json as itemJson,

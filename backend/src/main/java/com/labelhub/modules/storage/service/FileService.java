@@ -89,6 +89,41 @@ public class FileService {
                 checksum, downloadUrl.toString());
     }
 
+    @Transactional
+    public FileUploadResponse uploadGenerated(byte[] bytes,
+                                              String originalFilename,
+                                              String contentType,
+                                              Long ownerId,
+                                              String businessType) {
+        validateGenerated(bytes, originalFilename, businessType);
+        String safeFilename = StringUtils.cleanPath(originalFilename);
+        String resolvedContentType = StringUtils.hasText(contentType) ? contentType : "application/octet-stream";
+        String objectKey = buildObjectKey(businessType, safeFilename);
+        objectStorageService.upload(properties.bucket(), objectKey, resolvedContentType,
+                new java.io.ByteArrayInputStream(bytes), bytes.length);
+        String checksum = sha256(bytes);
+
+        ObjectFileEntity entity = new ObjectFileEntity();
+        entity.setOwnerId(ownerId);
+        entity.setBucketName(properties.bucket());
+        entity.setObjectKey(objectKey);
+        entity.setOriginalFilename(safeFilename);
+        entity.setContentType(resolvedContentType);
+        entity.setFileSize((long) bytes.length);
+        entity.setChecksum(checksum);
+        entity.setStorageProvider("COS");
+        objectFileMapper.insert(entity);
+
+        URL downloadUrl = objectStorageService.generatePresignedDownloadUrl(
+                properties.bucket(),
+                objectKey,
+                safeFilename,
+                Instant.now().plus(properties.signedUrlTtl())
+        );
+        return new FileUploadResponse(entity.getId(), safeFilename, resolvedContentType, (long) bytes.length, objectKey,
+                checksum, downloadUrl.toString());
+    }
+
     public SignedUrlResponse generateSignedUrl(Long fileId) {
         CurrentUser currentUser = CurrentUserContext.requireCurrentUser();
         ObjectFileEntity file = objectFileMapper.selectById(fileId);
@@ -121,6 +156,23 @@ public class FileService {
         String extension = extensionOf(filename);
         if (!SUPPORTED_EXTENSIONS.contains(extension)) {
             throw new BusinessException(400102, "不支持的文件类型");
+        }
+    }
+
+    private void validateGenerated(byte[] bytes, String originalFilename, String businessType) {
+        if (bytes == null) {
+            throw new BusinessException(400102, "鏂囦欢涓嶈兘涓虹┖");
+        }
+        if (bytes.length > properties.maxFileSizeBytes()) {
+            throw new BusinessException(400102, "鏂囦欢澶у皬瓒呭嚭闄愬埗");
+        }
+        if (!SUPPORTED_BUSINESS_TYPES.contains(normalize(businessType))) {
+            throw new BusinessException(400102, "Invalid business type");
+        }
+        String filename = StringUtils.cleanPath(originalFilename);
+        String extension = extensionOf(filename);
+        if (!SUPPORTED_EXTENSIONS.contains(extension)) {
+            throw new BusinessException(400102, "涓嶆敮鎸佺殑鏂囦欢绫诲瀷");
         }
     }
 

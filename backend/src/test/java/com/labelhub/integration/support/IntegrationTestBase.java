@@ -20,6 +20,8 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 public abstract class IntegrationTestBase {
 
+    private static final String REDIS_PASSWORD = "labelhub-test";
+
     @Container
     static final MySQLContainer<?> MYSQL = new MySQLContainer<>("mysql:8.4")
             .withDatabaseName("labelhub_test")
@@ -28,7 +30,8 @@ public abstract class IntegrationTestBase {
 
     @Container
     static final GenericContainer<?> REDIS = new GenericContainer<>("redis:7.2-alpine")
-            .withExposedPorts(6379);
+            .withExposedPorts(6379)
+            .withCommand("redis-server", "--requirepass", REDIS_PASSWORD);
 
     @Autowired
     protected TestRestTemplate restTemplate;
@@ -56,7 +59,7 @@ public abstract class IntegrationTestBase {
         registry.add("spring.datasource.driver-class-name", MYSQL::getDriverClassName);
         registry.add("spring.data.redis.host", REDIS::getHost);
         registry.add("spring.data.redis.port", () -> REDIS.getMappedPort(6379));
-        registry.add("spring.data.redis.password", () -> "");
+        registry.add("spring.data.redis.password", () -> REDIS_PASSWORD);
         registry.add("spring.flyway.enabled", () -> "true");
         registry.add("spring.flyway.locations", () -> "classpath:db/migration");
         registry.add("spring.flyway.baseline-on-migrate", () -> "true");

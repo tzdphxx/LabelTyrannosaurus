@@ -27,7 +27,7 @@ public interface UserMapper extends BaseMapper<UserEntity> {
             SELECT COUNT(DISTINCT u.id)
             FROM users u
             JOIN user_roles ur ON ur.user_id = u.id AND ur.role_code = 'LABELER'
-            WHERE u.user_type &lt;&gt; 'SYSTEM'
+            WHERE u.user_type != 'SYSTEM'
             <if test="enabledOnly">
               AND u.enabled = TRUE
               AND u.login_enabled = TRUE
@@ -70,7 +70,7 @@ public interface UserMapper extends BaseMapper<UserEntity> {
             FROM users u
             JOIN user_roles ur ON ur.user_id = u.id AND ur.role_code = 'LABELER'
             LEFT JOIN labeler_contribution_stats lcs ON lcs.labeler_id = u.id
-            WHERE u.user_type &lt;&gt; 'SYSTEM'
+            WHERE u.user_type != 'SYSTEM'
             <if test="enabledOnly">
               AND u.enabled = TRUE
               AND u.login_enabled = TRUE

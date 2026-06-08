@@ -160,7 +160,7 @@ public interface SubmissionMapper extends BaseMapper<Submission> {
             <if test="assignmentStatus != null">
             INNER JOIN assignments a ON a.id = s.assignment_id
             </if>
-            WHERE s.status &lt;&gt; 'SUPERSEDED'
+            WHERE s.status != 'SUPERSEDED'
             <if test="!includeAllLabelers"> AND s.labeler_id = #{labelerId}</if>
             <if test="taskId != null"> AND s.task_id = #{taskId}</if>
             <if test="submissionStatus != null"> AND s.status = #{submissionStatus}</if>
@@ -180,7 +180,7 @@ public interface SubmissionMapper extends BaseMapper<Submission> {
             <if test="assignmentStatus != null">
             INNER JOIN assignments a ON a.id = s.assignment_id
             </if>
-            WHERE s.status &lt;&gt; 'SUPERSEDED'
+            WHERE s.status != 'SUPERSEDED'
             <if test="!includeAllLabelers"> AND s.labeler_id = #{labelerId}</if>
             <if test="taskId != null"> AND s.task_id = #{taskId}</if>
             <if test="submissionStatus != null"> AND s.status = #{submissionStatus}</if>

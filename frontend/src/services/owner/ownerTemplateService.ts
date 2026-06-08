@@ -4,11 +4,14 @@ import type {
   OwnerTemplateForkRequest,
   OwnerTemplateCreateRequest,
   OwnerTemplateResponse,
+  OwnerTemplateVersionResponse,
   OwnerTemplateVersionState,
   TemplateCreateInput,
   TemplateDetail,
+  TemplateForkInput,
   TemplateStatus,
   TemplateSummary,
+  TemplateVersionSnapshot,
 } from '../../types/template'
 import { fromBackendTemplateSchema, toBackendTemplateSchema } from '../../features/dynamic-form/utils/backendSchema'
 import { getSchemaNodeKeys } from '../../features/dynamic-form/utils/schemaTree'
@@ -74,6 +77,22 @@ function toTemplateSummary(template: TemplateDetail): TemplateSummary {
   }
 }
 
+function mapOwnerTemplateVersion(version: OwnerTemplateVersionResponse): TemplateVersionSnapshot {
+  const templateId = String(version.templateId)
+  const schema = normalizeSchema(version.schemaJson, templateId, `v${version.versionNo}`)
+
+  return {
+    templateId,
+    versionId: String(version.versionId),
+    version: `v${version.versionNo}`,
+    status: mapOwnerTemplateStatus(version.state || (version.publishedSnapshot ? 'PUBLISHED_SNAPSHOT' : 'DRAFT')),
+    fieldCount: getSchemaNodeKeys(schema).length,
+    description: version.changeNote,
+    schema,
+    createdAt: version.createdAt,
+  }
+}
+
 async function getRealOwnerTemplateDetail(templateId: string): Promise<TemplateDetail | null> {
   const templates = await request.get<OwnerTemplateResponse[]>('/v1/owner/templates')
   const template = templates.find((item) => String(item.templateId) === templateId)
@@ -98,6 +117,33 @@ export const ownerTemplateService = {
       fieldCount: template.fieldCount,
       description: template.description,
     }))
+  },
+
+  async listTemplateVersions(templateId: string): Promise<TemplateVersionSnapshot[]> {
+    if (isRealServiceMode()) {
+      const versions = await request.get<OwnerTemplateVersionResponse[]>(`/v1/templates/${templateId}/versions`)
+
+      return versions.map(mapOwnerTemplateVersion)
+    }
+
+    const template = mockTemplates.find((item) => item.id === templateId)
+
+    if (!template) {
+      throw new Error('Template not found')
+    }
+
+    return [
+      {
+        templateId: template.id,
+        versionId: template.currentVersionId,
+        version: template.version,
+        status: template.status,
+        fieldCount: template.fieldCount,
+        description: template.description,
+        schema: structuredClone(template.schema),
+        createdAt: template.updatedAt,
+      },
+    ]
   },
 
   async getTemplateDetail(templateId: string): Promise<TemplateDetail | null> {
@@ -155,7 +201,7 @@ export const ownerTemplateService = {
     return structuredClone(template)
   },
 
-  async saveTemplateSchema(templateId: string, schema: DynamicFormSchema): Promise<DynamicFormSchema> {
+  async forkTemplateVersion(templateId: string, input: TemplateForkInput): Promise<TemplateDetail> {
     if (isRealServiceMode()) {
       const template = await getRealOwnerTemplateDetail(templateId)
 
@@ -165,12 +211,12 @@ export const ownerTemplateService = {
 
       const payload: OwnerTemplateForkRequest = {
         baseVersionId: Number(template.currentVersionId),
-        schemaJson: toBackendTemplateSchema(schema),
-        changeNote: '更新模板 schema',
+        schemaJson: toBackendTemplateSchema(input.schema),
+        changeNote: input.changeNote,
       }
       const nextTemplate = await request.post<OwnerTemplateResponse, OwnerTemplateForkRequest>(`/v1/templates/${templateId}/fork`, payload)
 
-      return mapOwnerTemplate(nextTemplate).schema
+      return mapOwnerTemplate(nextTemplate)
     }
 
     const template = mockTemplates.find((item) => item.id === templateId)
@@ -179,10 +225,25 @@ export const ownerTemplateService = {
       throw new Error('Template not found')
     }
 
-    template.schema = structuredClone(schema)
-    template.fieldCount = getSchemaNodeKeys(schema).length
+    const match = template.version.match(/^v(\d+)(?:\.(\d+))?$/)
+    const majorVersion = match ? Number(match[1]) : 0
+
+    template.schema = structuredClone(input.schema)
+    template.currentVersionId = `${template.id}-v${majorVersion + 1}`
+    template.version = `v${majorVersion + 1}`
+    template.fieldCount = getSchemaNodeKeys(input.schema).length
+    template.description = input.changeNote
     template.updatedAt = new Date().toLocaleString('zh-CN', { hour12: false })
 
-    return structuredClone(template.schema)
+    return structuredClone(template)
+  },
+
+  async saveTemplateSchema(templateId: string, schema: DynamicFormSchema): Promise<DynamicFormSchema> {
+    const template = await this.forkTemplateVersion(templateId, {
+      schema,
+      changeNote: '更新模板 schema',
+    })
+
+    return template.schema
   },
 }

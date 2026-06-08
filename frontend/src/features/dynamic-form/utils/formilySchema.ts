@@ -10,6 +10,7 @@ import type {
 import type { LlmTriggerContext, LlmTriggerRunRequest, LlmTriggerRunResponse } from '../../../types/llm'
 
 interface SchemaRuntimeOptions {
+  answerFieldKeys?: string[]
   getCurrentValues?: () => Record<string, unknown>
   llmContext?: LlmTriggerContext
   onApplyLlmValues?: (values: Record<string, unknown>) => void
@@ -201,6 +202,7 @@ function toNodeSchema(node: DynamicSchemaNode, runtimeOptions: SchemaRuntimeOpti
     'x-component': getComponentName(node),
     'x-component-props': {
       ...node.props,
+      answerFieldKeys: runtimeOptions.answerFieldKeys,
       componentId: node.id,
       getCurrentValues: runtimeOptions.getCurrentValues,
       llmContext: runtimeOptions.llmContext,

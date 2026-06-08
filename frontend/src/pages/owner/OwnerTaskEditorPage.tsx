@@ -28,7 +28,7 @@ import { ownerModelService, ownerTemplateService } from '../../services'
 import { useOwnerDraftStore } from '../../stores/ownerDraftStore'
 import { useOwnerTaskStore } from '../../stores/ownerTaskStore'
 import type { DatasetItemResponse, OwnerLabelerOption, OwnerModelOptionResponse } from '../../types/task'
-import type { TemplateSummary } from '../../types/template'
+import type { TemplateSummary, TemplateVersionSnapshot } from '../../types/template'
 import { distributionStrategyLabels, formatCount } from '../../utils/ownerTasks'
 import styles from './OwnerTaskEditorPage.module.css'
 import { AssigneePickerDrawer } from './task-editor/AssigneePickerDrawer'
@@ -63,6 +63,9 @@ export function OwnerTaskEditorPage() {
   const [messageApi, contextHolder] = message.useMessage()
   const [templates, setTemplates] = useState<TemplateSummary[]>([])
   const [isLoadingTemplates, setIsLoadingTemplates] = useState(false)
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(null)
+  const [templateVersionsByTemplateId, setTemplateVersionsByTemplateId] = useState<Record<string, TemplateVersionSnapshot[]>>({})
+  const [isLoadingTemplateVersions, setIsLoadingTemplateVersions] = useState(false)
   const [modelOptions, setModelOptions] = useState<OwnerModelOptionResponse[]>([])
   const [isLoadingModels, setIsLoadingModels] = useState(false)
   const isLoadingTemplatesRef = useRef(false)
@@ -97,23 +100,56 @@ export function OwnerTaskEditorPage() {
   const [isAssigneeDrawerOpen, setIsAssigneeDrawerOpen] = useState(false)
   const [selectedAssigneeName, setSelectedAssigneeName] = useState('')
 
-  const loadTemplateOptions = useCallback(async () => {
+  const loadTemplateOptions = useCallback(async (): Promise<TemplateSummary[]> => {
     if (isLoadingTemplatesRef.current) {
-      return
+      return templates
     }
 
     isLoadingTemplatesRef.current = true
     setIsLoadingTemplates(true)
 
     try {
-      setTemplates(await ownerTemplateService.listTemplates())
+      const nextTemplates = await ownerTemplateService.listTemplates()
+
+      setTemplates(nextTemplates)
+      return nextTemplates
     } catch {
       messageApi.error('模板列表加载失败')
+      return []
     } finally {
       isLoadingTemplatesRef.current = false
       setIsLoadingTemplates(false)
     }
-  }, [messageApi])
+  }, [messageApi, templates])
+
+  const loadTemplateVersionOptions = useCallback(
+    async (templateId: string): Promise<TemplateVersionSnapshot[]> => {
+      const cachedVersions = templateVersionsByTemplateId[templateId]
+
+      if (cachedVersions) {
+        return cachedVersions
+      }
+
+      setIsLoadingTemplateVersions(true)
+
+      try {
+        const versions = await ownerTemplateService.listTemplateVersions(templateId)
+
+        setTemplateVersionsByTemplateId((versionMap) => ({
+          ...versionMap,
+          [templateId]: versions,
+        }))
+
+        return versions
+      } catch {
+        messageApi.error('模板版本加载失败')
+        return []
+      } finally {
+        setIsLoadingTemplateVersions(false)
+      }
+    },
+    [messageApi, templateVersionsByTemplateId],
+  )
 
   const loadModelOptions = useCallback(async () => {
     if (isLoadingModelsRef.current) {
@@ -140,8 +176,62 @@ export function OwnerTaskEditorPage() {
       return
     }
 
+    setSelectedTemplateId(null)
     void resetDraft()
   }, [loadFromTask, loadTaskDetail, resetDraft, taskId])
+
+  useEffect(() => {
+    if (!draft.publishedTemplateVersionId) {
+      return
+    }
+
+    if (
+      selectedTemplateId &&
+      templateVersionsByTemplateId[selectedTemplateId]?.some((version) => version.versionId === draft.publishedTemplateVersionId)
+    ) {
+      return
+    }
+
+    let ignore = false
+
+    async function resolveSelectedTemplate() {
+      const loadedTemplates = templates.length ? templates : await loadTemplateOptions()
+      const directTemplate = loadedTemplates.find((template) => template.currentVersionId === draft.publishedTemplateVersionId)
+
+      if (directTemplate) {
+        const versions = await loadTemplateVersionOptions(directTemplate.id)
+
+        if (!ignore && versions.some((version) => version.versionId === draft.publishedTemplateVersionId)) {
+          setSelectedTemplateId(directTemplate.id)
+        }
+        return
+      }
+
+      for (const template of loadedTemplates) {
+        const versions = await loadTemplateVersionOptions(template.id)
+
+        if (versions.some((version) => version.versionId === draft.publishedTemplateVersionId)) {
+          if (!ignore) {
+            setSelectedTemplateId(template.id)
+          }
+          return
+        }
+      }
+    }
+
+    void resolveSelectedTemplate()
+
+    return () => {
+      ignore = true
+    }
+  }, [
+    draft.publishedTemplateVersionId,
+    loadTemplateOptions,
+    loadTemplateVersionOptions,
+    selectedTemplateId,
+    templateVersionsByTemplateId,
+    templates,
+  ])
 
   useEffect(() => {
     setPreviewDatasetPage(1)
@@ -160,16 +250,31 @@ export function OwnerTaskEditorPage() {
   }, [draft.assignedLabelerId])
 
   const templateOptions = templates.map((template) => ({
-    label: `${template.name} ${template.version}`,
-    value: template.currentVersionId,
+    label: template.name,
+    value: template.id,
+  }))
+  const selectedTemplateVersions = selectedTemplateId ? templateVersionsByTemplateId[selectedTemplateId] ?? [] : []
+  const templateVersionOptions = selectedTemplateVersions.map((version) => ({
+    label: `${version.version}${version.description ? ` · ${version.description}` : ''}`,
+    value: version.versionId,
   }))
   const modelSelectOptions = modelOptions.map((option) => ({
     label: option.defaultModel,
     value: String(option.id),
   }))
   const isReadonlyTask = Boolean(taskId && currentTaskDetail?.task.status !== 'draft')
+  const isUnresolvedTemplateVersion = Boolean(draft.publishedTemplateVersionId && !selectedTemplateId && !isLoadingTemplates && !isLoadingTemplateVersions)
   const deadlineValue = draft.deadline && dayjs(draft.deadline).isValid() ? dayjs(draft.deadline) : null
   const ratingDimensions = draft.aiReview.aiScoringDimensions
+
+  const selectTemplateForTask = (templateId: string | null) => {
+    setSelectedTemplateId(templateId)
+    updateDraft({ publishedTemplateVersionId: null })
+
+    if (templateId) {
+      void loadTemplateVersionOptions(templateId)
+    }
+  }
 
   const datasetPreviewRows = useMemo<DatasetPreviewRow[]>(() => (
     importPreview?.samples.map((sample) => ({
@@ -488,17 +593,38 @@ export function OwnerTaskEditorPage() {
                 <span>关联模板</span>
                 <Select
                   allowClear
+                  disabled={isReadonlyTask}
                   loading={isLoadingTemplates}
                   options={templateOptions}
-                  placeholder="选择模板当前版本"
-                  value={draft.publishedTemplateVersionId}
-                  onChange={(publishedTemplateVersionId) => updateDraft({ publishedTemplateVersionId: publishedTemplateVersionId ?? null })}
+                  placeholder="选择模板"
+                  value={selectedTemplateId}
+                  onChange={(templateId) => selectTemplateForTask(templateId ?? null)}
                   onOpenChange={(open) => {
                     if (open) {
                       void loadTemplateOptions()
                     }
                   }}
                 />
+              </label>
+              <label className={styles.field}>
+                <span>模板版本</span>
+                <Select
+                  allowClear
+                  disabled={isReadonlyTask || !selectedTemplateId}
+                  loading={isLoadingTemplateVersions}
+                  options={templateVersionOptions}
+                  placeholder={selectedTemplateId ? '选择模板版本' : '请先选择模板'}
+                  value={draft.publishedTemplateVersionId}
+                  onChange={(publishedTemplateVersionId) => updateDraft({ publishedTemplateVersionId: publishedTemplateVersionId ?? null })}
+                  onOpenChange={(open) => {
+                    if (open && selectedTemplateId) {
+                      void loadTemplateVersionOptions(selectedTemplateId)
+                    }
+                  }}
+                />
+                {isUnresolvedTemplateVersion ? (
+                  <Typography.Text type="warning">当前模板版本不在可选模板列表中</Typography.Text>
+                ) : null}
               </label>
               <label className={styles.field}>
                 <span>审核级别数</span>

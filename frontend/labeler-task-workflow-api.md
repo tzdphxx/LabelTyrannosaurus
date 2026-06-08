@@ -402,7 +402,7 @@
 
 ```json
 {
-  "componentId": "summary",
+  "componentId": "1",
   "currentAnswerJson": {
     "label": "cat"
   },
@@ -412,7 +412,7 @@
 
 | 字段 | 类型 | 必填 | 说明 |
 |------|------|------|------|
-| componentId | String | 否 | 被点击的模板组件 ID |
+| componentId | Number | 否 | 被点击的模板组件 ID |
 | currentAnswerJson | Object | 否 | 当前草稿答案 |
 | userInstruction | String | 否 | 用户补充指令 |
 
@@ -516,3 +516,46 @@
 - 任务详情接口中的 `items` 是分页可领取题目，不是一次性返回全量题目。
 - 如果任务已过期、未发布或不存在，标注员任务详情和模板接口会返回 `404501`。
 - 如果任务没有发布模板，答题模板接口会返回 `404502`。
+
+## 15. 查询 LlmTrigger 运行结果
+
+轮询异步 LlmTrigger 的运行状态和建议内容。触发接口（`POST .../llm-triggers` 或 `.../llm-triggers/test`）是异步的，返回时 `status` 通常为 `RUNNING`，需用响应里的 `triggerRunId` 轮询本接口直至终态。
+
+## 请求
+
+| 项 | 值 |
+|---|---|
+| Method | `GET` |
+| Path | `/api/v1/llm/triggers/runs/{triggerRunId}` |
+| 认证 | 需要登录 |
+
+### 路径参数
+
+| 参数 | 类型 | 必填 | 说明 |
+|---|---|---|---|
+| `triggerRunId` | Long | 是 | 运行记录 ID。来自触发接口响应体的 `triggerRunId` 字段（即服务端落库的 `LlmTriggerRun` 主键），前端不自行构造。 |
+
+无请求体、无查询参数。
+
+
+## 响应
+
+外层统一包裹 `ApiResponse<LlmTriggerRunResponse>`，`data` 字段结构如下：
+
+| 字段 | 类型 | 说明 |
+|---|---|---|
+| `triggerRunId` | Long | 运行记录 ID |
+| `agentRunId` | Long | 关联的 AgentRun ID（审计/追踪用） |
+| `componentId` | String | 触发的模板组件 ID |
+| `suggestionJson` | Object | 归一化后的完整结果（含 `componentId`/`targetFields`/`patch`/`displayText`/`confidence`/`reasoningSummary`/`warnings`）。未成功时为空对象 `{}` |
+| `patch` | Object | 可直接合并进答案的补丁，键为 `targetFields` 内的字段。未成功时为 `{}` |
+| `displayText` | String | 面向用户展示的建议文本，可能为 null |
+| `targetFields` | String[] | 本次建议作用的目标字段列表 |
+| `rawModelSummary` | String | 模型原始内容文本，可能为 null |
+| `confidence` | BigDecimal | 置信度，可能为 null |
+| `warnings` | String[] | 处理过程中的告警（如丢弃了非目标字段），可能为空数组 |
+| `traceId` | String | 追踪 ID |
+| `status` | String | 运行状态，见下表 |
+| `latencyMs` | Long | 调用耗时（毫秒），可能为 null |
+| `errorCode` | String | 失败错误码，成功时为 null |
+| `errorMessage` | String | 失败错误信息，成功时为 null |

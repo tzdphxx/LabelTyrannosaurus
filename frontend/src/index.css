@@ -1300,6 +1300,30 @@ select {
   line-height: 1.6;
 }
 
+.dynamic-renderer__llm-fields {
+  display: grid;
+  gap: 8px;
+}
+
+.dynamic-renderer__llm-field {
+  display: grid;
+  grid-template-columns: minmax(88px, 0.24fr) minmax(0, 1fr);
+  gap: 8px;
+  align-items: start;
+  padding: 8px;
+  border: 1px solid #f0e5fc;
+  border-radius: 6px;
+  background: #fbf8ff;
+}
+
+.dynamic-renderer__llm-field .ant-typography {
+  color: #391c57;
+}
+
+.dynamic-renderer__llm-field pre {
+  max-height: 120px;
+}
+
 .dynamic-renderer__llm-alert.ant-alert {
   margin: 0;
 }

@@ -11,7 +11,11 @@ interface ValueFieldProps<T> {
 }
 
 const statusLabels: Partial<Record<LlmGatewayStatus, string>> = {
+  PENDING: '等待清洗',
+  RUNNING: '正在清洗',
   SUCCESS: '调用成功',
+  FAILED: '清洗失败',
+  MANUAL_REQUIRED: '需要人工处理',
   PROVIDER_UNAVAILABLE: 'Provider 不可用',
   PROVIDER_ERROR: 'Provider 异常',
   TIMEOUT: '调用超时',
@@ -55,7 +59,7 @@ function getRunnablePayload(options: {
   const assignmentId = toNumber(options.context?.assignmentId)
   const datasetItemId = toNumber(options.context?.datasetItemId)
 
-  if (!taskId || !templateVersionId || !options.componentId) {
+  if (!options.componentId) {
     return null
   }
 
@@ -64,11 +68,17 @@ function getRunnablePayload(options: {
   }
 
   const payload: LlmTriggerRunRequest = {
-    taskId,
-    templateVersionId,
     componentId: options.componentId,
     currentAnswerJson: options.currentValues ?? {},
     previewMode: Boolean(options.context?.previewMode),
+  }
+
+  if (taskId) {
+    payload.taskId = taskId
+  }
+
+  if (templateVersionId) {
+    payload.templateVersionId = templateVersionId
   }
 
   if (datasetItemId) {
@@ -82,17 +92,43 @@ function getRunnablePayload(options: {
   return payload
 }
 
-function buildApplyValues(response: LlmTriggerRunResponse, configuredTargetFields: string[]) {
-  const targetFields = response.targetFields.length ? response.targetFields : configuredTargetFields
+function pickFields(source: Record<string, unknown>, fields: string[]) {
   const nextValues: Record<string, unknown> = {}
 
-  targetFields.forEach((field) => {
-    if (Object.hasOwn(response.suggestionJson, field)) {
-      nextValues[field] = response.suggestionJson[field]
+  fields.forEach((field) => {
+    if (Object.hasOwn(source, field)) {
+      nextValues[field] = source[field]
     }
   })
 
   return nextValues
+}
+
+function buildApplyValues(response: LlmTriggerRunResponse, configuredTargetFields: string[], answerFieldKeys: string[]) {
+  if (Object.keys(response.patch).length) {
+    return response.patch
+  }
+
+  const targetFields = response.targetFields.length ? response.targetFields : configuredTargetFields
+  const fallbackFields = targetFields.length ? targetFields : answerFieldKeys
+
+  return pickFields(response.suggestionJson, fallbackFields)
+}
+
+function buildOrderedSuggestionEntries(response: LlmTriggerRunResponse | null, configuredTargetFields: string[], answerFieldKeys: string[]) {
+  if (!response) {
+    return []
+  }
+
+  const source = Object.keys(response.patch).length ? response.patch : response.suggestionJson
+  const targetFields = response.targetFields.length ? response.targetFields : configuredTargetFields
+  const orderedFields = (targetFields.length ? targetFields : answerFieldKeys).filter((field) => Object.hasOwn(source, field))
+  const extraFields = Object.keys(source).filter((field) => !orderedFields.includes(field))
+
+  return [...orderedFields, ...extraFields].map((field) => ({
+    field,
+    value: source[field],
+  }))
 }
 
 export function RichTextEditor({ value, onChange, placeholder }: ValueFieldProps<string> & { placeholder?: string }) {
@@ -156,6 +192,7 @@ export function FileUploadField({
 }
 
 export function LlmPromptBlock({
+  answerFieldKeys,
   componentId,
   getCurrentValues,
   llmContext,
@@ -166,6 +203,7 @@ export function LlmPromptBlock({
   targetFields,
   text,
 }: {
+  answerFieldKeys?: string[]
   componentId?: string
   getCurrentValues?: () => Record<string, unknown>
   llmContext?: LlmTriggerContext
@@ -182,9 +220,14 @@ export function LlmPromptBlock({
   const [response, setResponse] = useState<LlmTriggerRunResponse | null>(null)
   const [error, setError] = useState<string | null>(null)
   const configuredTargetFields = useMemo(() => normalizeTargetFields(targetFields), [targetFields])
+  const orderedAnswerFieldKeys = useMemo(() => normalizeTargetFields(answerFieldKeys), [answerFieldKeys])
   const payload = getRunnablePayload({ componentId, context: llmContext })
   const canRun = Boolean(payload && onRunLlmTrigger)
-  const applyValues = response ? buildApplyValues(response, configuredTargetFields) : {}
+  const applyValues = response ? buildApplyValues(response, configuredTargetFields, orderedAnswerFieldKeys) : {}
+  const suggestionEntries = useMemo(
+    () => buildOrderedSuggestionEntries(response, configuredTargetFields, orderedAnswerFieldKeys),
+    [configuredTargetFields, orderedAnswerFieldKeys, response],
+  )
   const canApply = response?.status === 'SUCCESS' && Object.keys(applyValues).length > 0
   const displayPrompt = promptTemplate || prompt
   const suggestionText = response?.displayText || (Object.keys(response?.suggestionJson ?? {}).length ? JSON.stringify(response?.suggestionJson, null, 2) : '')
@@ -197,6 +240,7 @@ export function LlmPromptBlock({
 
     setIsRunning(true)
     setError(null)
+    setResponse(null)
 
     try {
       const nextResponse = await onRunLlmTrigger({
@@ -230,13 +274,28 @@ export function LlmPromptBlock({
           {response?.status === 'SUCCESS' ? (
             <>
               <Typography.Text type="secondary">
-                {response.latencyMs ? `${response.latencyMs}ms` : statusLabels[response.status]}
+                {[
+                  response.latencyMs ? `${response.latencyMs}ms` : statusLabels[response.status],
+                  response.confidence !== null ? `置信度 ${Math.round(response.confidence * 100)}%` : null,
+                ].filter(Boolean).join(' · ')}
               </Typography.Text>
-              {suggestionText ? <pre>{suggestionText}</pre> : <Typography.Text type="secondary">未返回可展示建议</Typography.Text>}
+              {suggestionEntries.length ? (
+                <div className="dynamic-renderer__llm-fields">
+                  {suggestionEntries.map((entry) => (
+                    <div className="dynamic-renderer__llm-field" key={entry.field}>
+                      <Typography.Text strong>{entry.field}</Typography.Text>
+                      <pre>{JSON.stringify(entry.value, null, 2)}</pre>
+                    </div>
+                  ))}
+                </div>
+              ) : suggestionText ? <pre>{suggestionText}</pre> : <Typography.Text type="secondary">未返回可展示建议</Typography.Text>}
+              {response.warnings.length ? (
+                <Typography.Text type="warning">{response.warnings.join('；')}</Typography.Text>
+              ) : null}
             </>
           ) : (
             <Typography.Text type="secondary">
-              {text || displayPrompt || '点击清洗后在这里查看建议'}
+              {isRunning ? '正在生成 AI 建议，请稍候' : text || displayPrompt || '点击清洗后在这里查看建议'}
             </Typography.Text>
           )}
         </div>

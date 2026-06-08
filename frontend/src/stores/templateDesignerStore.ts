@@ -19,10 +19,12 @@ interface TemplateDesignerStore {
   isLoading: boolean
   isSaving: boolean
   isDraftTemplate: boolean
+  isForkMode: boolean
+  forkChangeNote: string
   error: string | null
   hasUnsavedChanges: boolean
   initializeDraftTemplate: (input: { description: string; name: string }) => void
-  loadTemplate: (templateId: string) => Promise<void>
+  loadTemplate: (templateId: string, options?: { forkMode?: boolean; forkChangeNote?: string; templateVersion?: TemplateDetail }) => Promise<void>
   addNode: (type: DynamicFieldType, parentId?: string | null) => string | null
   selectNode: (nodeId: string | null) => void
   updateSelectedNode: (updates: Partial<DynamicSchemaNode>) => void
@@ -40,6 +42,8 @@ export const useTemplateDesignerStore = create<TemplateDesignerStore>((set, get)
   isLoading: false,
   isSaving: false,
   isDraftTemplate: false,
+  isForkMode: false,
+  forkChangeNote: '',
   error: null,
   hasUnsavedChanges: false,
 
@@ -67,15 +71,32 @@ export const useTemplateDesignerStore = create<TemplateDesignerStore>((set, get)
       schema,
       selectedNodeId: null,
       isDraftTemplate: true,
+      isForkMode: false,
+      forkChangeNote: '',
       hasUnsavedChanges: true,
       error: null,
     })
   },
 
-  loadTemplate: async (templateId) => {
+  loadTemplate: async (templateId, options = {}) => {
     set({ isLoading: true, error: null })
 
     try {
+      if (options.templateVersion) {
+        const template = options.templateVersion
+
+        set({
+          template,
+          schema: template.schema,
+          selectedNodeId: template.schema.nodes[0]?.id ?? null,
+          isDraftTemplate: false,
+          isForkMode: false,
+          forkChangeNote: '',
+          hasUnsavedChanges: false,
+        })
+        return
+      }
+
       const template = await ownerTemplateService.getTemplateDetail(templateId)
 
       if (!template) {
@@ -88,7 +109,9 @@ export const useTemplateDesignerStore = create<TemplateDesignerStore>((set, get)
         schema: template.schema,
         selectedNodeId: template.schema.nodes[0]?.id ?? null,
         isDraftTemplate: false,
-        hasUnsavedChanges: false,
+        isForkMode: Boolean(options.forkMode),
+        forkChangeNote: options.forkChangeNote ?? '',
+        hasUnsavedChanges: Boolean(options.forkMode),
       })
     } catch {
       set({ error: '模板加载失败' })
@@ -188,7 +211,7 @@ export const useTemplateDesignerStore = create<TemplateDesignerStore>((set, get)
   },
 
   saveSchema: async () => {
-    const { isDraftTemplate, schema, template } = get()
+    const { forkChangeNote, isDraftTemplate, isForkMode, schema, template } = get()
 
     if (!schema || !template) {
       return false
@@ -220,23 +243,30 @@ export const useTemplateDesignerStore = create<TemplateDesignerStore>((set, get)
               ? selectedNodeId
               : createdTemplate.schema.nodes[0]?.id ?? null,
           isDraftTemplate: false,
+          isForkMode: false,
+          forkChangeNote: '',
           hasUnsavedChanges: false,
         })
 
         return true
       }
 
-      const savedSchema = await ownerTemplateService.saveTemplateSchema(template.id, schema)
+      const savedTemplate = await ownerTemplateService.forkTemplateVersion(template.id, {
+        schema,
+        changeNote: isForkMode ? forkChangeNote || '基于当前版本 Fork' : '更新模板 schema',
+      })
       const selectedNodeId = get().selectedNodeId
 
       set({
-        schema: savedSchema,
-        template: {
-          ...template,
-          schema: savedSchema,
-        },
-        selectedNodeId: selectedNodeId && findSchemaNode(savedSchema, selectedNodeId) ? selectedNodeId : savedSchema.nodes[0]?.id ?? null,
+        schema: savedTemplate.schema,
+        template: savedTemplate,
+        selectedNodeId:
+          selectedNodeId && findSchemaNode(savedTemplate.schema, selectedNodeId)
+            ? selectedNodeId
+            : savedTemplate.schema.nodes[0]?.id ?? null,
         isDraftTemplate: false,
+        isForkMode: false,
+        forkChangeNote: '',
         hasUnsavedChanges: false,
       })
 

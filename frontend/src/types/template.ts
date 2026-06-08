@@ -18,10 +18,26 @@ export interface TemplateDetail extends TemplateSummary {
   updatedAt: string
 }
 
+export interface TemplateVersionSnapshot {
+  templateId: string
+  versionId: string
+  version: string
+  status: TemplateStatus
+  fieldCount: number
+  description: string
+  schema: DynamicFormSchema
+  createdAt: string
+}
+
 export interface TemplateCreateInput {
   name: string
   description: string
   schema?: DynamicFormSchema
+}
+
+export interface TemplateForkInput {
+  schema: DynamicFormSchema
+  changeNote: string
 }
 
 export interface OwnerTemplateCreateRequest {

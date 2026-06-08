@@ -8,6 +8,7 @@ import { llmService } from '../../../services/llm'
 import type { DynamicFormSchema, DynamicFormSubmitResult } from '../../../types/dynamicForm'
 import type { LlmTriggerContext } from '../../../types/llm'
 import { schemaToFormilySchema } from '../utils/formilySchema'
+import { getSchemaNodeKeys } from '../utils/schemaTree'
 import { FileUploadField, JsonEditorField, LlmPromptBlock, RichTextEditor } from './rendererFields'
 import styles from './DynamicFormRenderer.module.css'
 
@@ -94,6 +95,7 @@ export function DynamicFormRenderer({
 }: DynamicFormRendererProps) {
   const [messageApi, contextHolder] = message.useMessage()
   const [submitting, setSubmitting] = useState(false)
+  const answerFieldKeys = useMemo(() => getSchemaNodeKeys(schema), [schema])
 
   const form = useMemo(
     () =>
@@ -123,12 +125,13 @@ export function DynamicFormRenderer({
   const formilySchema = useMemo(
     () =>
       schemaToFormilySchema(schema, {
+        answerFieldKeys,
         getCurrentValues: () => ({ ...form.values }),
         llmContext,
         onApplyLlmValues: applyLlmValues,
         onRunLlmTrigger: llmService.runTrigger,
       }),
-    [applyLlmValues, form, llmContext, schema],
+    [answerFieldKeys, applyLlmValues, form, llmContext, schema],
   )
 
   async function submitForm() {

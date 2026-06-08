@@ -288,6 +288,71 @@
   min-height: 36px;
 }
 
+.templateNameButton:global(.ant-btn-link) {
+  height: auto;
+  max-width: 280px;
+  padding: 0;
+  color: var(--owner-ink);
+  font-weight: 800;
+  white-space: normal;
+  text-align: left;
+}
+
+.templateNameButton:global(.ant-btn-link):hover {
+  color: var(--owner-accent);
+}
+
+.templateNameButton :global(.anticon) {
+  margin-inline-start: 6px;
+  color: var(--owner-ink-muted);
+  font-size: 11px;
+}
+
+.versionList {
+  width: 320px;
+  max-width: min(320px, calc(100vw - 48px));
+}
+
+.versionListItem,
+.versionListItemSelected {
+  padding: 0 !important;
+  border-block-end: 1px solid rgba(15, 23, 42, 0.08) !important;
+}
+
+.versionListItemSelected {
+  background: rgba(37, 99, 235, 0.08);
+}
+
+.versionOption {
+  width: 100%;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  display: grid;
+  gap: 5px;
+  padding: 10px 12px;
+  text-align: left;
+}
+
+.versionOption:hover {
+  background: rgba(15, 23, 42, 0.05);
+}
+
+.versionOptionMain {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.versionOptionNote,
+.versionOptionTime {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 @keyframes ownerPanelEnter {
   from {
     opacity: 0;

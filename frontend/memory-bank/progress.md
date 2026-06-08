@@ -930,3 +930,45 @@
   - `src/components/navigation/RoleBadge.tsx` role key mismatch.
   - `src/features/dynamic-form/utils/designerDrag.ts` `never` type property access.
   - `src/pages/owner/templates/OwnerTemplateDesignerPage.tsx` `never` type property access.
+
+
+
+## 2026-06-08 - Owner template versioning, task template selection, and Modal v5 update
+
+### Implemented
+
+- Added Owner template version workflow support:
+  - Added `TemplateForkInput` and `TemplateVersionSnapshot` template types.
+  - Added `ownerTemplateService.forkTemplateVersion(templateId, input)` using `POST /v1/templates/{templateId}/fork`.
+  - Added `ownerTemplateService.listTemplateVersions(templateId)` using `GET /v1/templates/{templateId}/versions`.
+  - Kept `saveTemplateSchema()` compatible by delegating schema saving to the fork-version flow.
+- Extended Owner template list behavior:
+  - Template name can load and display all versions for that template.
+  - Selecting a version updates the current table row fields: version id, version label, status, field count, and change note.
+  - Entering the designer after selecting a version passes the selected version schema snapshot through router state.
+  - Added a Fork entry that opens the current template in designer fork mode with a change note.
+- Extended template designer behavior:
+  - Designer can initialize from a selected template version snapshot instead of always loading the current version.
+  - Fork mode is tracked in `templateDesignerStore` and saved as a new template version.
+  - Delete-field confirmation now uses Ant Design v5 `Modal.useModal()` instead of static `Modal.confirm`.
+- Updated Owner task creation/editing template selection:
+  - The task editor now selects template first, then template version.
+  - Only `publishedTemplateVersionId` is written to the draft and submitted to task create/update APIs.
+  - Existing draft tasks with only a version id attempt to resolve and preselect the owning template.
+- Updated template modal usage for Ant Design v5:
+  - Controlled template modals already use `open`.
+  - Replaced template modal `destroyOnClose` with `destroyOnHidden` for current `antd@5.29.3`.
+
+### Current Constraints
+
+- Template version switching in the template list is a page-local display choice; it does not persist the backend current version.
+- Existing task detail APIs still return only `publishedTemplateVersionId`, so edit-page template preselection may query template versions to resolve the owner template.
+- Template designer build errors remain in existing dynamic-form type narrowing code and are not caused by the Modal v5 migration.
+
+### Verification
+
+- Ran `git diff --check` for the changed Owner template and task editor files; only Git line-ending warnings were reported.
+- Ran `nvm list`; current Node version is `22.14.0`.
+- Ran `npm run build`; build still fails due to existing unrelated TypeScript errors:
+  - `src/features/dynamic-form/utils/designerDrag.ts` `never` type property access.
+  - `src/pages/owner/templates/OwnerTemplateDesignerPage.tsx` `never` type property access.

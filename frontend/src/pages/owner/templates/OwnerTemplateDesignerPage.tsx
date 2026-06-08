@@ -20,6 +20,7 @@ import { scrollNodeIntoCanvasView } from '../../../features/dynamic-form/utils/d
 import { findSchemaNode, getSchemaNodeKeys } from '../../../features/dynamic-form/utils/schemaTree'
 import { useTemplateDesignerStore } from '../../../stores/templateDesignerStore'
 import type { DynamicFormSubmitResult } from '../../../types/dynamicForm'
+import type { TemplateDetail } from '../../../types/template'
 import styles from './OwnerTemplateDesignerPage.module.css'
 
 export function OwnerTemplateDesignerPage() {
@@ -27,6 +28,7 @@ export function OwnerTemplateDesignerPage() {
   const location = useLocation()
   const { templateId } = useParams()
   const [messageApi, contextHolder] = message.useMessage()
+  const [modalApi, modalContextHolder] = Modal.useModal()
   const [previewResult, setPreviewResult] = useState<DynamicFormSubmitResult | null>(null)
   const [activeDrag, setActiveDrag] = useState<ActiveDragState | null>(null)
   const canvasScrollRef = useRef<HTMLDivElement | null>(null)
@@ -37,6 +39,7 @@ export function OwnerTemplateDesignerPage() {
   const isLoading = useTemplateDesignerStore((state) => state.isLoading)
   const isSaving = useTemplateDesignerStore((state) => state.isSaving)
   const isDraftTemplate = useTemplateDesignerStore((state) => state.isDraftTemplate)
+  const isForkMode = useTemplateDesignerStore((state) => state.isForkMode)
   const hasUnsavedChanges = useTemplateDesignerStore((state) => state.hasUnsavedChanges)
   const error = useTemplateDesignerStore((state) => state.error)
   const initializeDraftTemplate = useTemplateDesignerStore((state) => state.initializeDraftTemplate)
@@ -60,7 +63,16 @@ export function OwnerTemplateDesignerPage() {
     }
 
     if (templateId) {
-      void loadTemplate(templateId)
+      const state = location.state as
+        | { forkTemplate?: { changeNote: string }; templateVersion?: TemplateDetail }
+        | null
+      const forkTemplate = state?.forkTemplate
+
+      void loadTemplate(templateId, {
+        forkMode: Boolean(forkTemplate),
+        forkChangeNote: forkTemplate?.changeNote,
+        templateVersion: state?.templateVersion,
+      })
     }
   }, [initializeDraftTemplate, loadTemplate, location.state, templateId])
 
@@ -92,14 +104,14 @@ export function OwnerTemplateDesignerPage() {
         return
       }
 
-      messageApi.success('模板 schema 已保存')
+      messageApi.success(isForkMode ? 'Fork 版本已保存' : '模板 schema 已保存')
     } else {
       messageApi.error('模板 schema 保存失败')
     }
   }
 
   function confirmDeleteNode(nodeId: string) {
-    Modal.confirm({
+    modalApi.confirm({
       title: '删除字段',
       content: '删除后该字段及其子字段会从当前 schema 中移除。',
       okText: '删除',
@@ -172,16 +184,18 @@ export function OwnerTemplateDesignerPage() {
   return (
     <main className={styles.page}>
       {contextHolder}
+      {modalContextHolder}
       <ContentShell className={styles.headerShell}>
         <PageHeader
           title={template?.name ?? '模板 Designer'}
-          description={template?.description}
+          description={isForkMode ? `正在基于当前模板 Fork 新版本：${template?.description ?? ''}` : template?.description}
           extra={
             <>
+              {isForkMode ? <Tag color="processing">Fork 新版本</Tag> : null}
               {hasUnsavedChanges ? <Tag color="warning">有未保存变更</Tag> : <Tag color="success">已同步</Tag>}
               <Button onClick={() => navigate('/app/owner/templates')}>返回模板列表</Button>
               <Button icon={<SaveOutlined />} loading={isSaving} onClick={() => void saveCurrentSchema()} type="primary">
-                {isDraftTemplate ? '创建模板' : '保存 schema'}
+                {isDraftTemplate ? '创建模板' : isForkMode ? '保存 Fork 版本' : '保存 schema'}
               </Button>
             </>
           }

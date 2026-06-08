@@ -7,6 +7,7 @@ import com.labelhub.common.security.CurrentUserContext;
 import com.labelhub.common.security.RoleCode;
 import com.labelhub.modules.template.domain.TemplateVersionEntity;
 import com.labelhub.modules.template.dto.SchemaValidationError;
+import com.labelhub.modules.template.service.AnswerSchemaValidator;
 import com.labelhub.modules.template.repository.TemplateMapper;
 import com.labelhub.modules.template.repository.TemplateVersionRepositoryMapper;
 import com.labelhub.modules.template.service.SchemaValidationService;
@@ -19,6 +20,7 @@ import java.util.Map;
 import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.mock;
@@ -111,6 +113,34 @@ class SchemaValidationServiceTest {
                 .extracting(SchemaValidationError::path)
                 .containsExactly("/preview");
         assertThat(errors.get(0).errorMessage()).contains("ShowItem");
+    }
+
+    @Test
+    void answerSchemaValidatorRejectsMissingRequiredFieldForSubmissionPath() {
+        stubVersion("""
+                {"components":[{"type":"Input","field":"answer","required":true}]}
+                """);
+        AnswerSchemaValidator validator = schemaValidationService;
+
+        assertThatThrownBy(() -> validator.validateAnswer(200L, "{}"))
+                .isInstanceOf(BusinessException.class)
+                .satisfies(ex -> {
+                    BusinessException businessException = (BusinessException) ex;
+                    assertThat(businessException.getCode()).isEqualTo(400402);
+                    assertThat(businessException.getMessage()).contains("/answer").contains("必填");
+                });
+    }
+
+    @Test
+    void answerSchemaValidatorUsesInternalSnapshotForLabelerSubmission() {
+        stubVersion("""
+                {"components":[{"type":"Input","field":"answer","required":true}]}
+                """);
+        CurrentUserContext.set(new CurrentUser(30L, "labeler", "labeler@example.com", Set.of(RoleCode.LABELER), 1));
+        AnswerSchemaValidator validator = schemaValidationService;
+
+        assertThatCode(() -> validator.validateAnswer(200L, "{\"answer\":\"A\"}"))
+                .doesNotThrowAnyException();
     }
 
     @Test

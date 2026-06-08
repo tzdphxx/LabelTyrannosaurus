@@ -46,11 +46,11 @@ public class AiReviewResultQueryService {
             throw new BusinessException(AI_REVIEW_RESULT_NOT_FOUND, "AI 审核结果不存在");
         }
         Task task = taskMapper.selectById(submission.getTaskId());
-        requireAccess(currentUser, task);
+        requireAccess(currentUser, task,  submission);
         return aiAutoReviewService.toResponse(result, rawPrompt(task), submission.getAnswerJson());
     }
 
-    private void requireAccess(CurrentUser currentUser, Task task) {
+    private void requireAccess(CurrentUser currentUser, Task task, Submission submission) {
         Set<RoleCode> roles = currentUser.roles();
         if (roles.contains(RoleCode.ADMIN)) {
             return;

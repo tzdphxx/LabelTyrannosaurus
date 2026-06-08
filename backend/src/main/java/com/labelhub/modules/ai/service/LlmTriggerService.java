@@ -2,6 +2,7 @@ package com.labelhub.modules.ai.service;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.labelhub.common.audit.AuditAppender;
@@ -45,9 +46,11 @@ import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
@@ -195,10 +198,10 @@ public class LlmTriggerService {
         DatasetItem datasetItem = loadDatasetItem(assignment.getDatasetItemId(), task.getId());
         TemplateVersion templateVersion = loadTemplateVersion(assignment.getTemplateVersionId());
         AiReviewConfig config = loadTaskAiReviewConfig(task);
-        ComponentContext component = resolveComponent(templateVersion.getSchemaJson(), request.componentId());
+        TemplateContext templateContext = resolveTemplateContext(templateVersion, request.componentId());
         requireEnabledProvider(config.getProviderId());
 
-        return doRun(task, assignment.getTemplateVersionId(), datasetItem, config, component,
+        return doRun(task, assignment.getTemplateVersionId(), datasetItem, config, templateContext,
                 request, currentUser.userId(), assignmentId);
     }
 
@@ -216,24 +219,24 @@ public class LlmTriggerService {
         DatasetItem datasetItem = loadDatasetItem(request.datasetItemId(), task.getId());
         TemplateVersion templateVersion = loadTemplateVersion(task.getPublishedTemplateVersionId());
         AiReviewConfig config = loadTaskAiReviewConfig(task);
-        ComponentContext component = resolveComponent(templateVersion.getSchemaJson(), request.componentId());
+        TemplateContext templateContext = resolveTemplateContext(templateVersion, request.componentId());
         requireEnabledProvider(config.getProviderId());
 
-        return doRun(task, task.getPublishedTemplateVersionId(), datasetItem, config, component,
+        return doRun(task, task.getPublishedTemplateVersionId(), datasetItem, config, templateContext,
                 request, currentUser.userId(), null);
     }
 
     // ── 公共执行逻辑 ──
 
     private LlmTriggerRunResponse doRun(Task task, Long templateVersionId,
-                                         DatasetItem datasetItem, AiReviewConfig config,
-                                         ComponentContext component, LlmTriggerRunRequest request,
-                                         Long actorId, Long assignmentId) {
+                                          DatasetItem datasetItem, AiReviewConfig config,
+                                          TemplateContext templateContext, LlmTriggerRunRequest request,
+                                          Long actorId, Long assignmentId) {
         String traceId = traceIdProvider.currentTraceId();
-        Map<String, Object> inputSnapshot = buildInputSnapshot(task, datasetItem, config, component, request, traceId);
+        Map<String, Object> inputSnapshot = buildInputSnapshot(task, datasetItem, config, templateContext, request, traceId);
         AgentRun agentRun = agentRunService.create(AGENT_TYPE, null, config.getProviderId(),
                 config.getModelName().trim(),
-                "target:" + String.join(",", component.targetFields()),
+                "target:" + String.join(",", templateContext.targetFields()),
                 toJson(inputSnapshot), assignmentId, traceId);
         agentRunService.start(agentRun.getId());
 
@@ -242,12 +245,12 @@ public class LlmTriggerService {
         run.setAssignmentId(assignmentId);
         run.setTemplateVersionId(templateVersionId);
         run.setDatasetItemId(datasetItem != null ? datasetItem.getId() : request.datasetItemId());
-        run.setComponentId(component.componentId());
+        run.setComponentId(templateContext.componentId() == null ? null : String.valueOf(templateContext.componentId()));
         run.setProviderId(config.getProviderId());
         run.setModelName(config.getModelName().trim());
         run.setAgentRunId(agentRun.getId());
         run.setStatus(LlmTaskStatus.RUNNING.name());
-        run.setTargetFieldsJson(toJson(component.targetFields()));
+        run.setTargetFieldsJson(toJson(templateContext.targetFields()));
         run.setInputSnapshotJson(toJson(inputSnapshot));
         run.setCreatedBy(actorId);
         run.setCreatedAt(LocalDateTime.now());
@@ -343,9 +346,10 @@ public class LlmTriggerService {
                 config.getPromptVersion()
         );
         String userTemplate = config.getPromptTemplate() != null ? config.getPromptTemplate() : "";
+        TemplateVersion templateVersion = loadTemplateVersion(run.getTemplateVersionId());
         String systemPrompt = promptTemplateEngine.buildLlmTriggerPrompt(userTemplate, ctx,
-                run.getComponentId(), parseStringList(run.getTargetFieldsJson()),
-                run.getInputSnapshotJson());
+                longValue(run.getComponentId()), parseStringList(run.getTargetFieldsJson()),
+                extractSchemaFields(templateVersion.getSchemaJson()), run.getInputSnapshotJson());
 
         LlmGatewayResponse gatewayResponse;
         try {
@@ -366,7 +370,7 @@ public class LlmTriggerService {
         }
         if (gatewayResponse.status() == LlmGatewayStatus.SUCCESS) {
             Map<String, Object> normalizedResult = normalizeStructuredPatch(
-                    gatewayResponse.structuredJson(), run.getComponentId(), parseStringList(run.getTargetFieldsJson()));
+                    gatewayResponse.structuredJson(), longValue(run.getComponentId()), parseStringList(run.getTargetFieldsJson()));
             Map<String, Object> outputSnapshot = gatewayResponseSnapshot(gatewayResponse);
             outputSnapshot.put("normalizedResult", normalizedResult);
             agentRunService.complete(run.getAgentRunId(), toJson(outputSnapshot));
@@ -458,71 +462,21 @@ public class LlmTriggerService {
         return config;
     }
 
-    private ComponentContext resolveComponent(String schemaJson, String componentId) {
-        if (componentId == null || componentId.isBlank()) {
-            throw new BusinessException(LLM_TRIGGER_INVALID, "componentId is required");
-        }
-        Object schema = parseJsonValue(schemaJson);
-        Map<String, Object> component = findComponent(schema, componentId.trim());
-        if (component == null) {
-            throw new BusinessException(LLM_TRIGGER_INVALID, "LlmTrigger component not found");
-        }
-        return new ComponentContext(componentId.trim(), component, resolveTargetFields(component, componentId.trim()));
-    }
-
-    @SuppressWarnings("unchecked")
-    private Map<String, Object> findComponent(Object node, String componentId) {
-        if (node instanceof Map<?, ?> rawMap) {
-            Map<String, Object> map = (Map<String, Object>) rawMap;
-            if (matchesComponent(map, componentId)) {
-                return map;
-            }
-            for (Object value : map.values()) {
-                Map<String, Object> found = findComponent(value, componentId);
-                if (found != null) {
-                    return found;
-                }
-            }
-        } else if (node instanceof List<?> list) {
-            for (Object value : list) {
-                Map<String, Object> found = findComponent(value, componentId);
-                if (found != null) {
-                    return found;
-                }
-            }
-        }
-        return null;
-    }
-
-    private boolean matchesComponent(Map<String, Object> component, String componentId) {
-        return componentId.equals(stringValue(component.get("id"), null))
-                || componentId.equals(stringValue(component.get("componentId"), null))
-                || componentId.equals(stringValue(component.get("field"), null))
-                || componentId.equals(stringValue(component.get("name"), null));
-    }
-
-    private List<String> resolveTargetFields(Map<String, Object> component, String componentId) {
-        Object targetFields = component.get("targetFields");
-        if (targetFields instanceof List<?> list) {
-            List<String> fields = list.stream()
-                    .map(value -> stringValue(value, null))
-                    .filter(value -> value != null && !value.isBlank())
-                    .distinct()
-                    .toList();
-            if (!fields.isEmpty()) {
-                return fields;
-            }
-        }
-        String field = stringValue(component.get("field"), null);
-        if (field != null && !field.isBlank()) {
-            return List.of(field);
-        }
-        return List.of(componentId);
+    private TemplateContext resolveTemplateContext(TemplateVersion templateVersion, Long requestedComponentId) {
+        List<PromptTemplateEngine.SchemaField> schemaFields = extractSchemaFields(templateVersion.getSchemaJson());
+        List<String> targetFields = schemaFields.stream()
+                .filter(field -> !field.showOnly())
+                .map(PromptTemplateEngine.SchemaField::field)
+                .filter(field -> field != null && !field.isBlank())
+                .distinct()
+                .toList();
+        Long componentId = requestedComponentId != null ? requestedComponentId : templateVersion.getTemplateId();
+        return new TemplateContext(componentId, schemaFields, targetFields);
     }
 
     private Map<String, Object> buildInputSnapshot(Task task, DatasetItem datasetItem, AiReviewConfig config,
-                                                   ComponentContext component, LlmTriggerRunRequest request,
-                                                   String traceId) {
+                                                    TemplateContext templateContext, LlmTriggerRunRequest request,
+                                                    String traceId) {
         Map<String, Object> input = new LinkedHashMap<>();
         input.put("traceId", traceId);
         input.put("task", Map.of(
@@ -531,9 +485,9 @@ public class LlmTriggerService {
                 "description", task.getDescription() == null ? "" : task.getDescription(),
                 "instructionRichText", task.getInstructionRichText() == null ? "" : task.getInstructionRichText()
         ));
-        input.put("componentId", component.componentId());
-        input.put("component", component.component());
-        input.put("targetFields", component.targetFields());
+        input.put("componentId", templateContext.componentId());
+        input.put("templateFields", templateContext.schemaFields());
+        input.put("targetFields", templateContext.targetFields());
         input.put("scoringDimensions", parseStringList(config.getScoringDimensionsJson()));
         Map<String, Object> thresholds = new LinkedHashMap<>();
         thresholds.put("passThreshold", config.getPassThreshold());
@@ -552,9 +506,9 @@ public class LlmTriggerService {
     }
 
     private String buildLlmTriggerPrompt() {
-        return "Use the task, itemSnapshot, component, currentAnswerJson and scoringDimensions to produce a JSON "
+        return "Use the task, itemSnapshot, templateFields, currentAnswerJson and scoringDimensions to produce a JSON "
                 + "object that can be merged into the answer. Return exactly: componentId, targetFields, patch, "
-                + "displayText, confidence, reasoningSummary, warnings. Only include targetFields in patch.";
+                + "displayText, confidence, reasoningSummary, warnings. Include only schema targetFields in patch.";
     }
 
     public LlmTriggerRunResponse toRunResponse(LlmTriggerRun run) {
@@ -563,7 +517,7 @@ public class LlmTriggerService {
         return new LlmTriggerRunResponse(
                 run.getId(),
                 run.getAgentRunId(),
-                run.getComponentId(),
+                longValue(run.getComponentId()),
                 result,
                 objectMapValue(result.get("patch")),
                 stringValue(result.get("displayText"), run.getContentText()),
@@ -634,29 +588,29 @@ public class LlmTriggerService {
     }
 
     private Map<String, Object> normalizeStructuredPatch(Map<String, Object> structuredJson,
-                                                         String componentId,
-                                                         List<String> targetFields) {
+                                                          Long componentId,
+                                                          List<String> targetFields) {
         Map<String, Object> source = structuredJson == null ? Map.of() : structuredJson;
         Map<String, Object> result = new LinkedHashMap<>();
-        result.put("componentId", stringValue(source.get("componentId"), componentId));
+        result.put("componentId", componentId);
         result.put("targetFields", targetFields);
         List<String> warnings = new ArrayList<>(parseWarnings(source.get("warnings")));
         Map<String, Object> sourcePatch;
         if (source.get("patch") instanceof Map<?, ?> map) {
             sourcePatch = castObjectMap(map);
         } else {
-            log.warn("LLM trigger response missing 'patch' field for component {}; "
+            log.warn("LLM trigger response missing 'patch' field for template componentId {}; "
                     + "using entire response as patch source", componentId);
             sourcePatch = source;
             warnings.add("LLM response missing 'patch' wrapper; results may be incomplete");
         }
         Map<String, Object> patch = new LinkedHashMap<>();
         for (Map.Entry<String, Object> entry : sourcePatch.entrySet()) {
-            if (targetFields.contains(entry.getKey())) {
+            if (targetFields.isEmpty() || targetFields.contains(entry.getKey())) {
                 patch.put(entry.getKey(), entry.getValue());
             } else if (!List.of("componentId", "targetFields", "displayText", "confidence",
                     "reasoningSummary", "warnings", "patch").contains(entry.getKey())) {
-                warnings.add("Dropped non-target patch field: " + entry.getKey());
+                warnings.add("Dropped non-schema patch field: " + entry.getKey());
             }
         }
         result.put("patch", patch);
@@ -676,6 +630,82 @@ public class LlmTriggerService {
             }
         });
         return result;
+    }
+
+    private List<PromptTemplateEngine.SchemaField> extractSchemaFields(String schemaJson) {
+        if (schemaJson == null || schemaJson.isBlank()) {
+            return List.of();
+        }
+        try {
+            JsonNode root = objectMapper.readTree(schemaJson);
+            List<PromptTemplateEngine.SchemaField> fields = new ArrayList<>();
+            collectSchemaFields(root, fields, new LinkedHashSet<>());
+            return fields;
+        } catch (Exception ex) {
+            log.warn("Failed to extract LlmTrigger schema fields: {}", ex.getMessage());
+            return List.of();
+        }
+    }
+
+    private void collectSchemaFields(JsonNode node, List<PromptTemplateEngine.SchemaField> fields, Set<String> seen) {
+        if (node == null || node.isNull()) {
+            return;
+        }
+        if (node.isObject()) {
+            JsonNode fieldNode = node.get("field");
+            if (fieldNode != null && fieldNode.isTextual()) {
+                String field = fieldNode.asText();
+                if (!field.isBlank() && seen.add(field)) {
+                    String type = firstText(node, "type", "componentType", "component");
+                    boolean showOnly = "ShowItem".equalsIgnoreCase(type);
+                    fields.add(new PromptTemplateEngine.SchemaField(
+                            field,
+                            type == null ? "" : type,
+                            firstTextOrDefault(node, field, "label", "title", "name"),
+                            optionValues(node.get("options")),
+                            node.path("required").asBoolean(false),
+                            showOnly,
+                            firstTextOrDefault(node, "", "description", "help", "placeholder")));
+                }
+            }
+            node.fields().forEachRemaining(entry -> collectSchemaFields(entry.getValue(), fields, seen));
+            return;
+        }
+        if (node.isArray()) {
+            node.forEach(child -> collectSchemaFields(child, fields, seen));
+        }
+    }
+
+    private List<String> optionValues(JsonNode options) {
+        if (options == null || !options.isArray()) {
+            return null;
+        }
+        List<String> values = new ArrayList<>();
+        options.forEach(option -> {
+            String value = option.isTextual() ? option.asText() : firstText(option, "label", "value", "name");
+            if (value != null && !value.isBlank()) {
+                values.add(value);
+            }
+        });
+        return values;
+    }
+
+    private String firstTextOrDefault(JsonNode node, String fallback, String... keys) {
+        String value = firstText(node, keys);
+        return value == null || value.isBlank() ? fallback : value;
+    }
+
+    private String firstText(JsonNode node, String... keys) {
+        if (node == null) {
+            return null;
+        }
+        for (String key : keys) {
+            JsonNode value = node.get(key);
+            if (value != null && value.isTextual()) {
+                return value.asText();
+            }
+        }
+        return null;
     }
 
     private Object parseJsonValue(String json) {
@@ -713,6 +743,17 @@ public class LlmTriggerService {
         }
         String text = String.valueOf(value);
         return text.isBlank() ? fallback : text;
+    }
+
+    private Long longValue(String value) {
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+        try {
+            return Long.valueOf(value);
+        } catch (NumberFormatException ex) {
+            return null;
+        }
     }
 
     private BigDecimal decimalValue(Object value) {
@@ -761,8 +802,8 @@ public class LlmTriggerService {
         }
     }
 
-    private record ComponentContext(String componentId,
-                                    Map<String, Object> component,
-                                    List<String> targetFields) {
+    private record TemplateContext(Long componentId,
+                                   List<PromptTemplateEngine.SchemaField> schemaFields,
+                                     List<String> targetFields) {
     }
 }

@@ -8,7 +8,7 @@ import com.labelhub.infrastructure.llm.LlmGatewayStatus;
 public record LlmTriggerRunResponse(
         Long triggerRunId,
         Long agentRunId,
-        String componentId,
+        Long componentId,
         Map<String, Object> suggestionJson,
         Map<String, Object> patch,
         String displayText,

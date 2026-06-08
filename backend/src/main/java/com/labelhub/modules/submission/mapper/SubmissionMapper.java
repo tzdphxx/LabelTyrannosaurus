@@ -2,6 +2,7 @@ package com.labelhub.modules.submission.mapper;
 
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import com.labelhub.modules.submission.domain.Submission;
+import java.util.Map;
 import java.util.List;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
@@ -112,6 +113,89 @@ public interface SubmissionMapper extends BaseMapper<Submission> {
     int casUpdateStatus(@Param("submissionId") Long submissionId,
                         @Param("expectedStatus") String expectedStatus,
                         @Param("newStatus") String newStatus);
+
+    @Update("""
+            UPDATE submissions
+            SET status = 'APPROVED',
+                is_golden = 1,
+                review_flow_status = 'FINAL_APPROVED',
+                updated_at = CURRENT_TIMESTAMP(3)
+            WHERE id = #{submissionId}
+              AND status = 'PENDING_FINAL'
+            """)
+    int markApprovedIfPendingFinal(@Param("submissionId") Long submissionId);
+
+    @Update("""
+            UPDATE submissions
+            SET status = 'REJECTED',
+                updated_at = CURRENT_TIMESTAMP(3)
+            WHERE id = #{submissionId}
+              AND status = 'PENDING_FINAL'
+            """)
+    int markRejectedIfPendingFinal(@Param("submissionId") Long submissionId);
+
+    @Update("""
+            UPDATE submissions
+            SET status = 'REJECTED',
+                is_golden = 0,
+                updated_at = CURRENT_TIMESTAMP(3)
+            WHERE id = #{submissionId}
+              AND status = 'PENDING_FINAL'
+            """)
+    int markConflictRejectedIfPendingFinal(@Param("submissionId") Long submissionId);
+
+    @Select("""
+            SELECT status, COUNT(1) AS count
+            FROM submissions
+            WHERE task_id = #{taskId}
+              AND status <> 'SUPERSEDED'
+            GROUP BY status
+            """)
+    List<Map<String, Object>> selectStatusCountsByTaskId(@Param("taskId") Long taskId);
+
+    @Select("""
+            <script>
+            SELECT COUNT(1)
+            FROM submissions s
+            <if test="assignmentStatus != null">
+            INNER JOIN assignments a ON a.id = s.assignment_id
+            </if>
+            WHERE s.status &lt;&gt; 'SUPERSEDED'
+            <if test="!includeAllLabelers"> AND s.labeler_id = #{labelerId}</if>
+            <if test="taskId != null"> AND s.task_id = #{taskId}</if>
+            <if test="submissionStatus != null"> AND s.status = #{submissionStatus}</if>
+            <if test="assignmentStatus != null"> AND a.status = #{assignmentStatus}</if>
+            </script>
+            """)
+    long countLabelerSubmissions(@Param("labelerId") Long labelerId,
+                                 @Param("taskId") Long taskId,
+                                 @Param("submissionStatus") String submissionStatus,
+                                 @Param("assignmentStatus") String assignmentStatus,
+                                 @Param("includeAllLabelers") boolean includeAllLabelers);
+
+    @Select("""
+            <script>
+            SELECT s.*
+            FROM submissions s
+            <if test="assignmentStatus != null">
+            INNER JOIN assignments a ON a.id = s.assignment_id
+            </if>
+            WHERE s.status &lt;&gt; 'SUPERSEDED'
+            <if test="!includeAllLabelers"> AND s.labeler_id = #{labelerId}</if>
+            <if test="taskId != null"> AND s.task_id = #{taskId}</if>
+            <if test="submissionStatus != null"> AND s.status = #{submissionStatus}</if>
+            <if test="assignmentStatus != null"> AND a.status = #{assignmentStatus}</if>
+            ORDER BY s.submitted_at DESC
+            LIMIT #{limit} OFFSET #{offset}
+            </script>
+            """)
+    List<Submission> selectLabelerSubmissionsPage(@Param("labelerId") Long labelerId,
+                                                  @Param("taskId") Long taskId,
+                                                  @Param("submissionStatus") String submissionStatus,
+                                                  @Param("assignmentStatus") String assignmentStatus,
+                                                  @Param("includeAllLabelers") boolean includeAllLabelers,
+                                                  @Param("limit") int limit,
+                                                  @Param("offset") int offset);
 
     @Select("""
             SELECT id

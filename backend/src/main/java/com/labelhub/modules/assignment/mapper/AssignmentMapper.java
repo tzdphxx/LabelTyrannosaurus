@@ -28,6 +28,14 @@ public interface AssignmentMapper extends BaseMapper<Assignment> {
     Assignment selectOwnedAssignment(@Param("assignmentId") Long assignmentId,
                                      @Param("labelerId") Long labelerId);
 
+    @Select("""
+            SELECT *
+            FROM assignments
+            WHERE id = #{assignmentId}
+            FOR UPDATE
+            """)
+    Assignment selectByIdForUpdate(@Param("assignmentId") Long assignmentId);
+
     @Update("""
             UPDATE assignments
             SET draft_answer_json = #{answerJson},

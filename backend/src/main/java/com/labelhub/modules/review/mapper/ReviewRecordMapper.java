@@ -31,6 +31,37 @@ public interface ReviewRecordMapper extends BaseMapper<ReviewRecord> {
     List<ReviewRecord> selectBySubmissionIds(@Param("submissionIds") List<Long> submissionIds);
 
     @Select("""
+            <script>
+            SELECT rr.*
+            FROM review_records rr
+            <choose>
+            <when test="submissionIds != null and submissionIds.size() > 0">
+            WHERE rr.submission_id IN
+            <foreach collection="submissionIds" item="id" open="(" separator="," close=")">
+                #{id}
+            </foreach>
+              AND rr.action = 'REJECT'
+              AND NOT EXISTS (
+                  SELECT 1
+                  FROM review_records newer
+                  WHERE newer.submission_id = rr.submission_id
+                    AND newer.action = 'REJECT'
+                    AND (
+                        newer.created_at > rr.created_at
+                        OR (newer.created_at = rr.created_at AND newer.id > rr.id)
+                    )
+              )
+            </when>
+            <otherwise>
+            WHERE 1 = 0
+            </otherwise>
+            </choose>
+            ORDER BY rr.submission_id ASC
+            </script>
+            """)
+    List<ReviewRecord> selectLatestRejectBySubmissionIds(@Param("submissionIds") List<Long> submissionIds);
+
+    @Select("""
             SELECT COUNT(1)
             FROM review_records
             WHERE reviewer_id = #{reviewerId}

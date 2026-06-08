@@ -6,6 +6,7 @@ import com.labelhub.common.exception.BusinessException;
 import com.labelhub.common.security.CurrentUserContext;
 import com.labelhub.common.security.RoleCode;
 import com.labelhub.common.web.TraceIdProvider;
+import com.labelhub.infrastructure.redis.RedisKeyBuilder;
 import com.labelhub.infrastructure.redis.RedisLockService;
 import com.labelhub.modules.assignment.domain.Assignment;
 import com.labelhub.modules.assignment.domain.AssignmentStatus;
@@ -238,7 +239,7 @@ public class AssignmentClaimService {
     }
 
     private <T> T executeWithLock(Long taskId, java.util.function.Supplier<T> action) {
-        String lockKey = "lock:claim:task:" + taskId;
+        String lockKey = RedisKeyBuilder.taskClaimLock(taskId);
         boolean locked = redisLockService.tryLock(lockKey, CLAIM_LOCK_WAIT_MILLIS, CLAIM_LOCK_LEASE_MILLIS);
         if (!locked) {
             throw claimConflict("Task claim is busy, please retry");

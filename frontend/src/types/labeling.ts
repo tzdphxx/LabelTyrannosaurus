@@ -88,6 +88,7 @@ export interface LabelerAssignmentSummary {
 export interface LabelingQuestion {
   id: string
   taskId: string
+  assignmentId?: number | string | null
   templateVersionId?: number | string | null
   datasetItemId?: number | string | null
   title: string

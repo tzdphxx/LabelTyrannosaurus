@@ -205,11 +205,6 @@ export function LabelerMarketPage() {
               render: (status: LabelerTaskStatus) => <Tag color={labelerTaskStatusColors[status]}>{labelerTaskStatusLabels[status]}</Tag>,
             },
             {
-              title: 'Template',
-              dataIndex: 'templateName',
-              width: 180,
-            },
-            {
               title: 'Progress',
               width: 220,
               render: (_, task) => (

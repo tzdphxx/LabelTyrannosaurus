@@ -93,7 +93,7 @@ export function ReviewerQueuePage() {
                     </div>
                   </div>
 
-                  <Progress percent={percent} size="small" strokeColor="#f97316" trailColor="#fff7ed" />
+                  <Progress percent={percent} size="small" strokeColor="#0075de" trailColor="#f6f5f4" />
 
                   <Button icon={<RightOutlined />} type="primary" onClick={() => openTask(task)}>
                     查看题目

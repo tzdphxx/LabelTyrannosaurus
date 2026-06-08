@@ -1,31 +1,31 @@
 .page {
-  --reviewer-bg: #f6f7f9;
+  --reviewer-bg: #f6f5f4;
   --reviewer-panel: #ffffff;
-  --reviewer-panel-muted: #f9fafb;
-  --reviewer-border: #dfe3e8;
-  --reviewer-border-strong: #c6ced8;
-  --reviewer-text: #17202a;
-  --reviewer-muted: #667085;
-  --reviewer-accent: #1f6feb;
-  --reviewer-accent-soft: #eef4ff;
-  --reviewer-success: #188557;
-  --reviewer-warning: #b7791f;
-  --reviewer-danger: #c93b3b;
+  --reviewer-panel-muted: #f6f5f4;
+  --reviewer-border: #e6e6e6;
+  --reviewer-border-strong: #d8d8d8;
+  --reviewer-text: #000000;
+  --reviewer-muted: #615d59;
+  --reviewer-accent: #0075de;
+  --reviewer-accent-active: #005bab;
+  --reviewer-accent-soft: #f4f9ff;
+  --reviewer-success: #1aae39;
+  --reviewer-warning: #dd5b00;
+  --reviewer-danger: #ff64c8;
+  --reviewer-shadow: 0 0.175px 1.041px rgba(0, 0, 0, 0.01), 0 0.8px 2.925px rgba(0, 0, 0, 0.02), 0 2.025px 7.847px rgba(0, 0, 0, 0.027), 0 4px 18px rgba(0, 0, 0, 0.04);
   display: flex;
   flex-direction: column;
   gap: 14px;
   margin: -8px;
   padding: 8px;
   color: var(--reviewer-text);
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.88), rgba(246, 247, 249, 0.94)),
-    var(--reviewer-bg);
+  background: var(--reviewer-bg);
 }
 
 .page :global(.ant-card-head) {
   min-height: 44px;
   border-bottom-color: var(--reviewer-border);
-  background: linear-gradient(180deg, #ffffff, #fbfcfd);
+  background: var(--reviewer-panel);
 }
 
 .page :global(.ant-card-head-title) {
@@ -46,25 +46,25 @@
 
 .page :global(.ant-table-thead > tr > th) {
   border-bottom: 1px solid var(--reviewer-border);
-  background: #f8fafc;
+  background: var(--reviewer-panel-muted);
   color: var(--reviewer-muted);
   font-size: 12px;
   font-weight: 650;
 }
 
 .page :global(.ant-table-tbody > tr > td) {
-  border-bottom-color: #edf0f3;
+  border-bottom-color: var(--reviewer-border);
 }
 
 .page :global(.ant-table-tbody > tr:hover > td) {
-  background: #f7faff;
+  background: #faf9f8;
 }
 
 .page :global(.ant-input),
 .page :global(.ant-select-selector),
 .page :global(.ant-input-affix-wrapper) {
   border-color: var(--reviewer-border);
-  border-radius: 6px;
+  border-radius: 4px;
   background: #ffffff;
 }
 
@@ -72,13 +72,24 @@
 .page :global(.ant-input-focused),
 .page :global(.ant-select-focused .ant-select-selector),
 .page :global(.ant-input-affix-wrapper-focused) {
-  border-color: #84aef2;
-  box-shadow: 0 0 0 3px rgba(31, 111, 235, 0.1);
+  border-color: var(--reviewer-accent);
+  box-shadow: 0 0 0 3px rgba(0, 117, 222, 0.14);
 }
 
 .page :global(.ant-btn) {
-  border-radius: 6px;
+  border-radius: 8px;
   box-shadow: none;
+}
+
+.page :global(.ant-btn-primary) {
+  border-color: var(--reviewer-accent);
+  border-radius: 9999px;
+  background: var(--reviewer-accent);
+}
+
+.page :global(.ant-btn-primary:hover) {
+  border-color: var(--reviewer-accent-active);
+  background: var(--reviewer-accent-active);
 }
 
 .page :global(.ant-tag) {
@@ -96,9 +107,9 @@
 .claimTaskCard:global(.ant-card) {
   overflow: hidden;
   border: 1px solid var(--reviewer-border);
-  border-radius: 8px;
+  border-radius: 12px;
   background: var(--reviewer-panel);
-  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.04);
+  box-shadow: var(--reviewer-shadow);
 }
 
 .filterToolbar {
@@ -141,8 +152,9 @@
 }
 
 .statusCardActive {
-  border-color: #9bb8ef;
-  background: linear-gradient(180deg, #f7faff, #eef4ff);
+  border-color: var(--reviewer-accent);
+  background: var(--reviewer-accent-soft);
+  box-shadow: 0 0 0 2px rgba(0, 117, 222, 0.12);
 }
 
 .statGrid {
@@ -190,11 +202,11 @@
 
 .aiItem:global(.ant-list-item:hover) {
   border-color: var(--reviewer-border-strong);
-  background: #f8fafc;
+  background: #faf9f8;
 }
 
 .aiItemActive:global(.ant-list-item) {
-  border-color: #9bb8ef;
+  border-color: var(--reviewer-accent);
   background: var(--reviewer-accent-soft);
 }
 
@@ -297,12 +309,10 @@
   position: relative;
   min-height: 260px;
   overflow: hidden;
-  border: 1px solid rgba(31, 111, 235, 0.16);
-  border-radius: 8px;
-  background:
-    linear-gradient(135deg, rgba(255, 255, 255, 0.96), rgba(248, 252, 255, 0.92)),
-    repeating-linear-gradient(135deg, rgba(34, 197, 94, 0.06) 0 8px, transparent 8px 18px);
-  box-shadow: 0 14px 34px rgba(15, 23, 42, 0.08);
+  border: 1px solid var(--reviewer-border);
+  border-radius: 12px;
+  background: var(--reviewer-panel);
+  box-shadow: var(--reviewer-shadow);
   cursor: pointer;
   transition:
     border-color 0.18s ease,
@@ -311,25 +321,23 @@
 }
 
 .taskCard:hover {
-  border-color: rgba(31, 111, 235, 0.38);
-  box-shadow: 0 18px 42px rgba(15, 23, 42, 0.12);
-  transform: translateY(-3px);
+  border-color: var(--reviewer-border-strong);
+  box-shadow: 0 0.8px 2.925px rgba(0, 0, 0, 0.02), 0 4px 18px rgba(0, 0, 0, 0.045);
+  transform: translateY(-2px);
 }
 
 .taskCardSelected {
-  border-color: #1f6feb;
-  box-shadow: 0 0 0 3px rgba(31, 111, 235, 0.12), 0 18px 42px rgba(15, 23, 42, 0.12);
+  border-color: var(--reviewer-accent);
+  box-shadow: 0 0 0 2px rgba(0, 117, 222, 0.12), var(--reviewer-shadow);
 }
 
 .taskCardQueue {
-  background:
-    linear-gradient(135deg, rgba(255, 255, 255, 0.96), rgba(255, 251, 235, 0.88)),
-    repeating-linear-gradient(135deg, rgba(251, 191, 36, 0.08) 0 8px, transparent 8px 18px);
+  background: var(--reviewer-panel);
 }
 
 .taskCardTopline {
-  height: 6px;
-  background: linear-gradient(90deg, #1f6feb, #22c55e 46%, #f97316);
+  height: 4px;
+  background: var(--reviewer-accent);
 }
 
 .taskCardContent {
@@ -354,7 +362,7 @@
 
 .taskEyebrow {
   display: block;
-  color: #1f6feb;
+  color: var(--reviewer-accent);
   font-size: 11px;
   font-weight: 800;
   letter-spacing: 0.08em;
@@ -370,14 +378,14 @@
 .taskMetric {
   min-width: 0;
   padding: 10px;
-  border: 1px solid rgba(31, 111, 235, 0.12);
+  border: 1px solid var(--reviewer-border);
   border-radius: 8px;
-  background: rgba(255, 255, 255, 0.78);
+  background: var(--reviewer-panel-muted);
 }
 
 .taskMetric span {
   display: block;
-  color: #17202a;
+  color: var(--reviewer-text);
   font-size: 22px;
   font-weight: 800;
   line-height: 1;
@@ -391,8 +399,8 @@
 }
 
 .taskMetricHot {
-  border-color: rgba(249, 115, 22, 0.28);
-  background: #fff7ed;
+  border-color: #f0d0b8;
+  background: #fff4e8;
 }
 
 .taskCardActions {
@@ -405,12 +413,10 @@
   flex-direction: column;
   gap: 16px;
   padding: 18px;
-  border: 1px solid rgba(31, 111, 235, 0.16);
-  border-radius: 8px;
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(250, 252, 255, 0.96)),
-    #ffffff;
-  box-shadow: 0 14px 34px rgba(15, 23, 42, 0.06);
+  border: 1px solid var(--reviewer-border);
+  border-radius: 12px;
+  background: var(--reviewer-panel);
+  box-shadow: var(--reviewer-shadow);
 }
 
 .taskItemGrid {
@@ -424,7 +430,7 @@
   border: 1px solid var(--reviewer-border);
   border-radius: 8px;
   background: #ffffff;
-  box-shadow: 0 8px 18px rgba(15, 23, 42, 0.05);
+  box-shadow: 0 0.8px 2.925px rgba(0, 0, 0, 0.02), 0 2.025px 7.847px rgba(0, 0, 0, 0.027);
 }
 
 .queueItemList {
@@ -441,7 +447,7 @@
   border: 1px solid var(--reviewer-border);
   border-radius: 8px;
   background: #ffffff;
-  box-shadow: 0 8px 18px rgba(15, 23, 42, 0.05);
+  box-shadow: 0 0.8px 2.925px rgba(0, 0, 0, 0.02), 0 2.025px 7.847px rgba(0, 0, 0, 0.027);
 }
 
 .queueItemMain,
@@ -480,9 +486,7 @@
   padding: 12px;
   border: 1px solid var(--reviewer-border);
   border-radius: 8px;
-  background:
-    linear-gradient(135deg, rgba(255, 255, 255, 0.96), rgba(248, 252, 255, 0.92)),
-    #ffffff;
+  background: var(--reviewer-panel);
   color: var(--reviewer-text);
   cursor: pointer;
   text-align: left;
@@ -493,8 +497,8 @@
 }
 
 .taskSidebarItem:hover {
-  border-color: rgba(31, 111, 235, 0.38);
-  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.08);
+  border-color: var(--reviewer-border-strong);
+  box-shadow: var(--reviewer-shadow);
   transform: translateY(-1px);
 }
 
@@ -503,11 +507,9 @@
 }
 
 .taskSidebarItemActive {
-  border-color: #1f6feb;
-  background:
-    linear-gradient(135deg, #eef4ff, #f0fdf4),
-    #ffffff;
-  box-shadow: 0 0 0 3px rgba(31, 111, 235, 0.1);
+  border-color: var(--reviewer-accent);
+  background: var(--reviewer-accent-soft);
+  box-shadow: 0 0 0 2px rgba(0, 117, 222, 0.12);
 }
 
 .taskSidebarItemDisabled {
@@ -535,9 +537,9 @@
 .emptyStage {
   grid-column: 1 / -1;
   padding: 48px 16px;
-  border: 1px dashed rgba(31, 111, 235, 0.22);
+  border: 1px dashed #cfcac5;
   border-radius: 8px;
-  background: rgba(255, 255, 255, 0.72);
+  background: var(--reviewer-panel);
 }
 
 @media (max-width: 960px) {

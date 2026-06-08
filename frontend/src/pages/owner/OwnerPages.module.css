@@ -1,46 +1,59 @@
 .page {
+  --owner-primary: #0075de;
+  --owner-primary-active: #005bab;
+  --owner-secondary: #213183;
+  --owner-canvas: #f6f5f4;
+  --owner-surface: #ffffff;
+  --owner-ink: #000000;
+  --owner-ink-secondary: #31302e;
+  --owner-ink-muted: #615d59;
+  --owner-hairline: #e6e6e6;
+  --owner-shadow: 0 0.175px 1.041px rgba(0, 0, 0, 0.01), 0 0.8px 2.925px rgba(0, 0, 0, 0.02), 0 2.025px 7.847px rgba(0, 0, 0, 0.027), 0 4px 18px rgba(0, 0, 0, 0.04);
   display: flex;
   min-height: 100%;
   flex-direction: column;
   gap: clamp(14px, 1.8vw, 22px);
-  background:
-    linear-gradient(135deg, rgba(37, 99, 235, 0.1), transparent 32%),
-    linear-gradient(225deg, rgba(14, 165, 233, 0.1), transparent 30%),
-    #f6f9ff;
+  background: var(--owner-canvas);
+  color: var(--owner-ink);
 }
 
 .hero:global(.content-shell) {
   overflow: hidden;
-  border-color: rgba(37, 99, 235, 0.18);
-  background:
-    linear-gradient(120deg, rgba(37, 99, 235, 0.1), rgba(14, 165, 233, 0.08) 54%, rgba(255, 255, 255, 0.9)),
-    rgba(255, 255, 255, 0.96);
-  box-shadow: 0 18px 42px rgba(30, 64, 175, 0.08);
+  border-color: var(--owner-hairline);
+  background: var(--owner-surface);
+  box-shadow: var(--owner-shadow);
   animation: ownerPanelEnter 220ms ease-out both;
 }
 
 .hero :global(.page-header__title.ant-typography) {
-  color: #0f1f3d;
+  color: var(--owner-ink);
+  letter-spacing: -0.625px;
 }
 
 .hero :global(.page-header__description.ant-typography) {
-  color: #5b6f92;
+  color: var(--owner-ink-muted);
 }
 
 .hero :global(.ant-btn-primary) {
-  border-color: #2563eb;
-  background: #2563eb;
-  box-shadow: 0 12px 24px rgba(37, 99, 235, 0.18);
+  border-color: var(--owner-primary);
+  border-radius: 9999px;
+  background: var(--owner-primary);
+  box-shadow: none;
+}
+
+.hero :global(.ant-btn-primary:hover) {
+  border-color: var(--owner-primary-active);
+  background: var(--owner-primary-active);
 }
 
 .statCard:global(.ant-card),
 .panelCard:global(.ant-card),
 .tableCard:global(.ant-card) {
   overflow: hidden;
-  border: 1px solid rgba(37, 99, 235, 0.16);
-  border-radius: 8px;
-  background: rgba(255, 255, 255, 0.96);
-  box-shadow: 0 14px 34px rgba(30, 64, 175, 0.07);
+  border: 1px solid var(--owner-hairline);
+  border-radius: 12px;
+  background: var(--owner-surface);
+  box-shadow: var(--owner-shadow);
   animation: ownerPanelEnter 220ms ease-out both;
   transition:
     border-color 180ms ease,
@@ -51,26 +64,26 @@
 .statCard:global(.ant-card):hover,
 .panelCard:global(.ant-card):hover,
 .tableCard:global(.ant-card):hover {
-  border-color: rgba(37, 99, 235, 0.3);
-  box-shadow: 0 18px 42px rgba(30, 64, 175, 0.1);
+  border-color: #d8d8d8;
+  box-shadow: 0 0.8px 2.925px rgba(0, 0, 0, 0.02), 0 4px 18px rgba(0, 0, 0, 0.045);
   transform: translateY(-1px);
 }
 
 .statCard:global(.ant-card) {
   min-height: 104px;
-  border-top: 3px solid #2563eb;
+  border-top: 3px solid var(--owner-primary);
 }
 
 .statCardInfo:global(.ant-card) {
-  border-top-color: #0ea5e9;
+  border-top-color: #62aef0;
 }
 
 .statCardSuccess:global(.ant-card) {
-  border-top-color: #10b981;
+  border-top-color: #1aae39;
 }
 
 .statCardWarning:global(.ant-card) {
-  border-top-color: #f59e0b;
+  border-top-color: #dd5b00;
 }
 
 .statCard :global(.ant-card-body) {
@@ -78,34 +91,31 @@
 }
 
 .statCard :global(.ant-statistic-title) {
-  color: #5b6f92;
+  color: var(--owner-ink-muted);
   font-weight: 700;
 }
 
 .statCard :global(.ant-statistic-content) {
-  color: #0f1f3d;
+  color: var(--owner-ink);
   font-weight: 800;
 }
 
 .statCardAlert:global(.ant-card) {
-  border-color: rgba(239, 68, 68, 0.28);
-  border-top-color: #ef4444;
-  background:
-    linear-gradient(135deg, rgba(254, 242, 242, 0.98), rgba(255, 255, 255, 0.95));
+  border-color: var(--owner-hairline);
+  border-top-color: #ff64c8;
+  background: var(--owner-surface);
 }
 
 .panelCard :global(.ant-card-head),
 .tableCard :global(.ant-card-head) {
   min-height: 50px;
-  border-bottom-color: rgba(37, 99, 235, 0.14);
-  background:
-    linear-gradient(90deg, rgba(37, 99, 235, 0.08), rgba(14, 165, 233, 0.06)),
-    #ffffff;
+  border-bottom-color: var(--owner-hairline);
+  background: var(--owner-surface);
 }
 
 .panelCard :global(.ant-card-head-title),
 .tableCard :global(.ant-card-head-title) {
-  color: #0f1f3d;
+  color: var(--owner-ink);
   font-weight: 800;
 }
 
@@ -126,13 +136,13 @@
 .progressGrid :global(.ant-statistic) {
   min-width: 0;
   padding: 12px;
-  border: 1px solid rgba(37, 99, 235, 0.14);
+  border: 1px solid var(--owner-hairline);
   border-radius: 8px;
-  background: linear-gradient(135deg, #eff6ff, #ffffff);
+  background: var(--owner-canvas);
 }
 
 .progressGrid :global(.ant-statistic-title) {
-  color: #5b6f92;
+  color: var(--owner-ink-muted);
   font-weight: 700;
 }
 
@@ -153,22 +163,24 @@
 }
 
 .dataTable :global(.ant-table) {
-  color: #172033;
+  color: var(--owner-ink-secondary);
 }
 
 .dataTable :global(.ant-table-thead > tr > th) {
-  border-bottom-color: rgba(37, 99, 235, 0.14);
-  background: #f1f6ff;
-  color: #1e3a8a;
+  border-bottom-color: var(--owner-hairline);
+  background: var(--owner-canvas);
+  color: var(--owner-ink-secondary);
+  font-size: 12px;
   font-weight: 800;
+  letter-spacing: 0.125px;
 }
 
 .dataTable :global(.ant-table-tbody > tr > td) {
-  border-bottom-color: rgba(37, 99, 235, 0.08);
+  border-bottom-color: var(--owner-hairline);
 }
 
 .dataTable :global(.ant-table-tbody > tr:hover > td) {
-  background: #f8fbff;
+  background: #faf9f8;
 }
 
 .dataTable :global(.ant-tag) {
@@ -186,33 +198,33 @@
 }
 
 .statusPillDraft:global(.ant-tag) {
-  background: #eef2ff;
-  color: #4f46e5;
+  background: #f6f5f4;
+  color: #615d59;
 }
 
 .statusPillPublished:global(.ant-tag) {
-  background: #e9f8ff;
-  color: #0284c7;
+  background: #eef8ff;
+  color: var(--owner-primary);
 }
 
 .statusPillPaused:global(.ant-tag) {
-  background: #fff7ed;
-  color: #ea580c;
+  background: #fff4e8;
+  color: #dd5b00;
 }
 
 .statusPillEnded:global(.ant-tag) {
-  background: #f1f5f9;
-  color: #475569;
+  background: #f1f0ef;
+  color: #615d59;
 }
 
 .rewardBadge,
 .countBadge {
   display: inline-flex;
   align-items: center;
-  border: 1px solid rgba(37, 99, 235, 0.14);
+  border: 1px solid var(--owner-hairline);
   border-radius: 7px;
-  background: #f8fbff;
-  color: #1e3a8a;
+  background: var(--owner-canvas);
+  color: var(--owner-ink-secondary);
   font-weight: 800;
 }
 
@@ -224,7 +236,7 @@
 }
 
 .rewardBadge span {
-  color: #64748b;
+  color: var(--owner-ink-muted);
   font-size: 12px;
   font-weight: 700;
 }
@@ -247,13 +259,13 @@
 }
 
 .progressPercent {
-  color: #2563eb;
+  color: var(--owner-primary);
   font-size: 13px;
   font-weight: 800;
 }
 
 .progressLine :global(.ant-progress-bg) {
-  background: linear-gradient(90deg, #2563eb, #0ea5e9);
+  background: var(--owner-primary);
 }
 
 .progressMeta {
@@ -264,8 +276,8 @@
 
 .progressMeta span {
   border-radius: 7px;
-  background: #eff6ff;
-  color: #475569;
+  background: var(--owner-canvas);
+  color: var(--owner-ink-muted);
   font-size: 12px;
   font-weight: 700;
   line-height: 1.5;

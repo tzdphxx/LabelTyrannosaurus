@@ -121,7 +121,7 @@ export function ReviewerClaimPage() {
                     </div>
                   </div>
 
-                  <Progress percent={percent} size="small" strokeColor="#22c55e" trailColor="#ecfdf5" />
+                  <Progress percent={percent} size="small" strokeColor="#0075de" trailColor="#f6f5f4" />
 
                   <Space wrap className={styles.taskCardActions}>
                     <Button

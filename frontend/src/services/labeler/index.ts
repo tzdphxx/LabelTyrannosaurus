@@ -1,4 +1,5 @@
 import { isRealServiceMode } from '../http'
+export { labelerDashboardService } from './labelerDashboardService'
 import { mockLabelingService } from './labelingService'
 import { realLabelingService } from './labelingRealService'
 

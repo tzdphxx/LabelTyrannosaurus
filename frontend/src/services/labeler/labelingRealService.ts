@@ -22,6 +22,7 @@ import type {
   LabelingSubmitResult,
   LabelingSubmitValidationResult,
 } from '../../types/labeling'
+import { fromBackendTemplateSchema } from '../../features/dynamic-form/utils/backendSchema'
 import { ApiError, request } from '../http'
 import { mockLabelingService } from './labelingService'
 import { getNowLabel, validateQuestionDraft, validateTaskDrafts } from './labelingServiceHelpers'
@@ -287,6 +288,10 @@ function normalizeFieldType(type: unknown, component?: unknown, hasChildren = fa
 
   const componentName = String(component ?? type ?? '').toLowerCase()
 
+  if (componentName.includes('llm')) {
+    return 'llmPrompt'
+  }
+
   if (componentName.includes('textarea')) {
     return 'textarea'
   }
@@ -496,6 +501,18 @@ function parseSchema(schemaJson?: unknown, templateVersionId?: number | string):
   const parsedSchema = toRecord(parsedValue)
   const nestedSchema = toRecord(parsedSchema.schema)
   const sourceSchema = Object.keys(nestedSchema).length ? nestedSchema : parsedSchema
+
+  if (Array.isArray(sourceSchema.components)) {
+    const backendSchema = fromBackendTemplateSchema(sourceSchema)
+
+    return {
+      ...backendSchema,
+      id: String(backendSchema.id ?? sourceSchema.id ?? templateVersionId ?? 'template'),
+      version: String(backendSchema.version ?? sourceSchema.version ?? templateVersionId ?? '1'),
+      title: String(backendSchema.title ?? sourceSchema.title ?? '标注模板'),
+    }
+  }
+
   const rawNodes = Array.isArray(parsedValue)
     ? parsedValue
     : Array.isArray(sourceSchema.nodes)
@@ -723,10 +740,14 @@ function buildQuestionFromClaimedItem(
   taskId: string,
   item: ClaimItemResponse,
   schema: DynamicFormSchema,
+  templateVersionId?: number | string | null,
 ): LabelingQuestion {
   return {
     id: String(item.claimId),
     taskId,
+    assignmentId: String(item.claimId),
+    datasetItemId: String(item.itemId),
+    templateVersionId,
     title: item.externalId ? `题目 ${item.externalId}` : `题目 #${item.itemId}`,
     description: '',
     source: buildClaimedItemSource(item),
@@ -970,7 +991,7 @@ async function loadClaimedTask(taskId: string) {
     templateName: answerTemplate.templateVersionId ? `模板版本 #${answerTemplate.templateVersionId}` : '-',
   }
   const schema = parseSchema(answerTemplate.schemaJson, answerTemplate.templateVersionId)
-  const questions = items.map((item) => buildQuestionFromClaimedItem(resolvedTaskId, item, schema))
+  const questions = items.map((item) => buildQuestionFromClaimedItem(resolvedTaskId, item, schema, answerTemplate.templateVersionId))
 
   questions.forEach((question, index) => {
     const item = items[index]

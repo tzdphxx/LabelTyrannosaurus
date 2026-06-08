@@ -1,32 +1,39 @@
 .page {
+  --owner-primary: #0075de;
+  --owner-primary-active: #005bab;
+  --owner-canvas: #f6f5f4;
+  --owner-surface: #ffffff;
+  --owner-ink: #000000;
+  --owner-ink-secondary: #31302e;
+  --owner-ink-muted: #615d59;
+  --owner-hairline: #e6e6e6;
+  --owner-shadow: 0 0.175px 1.041px rgba(0, 0, 0, 0.01), 0 0.8px 2.925px rgba(0, 0, 0, 0.02), 0 2.025px 7.847px rgba(0, 0, 0, 0.027), 0 4px 18px rgba(0, 0, 0, 0.04);
   display: flex;
   min-height: 100dvh;
   flex-direction: column;
   gap: clamp(14px, 1.6vw, 20px);
   overflow: visible;
-  background:
-    linear-gradient(135deg, rgba(37, 99, 235, 0.1), transparent 32%),
-    linear-gradient(225deg, rgba(14, 165, 233, 0.1), transparent 30%),
-    #f6f9ff;
+  background: var(--owner-canvas);
+  color: var(--owner-ink);
 }
 
 .headerShell {
   flex: 0 0 auto;
-  border-color: rgba(37, 99, 235, 0.18);
-  background:
-    linear-gradient(120deg, rgba(37, 99, 235, 0.1), rgba(14, 165, 233, 0.08)),
-    rgba(255, 255, 255, 0.95);
-  box-shadow: 0 14px 34px rgba(30, 64, 175, 0.08);
+  border-color: var(--owner-hairline);
+  background: var(--owner-surface);
+  box-shadow: var(--owner-shadow);
 }
 
 .headerShell :global(.page-header__title.ant-typography) {
-  color: #0f1f3d;
+  color: var(--owner-ink);
+  letter-spacing: -0.625px;
 }
 
 .headerShell :global(.ant-btn-primary) {
-  border-color: #2563eb;
-  background: #2563eb;
-  box-shadow: 0 12px 24px rgba(37, 99, 235, 0.18);
+  border-color: var(--owner-primary);
+  border-radius: 9999px;
+  background: var(--owner-primary);
+  box-shadow: none;
 }
 
 .workspace {
@@ -42,10 +49,10 @@
   flex: 0 0 auto;
   min-width: 0;
   overflow: hidden;
-  border: 1px solid rgba(37, 99, 235, 0.16);
-  border-radius: 8px;
-  background: rgba(255, 255, 255, 0.92);
-  box-shadow: 0 16px 40px rgba(30, 64, 175, 0.08);
+  border: 1px solid var(--owner-hairline);
+  border-radius: 12px;
+  background: var(--owner-surface);
+  box-shadow: var(--owner-shadow);
   animation: cardEnter 220ms ease-out both;
   transition:
     border-color 180ms ease,
@@ -54,23 +61,21 @@
 }
 
 .formCard:hover {
-  border-color: rgba(37, 99, 235, 0.28);
-  box-shadow: 0 18px 42px rgba(30, 64, 175, 0.1);
+  border-color: #d8d8d8;
+  box-shadow: 0 0.8px 2.925px rgba(0, 0, 0, 0.02), 0 4px 18px rgba(0, 0, 0, 0.045);
   transform: translateY(-1px);
 }
 
 .formCard :global(.ant-card-head) {
   min-height: 48px;
-  border-bottom-color: rgba(37, 99, 235, 0.14);
-  background:
-    linear-gradient(90deg, rgba(37, 99, 235, 0.08), rgba(14, 165, 233, 0.06)),
-    #ffffff;
+  border-bottom-color: var(--owner-hairline);
+  background: var(--owner-surface);
 }
 
 .formCard :global(.ant-card-head-title) {
   font-size: 15px;
   font-weight: 700;
-  color: #0f1f3d;
+  color: var(--owner-ink);
 }
 
 .formCard :global(.ant-card-body) {
@@ -88,7 +93,7 @@
   min-width: 0;
   flex-direction: column;
   gap: 6px;
-  color: #273b62;
+  color: var(--owner-ink-secondary);
   font-size: 13px;
   font-weight: 600;
 }
@@ -131,15 +136,15 @@
 .field :global(.ant-input-number:hover),
 .field :global(.ant-picker:hover),
 .field :global(.ant-select-selector:hover) {
-  border-color: #2563eb;
+  border-color: var(--owner-primary);
 }
 
 .field :global(.ant-input:focus),
 .field :global(.ant-input-number-focused),
 .field :global(.ant-picker-focused),
 .field :global(.ant-select-focused .ant-select-selector) {
-  border-color: #2563eb;
-  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
+  border-color: var(--owner-primary);
+  box-shadow: 0 0 0 3px rgba(0, 117, 222, 0.14);
 }
 
 .uploadDragger :global(.ant-upload-drag-container) {
@@ -170,19 +175,19 @@
   gap: 12px;
   margin-top: 12px;
   padding: 10px 12px;
-  border: 1px solid rgba(37, 99, 235, 0.16);
+  border: 1px solid var(--owner-hairline);
   border-radius: 8px;
-  background: linear-gradient(135deg, rgba(239, 246, 255, 0.96), rgba(255, 255, 255, 0.92));
+  background: var(--owner-canvas);
 }
 
 .quotaSummary :global(.ant-statistic-title) {
   margin-bottom: 2px;
-  color: #65758b;
+  color: var(--owner-ink-muted);
   font-size: 12px;
 }
 
 .quotaSummary :global(.ant-statistic-content) {
-  color: #23313f;
+  color: var(--owner-ink);
   font-size: 18px;
 }
 
@@ -193,19 +198,19 @@
 .datasetSummary :global(.ant-statistic) {
   min-width: 0;
   padding: 10px 12px;
-  border: 1px solid rgba(37, 99, 235, 0.14);
+  border: 1px solid var(--owner-hairline);
   border-radius: 8px;
-  background: #fbfdff;
+  background: var(--owner-canvas);
 }
 
 .datasetSummary :global(.ant-statistic-title) {
   margin-bottom: 2px;
-  color: #65758b;
+  color: var(--owner-ink-muted);
   font-size: 12px;
 }
 
 .datasetSummary :global(.ant-statistic-content) {
-  color: #23313f;
+  color: var(--owner-ink);
   font-size: 18px;
 }
 
@@ -250,10 +255,9 @@
   justify-content: space-between !important;
   gap: 12px;
   padding: 14px 16px !important;
-  border: 1px solid rgba(37, 99, 235, 0.16) !important;
+  border: 1px solid var(--owner-hairline) !important;
   border-radius: 8px;
-  background:
-    linear-gradient(135deg, rgba(255, 255, 255, 0.98), rgba(239, 246, 255, 0.92));
+  background: var(--owner-surface);
   cursor: pointer;
   transition:
     border-color 180ms ease,
@@ -262,16 +266,15 @@
 }
 
 .assigneeItem:hover {
-  border-color: rgba(37, 99, 235, 0.48) !important;
-  box-shadow: 0 12px 26px rgba(30, 64, 175, 0.1);
+  border-color: var(--owner-primary) !important;
+  box-shadow: var(--owner-shadow);
   transform: translateY(-1px);
 }
 
 .assigneeItemSelected {
-  border-color: #2563eb !important;
-  background:
-    linear-gradient(135deg, rgba(219, 234, 254, 0.98), rgba(255, 255, 255, 0.94));
-  box-shadow: 0 12px 30px rgba(37, 99, 235, 0.16);
+  border-color: var(--owner-primary) !important;
+  background: #f4f9ff;
+  box-shadow: 0 0 0 2px rgba(0, 117, 222, 0.12);
 }
 
 .assigneeNameBlock {
@@ -299,7 +302,7 @@
   gap: 2px;
   padding: 8px 10px;
   border-radius: 8px;
-  background: rgba(255, 255, 255, 0.72);
+  background: var(--owner-canvas);
 }
 
 .assigneeMetrics :global(.ant-typography-secondary) {
@@ -323,16 +326,16 @@
 
 .datasetTable {
   overflow: hidden;
-  border: 1px solid #d9e1e8;
+  border: 1px solid var(--owner-hairline);
   border-radius: 8px;
 }
 
 .datasetTable :global(.ant-table) {
-  color: #23313f;
+  color: var(--owner-ink-secondary);
 }
 
 .datasetTable :global(.ant-table-thead > tr > th) {
-  background: #f1f6ff;
+  background: var(--owner-canvas);
   font-weight: 600;
 }
 
@@ -347,18 +350,18 @@
 }
 
 .datasetDraftRow > td {
-  background: #f5f9ff !important;
+  background: #f4f9ff !important;
 }
 
 .datasetStats {
-  color: #5f6f7d;
+  color: var(--owner-ink-muted);
   font-size: 12px;
 }
 
 .datasetFieldTone1 {
-  color: #1d4ed8;
-  border-color: #bfdbfe;
-  background: #eff6ff;
+  color: var(--owner-primary);
+  border-color: #c7e2fb;
+  background: #eef8ff;
 }
 
 .datasetFieldTone2 {

@@ -64,22 +64,51 @@ export function LoginPage() {
 
   return (
     <main className="login-page">
+      <div className="login-sticker login-sticker--sky" aria-hidden="true" />
+      <div className="login-sticker login-sticker--pink" aria-hidden="true" />
+      <div className="login-sticker login-sticker--green" aria-hidden="true" />
+
       <section className="login-panel">
         <div className="login-panel__intro">
           <div className="login-panel__brandmark" aria-hidden="true">
             LH
           </div>
-          <Typography.Text className="login-panel__eyebrow">LabelHub Foundation</Typography.Text>
+          <Typography.Text className="login-panel__eyebrow">LabelHub Workspace</Typography.Text>
           <Typography.Title className="login-panel__title">LabelHub</Typography.Title>
           <Typography.Paragraph className="login-panel__copy">
-            数据标注工作台，助力高质量训练数据的高效生产。
+            用一个安静、清晰的工作台串起任务发布、数据标注、AI 预审和人工复核。
           </Typography.Paragraph>
+
+          <div className="login-product-tags" aria-label="平台能力">
+            <span>任务管理</span>
+            <span>标注协作</span>
+            <span>审核闭环</span>
+          </div>
+
           <div className="login-flow" aria-hidden="true">
             <span className="login-flow__node login-flow__node--primary" />
             <span className="login-flow__line" />
             <span className="login-flow__node login-flow__node--review" />
             <span className="login-flow__line login-flow__line--short" />
             <span className="login-flow__node login-flow__node--done" />
+          </div>
+
+          <div className="login-mini-board" aria-hidden="true">
+            <div className="login-mini-board__row">
+              <span />
+              <strong>Dataset review</strong>
+              <em>82%</em>
+            </div>
+            <div className="login-mini-board__row">
+              <span />
+              <strong>Labeling queue</strong>
+              <em>34</em>
+            </div>
+            <div className="login-mini-board__row">
+              <span />
+              <strong>AI precheck</strong>
+              <em>Live</em>
+            </div>
           </div>
         </div>
 
@@ -101,7 +130,7 @@ export function LoginPage() {
                 {isRegisterMode ? '创建账号' : '账号登录'}
               </Typography.Title>
               <Typography.Paragraph className="auth-panel__copy">
-                {isRegisterMode ? '使用邮箱和密码完成注册。' : '使用邮箱和密码登录平台。'}
+                {isRegisterMode ? '使用邮箱、密码和身份创建一个工作账号。' : '继续进入你的标注协作空间。'}
               </Typography.Paragraph>
             </div>
           </div>

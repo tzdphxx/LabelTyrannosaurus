@@ -1,5 +1,5 @@
-import { BulbOutlined, CheckCircleOutlined, ThunderboltOutlined } from '@ant-design/icons'
-import { Alert, Button, Card, Input, Space, Tag, Upload, Typography } from 'antd'
+import { CheckCircleOutlined, ThunderboltOutlined } from '@ant-design/icons'
+import { Alert, Button, Card, Input, Space, Upload, Typography } from 'antd'
 import type { UploadFile } from 'antd/es/upload/interface'
 import styles from './DynamicFormRenderer.module.css'
 import { useMemo, useState } from 'react'
@@ -159,14 +159,12 @@ export function LlmPromptBlock({
   componentId,
   getCurrentValues,
   llmContext,
-  modelName,
   onApplyValues,
   onRunLlmTrigger,
   prompt,
   promptTemplate,
   targetFields,
   text,
-  title,
 }: {
   componentId?: string
   getCurrentValues?: () => Record<string, unknown>
@@ -189,6 +187,7 @@ export function LlmPromptBlock({
   const applyValues = response ? buildApplyValues(response, configuredTargetFields) : {}
   const canApply = response?.status === 'SUCCESS' && Object.keys(applyValues).length > 0
   const displayPrompt = promptTemplate || prompt
+  const suggestionText = response?.displayText || (Object.keys(response?.suggestionJson ?? {}).length ? JSON.stringify(response?.suggestionJson, null, 2) : '')
 
   async function runTrigger() {
     if (!payload || !onRunLlmTrigger) {
@@ -218,43 +217,30 @@ export function LlmPromptBlock({
 
   return (
     <Card className="dynamic-renderer__llm" size="small">
-      <Space className="dynamic-renderer__llm-head" direction="vertical" size={8}>
-        <div className="dynamic-renderer__llm-title">
-          <BulbOutlined />
-          <Typography.Text strong>{title ?? 'LLM 字段辅助'}</Typography.Text>
-        </div>
-        <Space size={6} wrap>
-          {modelName ? <Tag>{modelName}</Tag> : <Tag color="default">未配置模型</Tag>}
-          {configuredTargetFields.length ? <Tag color="processing">{configuredTargetFields.join(', ')}</Tag> : <Tag>仅展示建议</Tag>}
-        </Space>
+      <Space className="dynamic-renderer__llm-head" direction="vertical" size={6}>
+        <Typography.Text className="dynamic-renderer__llm-title" strong>AI 建议清洗</Typography.Text>
       </Space>
 
-      {displayPrompt ? (
-        <Typography.Paragraph className="dynamic-renderer__llm-prompt">{displayPrompt}</Typography.Paragraph>
-      ) : null}
-
-      {!canRun ? (
-        <Alert message="需要真实任务上下文后才能调用 LLM" showIcon type="warning" />
-      ) : null}
-
-      {error ? <Alert message={error} showIcon type="error" /> : null}
-
-      {response?.status === 'SUCCESS' ? (
-        <div className="dynamic-renderer__llm-result">
-          <Typography.Text type="secondary">
-            {response.latencyMs ? `${response.latencyMs}ms` : statusLabels[response.status]}
-          </Typography.Text>
-          {response.displayText ? <Typography.Paragraph>{response.displayText}</Typography.Paragraph> : null}
-          {Object.keys(response.suggestionJson).length ? (
-            <pre>{JSON.stringify(response.suggestionJson, null, 2)}</pre>
-          ) : null}
-        </div>
-      ) : null}
-
-      <Space className="dynamic-renderer__llm-actions">
+      <div className="dynamic-renderer__llm-cleaner">
         <Button disabled={!canRun} icon={<ThunderboltOutlined />} loading={isRunning} onClick={() => void runTrigger()} type="primary">
-          运行
+          清洗
         </Button>
+
+        <div className="dynamic-renderer__llm-suggestion">
+          {response?.status === 'SUCCESS' ? (
+            <>
+              <Typography.Text type="secondary">
+                {response.latencyMs ? `${response.latencyMs}ms` : statusLabels[response.status]}
+              </Typography.Text>
+              {suggestionText ? <pre>{suggestionText}</pre> : <Typography.Text type="secondary">未返回可展示建议</Typography.Text>}
+            </>
+          ) : (
+            <Typography.Text type="secondary">
+              {text || displayPrompt || '点击清洗后在这里查看建议'}
+            </Typography.Text>
+          )}
+        </div>
+
         <Button
           disabled={!canApply}
           icon={<CheckCircleOutlined />}
@@ -266,9 +252,13 @@ export function LlmPromptBlock({
         >
           采纳
         </Button>
-      </Space>
+      </div>
 
-      {!response && text ? <Typography.Text type="secondary">{text}</Typography.Text> : null}
+      {!canRun ? (
+        <Alert className="dynamic-renderer__llm-alert" message="需要真实任务上下文后才能调用 LLM" showIcon type="warning" />
+      ) : null}
+
+      {error ? <Alert className="dynamic-renderer__llm-alert" message={error} showIcon type="error" /> : null}
     </Card>
   )
 }

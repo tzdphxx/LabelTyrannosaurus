@@ -1,6 +1,5 @@
 export { adminReviewAssignmentService } from './admin'
 export { authService } from './auth'
-export { labelingService } from './labeler'
 export {
   AUTH_TOKEN_STORAGE_KEY,
   AUTH_ROLE_STORAGE_KEY,
@@ -17,5 +16,6 @@ export {
 } from './http'
 export type { ApiResponseEnvelope, RequestConfig, ServiceMode } from './http'
 export { llmService } from './llm'
+export { labelerDashboardService, labelingService } from './labeler'
 export { ownerDashboardService, ownerImportService, ownerModelService, ownerTaskService, ownerTemplateService } from './owner'
-export { reviewService } from './review'
+export { reviewerDashboardService, reviewService } from './review'

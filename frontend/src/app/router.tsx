@@ -2,6 +2,7 @@ import { BrowserRouter, Navigate, Route, Routes } from 'react-router'
 import { StatePlaceholder } from '../components/states/StatePlaceholder'
 import { AdminReviewAssignmentPage } from '../pages/admin/AdminReviewAssignmentPage'
 import { LoginPage } from '../pages/auth/LoginPage'
+import { LabelerDashboardPage } from '../pages/labeler/LabelerDashboardPage'
 import { LabelerMarketPage } from '../pages/labeler/LabelerMarketPage'
 import { LabelerSubmissionsPage } from '../pages/labeler/LabelerSubmissionsPage'
 import { LabelerWorkbenchPage } from '../pages/labeler/LabelerWorkbenchPage'
@@ -10,11 +11,11 @@ import { OwnerTaskEditorPage } from '../pages/owner/OwnerTaskEditorPage'
 import { OwnerTasksPage } from '../pages/owner/OwnerTasksPage'
 import { OwnerTemplateDesignerPage } from '../pages/owner/templates/OwnerTemplateDesignerPage'
 import { OwnerTemplatesPage } from '../pages/owner/templates/OwnerTemplatesPage'
+import { ReviewerDashboardPage } from '../pages/reviewer/ReviewerDashboardPage'
 import { ReviewerQueuePage } from '../pages/reviewer/ReviewerQueuePage'
 import { ReviewerClaimPage } from '../pages/reviewer/ReviewerClaimPage'
 import { ReviewerAiReviewQueuePage } from '../pages/reviewer/ReviewerAiReviewQueuePage'
 import { ReviewerReviewDetailPage } from '../pages/reviewer/ReviewerReviewDetailPage'
-import { RoleHomePage } from '../pages/roles/RoleHomePage'
 import { useAuthStore } from '../stores/authStore'
 import { AppLayout } from './layout/AppLayout'
 import { PublicOnlyRoute } from './guards/PublicOnlyRoute'
@@ -70,7 +71,7 @@ export function AppRouter() {
             />
           </Route>
           <Route path="labeler">
-            <Route index element={<RoleHomePage role="LABELER" />} />
+            <Route index element={<LabelerDashboardPage />} />
             <Route element={<LabelerMarketPage />} path="market" />
             <Route element={<LabelerWorkbenchPage />} path="workbench/:taskId" />
             <Route element={<LabelerSubmissionsPage />} path="submissions" />
@@ -80,7 +81,7 @@ export function AppRouter() {
             />
           </Route>
           <Route path="reviewer">
-            <Route index element={<RoleHomePage role="REVIEWER" />} />
+            <Route index element={<ReviewerDashboardPage />} />
             <Route element={<ReviewerClaimPage />} path="claim" />
             <Route element={<ReviewerQueuePage />} path="queue" />
             <Route element={<ReviewerAiReviewQueuePage />} path="ai-reviews" />

@@ -60,6 +60,18 @@ export function LabelerWorkbenchPage() {
     () => currentDraft?.values ?? currentQuestion?.previousValues ?? {},
     [currentDraft?.values, currentQuestion?.previousValues],
   )
+  const llmContext = useMemo(
+    () => currentQuestion
+      ? {
+        taskId,
+        templateVersionId: currentQuestion.templateVersionId,
+        datasetItemId: currentQuestion.datasetItemId,
+        assignmentId: currentQuestion.assignmentId ?? currentQuestion.id,
+        previewMode: false,
+      }
+      : undefined,
+    [currentQuestion, taskId],
+  )
   const formInitialValuesSignature = useMemo(() => stringifyDraftValues(formInitialValues), [formInitialValues])
   const activeQuestionId = currentQuestion?.id ?? null
   const savedValuesSignatureRef = useRef(formInitialValuesSignature)
@@ -369,6 +381,7 @@ export function LabelerWorkbenchPage() {
               ) : (
                 <DynamicFormRenderer
                   initialValues={formInitialValues}
+                  llmContext={llmContext}
                   schema={currentQuestion.schema}
                   submitText="校验当前题"
                   onSubmit={(result) => setLatestValues(result.values)}

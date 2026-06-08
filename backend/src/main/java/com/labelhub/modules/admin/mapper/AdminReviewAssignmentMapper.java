@@ -123,7 +123,7 @@ public interface AdminReviewAssignmentMapper {
                 FROM review_records
                 WHERE action IN ('APPROVE', 'REJECT')
                   AND created_at >= CURRENT_DATE()
-                  AND created_at < CURRENT_DATE() + INTERVAL 1 DAY
+                  AND created_at &lt; CURRENT_DATE() + INTERVAL 1 DAY
                 GROUP BY reviewer_id
             ) td ON td.reviewer_id = u.id
             LEFT JOIN (
@@ -183,7 +183,7 @@ public interface AdminReviewAssignmentMapper {
                 FROM review_records
                 WHERE action IN ('APPROVE', 'REJECT')
                   AND created_at >= CURRENT_DATE()
-                  AND created_at < CURRENT_DATE() + INTERVAL 1 DAY
+                  AND created_at &lt; CURRENT_DATE() + INTERVAL 1 DAY
                 GROUP BY reviewer_id
             ) td ON td.reviewer_id = u.id
             LEFT JOIN (

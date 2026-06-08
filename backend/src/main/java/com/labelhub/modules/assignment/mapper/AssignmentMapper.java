@@ -119,6 +119,7 @@ public interface AssignmentMapper extends BaseMapper<Assignment> {
                    t.claimed_count,
                    t.overlap_count,
                    t.strategy,
+                   t.max_claims_per_labeler,
                    t.deadline_at,
                    t.published_at,
                    t.ended_at,
@@ -133,7 +134,7 @@ public interface AssignmentMapper extends BaseMapper<Assignment> {
             WHERE a.labeler_id = #{labelerId}
             GROUP BY t.id, t.title, t.description, t.instruction_rich_text, t.status, t.quota,
                      t.claimed_count, t.overlap_count, t.strategy, t.deadline_at, t.published_at,
-                     t.ended_at, t.created_at, t.published_template_version_id
+                     t.max_claims_per_labeler, t.ended_at, t.created_at, t.published_template_version_id
             ORDER BY updated_at DESC
             LIMIT #{limit} OFFSET #{offset}
             """)
@@ -152,6 +153,7 @@ public interface AssignmentMapper extends BaseMapper<Assignment> {
                    t.claimed_count,
                    t.overlap_count,
                    t.strategy,
+                   t.max_claims_per_labeler,
                    t.deadline_at,
                    t.published_at,
                    t.ended_at,
@@ -167,7 +169,7 @@ public interface AssignmentMapper extends BaseMapper<Assignment> {
               AND a.task_id = #{taskId}
             GROUP BY t.id, t.title, t.description, t.instruction_rich_text, t.status, t.quota,
                      t.claimed_count, t.overlap_count, t.strategy, t.deadline_at, t.published_at,
-                     t.ended_at, t.created_at, t.published_template_version_id
+                     t.max_claims_per_labeler, t.ended_at, t.created_at, t.published_template_version_id
             """)
     java.util.Map<String, Object> selectLabelerClaimedTask(@Param("labelerId") Long labelerId,
                                                            @Param("taskId") Long taskId);

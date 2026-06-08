@@ -366,6 +366,22 @@
 
 **POST** `/api/v1/tasks/{taskId}/items/claim`
 
+### Request body
+
+```json
+{
+  "quantity": 3
+}
+```
+
+| Field | Type | Required | Description |
+|------|------|----------|-------------|
+| quantity | Integer | No | Number of items to claim. Defaults to `1`; valid range is `1..100`. Values greater than `1` are supported only for `FCFS` tasks. |
+
+If a `FCFS` task cannot provide the requested number of claimable items, the whole request fails and no partial claim result is returned.
+
+Response data is a `List<AssignmentClaimResponse>`. A single-item claim also returns a one-element list.
+
 ### 路径参数
 
 | 参数 | 类型 | 必填 | 说明 |

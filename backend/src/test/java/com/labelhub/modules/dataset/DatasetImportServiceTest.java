@@ -8,6 +8,8 @@ import com.labelhub.common.security.RoleCode;
 import com.labelhub.infrastructure.async.AsyncJobExecutor;
 import com.labelhub.infrastructure.async.AsyncJobService;
 import com.labelhub.infrastructure.storage.ObjectStorageService;
+import com.labelhub.modules.assignment.domain.AssignmentDispatch;
+import com.labelhub.modules.assignment.mapper.AssignmentDispatchMapper;
 import com.labelhub.modules.dataset.domain.DatasetFileEntity;
 import com.labelhub.modules.dataset.domain.DatasetImportJobEntity;
 import com.labelhub.modules.dataset.dto.BatchAppendJsonItemsRequest;
@@ -25,6 +27,7 @@ import com.labelhub.modules.dataset.service.JsonlDatasetParser;
 import com.labelhub.modules.storage.domain.ObjectFileEntity;
 import com.labelhub.modules.storage.repository.ObjectFileMapper;
 import com.labelhub.modules.storage.service.FileStorageProperties;
+import com.labelhub.modules.task.domain.ClaimStrategy;
 import com.labelhub.modules.task.domain.Task;
 import com.labelhub.modules.task.domain.TaskStatus;
 import com.labelhub.modules.task.mapper.TaskMapper;
@@ -59,6 +62,7 @@ class DatasetImportServiceTest {
     private final DatasetImportJobMapper importJobMapper = mock(DatasetImportJobMapper.class);
     private final DatasetItemMapper datasetItemMapper = mock(DatasetItemMapper.class);
     private final DatasetItemChangeLogMapper changeLogMapper = mock(DatasetItemChangeLogMapper.class);
+    private final AssignmentDispatchMapper dispatchMapper = mock(AssignmentDispatchMapper.class);
     private final ObjectStorageService objectStorageService = mock(ObjectStorageService.class);
     private final ObjectMapper objectMapper = new ObjectMapper();
     private final DatasetImportService service = new DatasetImportService(
@@ -68,6 +72,7 @@ class DatasetImportServiceTest {
             importJobMapper,
             datasetItemMapper,
             changeLogMapper,
+            dispatchMapper,
             objectStorageService,
             new FileStorageProperties("labelhub-test", 200L * 1024L * 1024L, Duration.ofMinutes(10)),
             new AsyncJobService(new AsyncJobExecutor(Runnable::run, List.of())),
@@ -105,6 +110,31 @@ class DatasetImportServiceTest {
         verify(importJobMapper, org.mockito.Mockito.atLeastOnce()).updateById(jobCaptor.capture());
         assertThat(jobCaptor.getAllValues().get(jobCaptor.getAllValues().size() - 1).getStatus()).isEqualTo("SUCCESS");
         verify(objectStorageService, never()).upload(eq("labelhub-test"), org.mockito.Mockito.contains("error"), any(), any(), anyLong());
+    }
+
+    @Test
+    void appendImportAutoDispatchesImportedItemsToAssignedLabeler() throws Exception {
+        CurrentUserContext.set(new CurrentUser(10L, "owner", "owner@example.com", Set.of(RoleCode.OWNER), 1));
+        stubAssignedTask(20L);
+        stubSourceFile("qa_quality.jsonl");
+        stubIds();
+        stubDatasetItemIds(500L);
+        when(objectStorageService.openReadStream("labelhub-test", "uploads/dataset/qa_quality.jsonl"))
+                .thenReturn(new ByteArrayInputStream("""
+                        {"externalId":"q1","question":"one"}
+                        {"externalId":"q2","question":"two"}
+                        """.getBytes(StandardCharsets.UTF_8)));
+        when(datasetItemMapper.countActiveByTaskIdAndExternalId(eq(1L), any())).thenReturn(0);
+
+        service.createAppendImport(1L, new DatasetImportRequest(99L));
+
+        ArgumentCaptor<AssignmentDispatch> dispatchCaptor = ArgumentCaptor.forClass(AssignmentDispatch.class);
+        verify(dispatchMapper, org.mockito.Mockito.times(2)).insert(dispatchCaptor.capture());
+        assertThat(dispatchCaptor.getAllValues()).extracting("taskId").containsExactly(1L, 1L);
+        assertThat(dispatchCaptor.getAllValues()).extracting("datasetItemId").containsExactly(500L, 501L);
+        assertThat(dispatchCaptor.getAllValues()).extracting("labelerId").containsExactly(20L, 20L);
+        assertThat(dispatchCaptor.getAllValues()).extracting("status").containsExactly("PENDING", "PENDING");
+        verify(dispatchMapper).syncQuotaToTask(1L);
     }
 
     @Test
@@ -259,6 +289,16 @@ class DatasetImportServiceTest {
         when(taskMapper.selectById(1L)).thenReturn(task);
     }
 
+    private void stubAssignedTask(Long assignedLabelerId) {
+        Task task = new Task();
+        task.setId(1L);
+        task.setOwnerId(10L);
+        task.setStatus(TaskStatus.DRAFT);
+        task.setStrategy(ClaimStrategy.ASSIGNED);
+        task.setAssignedLabelerId(assignedLabelerId);
+        when(taskMapper.selectById(1L)).thenReturn(task);
+    }
+
     private void stubSourceFile(String filename) {
         stubSourceFile(filename, 10L);
     }
@@ -291,6 +331,15 @@ class DatasetImportServiceTest {
         when(objectFileMapper.insert(any(ObjectFileEntity.class))).thenAnswer(invocation -> {
             ObjectFileEntity entity = invocation.getArgument(0);
             entity.setId(ids.getAndIncrement());
+            return 1;
+        });
+    }
+
+    private void stubDatasetItemIds(long firstId) {
+        AtomicLong ids = new AtomicLong(firstId);
+        when(datasetItemMapper.insert(any(DatasetItem.class))).thenAnswer(invocation -> {
+            DatasetItem item = invocation.getArgument(0);
+            item.setId(ids.getAndIncrement());
             return 1;
         });
     }

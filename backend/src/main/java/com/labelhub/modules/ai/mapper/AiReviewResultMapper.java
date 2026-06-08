@@ -62,7 +62,7 @@ public interface AiReviewResultMapper extends BaseMapper<AiReviewResult> {
               AND r.decision = #{query.decision}
             </if>
             <if test="query.startTime != null">
-              AND r.created_at &gt;= #{query.startTime}
+              AND r.created_at >= #{query.startTime}
             </if>
             <if test="query.endTime != null">
               AND r.created_at &lt;= #{query.endTime}
@@ -86,7 +86,7 @@ public interface AiReviewResultMapper extends BaseMapper<AiReviewResult> {
               AND r.decision = #{query.decision}
             </if>
             <if test="query.startTime != null">
-              AND r.created_at &gt;= #{query.startTime}
+              AND r.created_at >= #{query.startTime}
             </if>
             <if test="query.endTime != null">
               AND r.created_at &lt;= #{query.endTime}

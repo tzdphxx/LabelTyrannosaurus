@@ -27,11 +27,18 @@ Task overlapCount is fixed to 1.
 availableCount counts dataset items without a non-CANCELLED assignment.
 ```
 
-## POST /api/v1/tasks/{taskId}/assignments/claim
+## POST /api/v1/tasks/{taskId}/items/claim
 
-Description: Claims one available dataset item for the current labeler and returns the workbench payload.
+Description: Claims one or more available dataset items for the current labeler and returns the workbench payloads.
 
 Permission: `LABELER`
+
+Request body:
+
+```text
+quantity optional, default 1, valid range 1..100
+quantity > 1 is supported only for FCFS tasks
+```
 
 Internal dependencies:
 
@@ -47,9 +54,11 @@ One datasetItemId can have at most one non-CANCELLED assignment.
 Unclaimed items are shown as UNCLAIMED in dataset item lists.
 After claim succeeds, assignment.status = CLAIMED and itemStatus = CLAIMED.
 Overlapping multi-labeler claim is no longer supported.
+For FCFS bulk claim, if fewer items are available than requested, the whole request fails.
+For QUOTA_GRAB and ASSIGNED, quantity must be 1.
 ```
 
-Response fields:
+Response fields (`AssignmentClaimResponse[]`):
 
 ```text
 assignmentId
@@ -143,7 +152,7 @@ The claim behavior is governed by `task.strategy` (set at creation, frozen at pu
 | `QUOTA_GRAB` | FCFS + two gates: task-level `quota` (atomic increment) and per-labeler `maxClaimsPerLabeler` (active unfinished count). On cancel, quota is reclaimed. |
 | `ASSIGNED` | Labelers can only claim items explicitly dispatched by the owner. Requires dispatches before publish. |
 
-In all strategies, the `POST /api/v1/tasks/{taskId}/assignments/claim` endpoint behaves according to the task's strategy.
+In all strategies, the `POST /api/v1/tasks/{taskId}/items/claim` endpoint behaves according to the task's strategy.
 
 ## POST /api/v1/tasks/{taskId}/dispatches
 

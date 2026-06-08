@@ -1206,6 +1206,10 @@ public class AiAutoReviewService {
     }
 
     public AiReviewResultResponse toResponse(AiReviewResult result) {
+        return toResponse(result, null, null);
+    }
+
+    public AiReviewResultResponse toResponse(AiReviewResult result, String rawPrompt, String answerJson) {
         return new AiReviewResultResponse(
                 result.getId(),
                 result.getSubmissionId(),
@@ -1226,7 +1230,9 @@ public class AiAutoReviewService {
                 result.getErrorCode(),
                 result.getErrorMessage(),
                 result.getCreatedAt(),
-                result.getUpdatedAt()
+                result.getUpdatedAt(),
+                rawPrompt,
+                answerJson
         );
     }
 

@@ -62,10 +62,10 @@ public interface AiReviewResultMapper extends BaseMapper<AiReviewResult> {
               AND r.decision = #{query.decision}
             </if>
             <if test="query.startTime != null">
-              AND r.created_at &gt;= #{query.startTime}
+              AND r.created_at >= #{query.startTime}
             </if>
             <if test="query.endTime != null">
-              AND r.created_at &lt;= #{query.endTime}
+              AND r.created_at <= #{query.endTime}
             </if>
             ORDER BY r.created_at DESC
             LIMIT #{query.normalizedPageSize} OFFSET #{query.offset}
@@ -86,10 +86,10 @@ public interface AiReviewResultMapper extends BaseMapper<AiReviewResult> {
               AND r.decision = #{query.decision}
             </if>
             <if test="query.startTime != null">
-              AND r.created_at &gt;= #{query.startTime}
+              AND r.created_at >= #{query.startTime}
             </if>
             <if test="query.endTime != null">
-              AND r.created_at &lt;= #{query.endTime}
+              AND r.created_at <= #{query.endTime}
             </if>
             </script>
             """)

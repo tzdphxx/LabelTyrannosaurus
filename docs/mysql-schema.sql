@@ -116,6 +116,7 @@ CREATE TABLE tasks (
   quota INT NOT NULL,
   claimed_count INT NOT NULL DEFAULT 0,
   overlap_count INT NOT NULL DEFAULT 1,
+  assigned_labeler_id BIGINT NULL COMMENT 'Default labeler for ASSIGNED claim strategy auto dispatch',
   deadline_at DATETIME(3) NOT NULL,
   published_template_version_id BIGINT NULL,
   ai_review_config_id BIGINT NULL COMMENT 'Current AI review config used when the task is published or submitted.',
@@ -614,10 +615,13 @@ ALTER TABLE tasks
   ADD CONSTRAINT fk_tasks_published_template_version
     FOREIGN KEY (published_template_version_id) REFERENCES template_versions(id),
   ADD CONSTRAINT fk_tasks_ai_review_config
-    FOREIGN KEY (ai_review_config_id) REFERENCES ai_review_configs(id);
+    FOREIGN KEY (ai_review_config_id) REFERENCES ai_review_configs(id),
+  ADD CONSTRAINT fk_tasks_assigned_labeler
+    FOREIGN KEY (assigned_labeler_id) REFERENCES users(id);
 
 CREATE INDEX idx_tasks_template_version ON tasks (published_template_version_id);
 CREATE INDEX idx_tasks_ai_review_config ON tasks (ai_review_config_id);
+CREATE INDEX idx_tasks_assigned_labeler ON tasks (assigned_labeler_id);
 CREATE INDEX idx_task_tags_tag_task ON task_tags (tag_name, task_id);
 CREATE FULLTEXT INDEX ft_tasks_search ON tasks (title, description);
 CREATE INDEX idx_submissions_task_review ON submissions (task_id, status, conflict_status, submitted_at);

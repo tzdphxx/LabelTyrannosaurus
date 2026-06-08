@@ -22,8 +22,11 @@ import com.labelhub.modules.task.mapper.TaskMapper;
 import com.labelhub.modules.template.service.TemplateSchemaService;
 import com.labelhub.modules.template.service.TemplateSchemaSnapshot;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.support.TransactionTemplate;
@@ -32,6 +35,7 @@ import org.springframework.transaction.support.TransactionTemplate;
 public class AssignmentClaimService {
 
     private static final int TASK_NOT_FOUND = 404001;
+    private static final int BAD_REQUEST = 400001;
     private static final int TASK_STATUS_NOT_ALLOWED = 400101;
     private static final int CLAIM_CONFLICT = 409201;
     private static final int PERMISSION_DENIED = 403001;
@@ -39,6 +43,7 @@ public class AssignmentClaimService {
     private static final int CLAIM_LIMIT_EXCEEDED = 409203;
     private static final long CLAIM_LOCK_WAIT_MILLIS = 2000L;
     private static final long CLAIM_LOCK_LEASE_MILLIS = 10000L;
+    private static final int MAX_FCFS_CLAIM_QUANTITY = 100;
     private static final String ASSIGNMENT_BIZ_TYPE = "ASSIGNMENT";
     private static final String USER_ACTOR_TYPE = "USER";
 
@@ -73,6 +78,10 @@ public class AssignmentClaimService {
     }
 
     public AssignmentClaimResponse claim(Long taskId, Long labelerId) {
+        return claim(taskId, labelerId, 1).get(0);
+    }
+
+    public List<AssignmentClaimResponse> claim(Long taskId, Long labelerId, int quantity) {
         var currentUser = CurrentUserContext.requireCurrentUser();
         if (!currentUser.hasRole(RoleCode.LABELER)) {
             throw new BusinessException(PERMISSION_DENIED, "当前账号没有权限执行该操作");
@@ -80,65 +89,107 @@ public class AssignmentClaimService {
         if (!currentUser.isAdmin() && !currentUser.userId().equals(labelerId)) {
             throw new BusinessException(PERMISSION_DENIED, "不能代替其他用户领取任务");
         }
+        validateQuantity(quantity);
         Task task = loadClaimableTask(taskId);
         ClaimStrategy strategy = task.getStrategy();
         if (strategy == null) {
             strategy = ClaimStrategy.FCFS;
         }
+        if (strategy == ClaimStrategy.ASSIGNED && quantity > 1) {
+            throw new BusinessException(BAD_REQUEST,
+                    "Bulk claim is not supported for ASSIGNED strategy");
+        }
         return switch (strategy) {
-            case FCFS -> claimFcfs(task, labelerId);
-            case QUOTA_GRAB -> claimQuotaGrab(task, labelerId);
-            case ASSIGNED -> claimAssigned(task, labelerId);
+            case FCFS -> claimFcfs(task, labelerId, quantity);
+            case QUOTA_GRAB -> claimQuotaGrab(task, labelerId, quantity);
+            case ASSIGNED -> List.of(claimAssigned(task, labelerId));
         };
     }
 
-    private AssignmentClaimResponse claimFcfs(Task task, Long labelerId) {
+    private List<AssignmentClaimResponse> claimFcfs(Task task, Long labelerId, int quantity) {
         return executeWithLock(task.getId(), () ->
                 transactionTemplate.execute(status -> {
-                    DatasetItemSnapshot itemSnapshot = datasetClaimService
-                            .reserveClaimableItem(task.getId(), labelerId, 1)
-                            .orElseThrow(() -> claimConflict("No claimable item is available"));
                     TemplateSchemaSnapshot templateSchema = templateSchemaService
                             .getTemplateSchema(task.getPublishedTemplateVersionId());
-                    Assignment assignment = createAssignment(
-                            task.getId(), labelerId,
-                            itemSnapshot.datasetItemId(),
-                            templateSchema.templateVersionId());
-                    appendClaimAudit(assignment, itemSnapshot);
-                    return buildClaimResponse(assignment, itemSnapshot, templateSchema);
+                    List<Assignment> assignments = new ArrayList<>(quantity);
+                    List<DatasetItemSnapshot> itemSnapshots = new ArrayList<>(quantity);
+                    List<AssignmentClaimResponse> responses = new ArrayList<>(quantity);
+                    for (int i = 0; i < quantity; i++) {
+                        DatasetItemSnapshot itemSnapshot = datasetClaimService
+                                .reserveClaimableItem(task.getId(), labelerId, 1)
+                                .orElseThrow(() -> claimConflict("Not enough claimable items are available"));
+                        Assignment assignment = createAssignment(
+                                task.getId(), labelerId,
+                                itemSnapshot.datasetItemId(),
+                                templateSchema.templateVersionId());
+                        assignments.add(assignment);
+                        itemSnapshots.add(itemSnapshot);
+                    }
+                    for (int i = 0; i < assignments.size(); i++) {
+                        Assignment assignment = assignments.get(i);
+                        DatasetItemSnapshot itemSnapshot = itemSnapshots.get(i);
+                        appendClaimAudit(assignment, itemSnapshot);
+                        responses.add(buildClaimResponse(assignment, itemSnapshot, templateSchema));
+                    }
+                    return responses;
                 }));
     }
 
-    private AssignmentClaimResponse claimQuotaGrab(Task task, Long labelerId) {
+    private List<AssignmentClaimResponse> claimQuotaGrab(Task task, Long labelerId, int quantity) {
         return executeWithLock(task.getId(), () ->
                 transactionTemplate.execute(status -> {
-                    if (taskMapper.tryIncrementClaimedCount(task.getId()) == 0) {
-                        throw new BusinessException(QUOTA_EXCEEDED, "Task quota is full");
-                    }
                     int maxPerLabeler = task.getMaxClaimsPerLabeler() != null
                             ? task.getMaxClaimsPerLabeler() : Integer.MAX_VALUE;
                     int activeClaims = assignmentMapper.countActiveByTaskAndLabeler(
                             task.getId(), labelerId);
-                    if (activeClaims >= maxPerLabeler) {
-                        taskMapper.decrementClaimedCount(task.getId());
+                    if (activeClaims + quantity > maxPerLabeler) {
                         throw new BusinessException(CLAIM_LIMIT_EXCEEDED,
                                 "Personal claim limit reached for this task");
                     }
-                    DatasetItemSnapshot itemSnapshot = datasetClaimService
-                            .reserveClaimableItem(task.getId(), labelerId, 1)
-                            .orElseThrow(() -> {
-                                taskMapper.decrementClaimedCount(task.getId());
-                                return claimConflict("No claimable item is available");
-                            });
+
+                    int incrementedCount = 0;
+                    for (int i = 0; i < quantity; i++) {
+                        if (taskMapper.tryIncrementClaimedCount(task.getId()) == 0) {
+                            decrementClaimedCount(task.getId(), incrementedCount);
+                            throw new BusinessException(QUOTA_EXCEEDED, "Task quota is full");
+                        }
+                        incrementedCount++;
+                    }
+
                     TemplateSchemaSnapshot templateSchema = templateSchemaService
                             .getTemplateSchema(task.getPublishedTemplateVersionId());
-                    Assignment assignment = createAssignment(
-                            task.getId(), labelerId,
-                            itemSnapshot.datasetItemId(),
-                            templateSchema.templateVersionId());
-                    appendClaimAudit(assignment, itemSnapshot);
-                    return buildClaimResponse(assignment, itemSnapshot, templateSchema);
+                    List<Assignment> assignments = new ArrayList<>(quantity);
+                    List<DatasetItemSnapshot> itemSnapshots = new ArrayList<>(quantity);
+                    List<AssignmentClaimResponse> responses = new ArrayList<>(quantity);
+                    for (int i = 0; i < quantity; i++) {
+                        Optional<DatasetItemSnapshot> reservedItem = datasetClaimService
+                                .reserveClaimableItem(task.getId(), labelerId, 1);
+                        if (reservedItem.isEmpty()) {
+                            decrementClaimedCount(task.getId(), incrementedCount);
+                            throw claimConflict("No claimable item is available");
+                        }
+                        DatasetItemSnapshot itemSnapshot = reservedItem.get();
+                        Assignment assignment = createAssignment(
+                                task.getId(), labelerId,
+                                itemSnapshot.datasetItemId(),
+                                templateSchema.templateVersionId());
+                        assignments.add(assignment);
+                        itemSnapshots.add(itemSnapshot);
+                    }
+                    for (int i = 0; i < assignments.size(); i++) {
+                        Assignment assignment = assignments.get(i);
+                        DatasetItemSnapshot itemSnapshot = itemSnapshots.get(i);
+                        appendClaimAudit(assignment, itemSnapshot);
+                        responses.add(buildClaimResponse(assignment, itemSnapshot, templateSchema));
+                    }
+                    return responses;
                 }));
+    }
+
+    private void decrementClaimedCount(Long taskId, int count) {
+        for (int i = 0; i < count; i++) {
+            taskMapper.decrementClaimedCount(taskId);
+        }
     }
 
     private AssignmentClaimResponse claimAssigned(Task task, Long labelerId) {
@@ -178,6 +229,13 @@ public class AssignmentClaimService {
                 assignment.getDraftAnswerJson(),
                 assignment.getDraftVersion()
         );
+    }
+
+    private void validateQuantity(int quantity) {
+        if (quantity < 1 || quantity > MAX_FCFS_CLAIM_QUANTITY) {
+            throw new BusinessException(BAD_REQUEST,
+                    "Claim quantity must be between 1 and " + MAX_FCFS_CLAIM_QUANTITY);
+        }
     }
 
     private <T> T executeWithLock(Long taskId, java.util.function.Supplier<T> action) {

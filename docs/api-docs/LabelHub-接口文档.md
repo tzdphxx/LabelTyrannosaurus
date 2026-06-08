@@ -336,6 +336,47 @@ Authorization: Bearer <accessToken>
 
 ---
 
+### 3.1.1 GET /api/v1/owner/labelers/assignable
+
+**作用**：查询当前可被 OWNER 指派的标注员候选列表，用于创建 `ASSIGNED` 策略任务时选择 `assignedLabelerId`。
+
+**权限**：OWNER
+
+**请求参数**：
+
+| 参数 | 类型 | 必填 | 默认值 | 说明 |
+|------|------|------|--------|------|
+| keyword | String | 否 | - | 按用户名、邮箱或显示名搜索 |
+| enabledOnly | Boolean | 否 | true | 是否只返回已启用且允许登录的标注员 |
+| page | Integer | 否 | 1 | 页码，从 1 开始 |
+| size | Integer | 否 | 20 | 每页条数，最大 100 |
+
+**响应体** `PageResponse<AssignableLabelerResponse>`：
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| labelerId | Long | 标注员用户 ID，可作为 `assignedLabelerId` |
+| username | String | 用户名 |
+| email | String | 邮箱 |
+| displayName | String | 显示名 |
+| avatarUrl | String | 头像 URL |
+| enabled | Boolean | 账号是否启用 |
+| loginEnabled | Boolean | 是否允许登录 |
+| claimedCount | Integer | 已领取题目总数量 |
+| submittedCount | Integer | 已提交题目总数量 |
+| pendingReviewCount | Integer | 待审核题目数量 |
+| approvedCount | Integer | 已通过题目数量 |
+| rejectedCount | Integer | 已驳回题目数量 |
+| totalReward | BigDecimal | 累计获得奖励 |
+| todaySubmittedCount | Integer | 今日提交题目数量 |
+| lastSubmitDate | LocalDate | 最近提交日期 |
+| statsUpdatedAt | LocalDateTime | 统计数据更新时间 |
+| approvalRate | BigDecimal | 通过率，按 `approvedCount / (approvedCount + rejectedCount)` 计算，保留 4 位小数；暂无已审核题目时为 `0.0000` |
+
+**规则**：仅返回具备 `LABELER` 角色且 `userType != SYSTEM` 的用户。默认过滤禁用或不可登录账号。
+
+---
+
 ### 3.2 POST /api/v1/tasks
 
 **作用**：创建草稿任务。任务归属当前 OWNER 用户。可同时指定 datasetFileId 来触发数据集导入。
@@ -353,6 +394,9 @@ Authorization: Bearer <accessToken>
 | quota | Integer | 是 | ≥ 1 | 任务配额（可领取总数） |
 | deadlineAt | LocalDateTime | 是 | 必须为未来时间 | 截止时间 |
 | overlapCount | Integer | 是 | ≥ 1 | 每条数据需要的标注份数 |
+| strategy | String | 否 | FCFS / QUOTA_GRAB / ASSIGNED，默认 FCFS | 领取策略 |
+| maxClaimsPerLabeler | Integer | 否 | ≥ 1 | 单人并发未完成上限，仅 QUOTA_GRAB 有效 |
+| assignedLabelerId | Long | 否 | 仅 ASSIGNED 有效，用户需具备 LABELER 角色 | 默认指派标注员；导入成功后自动生成指派 |
 | publishedTemplateVersionId | Long | 否 | - | 关联的模板版本 ID |
 | **── AI 审核（引用已有 或 内联创建，二选一）──** |
 | aiReviewConfigId | Long | 否 | - | 引用已创建的 AI 配置 ID |
@@ -416,6 +460,8 @@ Authorization: Bearer <accessToken>
 | quota | Integer | 配额 |
 | claimedCount | Integer | 已领取数量 |
 | overlapCount | Integer | 重叠标注数 |
+| assignedLabelerId | Long | ASSIGNED 策略默认指派的标注员 ID |
+| assignedLabelerName | String | ASSIGNED 策略默认指派的标注员名称，优先显示名称，缺失时使用用户名 |
 | deadlineAt | LocalDateTime | 截止时间 |
 | publishedTemplateVersionId | Long | 模板版本 ID |
 | aiReview | AiReviewConfigResponse | AI 审核配置对象；未配置时为 null |

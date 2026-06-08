@@ -25,7 +25,7 @@ public interface LlmTriggerRunMapper extends BaseMapper<LlmTriggerRun> {
               AND created_at >= #{query.startTime}
             </if>
             <if test="query.endTime != null">
-              AND created_at <= #{query.endTime}
+              AND created_at &lt;= #{query.endTime}
             </if>
             ORDER BY created_at DESC
             LIMIT #{query.normalizedPageSize} OFFSET #{query.offset}
@@ -48,7 +48,7 @@ public interface LlmTriggerRunMapper extends BaseMapper<LlmTriggerRun> {
               AND created_at >= #{query.startTime}
             </if>
             <if test="query.endTime != null">
-              AND created_at <= #{query.endTime}
+              AND created_at &lt;= #{query.endTime}
             </if>
             </script>
             """)

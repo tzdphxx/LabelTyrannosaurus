@@ -10,6 +10,7 @@ import com.labelhub.modules.template.service.TemplateVersionService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import java.util.List;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -17,8 +18,6 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
-
-import java.util.List;
 
 /**
  * 模板版本管理接口。
@@ -83,6 +82,15 @@ public class TemplateController {
     @Operation(summary = "模板版本详情", description = "查询指定模板版本详情。")
     public ApiResponse<TemplateVersionResponse> getVersion(@PathVariable Long versionId) {
         return ApiResponse.ok(templateVersionService.getVersion(versionId));
+    }
+
+    /**
+     * 查询模板的所有版本。
+     */
+    @GetMapping("/templates/{templateId}/versions")
+    @Operation(summary = "模板版本列表", description = "查询指定模板的所有版本，最新版本在前。")
+    public ApiResponse<List<TemplateVersionResponse>> listVersions(@PathVariable Long templateId) {
+        return ApiResponse.ok(templateVersionService.listVersions(templateId));
     }
 
     /**

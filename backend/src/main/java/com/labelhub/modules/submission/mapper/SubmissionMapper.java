@@ -103,6 +103,22 @@ public interface SubmissionMapper extends BaseMapper<Submission> {
             """)
     List<Submission> selectByAssignmentId(@Param("assignmentId") Long assignmentId);
 
+    @Select("""
+            <script>
+            SELECT *
+            FROM submissions
+            WHERE task_id = #{taskId}
+              AND dataset_item_id = #{datasetItemId}
+            <if test="labelerId != null">
+              AND labeler_id = #{labelerId}
+            </if>
+            ORDER BY submitted_at ASC, id ASC
+            </script>
+            """)
+    List<Submission> selectItemHistorySubmissions(@Param("taskId") Long taskId,
+                                                  @Param("datasetItemId") Long datasetItemId,
+                                                  @Param("labelerId") Long labelerId);
+
     @Update("""
             UPDATE submissions
             SET status = #{newStatus},

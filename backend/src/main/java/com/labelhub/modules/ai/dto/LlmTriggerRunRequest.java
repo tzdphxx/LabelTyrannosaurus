@@ -17,8 +17,8 @@ public record LlmTriggerRunRequest(
         List<@Size(max = 64) String> targetFields,
         @Schema(description = "题目 ID，Owner 预览测试时指定要测试的题目")
         Long datasetItemId,
-        @Schema(description = "被点击的模板组件 ID", example = "summary")
-        @Size(max = 128) String componentId,
+        @Schema(description = "模板 ID（整型，仅回显不校验；整模板模式下不再用于定位单个组件）", example = "4502")
+        Long componentId,
         @Schema(description = "当前草稿答案 JSON")
         Map<String, Object> currentAnswerJson,
         @Schema(description = "标注员或 Owner 的额外补充指令")

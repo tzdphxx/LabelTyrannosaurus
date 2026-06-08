@@ -99,22 +99,24 @@ public class PromptTemplateEngine {
     }
 
     /**
-     * 拼装 LLM 触发器（字段级）的系统提示词。
+     * 拼装 LLM 触发器（整模板）的系统提示词。
      */
     public String buildLlmTriggerPrompt(String userProvidedTemplate, TaskPromptContext ctx,
-                                         String componentId, List<String> targetFields,
-                                         String currentAnswerJson) {
+                                          Long componentId, List<String> targetFields,
+                                          List<SchemaField> templateFields,
+                                          String currentAnswerJson) {
         String base = buildBase(ctx);
+        String fields = buildFieldConstraints(templateFields);
 
-        return base + UNTRUSTED_NOTICE + "\n\n"
+        return base + "\n" + fields + UNTRUSTED_NOTICE + "\n\n"
                 + "## 任务\n"
-                + "你是 LabelHub 的标注辅助助手。标注员选中了组件 '" + componentId + "'，"
+                + "你是 LabelHub 的标注辅助助手。本次触发面向整份模板，componentId 为模板 ID 回显值：" + componentId + "。\n"
                 + "目标字段：" + String.join(", ", targetFields) + "。\n"
-                + "请为这些字段生成合理的建议值。\n"
+                + "请根据字段说明和当前草稿，为整份答案生成可合并的建议补丁。\n"
                 + "## 不可信输入：当前草稿\n"
                 + fence(currentAnswerJson != null ? currentAnswerJson : "（无）") + "\n\n"
                 + "你需要返回包含 componentId、targetFields、patch、displayText、confidence、reasoningSummary、warnings 的 JSON。\n"
-                + "patch 中只包含目标字段。\n"
+                + "patch 中只包含上述模板字段；不要输出模板外字段。\n"
                 + "\n## 不可信输入：任务负责人提供的标注规则\n"
                 + fence(userProvidedTemplate);
     }

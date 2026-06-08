@@ -64,12 +64,12 @@ class LlmTriggerControllerTest {
 
     private LlmTriggerRunRequest request() {
         return new LlmTriggerRunRequest(null, null, null,
-                null, null, "summary", Map.of(), null);
+                null, null, 20L, Map.of(), null);
     }
 
     private LlmTriggerRunRequest requestWithItem() {
         return new LlmTriggerRunRequest(null, null, null,
-                null, 30L, "summary", Map.of("answer", "draft"), null);
+                null, 30L, 20L, Map.of("answer", "draft"), null);
     }
 
     private LlmTriggerRunResponse response() {

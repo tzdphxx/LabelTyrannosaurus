@@ -34,7 +34,6 @@ import styles from './AdminDashboardPage.module.css'
 
 const adminRangeOptions: Array<{ label: string, value: AdminDashboardRange }> = [
   { label: '7 天', value: '7d' },
-  { label: '14 天', value: '14d' },
   { label: '30 天', value: '30d' },
 ]
 
@@ -357,7 +356,12 @@ export function AdminDashboardPage() {
             <Typography.Text className={styles.muted}>账号创建后默认启用并允许登录。</Typography.Text>
             <Space>
               <Button onClick={() => setIsCreateDrawerOpen(false)}>取消</Button>
-              <Button loading={isCreatingReviewer} type="primary" onClick={() => void createReviewer()}>
+              <Button
+                loading={isCreatingReviewer}
+                type="primary"
+                onClick={() => void createReviewer()}
+                style={{ color: 'blue' }}
+              >
                 创建审核员
               </Button>
             </Space>

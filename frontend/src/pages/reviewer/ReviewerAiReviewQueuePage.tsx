@@ -77,16 +77,6 @@ function formatValue(value: unknown) {
   return String(value)
 }
 
-function formatCount(value: unknown) {
-  const numberValue = Number(value ?? 0)
-
-  if (Number.isNaN(numberValue)) {
-    return '0'
-  }
-
-  return numberValue.toLocaleString('zh-CN')
-}
-
 function formatJson(value: unknown) {
   if (value === undefined || value === null || value === '') {
     return '-'
@@ -228,14 +218,14 @@ function getHistoryAuditItems(history: SubmissionItemHistoryResponse | null) {
     const versionLabel = `v${formatValue(item.versionNo)} / SUB-${formatValue(item.submissionId)}`
     const aiItem = item.aiReview
       ? [
-          {
-            key: `${item.submissionId}-ai`,
-            versionLabel,
-            result: item.aiReview.decision ?? item.aiReview.status,
-            reviewer: 'AI 自动预审',
-            reviewedAt: item.aiReview.reviewedAt,
-          },
-        ]
+        {
+          key: `${item.submissionId}-ai`,
+          versionLabel,
+          result: item.aiReview.decision ?? item.aiReview.status,
+          reviewer: 'AI 自动预审',
+          reviewedAt: item.aiReview.reviewedAt,
+        },
+      ]
       : []
     const reviewItems = (item.reviewRounds ?? []).map((round) => ({
       key: `${item.submissionId}-${round.reviewRecordId}`,
@@ -350,7 +340,7 @@ export function ReviewerAiReviewQueuePage() {
               onChange={(value) => changeStatus(value as AiReviewQueueStatusFilter)}
             />
 
-            <div className={styles.aiQueueStats}>
+            {/* <div className={styles.aiQueueStats}>
               <span className={styles.aiPulse} />
               <div>
                 <strong>{formatCount(aiReviewLogTotal)}</strong>
@@ -364,7 +354,7 @@ export function ReviewerAiReviewQueuePage() {
                 <strong>1.2%</strong>
                 <span>重试率</span>
               </div>
-            </div>
+            </div> */}
 
             <List
               className={styles.aiQueueList}

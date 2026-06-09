@@ -64,6 +64,13 @@ type DatasetPreviewRow = {
 
 type DatasetTableRow = DatasetItemResponse | DatasetDraftRow | DatasetPreviewRow
 
+const DATASET_EXTERNAL_ID_COLUMN_WIDTH = 190
+const DATASET_FIELD_COLUMN_WIDTH = 220
+const DATASET_STATUS_COLUMN_WIDTH = 110
+const DATASET_UPDATED_AT_COLUMN_WIDTH = 170
+const DATASET_STATS_COLUMN_WIDTH = 210
+const DATASET_ACTION_COLUMN_WIDTH = 110
+
 function isDatasetDraftRow(row: DatasetTableRow): row is DatasetDraftRow {
   return 'rowType' in row && row.rowType === 'draft'
 }
@@ -336,9 +343,10 @@ export function OwnerTaskEditorPage() {
   }, [currentDatasetItemsPage?.items, datasetPreviewRows, draftDatasetExternalId, draftDatasetItem, taskId])
   const datasetColumns = useMemo(() => [
     {
+      key: 'externalId',
       title: 'externalId',
       dataIndex: 'externalId',
-      width: 190,
+      width: DATASET_EXTERNAL_ID_COLUMN_WIDTH,
       fixed: 'left' as const,
       render: (_: unknown, row: DatasetTableRow) =>
         isDatasetDraftRow(row) ? (
@@ -353,9 +361,10 @@ export function OwnerTaskEditorPage() {
         ),
     },
     ...datasetFieldNames.map((field, index) => ({
+      key: `dataset-field-${field}`,
       title: <Tag className={getDatasetFieldTone(index)}>{field}</Tag>,
       dataIndex: ['itemJson', field],
-      minWidth: 180,
+      width: DATASET_FIELD_COLUMN_WIDTH,
       render: (_: unknown, row: DatasetTableRow) =>
         isDatasetDraftRow(row) ? (
           <Input
@@ -370,7 +379,8 @@ export function OwnerTaskEditorPage() {
     })),
     {
       title: '状态',
-      width: 110,
+      key: 'status',
+      width: DATASET_STATUS_COLUMN_WIDTH,
       render: (_: unknown, row: DatasetTableRow) => {
         if (isDatasetDraftRow(row)) {
           return <Tag color="blue">新增</Tag>
@@ -385,13 +395,15 @@ export function OwnerTaskEditorPage() {
     },
     {
       title: '更新时间',
-      width: 170,
+      key: 'updatedAt',
+      width: DATASET_UPDATED_AT_COLUMN_WIDTH,
       render: (_: unknown, row: DatasetTableRow) =>
         isDatasetDraftRow(row) || isDatasetPreviewRow(row) ? '-' : <Typography.Text type="secondary">{formatDatasetItemTime(row.updatedAt)}</Typography.Text>,
     },
     {
       title: '统计',
-      width: 210,
+      key: 'stats',
+      width: DATASET_STATS_COLUMN_WIDTH,
       render: (_: unknown, row: DatasetTableRow) =>
         isDatasetDraftRow(row) || isDatasetPreviewRow(row) ? (
           '-'
@@ -405,7 +417,8 @@ export function OwnerTaskEditorPage() {
     },
     {
       title: '操作',
-      width: 110,
+      key: 'actions',
+      width: DATASET_ACTION_COLUMN_WIDTH,
       fixed: 'right' as const,
       render: (_: unknown, row: DatasetTableRow) =>
         isDatasetDraftRow(row) ? (
@@ -433,6 +446,16 @@ export function OwnerTaskEditorPage() {
     isAppendingDatasetItems,
     submitDatasetItemDraft,
   ])
+  const datasetTableScrollX = useMemo(
+    () =>
+      DATASET_EXTERNAL_ID_COLUMN_WIDTH +
+      datasetFieldNames.length * DATASET_FIELD_COLUMN_WIDTH +
+      DATASET_STATUS_COLUMN_WIDTH +
+      DATASET_UPDATED_AT_COLUMN_WIDTH +
+      DATASET_STATS_COLUMN_WIDTH +
+      DATASET_ACTION_COLUMN_WIDTH,
+    [datasetFieldNames.length],
+  )
 
   const formatFileSize = (fileSize: number) => {
     if (fileSize < 1024) {
@@ -530,7 +553,6 @@ export function OwnerTaskEditorPage() {
     navigate('/app/owner/tasks')
   }
 
-  const hasPreviewRows = taskId ? Boolean(currentDatasetItemsPage) : Boolean(importPreview)
   const previewButtonText = taskId ? '预览题目' : `预览题目${importPreview ? `（${formatCount(importPreview.validRows)}）` : ''}`
 
   return (
@@ -825,7 +847,7 @@ export function OwnerTaskEditorPage() {
         <Card
           className={styles.formCard}
           extra={
-            <Button disabled={!hasPreviewRows} icon={<EyeOutlined />} onClick={() => setIsPreviewDrawerOpen(true)}>
+            <Button icon={<EyeOutlined />} onClick={() => setIsPreviewDrawerOpen(true)}>
               {previewButtonText}
             </Button>
           }
@@ -936,7 +958,7 @@ export function OwnerTaskEditorPage() {
             }}
             rowClassName={(row) => (isDatasetDraftRow(row) ? styles.datasetDraftRow : '')}
             rowKey={(row) => ('rowKey' in row ? row.rowKey : String(row.itemId))}
-            scroll={{ x: 'max-content' }}
+            scroll={{ x: datasetTableScrollX }}
             size="middle"
           />
 

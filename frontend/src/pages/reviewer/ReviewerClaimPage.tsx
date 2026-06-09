@@ -66,8 +66,8 @@ export function ReviewerClaimPage() {
       {contextHolder}
       <ContentShell>
         <PageHeader
-          title="Claim Review Tasks"
-          description="Claim submitted work by task, then review items in the task detail page."
+          title="领取审核任务"
+          description="按任务提交领取相关题目，再在任务详情页完成题目审核。"
           extra={
             <Button icon={<ReloadOutlined />} loading={isReviewerTasksLoading} onClick={() => void loadReviewerTasks()}>
               Refresh

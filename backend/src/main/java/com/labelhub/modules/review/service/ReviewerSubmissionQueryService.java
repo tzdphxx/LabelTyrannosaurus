@@ -21,6 +21,7 @@ import com.labelhub.modules.review.dto.ReviewerSubmissionDetailResponse.LatestPr
 import com.labelhub.modules.review.dto.ReviewerSubmissionDetailResponse.ReviewRecordItem;
 import com.labelhub.modules.review.dto.ReviewerSubmissionDetailResponse.VersionHistoryItem;
 import com.labelhub.modules.review.mapper.ReviewRecordMapper;
+import com.labelhub.modules.review.mapper.ReviewTaskClaimMapper;
 import com.labelhub.modules.submission.domain.Submission;
 import com.labelhub.modules.submission.mapper.SubmissionMapper;
 import com.labelhub.modules.template.domain.TemplateVersion;
@@ -44,6 +45,7 @@ public class ReviewerSubmissionQueryService {
     private final AgentRunMapper agentRunMapper;
     private final ReviewRecordMapper reviewRecordMapper;
     private final PreAnnotationMapper preAnnotationMapper;
+    private final ReviewTaskClaimMapper reviewTaskClaimMapper;
 
     public ReviewerSubmissionQueryService(SubmissionMapper submissionMapper,
                                           AssignmentMapper assignmentMapper,
@@ -52,7 +54,8 @@ public class ReviewerSubmissionQueryService {
                                           AiReviewResultMapper aiReviewResultMapper,
                                           AgentRunMapper agentRunMapper,
                                           ReviewRecordMapper reviewRecordMapper,
-                                          PreAnnotationMapper preAnnotationMapper) {
+                                          PreAnnotationMapper preAnnotationMapper,
+                                          ReviewTaskClaimMapper reviewTaskClaimMapper) {
         this.submissionMapper = submissionMapper;
         this.assignmentMapper = assignmentMapper;
         this.datasetItemMapper = datasetItemMapper;
@@ -61,6 +64,7 @@ public class ReviewerSubmissionQueryService {
         this.agentRunMapper = agentRunMapper;
         this.reviewRecordMapper = reviewRecordMapper;
         this.preAnnotationMapper = preAnnotationMapper;
+        this.reviewTaskClaimMapper = reviewTaskClaimMapper;
     }
 
     public ReviewerSubmissionDetailResponse getDetail(Long submissionId) {
@@ -145,8 +149,21 @@ public class ReviewerSubmissionQueryService {
         if (reviewerId != null && reviewerId.equals(submission.getAssignedReviewerId())) {
             return;
         }
+        if (reviewerId != null && isTaskLevelClaimant(submission, reviewerId)) {
+            return;
+        }
         throw new BusinessException(REVIEWER_NOT_ASSIGNED,
                 "Reviewer is not assigned to this submission");
+    }
+
+    private boolean isTaskLevelClaimant(Submission submission, Long reviewerId) {
+        if (submission.getTaskId() == null) {
+            return false;
+        }
+        int level = submission.getCurrentReviewLevel() != null
+                ? submission.getCurrentReviewLevel() : 1;
+        Long claimantId = reviewTaskClaimMapper.selectReviewerForTaskLevel(submission.getTaskId(), level);
+        return reviewerId.equals(claimantId);
     }
 
     private LatestPreAnnotationSummary latestPreAnnotation(Submission submission) {

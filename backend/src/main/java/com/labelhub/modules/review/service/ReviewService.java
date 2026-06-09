@@ -41,6 +41,7 @@ public class ReviewService {
     private static final int ASSIGNMENT_NOT_FOUND = 404602;
     private static final int REVIEWER_NOT_ASSIGNED = 403601;
     private static final int INVALID_ANSWER_JSON = 400603;
+    private static final int INVALID_REVIEW_LEVEL = 400604;
     private static final String SUBMISSION_BIZ_TYPE = "SUBMISSION";
     private static final String USER_ACTOR_TYPE = "USER";
 
@@ -90,6 +91,7 @@ public class ReviewService {
         requireAssignedReviewer(submissionId, reviewerId);
         int currentLevel = request.reviewLevel();
         int maxLevel = escalationService.getMaxReviewLevel(submission.getTaskId());
+        requireValidReviewLevel(submission, currentLevel, maxLevel);
         requireNotReviewedAtOtherLevel(submissionId, reviewerId, currentLevel);
 
         if (request.revisedAnswerJson() != null) {
@@ -176,11 +178,14 @@ public class ReviewService {
         }
         Submission submission = requirePendingFinal(submissionId);
         requireAssignedReviewer(submissionId, reviewerId);
-        requireNotReviewedAtOtherLevel(submissionId, reviewerId, request.reviewLevel());
+        int currentLevel = request.reviewLevel();
+        int maxLevel = escalationService.getMaxReviewLevel(submission.getTaskId());
+        requireValidReviewLevel(submission, currentLevel, maxLevel);
+        requireNotReviewedAtOtherLevel(submissionId, reviewerId, currentLevel);
 
         ReviewRecord record = createReviewRecord(
                 submissionId, reviewerId, ReviewAction.REJECT,
-                request.reviewLevel(), request.reason(), null);
+                currentLevel, request.reason(), null);
 
         int affected = submissionMapper.markRejectedIfPendingFinal(submissionId);
         if (affected == 0) {
@@ -233,6 +238,14 @@ public class ReviewService {
         if (count > 0) {
             throw new BusinessException(403601,
                     "Same reviewer cannot review at multiple levels for the same submission");
+        }
+    }
+
+    private void requireValidReviewLevel(Submission submission, int requestedLevel, int maxLevel) {
+        int currentLevel = submission.getCurrentReviewLevel() == null ? 1 : submission.getCurrentReviewLevel();
+        if (requestedLevel < 1 || requestedLevel > maxLevel || requestedLevel != currentLevel) {
+            throw new BusinessException(INVALID_REVIEW_LEVEL,
+                    "Review level must match current submission review level and be within task review range");
         }
     }
 

@@ -178,6 +178,12 @@
   transform: translateY(-1px);
 }
 
+:global(.designer-material--dragging) {
+  opacity: 0.45;
+  box-shadow: none;
+  transform: none;
+}
+
 :global(.designer-material__icon) {
   display: inline-flex;
   align-items: center;
@@ -238,6 +244,12 @@
   background: #ffffff;
   overflow: hidden;
   box-shadow: 0 0.8px 2.925px rgba(0, 0, 0, 0.02), 0 2.025px 7.847px rgba(0, 0, 0, 0.027);
+}
+
+:global(.designer-node--dragging) {
+  opacity: 0.72;
+  box-shadow: 0 0 0 1px rgba(0, 117, 222, 0.2);
+  will-change: transform;
 }
 
 :global(.designer-node--selected) {
@@ -405,6 +417,7 @@
   background: #ffffff;
   box-shadow: 0 4px 18px rgba(0, 0, 0, 0.08), 0 23px 52px rgba(0, 0, 0, 0.05);
   cursor: grabbing;
+  will-change: transform;
 }
 
 :global(.designer-schema-panel) {

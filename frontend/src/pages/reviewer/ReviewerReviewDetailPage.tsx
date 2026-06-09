@@ -80,6 +80,22 @@ function formatJson(value: unknown) {
   return JSON.stringify(value, null, 2)
 }
 
+function toEditableJson(value: unknown) {
+  if (!value) {
+    return '{}'
+  }
+
+  if (typeof value === 'string') {
+    try {
+      return JSON.stringify(JSON.parse(value), null, 2)
+    } catch {
+      return value
+    }
+  }
+
+  return JSON.stringify(value, null, 2)
+}
+
 function getItemTitle(item: ReviewerTaskItemRow) {
   return item.externalId?.trim() || `题目 ${item.datasetItemId}`
 }
@@ -118,6 +134,20 @@ function getDecisionColor(decision?: string) {
   return aiDecisionColors[formatValue(decision)] ?? 'default'
 }
 
+function getDecisionClassName(decision?: string) {
+  const normalizedDecision = normalizeDecision(decision)
+
+  if (normalizedDecision === 'pass') {
+    return styles.manualQueueItemPass
+  }
+
+  if (normalizedDecision === 'reject') {
+    return styles.manualQueueItemReject
+  }
+
+  return styles.manualQueueItemManual
+}
+
 export function ReviewerReviewDetailPage() {
   const navigate = useNavigate()
   const { taskId } = useParams()
@@ -128,6 +158,9 @@ export function ReviewerReviewDetailPage() {
   const [reviewComment, setReviewComment] = useState('')
   const [rejectOpen, setRejectOpen] = useState(false)
   const [rejectReason, setRejectReason] = useState('')
+  const [revisionOpen, setRevisionOpen] = useState(false)
+  const [revisedAnswerText, setRevisedAnswerText] = useState('')
+  const [revisionError, setRevisionError] = useState('')
   const taskItemsPage = useReviewStore((state) => state.taskItemsPage)
   const currentDetail = useReviewStore((state) => state.currentDetail)
   const submissionVersions = useReviewStore((state) => state.submissionVersions)
@@ -234,6 +267,50 @@ export function ReviewerReviewDetailPage() {
 
   const toggleSelect = (reviewId: string, checked: boolean) => {
     setSelectedReviewIds(checked ? [...selectedReviewIds, reviewId] : selectedReviewIds.filter((item) => item !== reviewId))
+  }
+
+  const openRevisionModal = () => {
+    if (!displayedDetail) {
+      return
+    }
+
+    setRevisionError('')
+    setRevisedAnswerText(toEditableJson(rawSubmission?.answerJson ?? displayedDetail.answers ?? {}))
+    setRevisionOpen(true)
+  }
+
+  const submitRevisionApprove = async () => {
+    if (!selectedSubmissionId) {
+      return
+    }
+
+    let parsedAnswer: unknown
+
+    try {
+      parsedAnswer = JSON.parse(revisedAnswerText)
+    } catch {
+      setRevisionError('答案 JSON 格式不正确，请修正后再提交。')
+      return
+    }
+
+    const updatedDetail = await submitManualReviewAction(selectedSubmissionId, {
+      reviewerId: 'current-reviewer',
+      reviewerName: '当前审核员',
+      decision: 'approved',
+      comment: reviewComment.trim() || undefined,
+      revisedAnswerJson: JSON.stringify(parsedAnswer),
+    })
+
+    if (updatedDetail) {
+      messageApi.success('修订答案已通过并提交')
+      setRevisionOpen(false)
+      setRevisedAnswerText('')
+      setRevisionError('')
+      setReviewComment('')
+      void reloadDetail()
+    } else {
+      messageApi.error('修订提交失败')
+    }
   }
 
   const submitApprove = () => {
@@ -410,7 +487,7 @@ export function ReviewerReviewDetailPage() {
                 return (
                   <button
                     key={getItemKey(item)}
-                    className={`${styles.manualQueueItem} ${active ? styles.manualQueueItemActive : ''} ${
+                    className={`${styles.manualQueueItem} ${getDecisionClassName(item.aiDecision)} ${active ? styles.manualQueueItemActive : ''} ${
                       disabled ? styles.manualQueueItemDisabled : ''
                     }`}
                     disabled={disabled}
@@ -554,8 +631,14 @@ export function ReviewerReviewDetailPage() {
                 >
                   打回
                 </Button>
-                <Tooltip title="可用 approve payload 支持 revisedAnswerJson，但当前页面尚未提供答案编辑器">
-                  <Button className={styles.manualActionButton} disabled icon={<EditOutlined />}>
+                <Tooltip title="修订答案后将直接通过并入库">
+                  <Button
+                    className={styles.manualActionButton}
+                    disabled={isActionDisabled}
+                    icon={<EditOutlined />}
+                    loading={isActionSubmitting}
+                    onClick={openRevisionModal}
+                  >
                     直接修订
                   </Button>
                 </Tooltip>
@@ -615,6 +698,34 @@ export function ReviewerReviewDetailPage() {
           </Card>
         </aside>
       </div>
+
+      <Modal
+        confirmLoading={isActionSubmitting}
+        okText="修订并通过"
+        open={revisionOpen}
+        title="直接修订并通过"
+        width={720}
+        onCancel={() => {
+          setRevisionOpen(false)
+          setRevisionError('')
+        }}
+        onOk={() => void submitRevisionApprove()}
+      >
+        <Space direction="vertical" size={12} className={styles.actionPanel}>
+          <Typography.Text type="secondary">
+            修订后的答案会通过 approve 接口提交到 revisedAnswerJson 字段，并直接进入通过状态。
+          </Typography.Text>
+          {revisionError ? <Alert message={revisionError} showIcon type="error" /> : null}
+          <Input.TextArea
+            rows={16}
+            value={revisedAnswerText}
+            onChange={(event) => {
+              setRevisedAnswerText(event.target.value)
+              setRevisionError('')
+            }}
+          />
+        </Space>
+      </Modal>
 
       <Modal
         confirmLoading={isActionSubmitting}

@@ -339,12 +339,22 @@
   font-weight: 600;
 }
 
+.datasetTable :global(.ant-table-thead .ant-tag) {
+  max-width: 100%;
+  margin-inline-end: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  vertical-align: top;
+  white-space: nowrap;
+}
+
 .datasetTable :global(.ant-table-cell) {
+  box-sizing: border-box;
   vertical-align: top;
 }
 
 .datasetTable :global(.ant-typography) {
-  max-width: 320px;
+  max-width: 100%;
   margin-bottom: 0;
   overflow-wrap: anywhere;
 }

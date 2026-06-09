@@ -31,7 +31,6 @@ LabelHub 是一个 **AI 辅助的数据标注平台**，覆盖 **任务管理 �
 
 - **Schema 驱动** — 标注表单由 JSON Schema 定义，支持拖拽可视化搭建和运行时动态渲染
 - **AI 原生集成** — 后端 AI 审核结果在前端以可解释面板展示，包含评分维度、风险标记和降级兜底
-- **Mock/Real 双模式** — 开发期使用内存 Mock 独立运行，对接后端仅需切换环境变量
 - **全链路可追溯** — 草稿自动保存、多版本提交记录、审核操作审计留痕
 
 ---
@@ -46,13 +45,6 @@ LabelHub 是一个 **AI 辅助的数据标注平台**，覆盖 **任务管理 �
 - 草稿的本地缓存与自动保存
 - AI 审核结果的结构化展示与状态提示
 - 错误态、空态、加载态、无权限态的用户体验
-
-#### 前端不负责
-
-- 任务调度与分发策略的服务端执行
-- AI 模型推理与评分计算（前端只消费结构化结果）
-- 数据持久化与版本存储
-- 导出文件的生成计算（前端触发导出并下载）
 
 ---
 
@@ -521,53 +513,6 @@ DynamicSchemaNode  ──→  Formily ISchema
 
 ---
 
-### 3.2 Mock / Real 双模式服务层
-
-#### 挑战
-
-项目早期后端未就绪时，前端必须能独立开发和运行；后端就绪后又要平滑切换到真实 API。两套实现需要**共享同一接口签名**，且切换成本接近零。
-
-#### 方案
-
-每个业务域的服务层提供两套实现，通过 `serviceMode.ts` 中的 `isRealServiceMode()` 函数根据环境变量 `VITE_SERVICE_MODE` 选择：
-
-```typescript
-// src/services/labeler/index.ts
-export const labelingService = isRealServiceMode()
-  ? realLabelingService     // 真实 HTTP 调用
-  : mockLabelingService     // 内存 Mock 实现
-```
-
-**Mock 实现**在内存中维护数据副本（`tasks[]`、`questions[]`、`drafts[]`、`submissions[]`），增删改查操作直接操作 JavaScript 数组。这意味着开发时不需要启动任何后端服务，体验接近真实。
-
-**Real 实现**通过 `request.get/post/put/delete` 调用后端 API，响应经过 HTTP 客户端的自动解包。
-
-#### 更大的挑战：跨服务状态同步
-
-Mock 模式下审核系统和标注系统之间存在**状态耦合** — 审核员打回一个提交时，标注员页面应该看到"已打回"状态。
-
-解决方式：使用观察者模式，审核服务提供注册回调的接口，标注服务注册自己的状态同步函数：
-
-```typescript
-// reviewService.ts 注册同步 handler
-type ReviewOutcomeSyncHandler = (payload: ReviewOutcomeSyncPayload) => void
-let syncHandler: ReviewOutcomeSyncHandler | null = null
-
-export const reviewService = {
-  registerReviewOutcomeSync(handler) { syncHandler = handler },
-  submitManualReviewAction(..., payload) {
-    // ... 执行审核动作
-    syncHandler?.({ submissionId, status, ... })
-  }
-}
-
-// labelingService.ts 注册同步逻辑
-reviewService.registerReviewOutcomeSync(applyReviewOutcomeToLabelingState)
-```
-
-这样既保持了服务的职责单一，又解决了 Mock 模式下跨模块的数据一致性问题。
-
----
 
 ### 3.3 复杂审核状态流转
 
@@ -615,46 +560,6 @@ type SubmissionReviewStatus =
 - 审核历史通过 `versionHistory`（版本历史）+ `reviewRecords`（审核操作记录）+ `aiReviewResult`（AI 结果）三条时间线完整呈现
 - 状态展示使用不同的 Tag 颜色和徽标，让审核员一眼识别当前状态
 
----
-
-### 3.4 HTTP 客户端设计
-
-#### 挑战
-
-直接使用 Axios 会导致每个页面都重复处理 Token 注入、响应解包、401 重试、错误格式化。后端响应有统一信封但前端不想在每个调用点手动拆包。
-
-#### 方案
-
-自定义 Axios 实例 + 拦截器（`httpClient.ts`）：
-
-**请求拦截器** — 自动从 localStorage 读取 Token 并注入 `Authorization` 头：
-
-```typescript
-httpClient.interceptors.request.use((config) => {
-  const token = localStorage.getItem('labelhub_auth_token')
-  if (token) config.headers.set('Authorization', `Bearer ${token}`)
-  return config
-})
-```
-
-**响应拦截器** — 自动解包 `ApiResponseEnvelope` 并处理 401：
-
-```typescript
-httpClient.interceptors.response.use(
-  (response) => unwrapBody(response.data),  // 自动解包
-  async (error) => {
-    if (error.response?.status === 401) {
-      // 尝试 refresh token 自动续期
-      const tokens = await refreshAuthTokens()
-      if (tokens) return httpClient.request(originalConfig)
-      clearAuthTokens()
-    }
-    return Promise.reject(normalizeAxiosError(error))
-  }
-)
-```
-
-**结果**：Page 层和 Store 层的代码完全不需要关心 HTTP 细节，调用 `request.get<T>()` 直接拿到类型 `T`。
 
 ---
 

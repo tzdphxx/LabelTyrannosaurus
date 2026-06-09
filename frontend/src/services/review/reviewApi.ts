@@ -12,6 +12,7 @@ import type {
   ReviewQueueQuery,
   ReviewerSubmissionDetail,
   ReviewerSubmissionListItem,
+  ReviewerReviewTaskClaimScope,
   ReviewerTaskItemPageResponse,
   ReviewerTaskItemQuery,
   ReviewerTaskSummary,
@@ -44,8 +45,12 @@ export async function listManualReviewQueue(query: ReviewQueueQuery): Promise<Re
   return items.map(mapReviewerSubmissionToQueueItem).filter((item) => matchesRealQueueQuery(item, query))
 }
 
-export function listReviewerTasks(): Promise<ReviewerTaskSummary[]> {
-  return request.get<ReviewerTaskSummary[]>('/v1/reviewer/tasks')
+export function listReviewerTasks(claimScope: ReviewerReviewTaskClaimScope = 'ALL'): Promise<ReviewerTaskSummary[]> {
+  return request.get<ReviewerTaskSummary[]>('/v1/reviewer/review-tasks', {
+    params: {
+      claimScope,
+    },
+  })
 }
 
 export function listReviewerTaskItems(taskId: string | number, query: ReviewerTaskItemQuery): Promise<ReviewerTaskItemPageResponse> {

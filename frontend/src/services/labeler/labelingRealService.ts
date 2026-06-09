@@ -576,6 +576,13 @@ function getMaxClaimsPerLabeler(response: MarketTaskResponse, task: TaskSnapshot
 }
 
 function mapMarketStatus(response: MarketTaskResponse): LabelerTaskStatus {
+  const task = getMarketTaskSnapshot(response)
+  const status = String(response.status ?? task.status ?? '').toUpperCase()
+
+  if (status === 'PAUSED') {
+    return 'paused'
+  }
+
   const availableCount = response.availableCount ?? 0
 
   if (availableCount <= 0) {
@@ -589,6 +596,8 @@ function mapTaskStatusToAssignmentStatus(status: LabelerTaskStatus): LabelerAssi
   switch (status) {
     case 'in_progress':
       return 'DRAFTING'
+    case 'paused':
+      return 'PAUSED'
     case 'submitted':
       return 'SUBMITTED'
     case 'approved':
@@ -635,6 +644,10 @@ function mapSubmissionStatus(status?: string): LabelingSubmission['status'] {
 function getTaskStatusFromClaimedItems(items: ClaimItemResponse[]): LabelerTaskStatus {
   if (items.length === 0) {
     return 'claimed'
+  }
+
+  if (items.some((item) => item.claimStatus === 'PAUSED')) {
+    return 'paused'
   }
 
   if (items.some((item) => item.claimStatus === 'AI_RETURNED' || item.claimStatus === 'RETURNED')) {
@@ -692,6 +705,7 @@ function buildTaskSummaryFromClaimedTask(response: ClaimedTaskResponse): Labeler
   }
   const items = response.items ?? []
   const completedQuestions = response.mySubmittedCount ?? items.filter((item) => item.claimStatus === 'SUBMITTED' || item.claimStatus === 'APPROVED').length
+  const taskStatus = String(task.status ?? '').toUpperCase() === 'PAUSED' ? 'paused' : getTaskStatusFromClaimedItems(items)
 
   return {
     id: String(task.taskId),
@@ -699,7 +713,7 @@ function buildTaskSummaryFromClaimedTask(response: ClaimedTaskResponse): Labeler
     description: response.description ?? '',
     instruction: response.instructionRichText ?? response.description ?? '',
     tags: task.tags ?? [],
-    status: getTaskStatusFromClaimedItems(items),
+    status: taskStatus,
     templateId: '',
     templateName: '-',
     deadline: formatDateTime(task.deadlineAt),
@@ -742,7 +756,7 @@ function buildAssignmentSummary(response: ClaimedTaskResponse): LabelerAssignmen
   }
   const items = response.items ?? []
   const firstItem = items[0]
-  const status = getTaskStatusFromClaimedItems(items)
+  const status = String(task.status ?? '').toUpperCase() === 'PAUSED' ? 'paused' : getTaskStatusFromClaimedItems(items)
 
   return {
     id: String(task.taskId),

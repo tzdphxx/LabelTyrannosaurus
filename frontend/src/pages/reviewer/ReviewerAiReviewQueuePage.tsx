@@ -22,6 +22,7 @@ import type {
   AiReviewLogQuery,
   AiReviewQueueStatusFilter,
   AiReviewResultResponse,
+  AiReviewTraceStep,
   SubmissionItemHistoryResponse,
   SubmissionItemReviewRoundHistory,
 } from '../../types/review'
@@ -75,16 +76,6 @@ function formatValue(value: unknown) {
   }
 
   return String(value)
-}
-
-function formatCount(value: unknown) {
-  const numberValue = Number(value ?? 0)
-
-  if (Number.isNaN(numberValue)) {
-    return '0'
-  }
-
-  return numberValue.toLocaleString('zh-CN')
 }
 
 function formatJson(value: unknown) {
@@ -215,6 +206,36 @@ function getAuditResultColor(value: unknown) {
   return 'default'
 }
 
+function formatMetricValue(value: unknown) {
+  if (value === undefined || value === null || value === '') {
+    return '-'
+  }
+
+  if (typeof value === 'object') {
+    return formatJson(value)
+  }
+
+  return String(value)
+}
+
+function getTraceStepColor(step: AiReviewTraceStep) {
+  const status = step.status?.toUpperCase()
+
+  if (status === 'SUCCESS' || status === 'COMPLETED') {
+    return 'green'
+  }
+
+  if (status === 'FAILED') {
+    return 'red'
+  }
+
+  if (status === 'RUNNING' || status === 'PENDING') {
+    return 'blue'
+  }
+
+  return 'gray'
+}
+
 function getReviewerLabel(round: SubmissionItemReviewRoundHistory) {
   return formatValue(round.reviewerName ?? (round.reviewerId ? `审核员 ${round.reviewerId}` : undefined))
 }
@@ -228,14 +249,14 @@ function getHistoryAuditItems(history: SubmissionItemHistoryResponse | null) {
     const versionLabel = `v${formatValue(item.versionNo)} / SUB-${formatValue(item.submissionId)}`
     const aiItem = item.aiReview
       ? [
-          {
-            key: `${item.submissionId}-ai`,
-            versionLabel,
-            result: item.aiReview.decision ?? item.aiReview.status,
-            reviewer: 'AI 自动预审',
-            reviewedAt: item.aiReview.reviewedAt,
-          },
-        ]
+        {
+          key: `${item.submissionId}-ai`,
+          versionLabel,
+          result: item.aiReview.decision ?? item.aiReview.status,
+          reviewer: 'AI 自动预审',
+          reviewedAt: item.aiReview.reviewedAt,
+        },
+      ]
       : []
     const reviewItems = (item.reviewRounds ?? []).map((round) => ({
       key: `${item.submissionId}-${round.reviewRecordId}`,
@@ -285,6 +306,10 @@ export function ReviewerAiReviewQueuePage() {
   const selectedAverageScore = toPercent(currentAiReviewLog?.averageScore)
   const selectedDecision = formatValue(currentAiReviewLog?.decision)
   const selectedDecisionLabel = decisionLabels[selectedDecision] ?? selectedDecision
+  const reviewTrace = currentAiReviewLog?.reviewTrace ?? null
+  const reviewTraceSteps = reviewTrace?.steps ?? []
+  const reviewTraceMetrics = Object.entries(reviewTrace?.metrics ?? {}).filter(([, value]) => value !== undefined && value !== null && value !== '')
+  const reviewTraceTitle = reviewTrace?.strategyLabel ?? reviewTrace?.strategy ?? 'AI 审核策略'
 
   const selectRecord = (record: AiReviewResultResponse) => {
     setCurrentAiReviewLog(record)
@@ -350,7 +375,7 @@ export function ReviewerAiReviewQueuePage() {
               onChange={(value) => changeStatus(value as AiReviewQueueStatusFilter)}
             />
 
-            <div className={styles.aiQueueStats}>
+            {/* <div className={styles.aiQueueStats}>
               <span className={styles.aiPulse} />
               <div>
                 <strong>{formatCount(aiReviewLogTotal)}</strong>
@@ -364,7 +389,7 @@ export function ReviewerAiReviewQueuePage() {
                 <strong>1.2%</strong>
                 <span>重试率</span>
               </div>
-            </div>
+            </div> */}
 
             <List
               className={styles.aiQueueList}
@@ -489,6 +514,53 @@ export function ReviewerAiReviewQueuePage() {
               </Space>
             ) : (
               <Empty description="请选择一条 AI 审核记录" />
+            )}
+          </Card>
+
+          <Card
+            title="AI 审核策略"
+            extra={reviewTrace ? <Tag color="processing">{formatValue(reviewTraceTitle)}</Tag> : null}
+          >
+            {reviewTrace ? (
+              <Space direction="vertical" size={12} className={styles.panelStack}>
+                <Typography.Paragraph>{formatValue(reviewTrace.summary)}</Typography.Paragraph>
+                {reviewTraceMetrics.length > 0 ? (
+                  <Space wrap size={[6, 6]}>
+                    {reviewTraceMetrics.map(([key, value]) => (
+                      <Tag key={key}>
+                        {key}: {formatMetricValue(value)}
+                      </Tag>
+                    ))}
+                  </Space>
+                ) : (
+                  <Typography.Text type="secondary">暂无策略指标</Typography.Text>
+                )}
+                {reviewTraceSteps.length > 0 ? (
+                  <Timeline
+                    items={reviewTraceSteps.map((step, index) => ({
+                      color: getTraceStepColor(step),
+                      children: (
+                        <Space direction="vertical" size={4}>
+                          <Space wrap size={[6, 6]}>
+                            <Typography.Text strong>{formatValue(step.name || `步骤 ${index + 1}`)}</Typography.Text>
+                            <Tag>{formatValue(step.role)}</Tag>
+                            <Tag color={decisionColors[formatValue(step.decision)] ?? 'default'}>{formatValue(step.decision)}</Tag>
+                            <Tag color={statusColors[formatValue(step.status)] ?? 'default'}>{formatValue(step.status)}</Tag>
+                          </Space>
+                          <Typography.Text type="secondary">
+                            分数 {formatValue(step.score)} · 置信度 {formatValue(step.confidence)}
+                          </Typography.Text>
+                          <Typography.Text>{formatValue(step.reason)}</Typography.Text>
+                        </Space>
+                      ),
+                    }))}
+                  />
+                ) : (
+                  <Empty description="暂无策略步骤" />
+                )}
+              </Space>
+            ) : (
+              <Empty description="暂无策略过程" />
             )}
           </Card>
 

@@ -18,7 +18,7 @@ interface CanvasNodeCardProps {
 }
 
 function CanvasNodeCardComponent({ node, parentId, selectedNodeId, onDelete, onAddTabPane, onSelect }: CanvasNodeCardProps) {
-  const { attributes, listeners, setNodeRef, transform, transition } = useSortable({
+  const { attributes, isDragging, listeners, setNodeRef, transform, transition } = useSortable({
     id: node.id,
     data: {
       type: 'node',
@@ -35,7 +35,11 @@ function CanvasNodeCardComponent({ node, parentId, selectedNodeId, onDelete, onA
   return (
     <div
       ref={setNodeRef}
-      className={['designer-node', selectedNodeId === node.id ? 'designer-node--selected' : ''].join(' ')}
+      className={[
+        'designer-node',
+        selectedNodeId === node.id ? 'designer-node--selected' : '',
+        isDragging ? 'designer-node--dragging' : '',
+      ].join(' ')}
       data-node-id={node.id}
       onClick={(event) => {
         event.stopPropagation()

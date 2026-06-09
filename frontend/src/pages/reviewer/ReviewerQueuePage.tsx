@@ -30,7 +30,7 @@ export function ReviewerQueuePage() {
   const loadReviewerTasks = useReviewStore((state) => state.loadReviewerTasks)
 
   useEffect(() => {
-    void loadReviewerTasks()
+    void loadReviewerTasks('MINE')
   }, [loadReviewerTasks])
 
   const myTasks = useMemo(
@@ -50,9 +50,9 @@ export function ReviewerQueuePage() {
       <ContentShell>
         <PageHeader
           title="我的审核队列"
-          description="这里先按任务归组，点击任务进入题目复核工作台。"
+          description="点击任务进入题目复核工作台。"
           extra={
-            <Button icon={<ReloadOutlined />} loading={isReviewerTasksLoading} onClick={() => void loadReviewerTasks()}>
+            <Button icon={<ReloadOutlined />} loading={isReviewerTasksLoading} onClick={() => void loadReviewerTasks('MINE')}>
               刷新任务
             </Button>
           }

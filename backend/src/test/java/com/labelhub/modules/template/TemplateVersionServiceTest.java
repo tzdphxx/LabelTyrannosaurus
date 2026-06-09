@@ -201,6 +201,59 @@ class TemplateVersionServiceTest {
     }
 
     @Test
+    void listVersionsReturnsTemplateVersionsNewestFirst() {
+        CurrentUserContext.set(new CurrentUser(10L, "owner", "owner@example.com", Set.of(RoleCode.OWNER), 1));
+        TemplateEntity template = ownerTemplate(100L, 10L, 2);
+        TemplateVersionEntity version2 = ownerVersion(201L, 100L, 10L, 2, false);
+        TemplateVersionEntity version1 = ownerVersion(200L, 100L, 10L, 1, true);
+        when(templateMapper.selectById(100L)).thenReturn(template);
+        when(templateVersionMapper.selectByTemplateIdOrderByVersionNoDesc(100L)).thenReturn(List.of(version2, version1));
+
+        var response = versionService.listVersions(100L);
+
+        assertThat(response).extracting("versionNo").containsExactly(2, 1);
+        assertThat(response).extracting("versionId").containsExactly(201L, 200L);
+        assertThat(response.get(0).ownerId()).isEqualTo(10L);
+    }
+
+    @Test
+    void adminCanListVersionsForAnyTemplate() {
+        CurrentUserContext.set(new CurrentUser(99L, "admin", "admin@example.com", Set.of(RoleCode.ADMIN), 1));
+        TemplateEntity template = ownerTemplate(100L, 10L, 1);
+        TemplateVersionEntity version = ownerVersion(200L, 100L, 10L, 1, false);
+        when(templateMapper.selectById(100L)).thenReturn(template);
+        when(templateVersionMapper.selectByTemplateIdOrderByVersionNoDesc(100L)).thenReturn(List.of(version));
+
+        var response = versionService.listVersions(100L);
+
+        assertThat(response).hasSize(1);
+        assertThat(response.get(0).ownerId()).isEqualTo(10L);
+    }
+
+    @Test
+    void nonOwnerCannotListVersions() {
+        CurrentUserContext.set(new CurrentUser(20L, "other", "other@example.com", Set.of(RoleCode.OWNER), 1));
+        TemplateEntity template = ownerTemplate(100L, 10L, 1);
+        when(templateMapper.selectById(100L)).thenReturn(template);
+
+        assertThatThrownBy(() -> versionService.listVersions(100L))
+                .isInstanceOf(BusinessException.class)
+                .extracting("code")
+                .isEqualTo(403001);
+    }
+
+    @Test
+    void listVersionsFailsWhenTemplateMissing() {
+        CurrentUserContext.set(new CurrentUser(10L, "owner", "owner@example.com", Set.of(RoleCode.OWNER), 1));
+        when(templateMapper.selectById(100L)).thenReturn(null);
+
+        assertThatThrownBy(() -> versionService.listVersions(100L))
+                .isInstanceOf(BusinessException.class)
+                .extracting("code")
+                .isEqualTo(400102);
+    }
+
+    @Test
     void forkPublishedVersionCreatesNewVersionWithoutChangingOldVersion() {
         CurrentUserContext.set(new CurrentUser(10L, "owner", "owner@example.com", Set.of(RoleCode.OWNER), 1));
         stubTask(10L);

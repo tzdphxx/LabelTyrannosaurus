@@ -179,6 +179,7 @@ public interface AssignmentMapper extends BaseMapper<Assignment> {
             SELECT a.id AS assignment_id,
                    a.dataset_item_id,
                    a.status AS assignment_status,
+                   di.external_id,
                    di.item_json,
                    di.metadata_json,
                    a.draft_version,
@@ -190,6 +191,16 @@ public interface AssignmentMapper extends BaseMapper<Assignment> {
                      ORDER BY s.version_no DESC
                      LIMIT 1
                    ) AS latest_submission_status,
+                   (
+                     SELECT rr.reason
+                     FROM review_records rr
+                     INNER JOIN submissions rs ON rs.id = rr.submission_id
+                     WHERE rs.assignment_id = a.id
+                       AND rr.action = 'REJECT'
+                     ORDER BY rr.created_at DESC, rr.id DESC
+                     LIMIT 1
+                   ) AS returned_reason,
+                   a.returned_at,
                    a.updated_at
             FROM assignments a
             INNER JOIN dataset_items di ON di.id = a.dataset_item_id

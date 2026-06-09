@@ -127,6 +127,23 @@ Description: Reads one immutable or draft template version by id for rendering o
 
 ## Fork 模板版本
 
+## List template versions
+
+Description: Lists all versions of a template owned by the current OWNER. ADMIN can query any template.
+
+- URL: `/api/v1/templates/{templateId}/versions`
+- Method: `GET`
+- Roles: `ADMIN`, template `OWNER`
+- Owner module: BE-B
+
+Response body is `List<TemplateVersionResponse>`, sorted by `versionNo DESC, id DESC`.
+
+Notes:
+- Template not found returns `400102`.
+- Non-admin users who are not the template owner receive `403001`.
+
+## Fork template version
+
 Description: Creates a new template version from an existing version or the current template version.
 
 - URL: `/api/v1/templates/{templateId}/fork`

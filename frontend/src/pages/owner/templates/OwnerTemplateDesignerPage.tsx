@@ -1,7 +1,7 @@
 import { DndContext, DragOverlay, type DragEndEvent, type DragStartEvent, PointerSensor, useSensor, useSensors } from '@dnd-kit/core'
 import { SaveOutlined } from '@ant-design/icons'
 import { Alert, Button, Card, Modal, Space, Tabs, Tag, message } from 'antd'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate, useParams } from 'react-router'
 import { ContentShell } from '../../../components/page/ContentShell'
 import { PageHeader } from '../../../components/page/PageHeader'
@@ -111,7 +111,7 @@ export function OwnerTemplateDesignerPage() {
     }
   }
 
-  function confirmDeleteNode(nodeId: string) {
+  const confirmDeleteNode = useCallback((nodeId: string) => {
     modalApi.confirm({
       title: '删除字段',
       content: '删除后该字段及其子字段会从当前 schema 中移除。',
@@ -127,19 +127,21 @@ export function OwnerTemplateDesignerPage() {
         deleteNode(nodeId)
       },
     })
-  }
+  }, [deleteNode, deleteSelectedNode, modalApi, selectedNodeId])
 
-  function deleteCurrentNode() {
+  const deleteCurrentNode = useCallback(() => {
     if (selectedNodeId) {
       confirmDeleteNode(selectedNodeId)
     }
-  }
+  }, [confirmDeleteNode, selectedNodeId])
 
-  function handleDragStart(event: DragStartEvent) {
+  const handleDragStart = useCallback((event: DragStartEvent) => {
     setActiveDrag(createActiveDragState(schema, event.active.data.current as DesignerDragData | undefined))
-  }
+  }, [schema])
 
-  function handleDragEnd(event: DragEndEvent) {
+  const handleDragCancel = useCallback(() => setActiveDrag(null), [])
+
+  const handleDragEnd = useCallback((event: DragEndEvent) => {
     setActiveDrag(null)
 
     if (!schema || !event.over) {
@@ -180,7 +182,7 @@ export function OwnerTemplateDesignerPage() {
     if (activeData.type === 'node' && overData.type === 'node') {
       reorderNodes(activeData.nodeId, overData.nodeId)
     }
-  }
+  }, [addNode, messageApi, reorderNodes, schema])
 
   return (
     <main className={styles.page}>
@@ -206,8 +208,8 @@ export function OwnerTemplateDesignerPage() {
       {error ? <Alert message={error} showIcon type="error" /> : null}
 
       <DndContext
-        autoScroll={{ enabled: true, threshold: { x: 0.05, y: 0.18 }, acceleration: 12 }}
-        onDragCancel={() => setActiveDrag(null)}
+        autoScroll={{ enabled: true, threshold: { x: 0.05, y: 0.24 }, acceleration: 8 }}
+        onDragCancel={handleDragCancel}
         onDragEnd={handleDragEnd}
         onDragStart={handleDragStart}
         sensors={sensors}

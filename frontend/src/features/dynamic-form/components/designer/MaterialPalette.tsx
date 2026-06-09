@@ -13,7 +13,6 @@ import {
   UploadOutlined,
 } from '@ant-design/icons'
 import { useDraggable } from '@dnd-kit/core'
-import { CSS } from '@dnd-kit/utilities'
 import { Typography } from 'antd'
 import type { ReactNode } from 'react'
 import type { DynamicFieldType } from '../../../../types/dynamicForm'
@@ -38,7 +37,7 @@ const materialMeta: Partial<Record<DynamicFieldType, { icon: ReactNode; summary:
 function MaterialCard({ type }: { type: DynamicFieldType }) {
   const definition = dynamicMaterialRegistry[type]
   const meta = materialMeta[type] ?? { icon: <AppstoreOutlined />, summary: definition.description }
-  const { attributes, listeners, setNodeRef, transform } = useDraggable({
+  const { attributes, isDragging, listeners, setNodeRef } = useDraggable({
     id: `material:${type}`,
     data: {
       type: 'material',
@@ -49,8 +48,7 @@ function MaterialCard({ type }: { type: DynamicFieldType }) {
   return (
     <button
       ref={setNodeRef}
-      className="designer-material"
-      style={{ transform: CSS.Translate.toString(transform) }}
+      className={['designer-material', isDragging ? 'designer-material--dragging' : ''].join(' ')}
       type="button"
       {...listeners}
       {...attributes}

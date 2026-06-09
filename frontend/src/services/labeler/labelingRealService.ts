@@ -24,6 +24,7 @@ import type {
   SubmissionItemHistoryResponse,
 } from '../../types/labeling'
 import { fromBackendTemplateSchema } from '../../features/dynamic-form/utils/backendSchema'
+import { cloneSchema } from '../../features/dynamic-form/utils/schemaTree'
 import { ApiError, request } from '../http'
 import { mockLabelingService } from './labelingService'
 import { getNowLabel, validateQuestionDraft, validateTaskDrafts } from './labelingServiceHelpers'
@@ -729,7 +730,7 @@ function buildQuestionFromClaimedItem(
     description: '',
     returnedReason: item.returnedReason?.trim() ? item.returnedReason : null,
     source: buildClaimedItemSource(item),
-    schema,
+    schema: cloneSchema(schema),
     status: mapQuestionStatus(item.claimStatus),
   }
 }
@@ -782,7 +783,7 @@ function buildQuestion(detail: AssignmentClaimResponse, taskId: string): Labelin
     title: `题目 #${datasetItemId}`,
     description: '',
     source: buildClaimedItemSource(detail),
-    schema: parseSchema(detail.schemaJson, templateVersionId),
+    schema: cloneSchema(parseSchema(detail.schemaJson, templateVersionId)),
     status: mapQuestionStatus(detail.status),
   }
 }
@@ -831,8 +832,7 @@ function cloneQuestion(question: LabelingQuestion): LabelingQuestion {
     ...question,
     source: { ...question.source },
     schema: {
-      ...question.schema,
-      nodes: [...question.schema.nodes],
+      ...cloneSchema(question.schema),
     },
   }
 }

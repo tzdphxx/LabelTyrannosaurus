@@ -81,5 +81,5 @@ export function LinkageRuleEditor({ fieldKeys, isChoice, value, onChange }: Link
 }
 
 export function isChoiceNode(node: DynamicSchemaNode | null) {
-  return node?.type === 'radio' || node?.type === 'checkbox' || node?.type === 'select'
+  return node?.type === 'radio' || node?.type === 'checkbox' || node?.type === 'select' || node?.type === 'tagSelect'
 }

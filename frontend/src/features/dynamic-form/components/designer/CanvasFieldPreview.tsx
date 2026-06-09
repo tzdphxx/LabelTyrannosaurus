@@ -62,12 +62,29 @@ export function CanvasFieldPreview({ children, node }: CanvasFieldPreviewProps) 
           <Select disabled mode={node.props.mode} options={options} placeholder={String(node.props.placeholder ?? '请选择')} />
         </FieldFrame>
       )
+    case 'tagSelect':
+      return (
+        <FieldFrame title={node.title}>
+          <Select disabled mode="tags" options={options} placeholder={String(node.props.placeholder ?? '请选择或输入标签')} />
+        </FieldFrame>
+      )
     case 'showItem':
       return <Alert className="designer-field-preview__show-item" message={String(node.props.text ?? node.title)} showIcon type="info" />
     case 'richText':
       return (
         <FieldFrame title={node.title}>
-          <Input.TextArea autoSize={{ minRows: 5, maxRows: 10 }} disabled placeholder={String(node.props.placeholder ?? '请输入富文本内容')} />
+          <div className="designer-field-preview__rich-text">
+            <div className="designer-field-preview__rich-toolbar">
+              <span>B</span>
+              <span>I</span>
+              <span>U</span>
+              <span>•</span>
+            </div>
+            <div className="designer-field-preview__rich-body">
+              <strong>富文本内容</strong>
+              <span>{String(node.props.placeholder ?? '请输入带格式文本')}</span>
+            </div>
+          </div>
         </FieldFrame>
       )
     case 'fileUpload':

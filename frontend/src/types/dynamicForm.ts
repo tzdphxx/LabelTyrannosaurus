@@ -4,6 +4,7 @@ export type DynamicFieldType =
   | 'radio'
   | 'checkbox'
   | 'select'
+  | 'tagSelect'
   | 'showItem'
   | 'richText'
   | 'fileUpload'

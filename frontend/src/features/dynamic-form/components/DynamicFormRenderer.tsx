@@ -1,9 +1,9 @@
 import { createForm, onFormValuesChange } from '@formily/core'
-import { createSchemaField, FormProvider } from '@formily/react'
+import { createSchemaField, FormProvider, RecursionField, useFieldSchema } from '@formily/react'
 import { Checkbox, FormItem, FormLayout, Input, Radio, Select } from '@formily/antd-v5'
-import { Alert, Button, Card, Space, Tabs, Typography, message } from 'antd'
+import { Alert, Button, Card, Space, Tabs, Typography, message, type TabsProps } from 'antd'
 import type { ReactNode } from 'react'
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { llmService } from '../../../services/llm'
 import type { DynamicFormSchema, DynamicFormSubmitResult } from '../../../types/dynamicForm'
 import type { LlmTriggerContext } from '../../../types/llm'
@@ -23,14 +23,7 @@ interface DynamicFormRendererProps {
 }
 
 function ShowItem(props: { text?: string }) {
-  return (
-    <Alert
-      className={styles.showItem}
-      message={props.text ?? '展示信息'}
-      showIcon
-      type="info"
-    />
-  )
+  return <Alert className={styles.showItem} message={props.text ?? '展示信息'} showIcon type="info" />
 }
 
 function GroupSection({ children, title }: { children?: ReactNode; title?: string }) {
@@ -41,29 +34,77 @@ function GroupSection({ children, title }: { children?: ReactNode; title?: strin
   )
 }
 
-function TabsSection({ children, title }: { children?: ReactNode; title?: string }) {
+function TabsSection({ title }: { children?: ReactNode; title?: string }) {
+  const fieldSchema = useFieldSchema()
+  const paneItems = useMemo(
+    () =>
+      fieldSchema.reduceProperties<NonNullable<TabsProps['items']>, NonNullable<TabsProps['items']>>((items, paneSchema, paneKey, index) => {
+        const paneTitle = typeof paneSchema.title === 'string' && paneSchema.title.trim() ? paneSchema.title : `Tab ${index + 1}`
+        const itemKey = String(paneKey)
+
+        return [
+          ...items,
+          {
+            key: itemKey,
+            label: paneTitle,
+            children: <RecursionField schema={paneSchema} name={paneKey} />,
+          },
+        ]
+      }, []),
+    [fieldSchema],
+  )
+  const firstPaneKey = paneItems[0]?.key
+  const [activeKey, setActiveKey] = useState<string | undefined>(firstPaneKey)
+
+  useEffect(() => {
+    if (!paneItems.length) {
+      setActiveKey(undefined)
+      return
+    }
+
+    if (!activeKey || !paneItems.some((item) => item.key === activeKey)) {
+      setActiveKey(firstPaneKey)
+    }
+  }, [activeKey, firstPaneKey, paneItems])
+
+  if (paneItems.length > 0) {
+    return (
+      <Card className={styles.group} size="small" title={title}>
+        <Tabs activeKey={activeKey} destroyInactiveTabPane={false} items={paneItems} onChange={setActiveKey} />
+      </Card>
+    )
+  }
+
   return (
     <Card className={styles.group} size="small" title={title}>
-      <Tabs
-        items={[
-          {
-            key: 'content',
-            label: '内容',
-            children,
-          },
-        ]}
-      />
+      <Typography.Text type="secondary">暂无 TabPane</Typography.Text>
     </Card>
   )
 }
 
 function TabPaneSection({ children, title }: { children?: ReactNode; title?: string }) {
   return (
-    <div className={styles.tabPane}>
-      <Typography.Text strong>{title}</Typography.Text>
+    <div className={styles.tabPane} data-tab-title={title}>
       <div>{children}</div>
     </div>
   )
+}
+
+function stringifyFormValues(value: unknown): string {
+  if (!value || typeof value !== 'object') {
+    return JSON.stringify(value ?? null)
+  }
+
+  if (Array.isArray(value)) {
+    return `[${value.map((item) => stringifyFormValues(item)).join(',')}]`
+  }
+
+  const record = value as Record<string, unknown>
+
+  return `{${Object.keys(record)
+    .sort()
+    .map((key) => `${JSON.stringify(key)}:${stringifyFormValues(record[key])}`)
+    .join(',')}}`
 }
 
 const SchemaField = createSchemaField({
@@ -96,31 +137,44 @@ export function DynamicFormRenderer({
   const [messageApi, contextHolder] = message.useMessage()
   const [submitting, setSubmitting] = useState(false)
   const answerFieldKeys = useMemo(() => getSchemaNodeKeys(schema), [schema])
+  const onValuesChangeRef = useRef(onValuesChange)
+  const initialValuesSignature = useMemo(() => stringifyFormValues(initialValues ?? {}), [initialValues])
+
+  useEffect(() => {
+    onValuesChangeRef.current = onValuesChange
+  }, [onValuesChange])
 
   const form = useMemo(
     () =>
       createForm({
-        initialValues,
+        values: initialValues,
         pattern: readOnly ? 'readPretty' : 'editable',
         effects() {
           onFormValuesChange((formInstance) => {
             const values = { ...formInstance.values }
-            onValuesChange?.(values)
+            onValuesChangeRef.current?.(values)
           })
         },
       }),
-    [initialValues, onValuesChange, readOnly],
+    [readOnly],
   )
 
-  const applyLlmValues = useCallback((values: Record<string, unknown>) => {
-    const nextValues = {
-      ...form.values,
-      ...values,
-    }
+  useEffect(() => {
+    form.setValues(initialValues ?? {}, 'overwrite')
+  }, [form, initialValuesSignature])
 
-    form.setValues(nextValues)
-    onValuesChange?.(nextValues)
-  }, [form, onValuesChange])
+  const applyLlmValues = useCallback(
+    (values: Record<string, unknown>) => {
+      const nextValues = {
+        ...form.values,
+        ...values,
+      }
+
+      form.setValues(nextValues)
+      onValuesChangeRef.current?.(nextValues)
+    },
+    [form],
+  )
 
   const formilySchema = useMemo(
     () =>

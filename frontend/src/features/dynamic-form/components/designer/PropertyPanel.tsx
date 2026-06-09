@@ -1,6 +1,6 @@
 import { DeleteOutlined } from '@ant-design/icons'
 import { Button, Divider, Empty, Input, InputNumber, Space, Switch, Tag } from 'antd'
-import type { DynamicSchemaNode } from '../../../../types/dynamicForm'
+import type { DynamicFieldOption, DynamicSchemaNode } from '../../../../types/dynamicForm'
 import { dynamicMaterialRegistry } from '../../materialRegistry'
 import { ChoiceOptionsEditor } from './ChoiceOptionsEditor'
 import { ConditionRuleEditor } from './ConditionRuleEditor'
@@ -22,6 +22,19 @@ interface PropertyPanelProps {
   node: DynamicSchemaNode | null
   onDelete: () => void
   onUpdate: (updates: Partial<DynamicSchemaNode>) => void
+}
+
+function syncExistingEnumRule(node: DynamicSchemaNode, options: DynamicFieldOption[]) {
+  const rules = node.rules ?? []
+  const hasEnumRule = rules.some((rule) => rule.type === 'enum')
+
+  if (!hasEnumRule) {
+    return rules
+  }
+
+  const values = options.map((option) => option.value)
+
+  return rules.map((rule) => (rule.type === 'enum' ? { ...rule, values } : rule))
 }
 
 export function PropertyPanel({ fieldKeys, node, onDelete, onUpdate }: PropertyPanelProps) {
@@ -121,7 +134,7 @@ export function PropertyPanel({ fieldKeys, node, onDelete, onUpdate }: PropertyP
           <ChoiceOptionsEditor
             nodeId={node.id}
             options={node.props.options}
-            onCommit={(options) => onUpdate({ props: { options } })}
+            onCommit={(options) => onUpdate({ props: { options }, rules: syncExistingEnumRule(node, options) })}
           />
         </label>
       ) : null}

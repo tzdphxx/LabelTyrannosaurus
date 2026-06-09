@@ -1,6 +1,6 @@
+import { DeleteOutlined, DragOutlined, PlusOutlined } from '@ant-design/icons'
 import { useSortable } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
-import { DeleteOutlined, DragOutlined } from '@ant-design/icons'
 import { Button, Typography } from 'antd'
 import { memo } from 'react'
 import type { DynamicSchemaNode } from '../../../../types/dynamicForm'
@@ -13,10 +13,11 @@ interface CanvasNodeCardProps {
   parentId: string | null
   selectedNodeId: string | null
   onDelete: (nodeId: string) => void
+  onAddTabPane: (parentId: string) => void
   onSelect: (nodeId: string) => void
 }
 
-function CanvasNodeCardComponent({ node, parentId, selectedNodeId, onDelete, onSelect }: CanvasNodeCardProps) {
+function CanvasNodeCardComponent({ node, parentId, selectedNodeId, onDelete, onAddTabPane, onSelect }: CanvasNodeCardProps) {
   const { attributes, listeners, setNodeRef, transform, transition } = useSortable({
     id: node.id,
     data: {
@@ -49,6 +50,19 @@ function CanvasNodeCardComponent({ node, parentId, selectedNodeId, onDelete, onS
         <Typography.Text className="designer-node__type" type="secondary">
           {definition.title}
         </Typography.Text>
+        {node.type === 'tabs' ? (
+          <Button
+            aria-label="新增 Tab"
+            icon={<PlusOutlined />}
+            onClick={(event) => {
+              event.stopPropagation()
+              onAddTabPane(node.id)
+            }}
+            onPointerDown={(event) => event.stopPropagation()}
+            size="small"
+            type="text"
+          />
+        ) : null}
         <Button
           aria-label="删除字段"
           danger
@@ -73,6 +87,7 @@ function CanvasNodeCardComponent({ node, parentId, selectedNodeId, onDelete, onS
                   node={child}
                   parentId={node.id}
                   selectedNodeId={selectedNodeId}
+                  onAddTabPane={onAddTabPane}
                   onDelete={onDelete}
                   onSelect={onSelect}
                 />
@@ -93,6 +108,7 @@ function areCanvasNodeCardPropsEqual(previous: CanvasNodeCardProps, next: Canvas
     previous.node === next.node &&
     previous.parentId === next.parentId &&
     previous.onDelete === next.onDelete &&
+    previous.onAddTabPane === next.onAddTabPane &&
     previous.onSelect === next.onSelect &&
     previousSelected === nextSelected
   )

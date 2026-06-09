@@ -2,7 +2,7 @@ import { CheckCircleOutlined, ThunderboltOutlined } from '@ant-design/icons'
 import { Alert, Button, Card, Input, Space, Upload, Typography } from 'antd'
 import type { UploadFile } from 'antd/es/upload/interface'
 import styles from './DynamicFormRenderer.module.css'
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type { LlmGatewayStatus, LlmTriggerContext, LlmTriggerRunRequest, LlmTriggerRunResponse } from '../../../types/llm'
 
 interface ValueFieldProps<T> {
@@ -131,14 +131,80 @@ function buildOrderedSuggestionEntries(response: LlmTriggerRunResponse | null, c
   }))
 }
 
-export function RichTextEditor({ value, onChange, placeholder }: ValueFieldProps<string> & { placeholder?: string }) {
+export function RichTextEditor({
+  disabled,
+  readOnly,
+  value,
+  onChange,
+  placeholder,
+}: ValueFieldProps<string> & { disabled?: boolean; readOnly?: boolean; placeholder?: string }) {
+  const editorRef = useRef<HTMLDivElement>(null)
+  const isReadOnly = Boolean(disabled || readOnly)
+
+  useEffect(() => {
+    const editor = editorRef.current
+
+    if (!editor || document.activeElement === editor) {
+      return
+    }
+
+    if (editor.innerHTML !== (value ?? '')) {
+      editor.innerHTML = value ?? ''
+    }
+  }, [value])
+
+  const emitChange = () => {
+    onChange?.(editorRef.current?.innerHTML ?? '')
+  }
+
+  const runCommand = (command: string) => {
+    editorRef.current?.focus()
+    document.execCommand(command)
+    emitChange()
+  }
+
+  if (isReadOnly) {
+    return (
+      <div
+        className={styles.richTextReadonly}
+        dangerouslySetInnerHTML={{ __html: value?.trim() ? value : '<span class="rich-text-empty">-</span>' }}
+      />
+    )
+  }
+
   return (
-    <Input.TextArea
-      autoSize={{ minRows: 5, maxRows: 10 }}
-      placeholder={placeholder}
-      value={value}
-      onChange={(event) => onChange?.(event.target.value)}
-    />
+    <div className={styles.richTextEditor}>
+      <div className={styles.richTextToolbar}>
+        {[
+          ['bold', 'B'],
+          ['italic', 'I'],
+          ['underline', 'U'],
+          ['insertUnorderedList', '•'],
+          ['insertOrderedList', '1.'],
+          ['removeFormat', '清除'],
+        ].map(([command, label]) => (
+          <Button
+            key={command}
+            size="small"
+            type="text"
+            onMouseDown={(event) => event.preventDefault()}
+            onClick={() => runCommand(command)}
+          >
+            {label}
+          </Button>
+        ))}
+      </div>
+      <div
+        ref={editorRef}
+        className={styles.richTextBody}
+        contentEditable
+        data-placeholder={placeholder}
+        role="textbox"
+        tabIndex={0}
+        onBlur={emitChange}
+        onInput={emitChange}
+      />
+    </div>
   )
 }
 

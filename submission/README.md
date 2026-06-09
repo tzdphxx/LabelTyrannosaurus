@@ -68,10 +68,13 @@ backend/.env.docker
 | `AI_DASHSCOPE_API_KEY` | DashScope API Key，默认留空；为空时启动会跳过默认 AI Provider 初始化 |
 | `AI_DASHSCOPE_BASE_URL` | OpenAI-compatible Base URL，例如 `https://dashscope.aliyuncs.com/compatible-mode/v1`；默认留空 |
 | `AI_DASHSCOPE_CHAT_MODEL` | DashScope 模型名，例如 `qwen-plus`；默认留空 |
+| `LABELHUB_LLM_KEY_ENCRYPTION_SECRET` | LLM API Key 加密密钥，默认已配置；系统保存过 AI Provider 后不要随意修改，否则旧配置中的 API Key 将无法解密 |
 | `COS_SECRET_ID` / `COS_SECRET_KEY` | 对象存储密钥，文件上传下载演示需要配置 |
 | `COS_BUCKET` / `COS_REGION` | 对象存储 Bucket 与地域；`COS_BUCKET` 默认留空 |
 
 如果只验证登录、任务、模板、标注、审核等基础流程，可以先使用默认配置启动。
+
+如果启动前未填写 `AI_DASHSCOPE_API_KEY`、`AI_DASHSCOPE_BASE_URL` 和 `AI_DASHSCOPE_CHAT_MODEL`，系统仍可正常启动，但不会自动创建默认 AI Provider。需要使用 AI 辅助标注能力时，请启动后登录 Admin 页面，手动新增并启用 AI Provider，再在任务 AI 配置中选择该 Provider。
 
 ### 4. 启动完整服务
 
@@ -130,6 +133,7 @@ docker compose up --build -d
 - 端口冲突：如果 `3000` 或 `8080` 被占用，请先停止本机占用端口的服务，或修改 `compose.yml` 中的端口映射。
 - 后端启动失败：优先查看 `docker compose logs backend`，确认 MySQL、Redis 是否健康，以及 `backend/.env.docker` 中的变量是否正确。
 - AI 或文件能力不可用：检查 `AI_DASHSCOPE_API_KEY`、`AI_DASHSCOPE_BASE_URL`、`AI_DASHSCOPE_CHAT_MODEL` 和 COS 相关变量是否已按实际环境填写；默认空值只支持基础流程启动，不会启用 AI 调用或对象存储能力。
+- 已保存的 AI Provider 无法调用：确认 `LABELHUB_LLM_KEY_ENCRYPTION_SECRET` 是否被修改过。该密钥用于加密数据库中的 LLM API Key，修改后旧密文无法解密，需要恢复原密钥或重新录入 AI Provider。
 
 ## Demo 截图
 
@@ -309,7 +313,7 @@ submission/ # final submission package docs
 | 认证与管理 | 账号密码登录、身份注册、JWT、RBAC、用户角色、Admin 看板、审核分配查询和 Reviewer 账号创建 |
 | 任务主链路 | 任务生命周期、任务市场、领取、草稿、提交版本、answerHash 幂等、提交追溯 |
 | 数据资产与模板 | 数据导入、题目管理、模板版本、Schema 校验、答案校验 |
-| AI 与 Agent | Admin Provider 管理、Owner AI 配置、AI 预审、AgentRun、LLM 队列、字段级 LLM 辅助、题目级预标注 |
+| AI 与 Agent | Admin Provider 管理、Owner AI 配置、AI 预审、AI 辅助标注、AgentRun、LLM 队列 |
 | 人工审核 | Reviewer 工作台、审核领取、审核详情、通过、打回、批量处理、ReviewRecord |
 | 导出与文件 | 异步导出、直接导出、JSON/JSONL/CSV/Excel、文件上传、签名 URL、对象存储 |
 | 奖励与看板 | 奖励规则、奖励结算、贡献统计、Admin/Owner/Labeler/Reviewer 看板 |

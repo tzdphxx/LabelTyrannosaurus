@@ -203,8 +203,7 @@ export function createSchemaNodeFromMaterial(type: DynamicFieldType): DynamicSch
     return {
       ...baseNode,
       children: [
-        createTabPaneNode('基础信息'),
-        createTabPaneNode('补充信息'),
+        createTabPaneNode('Tab 1'),
       ],
     }
   }

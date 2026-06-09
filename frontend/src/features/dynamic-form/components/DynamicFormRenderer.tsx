@@ -1,9 +1,9 @@
 import { createForm, onFormValuesChange } from '@formily/core'
-import { createSchemaField, FormProvider } from '@formily/react'
+import { createSchemaField, FormProvider, RecursionField, useFieldSchema } from '@formily/react'
 import { Checkbox, FormItem, FormLayout, Input, Radio, Select } from '@formily/antd-v5'
-import { Alert, Button, Card, Space, Tabs, Typography, message } from 'antd'
+import { Alert, Button, Card, Space, Tabs, Typography, message, type TabsProps } from 'antd'
 import type { ReactNode } from 'react'
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { llmService } from '../../../services/llm'
 import type { DynamicFormSchema, DynamicFormSubmitResult } from '../../../types/dynamicForm'
 import type { LlmTriggerContext } from '../../../types/llm'
@@ -23,14 +23,7 @@ interface DynamicFormRendererProps {
 }
 
 function ShowItem(props: { text?: string }) {
-  return (
-    <Alert
-      className={styles.showItem}
-      message={props.text ?? '展示信息'}
-      showIcon
-      type="info"
-    />
-  )
+  return <Alert className={styles.showItem} message={props.text ?? '展示信息'} showIcon type="info" />
 }
 
 function GroupSection({ children, title }: { children?: ReactNode; title?: string }) {
@@ -41,26 +34,57 @@ function GroupSection({ children, title }: { children?: ReactNode; title?: strin
   )
 }
 
-function TabsSection({ children, title }: { children?: ReactNode; title?: string }) {
+function TabsSection({ title }: { children?: ReactNode; title?: string }) {
+  const fieldSchema = useFieldSchema()
+  const paneItems = useMemo(
+    () =>
+      fieldSchema.reduceProperties<NonNullable<TabsProps['items']>, NonNullable<TabsProps['items']>>((items, paneSchema, paneKey, index) => {
+        const paneTitle = typeof paneSchema.title === 'string' && paneSchema.title.trim() ? paneSchema.title : `Tab ${index + 1}`
+        const itemKey = String(paneKey)
+
+        return [
+          ...items,
+          {
+            key: itemKey,
+            label: paneTitle,
+            children: <RecursionField schema={paneSchema} name={paneKey} />,
+          },
+        ]
+      }, []),
+    [fieldSchema],
+  )
+  const firstPaneKey = paneItems[0]?.key
+  const [activeKey, setActiveKey] = useState<string | undefined>(firstPaneKey)
+
+  useEffect(() => {
+    if (!paneItems.length) {
+      setActiveKey(undefined)
+      return
+    }
+
+    if (!activeKey || !paneItems.some((item) => item.key === activeKey)) {
+      setActiveKey(firstPaneKey)
+    }
+  }, [activeKey, firstPaneKey, paneItems])
+
+  if (paneItems.length > 0) {
+    return (
+      <Card className={styles.group} size="small" title={title}>
+        <Tabs activeKey={activeKey} destroyInactiveTabPane={false} items={paneItems} onChange={setActiveKey} />
+      </Card>
+    )
+  }
+
   return (
     <Card className={styles.group} size="small" title={title}>
-      <Tabs
-        items={[
-          {
-            key: 'content',
-            label: '内容',
-            children,
-          },
-        ]}
-      />
+      <Typography.Text type="secondary">暂无 TabPane</Typography.Text>
     </Card>
   )
 }
 
 function TabPaneSection({ children, title }: { children?: ReactNode; title?: string }) {
   return (
-    <div className={styles.tabPane}>
-      <Typography.Text strong>{title}</Typography.Text>
+    <div className={styles.tabPane} data-tab-title={title}>
       <div>{children}</div>
     </div>
   )
@@ -112,15 +136,18 @@ export function DynamicFormRenderer({
     [initialValues, onValuesChange, readOnly],
   )
 
-  const applyLlmValues = useCallback((values: Record<string, unknown>) => {
-    const nextValues = {
-      ...form.values,
-      ...values,
-    }
+  const applyLlmValues = useCallback(
+    (values: Record<string, unknown>) => {
+      const nextValues = {
+        ...form.values,
+        ...values,
+      }
 
-    form.setValues(nextValues)
-    onValuesChange?.(nextValues)
-  }, [form, onValuesChange])
+      form.setValues(nextValues)
+      onValuesChange?.(nextValues)
+    },
+    [form, onValuesChange],
+  )
 
   const formilySchema = useMemo(
     () =>

@@ -103,6 +103,7 @@ public class SubmissionSubmitService {
                                            Long labelerId,
                                            SubmissionSubmitRequest request) {
         Assignment assignment = loadOwnedAssignment(assignmentId, labelerId);
+        requireSubmittableStatus(assignment);
         requireCurrentDraftVersion(assignment, request.clientVersion());
         String canonicalAnswerJson = canonicalAnswerJson(request.answerJson());
         answerSchemaValidator.validateAnswer(assignment.getTemplateVersionId(), canonicalAnswerJson);
@@ -112,7 +113,6 @@ public class SubmissionSubmitService {
         if (latestActive != null && Objects.equals(latestActive.getAnswerHash(), answerHash)) {
             return toResponse(latestActive, null);
         }
-        requireSubmittableStatus(assignment);
         Submission latest = submissionMapper.selectLatestByAssignmentId(assignmentId);
         int nextVersionNo = latest == null ? 1 : latest.getVersionNo() + 1;
         if (latestActive != null) {

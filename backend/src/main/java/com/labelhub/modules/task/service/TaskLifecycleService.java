@@ -295,7 +295,18 @@ public class TaskLifecycleService {
 
     private TaskStatusResponse updateStatus(Task task, Long ownerId, String action, TaskStatus beforeStatus) {
         Map<String, Object> beforeJson = Map.of("status", beforeStatus);
-        taskMapper.updateById(task);
+        int updated = taskMapper.updateStatusIfCurrent(
+                task.getId(),
+                task.getOwnerId(),
+                beforeStatus,
+                task.getStatus(),
+                task.getPublishedAt(),
+                task.getEndedAt(),
+                task.getQuota(),
+                task.getClaimedCount());
+        if (updated != 1) {
+            throw new BusinessException(TASK_STATUS_NOT_ALLOWED, "Task status changed, please refresh and retry");
+        }
         appendAudit(task, ownerId, action, beforeJson, Map.of("status", task.getStatus()));
         publishTaskStatusChanged(task, beforeStatus);
         return new TaskStatusResponse(task.getId(), task.getStatus());

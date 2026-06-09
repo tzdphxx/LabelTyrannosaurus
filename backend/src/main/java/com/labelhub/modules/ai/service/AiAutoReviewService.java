@@ -1263,10 +1263,19 @@ public class AiAutoReviewService {
                 && submission.getStatus() != SubmissionStatus.PENDING_FINAL) {
             return;
         }
+        int updated = submissionMapper.updateStatusIfCurrentIn(
+                submission.getId(),
+                SubmissionStatus.APPROVED.name(),
+                ReviewFlowStatus.FINAL_APPROVED.name(),
+                true,
+                SubmissionStatus.AI_REVIEWING.name(),
+                SubmissionStatus.PENDING_FINAL.name());
+        if (updated != 1) {
+            return;
+        }
         submission.setStatus(SubmissionStatus.APPROVED);
         submission.setReviewFlowStatus(ReviewFlowStatus.FINAL_APPROVED.name());
         submission.setIsGolden(true);
-        submissionMapper.updateById(submission);
         Assignment assignment = assignmentMapper.selectById(submission.getAssignmentId());
         if (assignment != null) {
             assignment.setStatus(AssignmentStatus.APPROVED);
@@ -1283,9 +1292,18 @@ public class AiAutoReviewService {
                 && submission.getStatus() != SubmissionStatus.PENDING_FINAL) {
             return;
         }
+        int updated = submissionMapper.updateStatusIfCurrentIn(
+                submission.getId(),
+                SubmissionStatus.REJECTED.name(),
+                ReviewFlowStatus.REJECTED.name(),
+                null,
+                SubmissionStatus.AI_REVIEWING.name(),
+                SubmissionStatus.PENDING_FINAL.name());
+        if (updated != 1) {
+            return;
+        }
         submission.setStatus(SubmissionStatus.REJECTED);
         submission.setReviewFlowStatus(ReviewFlowStatus.REJECTED.name());
-        submissionMapper.updateById(submission);
         Assignment assignment = assignmentMapper.selectById(submission.getAssignmentId());
         if (assignment != null) {
             assignment.setStatus(AssignmentStatus.RETURNED);

@@ -1,5 +1,6 @@
 package com.labelhub.modules.agent.service;
 
+import com.labelhub.common.exception.BusinessException;
 import com.labelhub.modules.agent.domain.AgentRun;
 import com.labelhub.modules.agent.domain.AgentRunStatus;
 import com.labelhub.modules.agent.mapper.AgentRunMapper;
@@ -12,6 +13,8 @@ import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class AgentRunService {
+
+    private static final int AGENT_RUN_STATE_CONFLICT = 409901;
 
     private static final Set<AgentRunStatus> FAIL_STATUSES =
             Set.of(AgentRunStatus.FAILED, AgentRunStatus.RATE_LIMITED, AgentRunStatus.MANUAL_REQUIRED);
@@ -63,7 +66,9 @@ public class AgentRunService {
         }
         run.setStatus(AgentRunStatus.RUNNING);
         run.setStartedAt(LocalDateTime.now());
-        agentRunMapper.updateById(run);
+        int updated = agentRunMapper.startIfStatus(agentRunId, AgentRunStatus.PENDING,
+                AgentRunStatus.RUNNING, run.getStartedAt());
+        ensureUpdated(updated, agentRunId);
     }
 
     /**
@@ -114,7 +119,9 @@ public class AgentRunService {
         run.setOutputSnapshot(outputSnapshot);
         run.setFinishedAt(LocalDateTime.now());
         run.setLatencyMs(calculateLatencyMs(run));
-        agentRunMapper.updateById(run);
+        int updated = agentRunMapper.completeIfStatus(agentRunId, AgentRunStatus.RUNNING,
+                AgentRunStatus.SUCCESS, outputSnapshot, run.getFinishedAt(), run.getLatencyMs());
+        ensureUpdated(updated, agentRunId);
     }
 
     @Transactional
@@ -128,11 +135,14 @@ public class AgentRunService {
             throw new IllegalStateException(
                     "Cannot fail AgentRun " + agentRunId + ": expected PENDING or RUNNING, got " + run.getStatus());
         }
+        AgentRunStatus currentStatus = run.getStatus();
         run.setStatus(failStatus);
         run.setErrorMessage(errorMessage);
         run.setFinishedAt(LocalDateTime.now());
         run.setLatencyMs(calculateLatencyMs(run));
-        agentRunMapper.updateById(run);
+        int updated = agentRunMapper.failIfStatus(agentRunId, currentStatus, failStatus,
+                errorMessage, run.getFinishedAt(), run.getLatencyMs());
+        ensureUpdated(updated, agentRunId);
     }
 
     private Long calculateLatencyMs(AgentRun run) {
@@ -148,5 +158,12 @@ public class AgentRunService {
             throw new IllegalStateException("AgentRun not found: " + agentRunId);
         }
         return run;
+    }
+
+    private void ensureUpdated(int updated, Long agentRunId) {
+        if (updated != 1) {
+            throw new BusinessException(AGENT_RUN_STATE_CONFLICT,
+                    "AgentRun state changed concurrently: " + agentRunId);
+        }
     }
 }

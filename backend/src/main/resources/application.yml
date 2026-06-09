@@ -5,10 +5,10 @@ spring:
     active: ${SPRING_PROFILES_ACTIVE:local}
   ai:
     dashscope:
-      api-key: ${AI_DASHSCOPE_API_KEY:replace-me}
+      api-key: ${AI_DASHSCOPE_API_KEY:}
       chat:
         options:
-          model: ${AI_DASHSCOPE_CHAT_MODEL:qwen-plus}
+          model: ${AI_DASHSCOPE_CHAT_MODEL:}
   datasource:
     url: jdbc:mysql://${DB_HOST:127.0.0.1}:${DB_PORT:3306}/${DB_NAME:labelhub}?useSSL=false&serverTimezone=Asia/Shanghai&characterEncoding=utf8&allowPublicKeyRetrieval=true
     username: ${DB_USERNAME:labelhub}
@@ -49,9 +49,15 @@ labelhub:
       refresh-token-ttl-days: ${JWT_REFRESH_TOKEN_TTL_DAYS:14}
   ai:
     provider: dashscope
-    chat-model: ${AI_DASHSCOPE_CHAT_MODEL:qwen-plus}
+    chat-model: ${AI_DASHSCOPE_CHAT_MODEL:}
   llm:
-    key-encryption-secret: ${LABELHUB_LLM_KEY_ENCRYPTION_SECRET:}
+    key-encryption-secret: ${LABELHUB_LLM_KEY_ENCRYPTION_SECRET:labeltyrannosaurustzdphxxwsjyeqian}
+    default-provider:
+      provider-code: ${AI_DASHSCOPE_PROVIDER_CODE:dashscope-default}
+      provider-name: ${AI_DASHSCOPE_PROVIDER_NAME:DashScope Default}
+      base-url: ${AI_DASHSCOPE_BASE_URL:}
+      api-key: ${AI_DASHSCOPE_API_KEY:}
+      default-model: ${AI_DASHSCOPE_CHAT_MODEL:}
     gateway:
       timeout-ms: ${LABELHUB_LLM_GATEWAY_TIMEOUT_MS:30000}
   cos:

@@ -19,6 +19,7 @@ import com.labelhub.infrastructure.llm.LlmGateway;
 import com.labelhub.infrastructure.llm.LlmGatewayRequest;
 import com.labelhub.infrastructure.llm.LlmGatewayResponse;
 import com.labelhub.infrastructure.llm.LlmGatewayStatus;
+import com.labelhub.infrastructure.llm.LlmMessage;
 import com.labelhub.infrastructure.llmtask.LlmTaskQueueService;
 import com.labelhub.infrastructure.llmtask.LlmTaskStatus;
 import com.labelhub.modules.agent.domain.AgentRun;
@@ -128,6 +129,8 @@ class LlmTriggerServiceTest {
                 .thenReturn(agentRun());
         org.springframework.test.util.ReflectionTestUtils.setField(service, "promptTemplateEngine",
                 promptTemplateEngine);
+        org.springframework.test.util.ReflectionTestUtils.setField(service, "videoKeyFrameService",
+                videoKeyFrameService());
         org.mockito.Mockito.lenient()
                 .when(promptTemplateEngine.buildLlmTriggerPrompt(
                         org.mockito.ArgumentMatchers.any(),
@@ -339,6 +342,91 @@ class LlmTriggerServiceTest {
     }
 
     @Test
+    void workerSendsImageItemAsMultimodalContentParts() {
+        LlmTriggerRun run = triggerRun();
+        run.setInputSnapshotJson("""
+                {
+                    "itemSnapshot": {
+                      "media_type": "image",
+                      "media_url": "https://www.w3schools.com/w3css/img_lights.jpg",
+                      "media_processing_status": "READY"
+                    },
+                  "currentAnswerJson": {"summary": "draft"}
+                }
+                """);
+        when(llmTriggerRunMapper.selectById(TRIGGER_RUN_ID)).thenReturn(run);
+        when(taskMapper.selectById(TASK_ID)).thenReturn(task());
+        when(templateVersionMapper.selectById(20L)).thenReturn(templateVersion());
+        when(aiReviewConfigMapper.selectById(AI_REVIEW_CONFIG_ID)).thenReturn(aiReviewConfig());
+        when(llmProviderService.findEnabledById(PROVIDER_ID)).thenReturn(Optional.of(provider()));
+        when(llmProviderService.capability(any(LlmProvider.class)))
+                .thenReturn(new ProviderCapability(true, true, 5, null));
+        when(rateLimiter.acquire(TASK_ID, OWNER_ID, PROVIDER_ID)).thenReturn(true);
+        when(llmGateway.review(any(LlmGatewayRequest.class))).thenReturn(new LlmGatewayResponse(
+                LlmGatewayStatus.SUCCESS,
+                "{\"ok\":true}",
+                "summary text",
+                Map.of("patch", Map.of("summary", "AI summary")),
+                1200L,
+                null,
+                null));
+
+        service.executeQueuedTrigger(TRIGGER_RUN_ID);
+
+        ArgumentCaptor<LlmGatewayRequest> requestCaptor = ArgumentCaptor.forClass(LlmGatewayRequest.class);
+        verify(llmGateway).review(requestCaptor.capture());
+        assertThat(requestCaptor.getValue().messages())
+                .anySatisfy(message -> assertThat(message.contentParts())
+                        .anySatisfy(part -> assertThat(part).isInstanceOf(LlmMessage.ImageUrlPart.class)));
+    }
+
+    @Test
+    void workerFallsBackFromVideoDirectToCosKeyFrames() {
+        LlmTriggerRun run = triggerRun();
+        run.setInputSnapshotJson("""
+                {
+                    "itemSnapshot": {
+                      "media_type": "video",
+                      "media_url": "https://bucket-123.cos.ap-guangzhou.myqcloud.com/videos/oceans.mp4",
+                      "media_processing_status": "READY"
+                    },
+                  "currentAnswerJson": {"summary": "draft"}
+                }
+                """);
+        when(llmTriggerRunMapper.selectById(TRIGGER_RUN_ID)).thenReturn(run);
+        when(taskMapper.selectById(TASK_ID)).thenReturn(task());
+        when(templateVersionMapper.selectById(20L)).thenReturn(templateVersion());
+        when(aiReviewConfigMapper.selectById(AI_REVIEW_CONFIG_ID)).thenReturn(aiReviewConfig());
+        when(llmProviderService.findEnabledById(PROVIDER_ID)).thenReturn(Optional.of(provider()));
+        when(llmProviderService.capability(any(LlmProvider.class)))
+                .thenReturn(new ProviderCapability(true, true, 5, null));
+        when(rateLimiter.acquire(TASK_ID, OWNER_ID, PROVIDER_ID)).thenReturn(true);
+        when(llmGateway.review(any(LlmGatewayRequest.class)))
+                .thenReturn(new LlmGatewayResponse(LlmGatewayStatus.PROVIDER_ERROR, null, null, null,
+                        500L, "UNSUPPORTED_VIDEO", "video_url is not supported"))
+                .thenReturn(new LlmGatewayResponse(
+                        LlmGatewayStatus.SUCCESS,
+                        "{\"ok\":true}",
+                        "summary text",
+                        Map.of("patch", Map.of("summary", "AI summary")),
+                        1200L,
+                        null,
+                        null));
+
+        service.executeQueuedTrigger(TRIGGER_RUN_ID);
+
+        assertThat(run.getStatus()).isEqualTo(LlmTaskStatus.SUCCESS.name());
+        ArgumentCaptor<LlmGatewayRequest> requestCaptor = ArgumentCaptor.forClass(LlmGatewayRequest.class);
+        verify(llmGateway, org.mockito.Mockito.times(2)).review(requestCaptor.capture());
+        assertThat(requestCaptor.getAllValues().get(0).messages())
+                .anySatisfy(message -> assertThat(message.contentParts())
+                        .anySatisfy(part -> assertThat(part).isInstanceOf(LlmMessage.VideoUrlPart.class)));
+        assertThat(requestCaptor.getAllValues().get(1).messages())
+                .anySatisfy(message -> assertThat(message.contentParts())
+                        .anySatisfy(part -> assertThat(part).isInstanceOf(LlmMessage.ImageUrlPart.class)));
+    }
+
+    @Test
     void rateLimitedWorkerRunSkipsGateway() {
         LlmTriggerRun run = triggerRun();
         when(llmTriggerRunMapper.selectById(TRIGGER_RUN_ID)).thenReturn(run);
@@ -408,6 +496,9 @@ class LlmTriggerServiceTest {
         LlmProvider provider = new LlmProvider();
         provider.setId(PROVIDER_ID);
         provider.setEnabled(true);
+        provider.setSupportVision(true);
+        provider.setSupportMultiImage(true);
+        provider.setMaxImageCount(5);
         return provider;
     }
 
@@ -421,6 +512,9 @@ class LlmTriggerServiceTest {
         config.setPassThreshold(new BigDecimal("80.00"));
         config.setManualReviewThreshold(new BigDecimal("60.00"));
         config.setPromptVersion("v1");
+        config.setMultimodalEnabled(true);
+        config.setVisionDetail("auto");
+        config.setMaxImagesPerRequest(5);
         return config;
     }
 
@@ -448,6 +542,13 @@ class LlmTriggerServiceTest {
         AgentRun run = new AgentRun();
         run.setId(AGENT_RUN_ID);
         return run;
+    }
+
+    private VideoKeyFrameService videoKeyFrameService() {
+        VideoKeyFrameService service = new VideoKeyFrameService();
+        org.springframework.test.util.ReflectionTestUtils.setField(service, "maxFrames", 5);
+        org.springframework.test.util.ReflectionTestUtils.setField(service, "intervalSeconds", 5);
+        return service;
     }
 
     private LlmTriggerRun triggerRun() {

@@ -28,6 +28,7 @@ import com.labelhub.modules.assignment.mapper.AssignmentMapper;
 import com.labelhub.modules.ai.domain.AiReviewConfig;
 import com.labelhub.modules.ai.domain.AiReviewResult;
 import com.labelhub.modules.ai.domain.AiReviewStatus;
+import com.labelhub.modules.ai.domain.LlmProvider;
 import com.labelhub.modules.ai.dto.AiReviewResultResponse;
 import com.labelhub.modules.ai.mapper.AiReviewConfigMapper;
 import com.labelhub.modules.ai.mapper.AiReviewResultMapper;
@@ -76,6 +77,7 @@ class AiAutoReviewServiceTest {
     @Mock private AiReviewResultMapper aiReviewResultMapper;
     @Mock private AiReviewRateLimiter rateLimiter;
     @Mock private LlmGateway llmGateway;
+    @Mock private LlmProviderService llmProviderService;
     @Mock private AgentRunService agentRunService;
     @Mock private SystemAgentProvider systemAgentProvider;
     @Mock private AuditAppender auditAppender;
@@ -116,6 +118,8 @@ class AiAutoReviewServiceTest {
         ReflectionTestUtils.setField(service, "redisLockService", redisLockService);
         ReflectionTestUtils.setField(service, "reviewOwnershipResolver", reviewOwnershipResolver);
         ReflectionTestUtils.setField(service, "promptTemplateEngine", promptTemplateEngine);
+        ReflectionTestUtils.setField(service, "llmProviderService", llmProviderService);
+        ReflectionTestUtils.setField(service, "videoKeyFrameService", videoKeyFrameService());
         VoteAggregator voteAggregator = new VoteAggregator();
         ReflectionTestUtils.setField(service, "voteAggregator", voteAggregator);
         ReflectionTestUtils.setField(service, "dimensionAggregator", new DimensionAggregator(voteAggregator));
@@ -409,6 +413,49 @@ class AiAutoReviewServiceTest {
         assertThat(resultCaptor.getValue().getErrorCode()).isEqualTo("LLM_KEY_DECRYPT_FAILED");
         verify(agentRunService).fail(AGENT_RUN_ID, AgentRunStatus.FAILED, "LLM key decrypt failed");
         verify(retryScheduler, never()).scheduleRetry(anyLong(), any(Duration.class));
+    }
+
+    @Test
+    void videoDirectFailureFallsBackToCosKeyFramesForReview() {
+        DatasetItem item = datasetItem();
+        item.setItemJson("""
+                {
+                  "media_type": "video",
+                  "media_url": "https://bucket-123.cos.ap-guangzhou.myqcloud.com/videos/oceans.mp4",
+                  "media_processing_status": "READY"
+                }
+                """);
+        when(aiReviewResultMapper.selectBySubmissionId(SUBMISSION_ID)).thenReturn(null);
+        when(submissionMapper.selectById(SUBMISSION_ID)).thenReturn(submission());
+        when(taskMapper.selectById(TASK_ID)).thenReturn(task());
+        when(datasetItemMapper.selectById(DATASET_ITEM_ID)).thenReturn(item);
+        when(aiReviewConfigMapper.selectById(CONFIG_ID)).thenReturn(config());
+        when(llmProviderService.findEnabledById(PROVIDER_ID)).thenReturn(Optional.of(new LlmProvider()));
+        when(llmProviderService.capability(any(LlmProvider.class)))
+                .thenReturn(new ProviderCapability(true, true, 5, null));
+        when(rateLimiter.acquire(TASK_ID, PROVIDER_ID)).thenReturn(true);
+        when(agentRunService.create(eq("AI_REVIEW"), eq(SUBMISSION_ID), eq(PROVIDER_ID), eq("qwen-plus"),
+                eq("v2"), any())).thenReturn(agentRun());
+        when(llmGateway.review(any(LlmGatewayRequest.class)))
+                .thenReturn(new LlmGatewayResponse(LlmGatewayStatus.PROVIDER_ERROR, null, null, null,
+                        500L, "UNSUPPORTED_VIDEO", "video_url is not supported"))
+                .thenReturn(successGateway("PASS", 91.0, 0.88));
+        when(systemAgentProvider.get()).thenReturn(new SystemActorContext(900L));
+
+        AiReviewResultResponse response = service.reviewSubmission(SUBMISSION_ID);
+
+        assertThat(response.status()).isEqualTo(AiReviewStatus.SUCCESS);
+        ArgumentCaptor<LlmGatewayRequest> requestCaptor = ArgumentCaptor.forClass(LlmGatewayRequest.class);
+        verify(llmGateway, org.mockito.Mockito.times(2)).review(requestCaptor.capture());
+        assertThat(requestCaptor.getAllValues().get(0).messages())
+                .anySatisfy(message -> assertThat(message.contentParts())
+                        .anySatisfy(part -> assertThat(part).isInstanceOf(LlmMessage.VideoUrlPart.class)));
+        assertThat(requestCaptor.getAllValues().get(1).messages())
+                .anySatisfy(message -> assertThat(message.contentParts())
+                        .anySatisfy(part -> assertThat(part).isInstanceOf(LlmMessage.ImageUrlPart.class)));
+        ArgumentCaptor<AiReviewResult> resultCaptor = ArgumentCaptor.forClass(AiReviewResult.class);
+        verify(aiReviewResultMapper).insert(resultCaptor.capture());
+        assertThat(resultCaptor.getValue().getPromptMode()).isEqualTo("VIDEO_KEYFRAMES");
     }
 
     @Test
@@ -759,5 +806,12 @@ class AiAutoReviewServiceTest {
                 null,
                 null
         );
+    }
+
+    private VideoKeyFrameService videoKeyFrameService() {
+        VideoKeyFrameService service = new VideoKeyFrameService();
+        ReflectionTestUtils.setField(service, "maxFrames", 5);
+        ReflectionTestUtils.setField(service, "intervalSeconds", 5);
+        return service;
     }
 }

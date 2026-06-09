@@ -111,7 +111,7 @@ public class OpenAiCompatibleAdapter {
         URI requestUri = resolveAndValidateUri(config.baseUrl(), originalUri);
         HttpRequest.Builder builder = HttpRequest.newBuilder()
                 .uri(requestUri)
-                .timeout(containsImagePart(messages) ? visionTimeout : timeout)
+                .timeout(containsMediaPart(messages) ? visionTimeout : timeout)
                 .header("Content-Type", "application/json");
         if (config.customHeaders() != null) {
             config.customHeaders().forEach((key, value) -> {
@@ -216,17 +216,23 @@ public class OpenAiCompatibleAdapter {
             map.put("image_url", imageUrl);
             return map;
         }
+        if (part instanceof LlmMessage.VideoUrlPart videoUrlPart) {
+            map.put("type", "video_url");
+            map.put("video_url", Map.of("url", videoUrlPart.url()));
+            return map;
+        }
         throw new IllegalArgumentException("Unsupported content part: " + part);
     }
 
-    private boolean containsImagePart(List<LlmMessage> messages) {
+    private boolean containsMediaPart(List<LlmMessage> messages) {
         if (messages == null) {
             return false;
         }
         return messages.stream()
                 .filter(message -> message.contentParts() != null)
                 .flatMap(message -> message.contentParts().stream())
-                .anyMatch(LlmMessage.ImageUrlPart.class::isInstance);
+                .anyMatch(part -> part instanceof LlmMessage.ImageUrlPart
+                        || part instanceof LlmMessage.VideoUrlPart);
     }
 
     private OpenAiCompatibleResponse failed(Instant startedAt, String message, String apiKey, boolean timedOut) {

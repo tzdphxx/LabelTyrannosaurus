@@ -101,6 +101,8 @@ public class AiAutoReviewService {
     @Autowired(required = false)
     private MediaPromptContextBuilder mediaPromptContextBuilder;
     @Autowired(required = false)
+    private VideoKeyFrameService videoKeyFrameService;
+    @Autowired(required = false)
     private LlmProviderService llmProviderService;
     @Autowired(required = false)
     private MediaContextResolver mediaContextResolver;
@@ -316,12 +318,72 @@ public class AiAutoReviewService {
         }
         String systemPrompt = buildReviewSystemPrompt(config, task, List.of());
         ReviewStrategy strategy = resolveReviewStrategy(config);
+        AttemptOutcome outcome = executeAttemptOnce(strategy, submission, config, agentRun, prompt, systemPrompt);
+        if (!shouldFallbackVideoDirect(prompt, outcome)) {
+            return outcome;
+        }
+
+        List<Map<String, Object>> attempts = new ArrayList<>();
+        attempts.add(fallbackAttempt(prompt, outcome));
+
+        MediaPromptResult keyFramePrompt = buildFallbackPrompt(submission, datasetItemMapper.selectById(
+                submission.getDatasetItemId()), config, false);
+        if (keyFramePrompt != null && keyFramePrompt.promptMode() == PromptMode.VIDEO_KEYFRAMES) {
+            outcome = executeAttemptOnce(strategy, submission, config, agentRun, keyFramePrompt, systemPrompt);
+            attempts.add(fallbackAttempt(keyFramePrompt, outcome));
+            if (outcome.success()) {
+                return withFallbackAttempts(outcome, attempts);
+            }
+        }
+
+        MediaPromptResult textPrompt = buildFallbackPrompt(submission, datasetItemMapper.selectById(
+                submission.getDatasetItemId()), config, true);
+        if (textPrompt != null && textPrompt.promptMode() == PromptMode.TEXT_ONLY) {
+            outcome = executeAttemptOnce(strategy, submission, config, agentRun, textPrompt, systemPrompt);
+            attempts.add(fallbackAttempt(textPrompt, outcome));
+        }
+        return withFallbackAttempts(outcome, attempts);
+    }
+
+    private AttemptOutcome executeAttemptOnce(ReviewStrategy strategy, Submission submission, AiReviewConfig config,
+                                              AgentRun agentRun, MediaPromptResult prompt, String systemPrompt) {
         return switch (strategy) {
-            case LIGHTWEIGHT -> executeDirect(submission, config, agentRun, prompt, systemPrompt);
+            case LIGHTWEIGHT -> executeDirect(submission, config, agentRun, prompt, systemPrompt,
+                    prompt.promptMode() != PromptMode.VIDEO_DIRECT);
             case PARALLEL_VOTE -> executeParallelVote(submission, config, agentRun, prompt, systemPrompt);
             case DEEP_DIMENSION -> executeDeepDimension(submission, config, agentRun, prompt, systemPrompt);
             case AGENT_DEBATE -> executeAgentDebate(submission, config, agentRun, prompt);
         };
+    }
+
+    private boolean shouldFallbackVideoDirect(MediaPromptResult prompt, AttemptOutcome outcome) {
+        return prompt != null
+                && prompt.promptMode() == PromptMode.VIDEO_DIRECT
+                && outcome != null
+                && !outcome.success()
+                && !"RATE_LIMITED".equals(outcome.errorCode());
+    }
+
+    private AttemptOutcome withFallbackAttempts(AttemptOutcome outcome, List<Map<String, Object>> attempts) {
+        if (outcome == null || attempts.isEmpty()) {
+            return outcome;
+        }
+        if (!outcome.success()) {
+            return outcome;
+        }
+        Map<String, Object> snapshot = outcome.responseSnapshot() == null
+                ? new LinkedHashMap<>() : new LinkedHashMap<>(outcome.responseSnapshot());
+        snapshot.put("fallbackAttempts", attempts);
+        return AttemptOutcome.success(outcome.result(), snapshot);
+    }
+
+    private Map<String, Object> fallbackAttempt(MediaPromptResult prompt, AttemptOutcome outcome) {
+        Map<String, Object> attempt = new LinkedHashMap<>();
+        attempt.put("promptMode", prompt == null ? null : prompt.promptMode().name());
+        attempt.put("success", outcome != null && outcome.success());
+        attempt.put("errorCode", outcome == null ? null : outcome.errorCode());
+        attempt.put("errorMessage", outcome == null ? null : outcome.errorMessage());
+        return attempt;
     }
 
     private ReviewStrategy resolveReviewStrategy(AiReviewConfig config) {
@@ -715,6 +777,12 @@ public class AiAutoReviewService {
 
     private AttemptOutcome executeDirect(Submission submission, AiReviewConfig config,
                                          AgentRun agentRun, MediaPromptResult prompt, String systemPrompt) {
+        return executeDirect(submission, config, agentRun, prompt, systemPrompt, true);
+    }
+
+    private AttemptOutcome executeDirect(Submission submission, AiReviewConfig config,
+                                         AgentRun agentRun, MediaPromptResult prompt, String systemPrompt,
+                                         boolean failAgentRunOnGatewayFailure) {
         if (!rateLimiter.acquire(submission.getTaskId(), config.getProviderId())) {
             agentRunService.fail(agentRun.getId(), AgentRunStatus.RATE_LIMITED, "AI review rate limited");
             return AttemptOutcome.failure("RATE_LIMITED", "AI 审核触发过于频繁，请稍后重试", null);
@@ -726,7 +794,9 @@ public class AiAutoReviewService {
         LlmGatewayResponse response = callLlm(submission.getTaskId(), config.getProviderId(),
                 config.getModelName(), messages);
         if (response.status() != LlmGatewayStatus.SUCCESS) {
-            agentRunService.fail(agentRun.getId(), AgentRunStatus.FAILED, response.errorMessage());
+            if (failAgentRunOnGatewayFailure) {
+                agentRunService.fail(agentRun.getId(), AgentRunStatus.FAILED, response.errorMessage());
+            }
             return AttemptOutcome.failure(response.errorCode(), response.errorMessage(), response.rawResponse());
         }
 
@@ -1032,6 +1102,45 @@ public class AiAutoReviewService {
     }
 
     private MediaPromptResult buildPrompt(Submission submission, DatasetItem datasetItem, AiReviewConfig config) {
+        String itemJson = datasetItem == null ? null : datasetItem.getItemJson();
+        if (mediaContextResolver != null && datasetItem != null) {
+            itemJson = mediaContextResolver.resolveItemJson(datasetItem.getId(), itemJson);
+        }
+        return buildPromptFromItemJson(submission, datasetItem, config, itemJson);
+    }
+
+    private MediaPromptResult buildFallbackPrompt(Submission submission, DatasetItem datasetItem,
+                                                  AiReviewConfig config, boolean textOnly) {
+        String itemJson = datasetItem == null ? null : datasetItem.getItemJson();
+        if (mediaContextResolver != null && datasetItem != null) {
+            itemJson = mediaContextResolver.resolveItemJson(datasetItem.getId(), itemJson);
+        }
+        Map<String, Object> item = new LinkedHashMap<>(parseObjectMapOrEmpty(itemJson));
+        if (!"video".equalsIgnoreCase(String.valueOf(item.getOrDefault("media_type", "")))) {
+            return null;
+        }
+        String mediaUrl = String.valueOf(item.getOrDefault("media_url", ""));
+        if (textOnly) {
+            item.remove("media_url");
+            item.remove("key_frame_urls");
+            addMediaLimitation(item, "VIDEO_MEDIA_FALLBACK_TEXT_ONLY");
+        } else {
+            List<String> keyFrameUrls = stringListValue(item.get("key_frame_urls"));
+            if (keyFrameUrls.isEmpty() && videoKeyFrameService != null) {
+                keyFrameUrls = videoKeyFrameService.generateKeyFrameUrls(mediaUrl, intValue(item.get("video_duration_seconds")));
+            }
+            if (keyFrameUrls.isEmpty()) {
+                return null;
+            }
+            item.put("key_frame_urls", keyFrameUrls);
+            item.remove("media_url");
+            addMediaLimitation(item, "VIDEO_DIRECT_FALLBACK_TO_KEYFRAMES");
+        }
+        return buildPromptFromItemJson(submission, datasetItem, config, toJson(item));
+    }
+
+    private MediaPromptResult buildPromptFromItemJson(Submission submission, DatasetItem datasetItem,
+                                                      AiReviewConfig config, String itemJson) {
         ProviderCapability capability = ProviderCapability.textOnly();
         if (llmProviderService != null) {
             capability = llmProviderService.findEnabledById(config.getProviderId())
@@ -1040,10 +1149,6 @@ public class AiAutoReviewService {
         }
         MediaPromptContextBuilder builder = mediaPromptContextBuilder != null
                 ? mediaPromptContextBuilder : new DefaultMediaPromptContextBuilder();
-        String itemJson = datasetItem == null ? null : datasetItem.getItemJson();
-        if (mediaContextResolver != null && datasetItem != null) {
-            itemJson = mediaContextResolver.resolveItemJson(datasetItem.getId(), itemJson);
-        }
         return builder.build(new MediaPromptInput(
                 itemJson,
                 submission.getAnswerJson(),
@@ -1053,6 +1158,42 @@ public class AiAutoReviewService {
                 config.getVisionDetail() != null ? config.getVisionDetail() : "auto",
                 config.getMaxImagesPerRequest() != null ? config.getMaxImagesPerRequest() : 5
         ));
+    }
+
+    @SuppressWarnings("unchecked")
+    private void addMediaLimitation(Map<String, Object> item, String limitation) {
+        List<String> limitations = new ArrayList<>(stringListValue(item.get("media_context_limitations")));
+        if (!limitations.contains(limitation)) {
+            limitations.add(limitation);
+        }
+        item.put("media_context_limitations", limitations);
+    }
+
+    private List<String> stringListValue(Object value) {
+        if (!(value instanceof Iterable<?> iterable)) {
+            return List.of();
+        }
+        List<String> values = new ArrayList<>();
+        for (Object item : iterable) {
+            if (item != null && !String.valueOf(item).isBlank()) {
+                values.add(String.valueOf(item));
+            }
+        }
+        return values;
+    }
+
+    private Integer intValue(Object value) {
+        if (value instanceof Number number) {
+            return number.intValue();
+        }
+        if (value == null || String.valueOf(value).isBlank()) {
+            return null;
+        }
+        try {
+            return Integer.valueOf(String.valueOf(value));
+        } catch (NumberFormatException ex) {
+            return null;
+        }
     }
 
     private void moveSubmissionToPendingFinal(Submission submission) {

@@ -81,7 +81,7 @@ class MediaProcessingServiceTest {
     }
 
     @Test
-    void refreshContextMarksVideoPartialWhenKeyFramesAndTranscriptAreMissing() {
+    void refreshContextMarksUploadedVideoReadyForDirectVideoModelInput() {
         when(objectFileMapper.selectById(99L)).thenReturn(objectFile(99L, "video/mp4", 123L, "sha"));
         when(mediaAssetMapper.insert(any(MediaAssetEntity.class))).thenAnswer(invocation -> {
             MediaAssetEntity asset = invocation.getArgument(0);
@@ -93,8 +93,8 @@ class MediaProcessingServiceTest {
 
         ArgumentCaptor<DatasetItemMediaContextEntity> contextCaptor = ArgumentCaptor.forClass(DatasetItemMediaContextEntity.class);
         verify(contextMapper).insert(contextCaptor.capture());
-        assertThat(contextCaptor.getValue().getProcessingStatus()).isEqualTo("PARTIAL");
-        assertThat(contextCaptor.getValue().getLimitationsJson()).contains("KEY_FRAME_MISSING", "TRANSCRIPT_MISSING");
+        assertThat(contextCaptor.getValue().getProcessingStatus()).isEqualTo("READY");
+        assertThat(contextCaptor.getValue().getLimitationsJson()).isEqualTo("[]");
     }
 
     @Test

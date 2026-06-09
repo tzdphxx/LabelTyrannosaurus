@@ -712,7 +712,7 @@ class AiAutoReviewServiceTest {
         verify(agentRunService).complete(eq(AGENT_RUN_ID), any());
         verify(aiReviewResultMapper).updateForSuccess(eq(SUBMISSION_ID), eq("SUCCESS"),
                 eq(AGENT_RUN_ID), eq("PASS"), any(), any(), any(), any(), any(),
-                any(), any(), any(), any(), any(), any());
+                any(), any(), any(), eq("TEXT_ONLY"), eq(false), eq("[]"));
         verify(auditAppender).append(any(AuditCommand.class));
     }
 

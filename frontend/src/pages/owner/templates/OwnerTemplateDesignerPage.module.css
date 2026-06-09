@@ -87,7 +87,50 @@
 }
 
 .inspectorPanel :global(.ant-card-body) {
-  overflow: auto;
+  display: flex;
+  min-height: 0;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.inspectorPanel :global(.ant-tabs) {
+  display: flex;
+  min-height: 0;
+  height: 100%;
+  flex: 1;
+  flex-direction: column;
+}
+
+.inspectorPanel :global(.ant-tabs-content-holder) {
+  min-height: 0;
+  flex: 1;
+  overflow: hidden;
+}
+
+.inspectorPanel :global(.ant-tabs-content) {
+  height: 100%;
+  min-height: 0;
+}
+
+.inspectorPanel :global(.ant-tabs-tabpane) {
+  min-height: 0;
+}
+
+.inspectorPanel :global(.ant-tabs-tabpane-active) {
+  display: flex;
+  height: 100%;
+  min-height: 0;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.inspectorPanel :global(.designer-property),
+.inspectorPanel :global(.designer-schema-panel) {
+  min-height: 0;
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding-right: 4px;
 }
 
 :global(.designer-material-group) {
@@ -287,7 +330,12 @@
 }
 
 .preview {
+  height: 100%;
+  min-height: 0;
   width: 100%;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding-right: 4px;
 }
 
 .previewResult {
@@ -347,6 +395,17 @@
   .materialsPanel :global(.ant-card-body),
   .inspectorPanel :global(.ant-card-body),
   .panel :global(.ant-card-body) {
+    overflow: visible;
+  }
+
+  .inspectorPanel :global(.ant-tabs),
+  .inspectorPanel :global(.ant-tabs-content-holder),
+  .inspectorPanel :global(.ant-tabs-content),
+  .inspectorPanel :global(.ant-tabs-tabpane-active),
+  .preview,
+  .inspectorPanel :global(.designer-property),
+  .inspectorPanel :global(.designer-schema-panel) {
+    height: auto;
     overflow: visible;
   }
 

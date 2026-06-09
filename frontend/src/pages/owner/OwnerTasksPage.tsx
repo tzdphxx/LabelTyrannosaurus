@@ -13,12 +13,13 @@ import {
   message,
 } from 'antd'
 import { PlusOutlined, ReloadOutlined } from '@ant-design/icons'
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router'
 import { ContentShell } from '../../components/page/ContentShell'
 import { PageHeader } from '../../components/page/PageHeader'
+import { ownerTaskService } from '../../services'
 import { useOwnerTaskStore } from '../../stores/ownerTaskStore'
-import type { OwnerTask, OwnerTaskStatus } from '../../types/task'
+import type { OwnerTask, OwnerTaskStatus, TaskExportFormat } from '../../types/task'
 import {
   formatCount,
   getProgressPercent,
@@ -35,6 +36,13 @@ const statusOptions = [
   { label: '已结束', value: 'ended' },
 ]
 
+const exportFormatOptions: Array<{ label: string; value: TaskExportFormat }> = [
+  { label: 'JSONL', value: 'JSONL' },
+  { label: 'JSON', value: 'JSON' },
+  { label: 'CSV', value: 'CSV' },
+  { label: 'XLSX', value: 'XLSX' },
+]
+
 const statusPillClasses: Record<OwnerTaskStatus, string> = {
   draft: styles.statusPillDraft,
   published: styles.statusPillPublished,
@@ -49,13 +57,18 @@ function formatReward(task: OwnerTask) {
     return '-'
   }
 
-  return `${reward.unitPrice} ${reward.rewardCurrency}`
+  // return `${reward.unitPrice} ${reward.rewardCurrency}`
+  return `${reward.unitPrice}`
+
 }
 
 export function OwnerTasksPage() {
   const navigate = useNavigate()
   const [messageApi, contextHolder] = message.useMessage()
   const [modalApi, modalContextHolder] = Modal.useModal()
+  const [exportFormat, setExportFormat] = useState<TaskExportFormat>('JSONL')
+  const [exportTarget, setExportTarget] = useState<OwnerTask | null>(null)
+  const [exportingTaskId, setExportingTaskId] = useState<string | null>(null)
   const tasks = useOwnerTaskStore((state) => state.tasks)
   const filters = useOwnerTaskStore((state) => state.filters)
   const total = useOwnerTaskStore((state) => state.total)
@@ -76,6 +89,59 @@ export function OwnerTasksPage() {
   const reloadWithFilter = (changes: Parameters<typeof setFilters>[0]) => {
     setFilters(changes)
     void loadTasks()
+  }
+
+  const openExportTask = (task: OwnerTask) => {
+    setExportFormat('JSONL')
+    setExportTarget(task)
+  }
+
+  const closeExportTask = () => {
+    if (exportingTaskId) {
+      return
+    }
+
+    setExportTarget(null)
+  }
+
+  const confirmExportTask = async () => {
+    if (!exportTarget) {
+      return
+    }
+
+    setExportingTaskId(exportTarget.id)
+
+    try {
+      const progress = await ownerTaskService.getTaskProgress(exportTarget.id)
+
+      if (!progress || progress.completedItems <= 0) {
+        messageApi.warning('该任务暂无提交，不能导出')
+        return
+      }
+
+      const result = await ownerTaskService.exportTaskDirect(exportTarget.id, exportFormat)
+
+      if (!result.downloadUrl) {
+        messageApi.error('导出文件下载链接为空')
+        return
+      }
+
+      const link = document.createElement('a')
+      link.href = result.downloadUrl
+      link.target = '_blank'
+      link.rel = 'noopener noreferrer'
+      link.download = result.filename
+      document.body.appendChild(link)
+      link.click()
+      link.remove()
+
+      messageApi.success(`导出文件已生成，共 ${formatCount(result.exportedCount)} 条`)
+      setExportTarget(null)
+    } catch {
+      messageApi.error('任务导出失败')
+    } finally {
+      setExportingTaskId(null)
+    }
   }
 
   const confirmDeleteTask = (task: OwnerTask) => {
@@ -156,6 +222,31 @@ export function OwnerTasksPage() {
 
       {error ? <Alert message={error} showIcon type="error" /> : null}
 
+      <Modal
+        destroyOnHidden
+        confirmLoading={Boolean(exportingTaskId)}
+        okText="开始导出"
+        open={Boolean(exportTarget)}
+        title="导出任务数据"
+        onCancel={closeExportTask}
+        onOk={() => void confirmExportTask()}
+      >
+        <Space direction="vertical" size={12} style={{ width: '100%' }}>
+          <Typography.Text type="secondary">
+            {exportTarget ? `任务：${exportTarget.title}` : '请选择需要导出的任务'}
+          </Typography.Text>
+          <Select
+            options={exportFormatOptions}
+            style={{ width: '100%' }}
+            value={exportFormat}
+            onChange={(value) => setExportFormat(value as TaskExportFormat)}
+          />
+          <Typography.Text type="secondary">
+            导出前会检查该任务是否已有提交；后端仅导出审核通过的提交。
+          </Typography.Text>
+        </Space>
+      </Modal>
+
       <Card className={styles.tableCard}>
         <div className={styles.toolbar}>
           <Input.Search
@@ -202,11 +293,7 @@ export function OwnerTasksPage() {
                 </Tag>
               ),
             },
-            {
-              title: '模板',
-              dataIndex: 'templateName',
-              width: 180,
-            },
+
             {
               title: '奖励',
               width: 120,
@@ -250,11 +337,20 @@ export function OwnerTasksPage() {
             },
             {
               title: '操作',
-              width: 260,
+              width: 300,
               render: (_, task) => (
                 <Space wrap>
                   <Button size="small" type="link" onClick={() => navigate(`/app/owner/tasks/${task.id}/edit`)}>
                     编辑
+                  </Button>
+                  <Button
+                    disabled={task.status === 'draft'}
+                    loading={exportingTaskId === task.id}
+                    size="small"
+                    type="link"
+                    onClick={() => openExportTask(task)}
+                  >
+                    导出
                   </Button>
                   {task.status === 'draft' ? (
                     <Button loading={isStatusSubmitting} size="small" type="link" onClick={() => confirmPublishTask(task)}>

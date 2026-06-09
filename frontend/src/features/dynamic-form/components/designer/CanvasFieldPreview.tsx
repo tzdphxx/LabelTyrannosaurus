@@ -1,4 +1,4 @@
-import { Alert, Card, Checkbox, Input, Radio, Select, Tabs, Typography, Upload } from 'antd'
+import { Alert, Card, Checkbox, Input, Radio, Select, Space, Tabs, Typography, Upload } from 'antd'
 import type { ReactNode } from 'react'
 import type { DynamicFieldOption, DynamicSchemaNode } from '../../../../types/dynamicForm'
 
@@ -39,7 +39,15 @@ export function CanvasFieldPreview({ children, node }: CanvasFieldPreviewProps) 
     case 'radio':
       return (
         <FieldFrame title={node.title}>
-          <Radio.Group disabled options={options} />
+          <Radio.Group disabled>
+            <Space direction="vertical" size={6}>
+              {options.map((option, index) => (
+                <Radio key={`${option.value}-${index}`} value={option.value}>
+                  {option.label}
+                </Radio>
+              ))}
+            </Space>
+          </Radio.Group>
         </FieldFrame>
       )
     case 'checkbox':

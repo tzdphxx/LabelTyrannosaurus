@@ -166,6 +166,13 @@ export interface OwnerDashboardData {
   recentTasks: OwnerTask[]
 }
 
+export interface OwnerTaskResponseRewardRule {
+  rewardMode?: RewardMode
+  unitReward?: number
+  rewardCurrency?: RewardCurrency
+  rewardVisible?: boolean
+}
+
 export interface OwnerTaskSummaryResponse {
   taskId: number
   title: string
@@ -176,6 +183,8 @@ export interface OwnerTaskSummaryResponse {
   tags?: string[]
   tag?: string[]
   description?: string
+  deadlineAt: string
+  rewardRule?: OwnerTaskResponseRewardRule | null
 }
 
 export interface OwnerTaskPageResponse {
@@ -264,6 +273,22 @@ export interface CreateTaskRequest {
 }
 
 export type UpdateTaskRequest = Omit<CreateTaskRequest, 'datasetFileId'>
+
+export type TaskExportFormat = 'JSON' | 'JSONL' | 'CSV' | 'XLSX'
+
+export interface TaskDirectExportRequest {
+  format: TaskExportFormat
+}
+
+export interface TaskDirectExportResponse {
+  fileId: number
+  filename: string
+  contentType: string
+  fileSize: number
+  checksum: string
+  downloadUrl: string
+  exportedCount: number
+}
 
 export interface CreateTaskResponse {
   taskId: number

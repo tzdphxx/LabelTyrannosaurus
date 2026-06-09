@@ -59,13 +59,13 @@ export const roleNavigation: Record<Role, NavItem[]> = {
       role: 'OWNER',
       icon: <FormOutlined />,
     },
-    {
-      key: 'owner-audit',
-      label: '导出与审计',
-      path: '/app/owner/audit',
-      role: 'OWNER',
-      icon: <AuditOutlined />,
-    },
+    // {
+    //   key: 'owner-audit',
+    //   label: '导出与审计',
+    //   path: '/app/owner/audit',
+    //   role: 'OWNER',
+    //   icon: <AuditOutlined />,
+    // },
   ],
   LABELER: [
     {

@@ -12,6 +12,9 @@ import type {
   DatasetItemResponse,
   DistributionStrategy,
   DistributionStrategyCode,
+  TaskDirectExportRequest,
+  TaskDirectExportResponse,
+  TaskExportFormat,
   OwnerTask,
   OwnerTaskApiStatus,
   OwnerTaskDetail,
@@ -276,6 +279,47 @@ function getEmptyProgress(totalItems = 0, claimedCount = 0): TaskProgress {
   }
 }
 
+function getExportContentType(format: TaskExportFormat) {
+  if (format === 'JSON') {
+    return 'application/json'
+  }
+
+  if (format === 'CSV') {
+    return 'text/csv'
+  }
+
+  if (format === 'XLSX') {
+    return 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+  }
+
+  return 'application/x-ndjson'
+}
+
+function buildMockExportResponse(taskId: string, format: TaskExportFormat, exportedCount: number): TaskDirectExportResponse {
+  const extension = format.toLowerCase()
+  const filename = `task-${taskId}-approved-submissions.${extension}`
+  const content = JSON.stringify(
+    {
+      taskId,
+      format,
+      exportedCount,
+      generatedAt: new Date().toISOString(),
+    },
+    null,
+    2,
+  )
+
+  return {
+    fileId: Date.now(),
+    filename,
+    contentType: getExportContentType(format),
+    fileSize: content.length,
+    checksum: '',
+    downloadUrl: `data:${getExportContentType(format)};charset=utf-8,${encodeURIComponent(content)}`,
+    exportedCount,
+  }
+}
+
 function mapSummaryResponse(response: OwnerTaskSummaryResponse): OwnerTask {
   return {
     id: String(response.taskId),
@@ -283,11 +327,11 @@ function mapSummaryResponse(response: OwnerTaskSummaryResponse): OwnerTask {
     description: response.description ?? '',
     instruction: '',
     tags: response.tags ?? response.tag ?? [],
-    deadline: '',
+    deadline: response.deadlineAt,
     quota: response.quota,
     claimedCount: response.claimedCount,
     rewardRule: {
-      unitPrice: 0,
+      unitPrice: response.rewardRule?.unitReward ?? 0,
       currency: 'CNY',
       rewardMode: 'APPROVED_ITEM',
       rewardCurrency: 'POINT',
@@ -769,5 +813,14 @@ export const ownerTaskService = {
     const task = tasks.find((item) => item.id === taskId)
 
     return task ? cloneProgress(task.progress) : null
+  },
+
+  async exportTaskDirect(taskId: string, format: TaskExportFormat): Promise<TaskDirectExportResponse> {
+    if (isRealServiceMode()) {
+      return request.post<TaskDirectExportResponse, TaskDirectExportRequest>(`/v1/tasks/${taskId}/exports/direct`, { format })
+    }
+
+    const task = tasks.find((item) => item.id === taskId)
+    return buildMockExportResponse(taskId, format, task?.progress.approvedItems ?? 0)
   },
 }

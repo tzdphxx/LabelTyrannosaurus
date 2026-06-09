@@ -1,7 +1,7 @@
-import { Input } from 'antd'
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { Alert, Input } from 'antd'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { DynamicFieldOption } from '../../../../types/dynamicForm'
-import { optionsToText, textToOptions } from '../../utils/designerFields'
+import { getDuplicateOptionValues, optionsToText, textToOptions } from '../../utils/designerFields'
 
 const COMMIT_DELAY_MS = 300
 
@@ -18,6 +18,7 @@ export function ChoiceOptionsEditor({ nodeId, options, onCommit }: ChoiceOptions
   const commitTimerRef = useRef<number | null>(null)
   const lastCommittedTextRef = useRef(optionsText)
   const lastCommittedOptionsTextRef = useRef<string | null>(null)
+  const duplicateValues = useMemo(() => getDuplicateOptionValues(draftText), [draftText])
 
   const clearCommitTimer = useCallback(() => {
     if (commitTimerRef.current !== null) {
@@ -71,18 +72,27 @@ export function ChoiceOptionsEditor({ nodeId, options, onCommit }: ChoiceOptions
   useEffect(() => clearCommitTimer, [clearCommitTimer])
 
   return (
-    <Input.TextArea
-      autoSize={{ minRows: 4, maxRows: 8 }}
-      value={draftText}
-      onBlur={() => {
-        setDraftText(optionsToText(textToOptions(draftText)))
-        commitText(draftText)
-      }}
-      onChange={(event) => {
-        const nextText = event.target.value
-        setDraftText(nextText)
-        scheduleCommit(nextText)
-      }}
-    />
+    <>
+      <Input.TextArea
+        autoSize={{ minRows: 4, maxRows: 8 }}
+        value={draftText}
+        onBlur={() => {
+          setDraftText(optionsToText(textToOptions(draftText)))
+          commitText(draftText)
+        }}
+        onChange={(event) => {
+          const nextText = event.target.value
+          setDraftText(nextText)
+          scheduleCommit(nextText)
+        }}
+      />
+      {duplicateValues.length ? (
+        <Alert
+          message={`选项值重复：${duplicateValues.join(', ')}。保存时会自动改为唯一值，避免单选联动选中。`}
+          showIcon
+          type="warning"
+        />
+      ) : null}
+    </>
   )
 }

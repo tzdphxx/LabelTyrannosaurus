@@ -771,7 +771,7 @@ export function OwnerTaskEditorPage() {
                 loading={isLoadingModels}
                 options={modelSelectOptions}
                 placeholder="选择大模型"
-                value={draft.aiReview.aiProviderId ?? undefined}
+                value={draft.aiReview.aiModelName ?? undefined}
                 onChange={(aiProviderId) => {
                   const selectedModel = modelOptions.find((option) => String(option.id) === aiProviderId)
                   updateDraft({

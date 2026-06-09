@@ -25,6 +25,18 @@
   margin-bottom: 12px;
 }
 
+:global(.dynamic-form-radio-group.ant-radio-group) {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+:global(.dynamic-form-radio-group.ant-radio-group .ant-radio-wrapper) {
+  width: fit-content;
+  margin-inline-end: 0;
+  white-space: normal;
+}
+
 .jsonEditor:global(.ant-input) {
   font-family:
     "Cascadia Code",

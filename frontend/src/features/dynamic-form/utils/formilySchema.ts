@@ -62,6 +62,22 @@ function getSchemaType(node: DynamicSchemaNode) {
   return 'string'
 }
 
+function getComponentProps(node: DynamicSchemaNode, runtimeOptions: SchemaRuntimeOptions) {
+  const className = typeof node.props.className === 'string' ? node.props.className : undefined
+
+  return {
+    ...node.props,
+    answerFieldKeys: runtimeOptions.answerFieldKeys,
+    className: node.type === 'radio' ? ['dynamic-form-radio-group', className].filter(Boolean).join(' ') : className,
+    componentId: node.id,
+    getCurrentValues: runtimeOptions.getCurrentValues,
+    llmContext: runtimeOptions.llmContext,
+    onApplyValues: runtimeOptions.onApplyLlmValues,
+    onRunLlmTrigger: runtimeOptions.onRunLlmTrigger,
+    title: node.title,
+  }
+}
+
 function toValidator(rule: DynamicValidationRule, node: DynamicSchemaNode) {
   if (rule.type === 'required') {
     return {
@@ -200,16 +216,7 @@ function toNodeSchema(node: DynamicSchemaNode, runtimeOptions: SchemaRuntimeOpti
     title: node.title,
     'x-decorator': node.type === 'showItem' || node.type === 'group' || node.type === 'tabs' || node.type === 'tabPane' ? undefined : 'FormItem',
     'x-component': getComponentName(node),
-    'x-component-props': {
-      ...node.props,
-      answerFieldKeys: runtimeOptions.answerFieldKeys,
-      componentId: node.id,
-      getCurrentValues: runtimeOptions.getCurrentValues,
-      llmContext: runtimeOptions.llmContext,
-      onApplyValues: runtimeOptions.onApplyLlmValues,
-      onRunLlmTrigger: runtimeOptions.onRunLlmTrigger,
-      title: node.title,
-    },
+    'x-component-props': getComponentProps(node, runtimeOptions),
   }
 
   if (node.defaultValue !== undefined) {

@@ -1,6 +1,7 @@
 package com.labelhub.modules.admin;
 
 import com.labelhub.common.exception.BusinessException;
+import com.labelhub.common.security.AuthUserCacheService;
 import com.labelhub.common.security.RoleCode;
 import com.labelhub.modules.admin.dto.CreateReviewerRequest;
 import com.labelhub.modules.admin.service.AdminUserService;
@@ -29,7 +30,9 @@ class AdminUserServiceTest {
     private final UserMapper userMapper = mock(UserMapper.class);
     private final UserRoleMapper userRoleMapper = mock(UserRoleMapper.class);
     private final PasswordEncoder passwordEncoder = mock(PasswordEncoder.class);
-    private final AdminUserService adminUserService = new AdminUserService(userMapper, userRoleMapper, passwordEncoder);
+    private final AuthUserCacheService authUserCacheService = mock(AuthUserCacheService.class);
+    private final AdminUserService adminUserService = new AdminUserService(
+            userMapper, userRoleMapper, passwordEncoder, authUserCacheService);
 
     @Test
     void listUsersReturnsSingleRole() {

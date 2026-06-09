@@ -2055,9 +2055,9 @@ Authorization: Bearer <accessToken>
 
 ---
 
-## 13. LlmTrigger（字段级 AI 辅助）
+## 13. LlmTrigger（AI 辅助）
 
-LlmTrigger 是标注员在作答过程中点击某个模板组件触发的 AI 辅助能力。前端只传点击的 `componentId`、当前草稿 `currentAnswerJson` 和可选 `userInstruction`；后端自动读取 assignment、任务、题目、模板组件、任务 AI 审核配置和评分维度，调用 LLM 后返回可直接合并到 `answerJson` 的结构化 `patch`。
+LlmTrigger 是标注员在作答过程中点击模板组件触发的 AI 辅助能力。前端只传点击的 `componentId`、当前草稿 `currentAnswerJson` 和可选 `userInstruction`；后端自动读取 assignment、任务、题目、模板组件、任务 AI 审核配置和评分维度，调用 LLM 后返回可直接合并到 `answerJson` 的结构化 `patch`。
 
 ### 13.1 POST /api/v1/assignments/{assignmentId}/llm-triggers（标注时触发）
 
@@ -2181,7 +2181,7 @@ LlmTrigger 是标注员在作答过程中点击某个模板组件触发的 AI �
 
 ### 14.1 POST /api/v1/assignments/{assignmentId}/pre-annotations/run
 
-**作用**：触发 AI 为当前 assignment 生成整题建议答案。复用任务的 AI 审核配置中的 Provider 和 Prompt。一个 assignment 同时只能有一个预标注在运行（通过 Redis 锁保证）。预标注结果不会自动写入草稿，需标注员确认后手动采纳。
+**作用**：触发 AI 为当前 assignment 生成建议答案。复用任务的 AI 审核配置中的 Provider 和 Prompt。一个 assignment 同时只能有一个预标注在运行（通过 Redis 锁保证）。预标注结果不会自动写入草稿，需标注员确认后手动采纳。
 
 **权限**：LABELER
 
@@ -2972,7 +2972,7 @@ POST /api/v1/templates/10/fork
     响应: { draftVersion: 1 }
     说明: 保存草稿（可多次调用，每次 clientVersion 递增）
 
-    ── 标注过程中可触发 LlmTrigger（字段级 AI 辅助）──
+    ── 标注过程中可触发 LlmTrigger（AI 辅助）──
 
 15. POST /api/v1/assignments/100/llm-triggers
     请求: {
@@ -2989,7 +2989,7 @@ POST /api/v1/templates/10/fork
     响应: { status: "SUCCESS", suggestionJson: { "summary": "AI建议..." }, targetFields: ["summary"] }
     说明: 标注员参考 AI 建议，自行决定是否采纳
 
-    ──（可选）AI 预标注辅助（整题级别）──
+    ──（可选）AI 预标注辅助──
 ```
 ```text
 15a. POST /api/v1/assignments/100/pre-annotations/run
@@ -3225,15 +3225,6 @@ POST /api/v1/tasks/{taskId}/llm-triggers/test
 
 权限：OWNER（必须是任务所有者）。需传 `datasetItemId` 指定测试题目，传 `componentId` 指定测试组件。模型和评分维度同样来自任务 AI 审核配置。
 
-#### 与 AI 审核、预标注的区别
-
-| | LlmTrigger | 预标注 | AI 审核 |
-|---|:--:|:--:|:--:|
-| 触发 | **手动点击** | 手动 | 提交后**自动** |
-| 粒度 | 字段级 | 整题 | submission |
-| 参数来源 | assignment + template component + ai-review-configs | API 调用 | ai-review-configs |
-| 结果影响 | 前端展示，标注员决定 | 前端展示 | 写入 ai_review_result |
-
 #### 数据流
 
 ```text
@@ -3268,7 +3259,7 @@ Worker 消费
 
 ## 附录 E：AI 场景接入指导
 
-本节按真实业务场景说明 AI 能力如何接入。AI 结果默认都是辅助建议：AI 审核不直接通过提交，预标注和 LlmTrigger 不直接写入答案，前端必须由用户确认后再采纳。
+本节按真实业务场景说明 AI 能力如何接入。AI 结果默认都是辅助建议：AI 审核不直接通过提交，标注端 AI 辅助不直接写入答案，前端必须由用户确认后再采纳。
 
 ### E.1 AI 能力总览
 
@@ -3277,8 +3268,7 @@ Worker 消费
 | 模型供应商配置 | OWNER | 手动配置 | Provider | `/api/v1/llm-providers` | 接入 DashScope、OpenAI-compatible 等模型服务 |
 | AI 审核配置 | OWNER | 手动配置 | Task | `/api/v1/tasks/{taskId}/ai-review-configs` | 定义审核 prompt、评分维度、阈值和输出 schema |
 | AI Prompt 测试 | OWNER | 手动测试 | Config | `/api/v1/tasks/{taskId}/ai-review-configs/{configId}/test` | 发布前验证 prompt 和结构化输出 |
-| 预标注 | LABELER | 手动触发 | Assignment | `/api/v1/assignments/{assignmentId}/pre-annotations/latest` | 整题建议答案、字段建议、置信度和风险提示 |
-| LlmTrigger | LABELER / OWNER | 手动触发 | 字段级 | `/api/v1/llm/triggers/runs/{triggerRunId}` | 作答过程中的字段级 AI 辅助 |
+| 标注端 AI 辅助 | LABELER / OWNER | 手动触发 | Assignment / TriggerRun | `/api/v1/assignments/{assignmentId}/pre-annotations/latest`、`/api/v1/llm/triggers/runs/{triggerRunId}` | 建议答案、字段建议、置信度和风险提示 |
 | AI 自动审核 | 系统 | 提交后异步触发 | Submission | `/api/v1/submissions/{submissionId}/ai-review` | 给 Reviewer 提供评分、结论和风险建议 |
 | AgentRun 追踪 | 有权访问业务对象的用户 | 查询 | 单次 AI 调用 | `/api/v1/agent-runs/{agentRunId}` | 查看输入快照、输出快照、traceId、耗时和错误 |
 | AI 指标 | 已认证用户，按 Actuator 权限 | 查询 | 服务指标 | `/actuator/metrics/labelhub.ai.requests` | 查看成功、失败、限流、超时、耗时等埋点 |
@@ -3425,7 +3415,7 @@ GET /api/v1/assignments/{assignmentId}/pre-annotations/latest
 | preAnnotationId | 预标注记录 ID |
 | agentRunId | 对应 AgentRun，可继续查链路详情 |
 | status | `RUNNING` / `SUCCESS` / `FAILED` / `RATE_LIMITED` 等 |
-| suggestedAnswerJson | 整题建议答案 |
+| suggestedAnswerJson | 建议答案 |
 | fieldSuggestions | 字段级建议 |
 | overallConfidence | 整体置信度 |
 | riskFlags | 风险标记 |
@@ -3439,7 +3429,7 @@ GET /api/v1/assignments/{assignmentId}/pre-annotations/latest
 - `SUCCESS` 后也不要自动覆盖草稿，必须展示差异并让用户确认采纳。
 - 如果需要完整链路，取响应中的 `agentRunId` 调用 AgentRun 详情。
 
-### E.5 场景四：LABELER 作答时使用字段级 LlmTrigger
+### E.5 场景四：LABELER 作答时使用 LlmTrigger
 
 适用页面：标注表单中的“AI 生成摘要”“AI 改写”“AI 推荐标签”等按钮。
 

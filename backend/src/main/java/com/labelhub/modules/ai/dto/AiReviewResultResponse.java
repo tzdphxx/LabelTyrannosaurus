@@ -26,7 +26,8 @@ public record AiReviewResultResponse(Long id,
                                      LocalDateTime createdAt,
                                      LocalDateTime updatedAt,
                                      String rawPrompt,
-                                     String answerJson) {
+                                     String answerJson,
+                                     ReviewTraceResponse reviewTrace) {
     public AiReviewResultResponse(Long id,
                                   Long submissionId,
                                   Long agentRunId,
@@ -50,7 +51,7 @@ public record AiReviewResultResponse(Long id,
         this(id, submissionId, agentRunId, providerId, modelName, status, decision, averageScore,
                 dimensionScores, riskFlags, suggestion, confidence, flowAction,
                 promptMode, degraded, limitations, errorCode, errorMessage, createdAt, updatedAt,
-                null, null);
+                null, null, null);
     }
 
     public AiReviewResultResponse(Long id, Long submissionId, Long agentRunId, Long providerId,
@@ -62,6 +63,6 @@ public record AiReviewResultResponse(Long id,
         this(id, submissionId, agentRunId, providerId, modelName, status, decision, averageScore,
                 dimensionScores, riskFlags, suggestion, confidence, flowAction,
                 null, false, List.of(), errorCode, errorMessage, createdAt, updatedAt,
-                null, null);
+                null, null, null);
     }
 }

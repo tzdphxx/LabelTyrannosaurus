@@ -1,9 +1,5 @@
 package com.labelhub.common.security;
 
-import com.labelhub.modules.auth.domain.UserEntity;
-import com.labelhub.modules.auth.repository.UserMapper;
-import com.labelhub.modules.auth.repository.UserRoleMapper;
-import com.labelhub.common.exception.BusinessException;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -21,13 +17,11 @@ import java.io.IOException;
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     private final JwtTokenService jwtTokenService;
-    private final UserMapper userMapper;
-    private final UserRoleMapper userRoleMapper;
+    private final AuthUserCacheService authUserCacheService;
 
-    public JwtAuthenticationFilter(JwtTokenService jwtTokenService, UserMapper userMapper, UserRoleMapper userRoleMapper) {
+    public JwtAuthenticationFilter(JwtTokenService jwtTokenService, AuthUserCacheService authUserCacheService) {
         this.jwtTokenService = jwtTokenService;
-        this.userMapper = userMapper;
-        this.userRoleMapper = userRoleMapper;
+        this.authUserCacheService = authUserCacheService;
     }
 
     @Override
@@ -65,14 +59,12 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     private void authenticate(String token) {
         JwtTokenService.TokenClaims claims = jwtTokenService.parseAccessToken(token);
-        UserEntity user = userMapper.selectById(claims.userId());
-        if (user == null || !Boolean.TRUE.equals(user.getEnabled()) || !claims.tokenVersion().equals(user.getTokenVersion())) {
+        CurrentUser currentUser = authUserCacheService.authenticate(claims).orElse(null);
+        if (currentUser == null) {
             return;
         }
-        var roles = userRoleMapper.selectRoleCodesByUserId(user.getId());
-        var currentUser = new CurrentUser(user.getId(), user.getUsername(), user.getEmail(), roles, user.getTokenVersion());
         CurrentUserContext.set(currentUser);
-        var authorities = roles.stream()
+        var authorities = currentUser.roles().stream()
                 .map(role -> new SimpleGrantedAuthority("ROLE_" + role.name()))
                 .toList();
         SecurityContextHolder.getContext().setAuthentication(

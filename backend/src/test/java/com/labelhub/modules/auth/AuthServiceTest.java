@@ -1,6 +1,7 @@
 package com.labelhub.modules.auth;
 
 import com.labelhub.common.exception.BusinessException;
+import com.labelhub.common.security.AuthUserCacheService;
 import com.labelhub.common.security.CurrentUser;
 import com.labelhub.common.security.CurrentUserContext;
 import com.labelhub.common.security.JwtTokenService;
@@ -33,7 +34,9 @@ class AuthServiceTest {
     private final UserRoleMapper userRoleMapper = mock(UserRoleMapper.class);
     private final PasswordEncoder passwordEncoder = mock(PasswordEncoder.class);
     private final JwtTokenService jwtTokenService = mock(JwtTokenService.class);
-    private final AuthService authService = new AuthService(userMapper, userRoleMapper, passwordEncoder, jwtTokenService);
+    private final AuthUserCacheService authUserCacheService = mock(AuthUserCacheService.class);
+    private final AuthService authService = new AuthService(
+            userMapper, userRoleMapper, passwordEncoder, jwtTokenService, authUserCacheService);
 
     @Test
     void registerCreatesEnabledUserWithRequestedOwnerRole() {

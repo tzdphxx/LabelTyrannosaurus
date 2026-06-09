@@ -1,6 +1,8 @@
 # LabelHub AI 使用场景与实现对比
 
 > 本文档对比课题要求与现有代码中的 AI/LLM 使用场景，明确实现状态、差异和待调整项。
+>
+> 当前状态说明（2026-06-08）：本文保留 AI 能力梳理价值，但部分权限口径来自早期方案。当前代码以 ADMIN 全局管理 LLM Provider、Owner 查询已启用 Provider 为准；最终提交材料见 `docs/final-delivery/basic-technical-doc.md`。
 
 ## 一、课题对 AI 的要求
 
@@ -14,7 +16,7 @@
 | 4 | 4.5 审核流转 | AI 预审结果可在审核工作台查看 AI 评语与原始 Prompt | 可追溯性要求 |
 
 **课题未要求但有加分价值的**：
-- Pre-Annotation（题目级预标注）
+- Pre-Annotation（预标注）
 - SupervisorAgent（工具调用型 Agent）
 - 多模态支持（图片/视频输入）
 
@@ -27,7 +29,7 @@
 | # | 场景 | 实现状态 | 课题对应 | 核心类 |
 |---|------|----------|----------|--------|
 | 1 | AI 自动预审 | ✅ 主体完成 | 4.4 核心难点 | `AiAutoReviewService` |
-| 2 | LLM Trigger（字段级辅助） | ✅ 完整，已异步化 | 4.2 物料 | `LlmTriggerService` + `llm_trigger_runs` |
+| 2 | LLM Trigger（AI 辅助） | ✅ 完整，已异步化 | 4.2 物料 | `LlmTriggerService` + `llm_trigger_runs` |
 | 3 | Pre-Annotation（题目级预填） | ✅ 完整，已异步化 | 额外加分 | `PreAnnotationService` |
 | 4 | SupervisorAgent（工具调用） | ✅ 完整 | 额外加分 | `SupervisorAgent` (182行) |
 | 5 | LLM Provider 管理 | ✅ 已迁移 OWNER 私有隔离 | 基础设施 | `LlmProviderService` |
@@ -197,7 +199,7 @@ Labeler 在标注工作台点击触发按钮
 
 #### 定位
 
-课题未明确要求，但代码中实现了完整的题目级预标注功能。与 LlmTrigger 的区别是粒度：Pre-Annotation 一次生成整题所有字段的建议。
+课题未明确要求，但代码中实现了完整的预标注功能，用于在标注端提供 AI 建议。
 
 #### 代码实现
 
@@ -235,17 +237,6 @@ Labeler 点击「AI 预填」按钮
 ```
 
 **状态机**：`PENDING → RUNNING → SUCCESS / FAILED / RATE_LIMITED / MANUAL_REQUIRED`
-
-#### 与 LlmTrigger 的对比
-
-| 维度 | LlmTrigger（课题要求） | Pre-Annotation（加分项） |
-|------|------------------------|------------------------|
-| 粒度 | 字段级 | 题目级 |
-| 配置来源 | 模板 schema 中的组件属性 | 复用任务的 AI 审核配置 |
-| Provider 来源 | 组件内嵌 providerId | AI 审核配置中的 providerId |
-| 触发时机 | 标注过程中，针对单个字段 | 开始作答前，一次性生成全部建议 |
-| 输出 | 单字段/少数字段的值 | 整题 suggestedAnswerJson + 逐字段 confidence |
-| 用户交互 | 点击组件按钮 → 查看结果 → 确认预填 | 点击「AI 预填」→ 查看建议 → 选择性采纳 |
 
 ---
 
@@ -431,11 +422,11 @@ POST /api/v1/llm/triggers/run
 
 ### 4.2 Labeler 使用 AI 辅助的流程
 
-Labeler 有两种方式获得 AI 辅助：
+Labeler 在标注工作台通过 AI 辅助入口获得建议，前端按当前交互调用对应接口：
 
-#### 方式 A：LlmTrigger 字段级辅助（课题要求）
+#### 接口：LlmTrigger 辅助
 
-**触发**：Labeler 在标注工作台点击 LlmTrigger 组件上的「AI 辅助」按钮。
+**触发**：Labeler 在标注工作台点击 AI 辅助入口。
 
 **请求**：
 
@@ -480,9 +471,9 @@ POST /api/v1/llm/triggers/run
 3. 或点击「忽略」→ 不做任何操作
 4. **绝不自动写入提交**
 
-#### 方式 B：Pre-Annotation 题目级预填（加分项）
+#### 接口：Pre-Annotation 预填
 
-**触发**：Labeler 在标注工作台点击「AI 预填」按钮。
+**触发**：Labeler 在标注工作台点击 AI 辅助入口。
 
 **请求**：
 
@@ -725,7 +716,7 @@ public interface LlmGateway {
 
 两套独立限流器：
 - `AiReviewRateLimiter` — AI 自动预审 + Pre-Annotation
-- `LlmTriggerRateLimiter` — 字段级 LlmTrigger
+- `LlmTriggerRateLimiter` — LlmTrigger
 
 ### 4.5 重试与恢复
 
@@ -760,7 +751,7 @@ public interface LlmGateway {
 
 | 额外实现 | 技术亮点 | 答辩话术 |
 |----------|----------|----------|
-| Pre-Annotation 预标注 | 题目级整体预填，提升标注效率 | 「除了字段级辅助，我们还实现了题目级预标注，一键生成全部字段建议」 |
+| Pre-Annotation 预标注 | 提供标注建议，提升标注效率 | 「标注端 AI 辅助可以生成建议，用户确认后再采纳」 |
 | SupervisorAgent 工具调用 | 多步推理，可调用外部工具 | 「审核 Agent 支持 Tool Use，可在审核过程中查询额外信息后再给出结论」 |
 | 多模态支持 | 图片输入 + 视频关键帧/转写/说明消费 + 优雅降级 | 「支持多模态标注数据的 AI 审核；视频场景基于 BE-B/FE 提供的关键帧、转写或人工说明进入 AI 链路」 |
 | AI 流转策略 | 5 种 Policy 灵活配置 | 「Owner 可灵活配置 AI 的决策权限，从纯建议到自动审批均可」 |

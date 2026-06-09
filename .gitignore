@@ -107,3 +107,4 @@ frontend-label/
 frontend-performance/
 nul
 *.ps1
+.omo/

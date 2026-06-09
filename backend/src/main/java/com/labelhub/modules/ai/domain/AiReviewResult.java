@@ -50,6 +50,8 @@ public class AiReviewResult {
 
     private String rawResponse;
 
+    private String reviewTrace;
+
     private Integer retryCount;
 
     private LocalDateTime nextRetryAt;

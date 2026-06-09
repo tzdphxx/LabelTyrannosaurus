@@ -1,11 +1,13 @@
 package com.labelhub.modules.submission.service;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.labelhub.common.audit.AuditAppender;
 import com.labelhub.common.audit.AuditCommand;
 import com.labelhub.common.exception.BusinessException;
+import com.labelhub.common.security.CurrentUserContext;
+import com.labelhub.common.util.AnswerCanonicalizer;
+import com.labelhub.common.web.TraceIdProvider;
 import com.labelhub.modules.agent.domain.AgentRun;
 import com.labelhub.modules.agent.domain.AgentRunStatus;
 import com.labelhub.modules.agent.mapper.AgentRunMapper;
@@ -23,11 +25,7 @@ import com.labelhub.modules.task.domain.Task;
 import com.labelhub.modules.task.domain.TaskStatus;
 import com.labelhub.modules.task.mapper.TaskMapper;
 import com.labelhub.modules.template.service.AnswerSchemaValidator;
-import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
 import java.time.LocalDateTime;
-import java.util.HexFormat;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
@@ -62,6 +60,7 @@ public class SubmissionSubmitService {
     private final AiReviewDispatcher aiReviewDispatcher;
     private final DatasetClaimService datasetClaimService;
     private final ObjectMapper objectMapper;
+    private final TraceIdProvider traceIdProvider;
 
     @Autowired
     public SubmissionSubmitService(AssignmentMapper assignmentMapper,
@@ -71,9 +70,10 @@ public class SubmissionSubmitService {
                                    AnswerSchemaValidator answerSchemaValidator,
                                    AuditAppender auditAppender,
                                    AiReviewDispatcher aiReviewDispatcher,
-                                   DatasetClaimService datasetClaimService) {
+                                   DatasetClaimService datasetClaimService,
+                                   TraceIdProvider traceIdProvider) {
         this(assignmentMapper, submissionMapper, taskMapper, agentRunMapper, answerSchemaValidator, auditAppender,
-                aiReviewDispatcher, datasetClaimService, new ObjectMapper());
+                aiReviewDispatcher, datasetClaimService, new ObjectMapper(), traceIdProvider);
     }
 
     SubmissionSubmitService(AssignmentMapper assignmentMapper,
@@ -84,7 +84,8 @@ public class SubmissionSubmitService {
                             AuditAppender auditAppender,
                             AiReviewDispatcher aiReviewDispatcher,
                             DatasetClaimService datasetClaimService,
-                            ObjectMapper objectMapper) {
+                            ObjectMapper objectMapper,
+                            TraceIdProvider traceIdProvider) {
         this.assignmentMapper = assignmentMapper;
         this.submissionMapper = submissionMapper;
         this.taskMapper = taskMapper;
@@ -94,6 +95,7 @@ public class SubmissionSubmitService {
         this.aiReviewDispatcher = aiReviewDispatcher;
         this.datasetClaimService = datasetClaimService;
         this.objectMapper = objectMapper;
+        this.traceIdProvider = traceIdProvider;
     }
 
     @Transactional
@@ -124,7 +126,7 @@ public class SubmissionSubmitService {
                 AssignmentStatus.SUBMITTED
         );
         if (updated != 1) {
-            throw new BusinessException(DRAFT_VERSION_CONFLICT, "Draft version conflict");
+            throw new BusinessException(DRAFT_VERSION_CONFLICT, "草稿版本冲突，请刷新后重试");
         }
         AgentRun agentRun = createPendingAiReviewRun(submission, task);
         appendSubmitAudit(assignment, submission, agentRun.getId());
@@ -134,9 +136,11 @@ public class SubmissionSubmitService {
     }
 
     private Assignment loadOwnedAssignment(Long assignmentId, Long labelerId) {
-        Assignment assignment = assignmentMapper.selectOwnedAssignment(assignmentId, labelerId);
+        Assignment assignment = CurrentUserContext.isAdmin()
+                ? assignmentMapper.selectById(assignmentId)
+                : assignmentMapper.selectOwnedAssignment(assignmentId, labelerId);
         if (assignment == null) {
-            throw new BusinessException(ASSIGNMENT_NOT_FOUND, "Assignment not found");
+            throw new BusinessException(ASSIGNMENT_NOT_FOUND, "领取记录不存在");
         }
         return assignment;
     }
@@ -145,39 +149,33 @@ public class SubmissionSubmitService {
         Task task = taskMapper.selectById(taskId);
         if (task == null || task.getStatus() != TaskStatus.PUBLISHED
                 || task.getDeadlineAt() == null || !task.getDeadlineAt().isAfter(LocalDateTime.now())) {
-            throw new BusinessException(TASK_NOT_SUBMITTABLE, "Task is not submittable");
+            throw new BusinessException(TASK_NOT_SUBMITTABLE, "当前任务不可提交");
         }
         return task;
     }
 
     private void requireCurrentDraftVersion(Assignment assignment, Integer clientDraftVersion) {
         if (!Objects.equals(assignment.getDraftVersion(), clientDraftVersion)) {
-            throw new BusinessException(DRAFT_VERSION_CONFLICT, "Draft version conflict");
+            throw new BusinessException(DRAFT_VERSION_CONFLICT, "草稿版本冲突，请刷新后重试");
         }
     }
 
     private void requireSubmittableStatus(Assignment assignment) {
         if (!SUBMITTABLE_STATUSES.contains(assignment.getStatus())) {
-            throw new BusinessException(ASSIGNMENT_STATUS_NOT_SUBMITTABLE, "Assignment status is not submittable");
+            throw new BusinessException(ASSIGNMENT_STATUS_NOT_SUBMITTABLE, "当前领取记录状态不可提交");
         }
     }
 
     private String canonicalAnswerJson(String answerJson) {
         try {
-            JsonNode jsonNode = objectMapper.readTree(answerJson);
-            return objectMapper.writeValueAsString(jsonNode);
-        } catch (JsonProcessingException ex) {
-            throw new BusinessException(INVALID_ANSWER_JSON, "Answer JSON is invalid");
+            return AnswerCanonicalizer.canonicalize(answerJson, objectMapper);
+        } catch (IllegalArgumentException ex) {
+            throw new BusinessException(INVALID_ANSWER_JSON, ex.getMessage());
         }
     }
 
     private String sha256(String value) {
-        try {
-            return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256")
-                    .digest(value.getBytes(StandardCharsets.UTF_8)));
-        } catch (NoSuchAlgorithmException ex) {
-            throw new IllegalStateException(ex);
-        }
+        return AnswerCanonicalizer.sha256(value);
     }
 
     private Submission createSubmission(Assignment assignment,
@@ -236,7 +234,7 @@ public class SubmissionSubmitService {
 
         auditAppender.append(new AuditCommand(USER_ACTOR_TYPE, assignment.getLabelerId(),
                 ASSIGNMENT_BIZ_TYPE, assignment.getId(),
-                "ASSIGNMENT_SUBMITTED", beforeJson, afterJson, null, agentRunId));
+                "ASSIGNMENT_SUBMITTED", beforeJson, afterJson, traceIdProvider.currentTraceId(), agentRunId));
     }
 
     private SubmissionSubmitResponse toResponse(Submission submission, Long agentRunId) {

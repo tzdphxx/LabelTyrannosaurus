@@ -18,4 +18,10 @@ class SecurityConfigSwaggerTest {
         assertThat(SecurityConfig.isSwaggerProfile(new MockEnvironment()))
                 .isFalse();
     }
+
+    @Test
+    void swaggerPathsIncludeKnife4jAssets() {
+        assertThat(SecurityConfig.swaggerPaths())
+                .contains("/doc.html", "/webjars/**");
+    }
 }

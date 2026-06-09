@@ -9,7 +9,8 @@ import java.time.LocalDateTime;
 /**
  * 模板版本实体。
  *
- * <p>{@code schemaJson} 是渲染器和后端校验共同消费的版本快照；发布快照不可原地修改，只能 fork 新版本。</p>
+ * <p>{@code schemaJson} 是渲染器和后端校验共同消费的版本快照；版本归属跟随模板 OWNER。
+ * 历史 {@code taskId} 只用于追踪旧任务内模板来源，新模板版本不再依赖任务。</p>
  */
 @TableName("template_versions")
 public class TemplateVersionEntity {
@@ -17,6 +18,7 @@ public class TemplateVersionEntity {
     @TableId(type = IdType.AUTO)
     private Long id;
     private Long templateId;
+    private Long ownerId;
     private Long taskId;
     private Integer versionNo;
     private String schemaJson;
@@ -47,6 +49,14 @@ public class TemplateVersionEntity {
 
     public void setTaskId(Long taskId) {
         this.taskId = taskId;
+    }
+
+    public Long getOwnerId() {
+        return ownerId;
+    }
+
+    public void setOwnerId(Long ownerId) {
+        this.ownerId = ownerId;
     }
 
     public Integer getVersionNo() {

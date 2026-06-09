@@ -25,6 +25,7 @@ tags
 quota
 claimedCount
 overlapCount
+strategy
 deadlineAt
 publishedAt
 endedAt
@@ -37,6 +38,46 @@ Rules:
 ```text
 Only tasks whose ownerId equals the current user are returned.
 Results are ordered by updatedAt desc, then id desc.
+```
+
+## GET /api/v1/owner/labelers/assignable
+
+Description: Lists labeler users that an OWNER can select when creating an ASSIGNED strategy task.
+
+- Method: `GET`
+- Permission: `OWNER`
+- Query: `keyword` optional, `enabledOnly` default true, `page` default 1, `size` default 20 and max 100
+- Response: `PageResponse<AssignableLabelerResponse>`
+
+Response fields:
+
+| Field | Type | 中文注释 |
+| --- | --- | --- |
+| labelerId | Long | 标注员用户 ID |
+| username | String | 用户名 |
+| email | String | 邮箱 |
+| displayName | String | 显示名称 |
+| avatarUrl | String | 头像 URL |
+| enabled | Boolean | 账号是否启用 |
+| loginEnabled | Boolean | 是否允许登录 |
+| claimedCount | Integer | 已领取题目总数量 |
+| submittedCount | Integer | 已提交题目总数量 |
+| pendingReviewCount | Integer | 待审核题目数量 |
+| approvedCount | Integer | 已通过题目数量 |
+| rejectedCount | Integer | 已驳回题目数量 |
+| totalReward | BigDecimal | 累计获得奖励 |
+| todaySubmittedCount | Integer | 今日提交题目数量 |
+| lastSubmitDate | LocalDate | 最近提交日期 |
+| statsUpdatedAt | LocalDateTime | 统计数据更新时间 |
+| approvalRate | BigDecimal | 通过率，按 `approvedCount / (approvedCount + rejectedCount)` 计算，保留 4 位小数；暂无已审核题目时为 `0.0000` |
+
+Rules:
+
+```text
+Only users with role LABELER are returned.
+System users are excluded.
+When enabledOnly=true, only enabled and login-enabled labelers are returned.
+keyword matches username, email, or displayName.
 ```
 
 ## POST /api/v1/tasks
@@ -55,11 +96,35 @@ title required, max 200
 description optional
 instructionRichText optional
 tags optional, each tag max 64
-quota required, >= 1
+quota required for FCFS/QUOTA_GRAB (>= 1), auto-derived for ASSIGNED
 deadlineAt required, must be future time
-overlapCount required, >= 1
-publishedTemplateVersionId optional
+overlapCount required, must be 1
+strategy optional, default FCFS. Values: FCFS | QUOTA_GRAB | ASSIGNED
+maxClaimsPerLabeler optional, >= 1. Only effective for QUOTA_GRAB
+assignedLabelerId optional. Only valid for ASSIGNED; imported items are auto-dispatched to this labeler.
+publishedTemplateVersionId optional, must belong to current OWNER
 aiReviewConfigId optional
+aiProviderId / aiModelName / aiPrompt / aiScoringDimensions / aiPassThreshold / aiManualReviewThreshold optional, for inline AI config
+reviewLevelCount optional, >= 1, default 1
+datasetFileId optional
+rewardRule optional
+```
+
+Claim strategy behavior:
+
+```text
+FCFS (default): Labelers freely claim any available item until the dataset runs out.
+                 Quota is not enforced; maxClaimsPerLabeler is ignored.
+
+QUOTA_GRAB:      Like FCFS, but with two additional gates:
+                 1. Task claimed_count < quota (atomic increment, rejects when full).
+                 2. Labeler's active unfinished claims < maxClaimsPerLabeler.
+
+ASSIGNED:        Labelers can only claim items explicitly dispatched to them by the owner.
+                 Quota is automatically derived from the total dispatch count.
+                 If assignedLabelerId is provided at creation, imported items are dispatched
+                 to that labeler automatically after import succeeds.
+                 Without assignedLabelerId, dispatches must be created via the /dispatches API before publish.
 ```
 
 Response fields:
@@ -73,6 +138,8 @@ Effects:
 
 ```text
 Creates a tasks row with ownerId = current user and status = DRAFT.
+Strategy defaults to FCFS if not specified.
+If publishedTemplateVersionId is provided, verifies the template version belongs to current OWNER.
 Normalizes non-blank tags into task_tags.
 Appends TASK_CREATED audit log.
 ```
@@ -100,10 +167,16 @@ tags
 quota
 claimedCount
 overlapCount
+strategy
+maxClaimsPerLabeler
+assignedLabelerId
+assignedLabelerName
 deadlineAt
 publishedTemplateVersionId
-aiReviewConfigId
+aiReview (AiReviewConfigResponse, nullable)
+reviewLevelCount
 rewardVisible
+rewardRule
 publishedAt
 endedAt
 createdAt
@@ -133,11 +206,15 @@ title required, max 200
 description optional
 instructionRichText optional
 tags optional, each tag max 64
-quota required, >= 1
+quota required for FCFS/QUOTA_GRAB (>= 1), auto-derived for ASSIGNED
 deadlineAt required, must be future time
-overlapCount required, >= 1
-publishedTemplateVersionId optional
+overlapCount required, must be 1
+strategy optional. Values: FCFS | QUOTA_GRAB | ASSIGNED. Only mutable while DRAFT
+maxClaimsPerLabeler optional, >= 1. Only effective for QUOTA_GRAB
+publishedTemplateVersionId optional, must belong to current OWNER
 aiReviewConfigId optional
+reviewLevelCount optional, >= 1
+rewardRule optional
 ```
 
 Response fields:
@@ -151,6 +228,7 @@ Rules:
 
 ```text
 Only DRAFT tasks can be edited.
+If publishedTemplateVersionId is provided, verifies the template version belongs to current OWNER.
 Replaces the task tag set with normalized non-blank tags from the request.
 Appends TASK_UPDATED audit log.
 ```
@@ -176,11 +254,12 @@ Publish checks:
 
 ```text
 Task status must be DRAFT.
-Task quota must be > 0.
-Task overlapCount must be >= 1.
+Task overlapCount must be 1.
 Task deadlineAt must be in the future.
+Task quota must be > 0 (FCFS/QUOTA_GRAB only; ASSIGNED auto-syncs from dispatch count).
+For ASSIGNED strategy: at least one dispatch must exist.
 BE-B dataset must be ready.
-BE-B template version must exist.
+BE-B template version must exist and belong to the task owner.
 BE-B reward rule must exist.
 BE-A AI review config must exist.
 ```
@@ -196,7 +275,7 @@ Errors:
 
 ```text
 400101 Task status transition is not allowed.
-400102 Publish prerequisite is missing.
+400102 Publish prerequisite is missing or template version is not usable by this task.
 404001 Task not found or not owned by current user.
 ```
 

@@ -11,6 +11,7 @@ import java.time.LocalDateTime;
 public record TemplateVersionResponse(Long versionId,
                                       Long templateId,
                                       Long taskId,
+                                      Long ownerId,
                                       Integer versionNo,
                                       JsonNode schemaJson,
                                       Boolean publishedSnapshot,

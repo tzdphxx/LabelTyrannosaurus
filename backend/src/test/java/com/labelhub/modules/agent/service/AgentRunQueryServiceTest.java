@@ -52,6 +52,9 @@ class AgentRunQueryServiceTest {
                 user(10L, RoleCode.OWNER), 1L);
 
         assertThat(response.agentRunId()).isEqualTo(1L);
+        assertThat(response.traceId()).isEqualTo("trace-owner");
+        assertThat(response.latencyMs()).isEqualTo(5000L);
+        assertThat(response.queuedAt()).isNotNull();
         assertThat(response.redacted()).isFalse();
         assertThat(response.inputSnapshot()).containsEntry("prompt", "judge this");
         assertThat(response.inputSnapshot()).containsEntry("apiKey", "***REDACTED***");
@@ -177,6 +180,8 @@ class AgentRunQueryServiceTest {
         run.setModelName("qwen-plus");
         run.setPromptVersion("v1");
         run.setStatus(AgentRunStatus.SUCCESS);
+        run.setTraceId("trace-owner");
+        run.setLatencyMs(5000L);
         run.setInputSnapshot("""
                 {
                   "prompt": "judge this",
@@ -198,6 +203,7 @@ class AgentRunQueryServiceTest {
                 """);
         run.setStartedAt(LocalDateTime.now().minusSeconds(5));
         run.setFinishedAt(LocalDateTime.now());
+        run.setQueuedAt(LocalDateTime.now().minusSeconds(8));
         run.setCreatedAt(LocalDateTime.now().minusSeconds(10));
         return run;
     }

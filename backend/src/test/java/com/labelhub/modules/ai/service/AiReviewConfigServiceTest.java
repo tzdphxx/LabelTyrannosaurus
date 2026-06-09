@@ -70,6 +70,9 @@ class AiReviewConfigServiceTest {
     @Mock
     private TraceIdProvider traceIdProvider;
 
+    @Mock
+    private PromptTemplateEngine promptTemplateEngine;
+
     private AiReviewConfigService service;
 
     @BeforeEach
@@ -83,6 +86,14 @@ class AiReviewConfigServiceTest {
                 auditAppender,
                 traceIdProvider
         );
+        org.springframework.test.util.ReflectionTestUtils.setField(service, "promptTemplateEngine",
+                promptTemplateEngine);
+        org.mockito.Mockito.lenient()
+                .when(promptTemplateEngine.buildReviewPrompt(
+                        org.mockito.ArgumentMatchers.any(),
+                        org.mockito.ArgumentMatchers.any(),
+                        org.mockito.ArgumentMatchers.any()))
+                .thenReturn("You are LabelHub AI reviewer. Return valid JSON only.");
     }
 
     @Test
@@ -90,7 +101,7 @@ class AiReviewConfigServiceTest {
         Task task = draftTask();
         when(taskMapper.selectById(TASK_ID)).thenReturn(task);
         when(llmProviderService.findEnabledById(PROVIDER_ID)).thenReturn(Optional.of(provider()));
-        when(aiReviewConfigMapper.selectOne(any(Wrapper.class))).thenReturn(null);
+        when(aiReviewConfigMapper.selectList(any(Wrapper.class))).thenReturn(List.of());
         when(traceIdProvider.currentTraceId()).thenReturn("trace-1");
         when(aiReviewConfigMapper.insert(any(AiReviewConfig.class))).thenAnswer(invocation -> {
             AiReviewConfig config = invocation.getArgument(0);
@@ -115,6 +126,31 @@ class AiReviewConfigServiceTest {
     }
 
     @Test
+    void backfillsModelNameFromProviderDefaultWhenOmitted() {
+        Task task = draftTask();
+        when(taskMapper.selectById(TASK_ID)).thenReturn(task);
+        when(llmProviderService.findEnabledById(PROVIDER_ID)).thenReturn(Optional.of(provider()));
+        when(aiReviewConfigMapper.selectList(any(Wrapper.class))).thenReturn(List.of());
+        when(traceIdProvider.currentTraceId()).thenReturn("trace-1");
+        when(aiReviewConfigMapper.insert(any(AiReviewConfig.class))).thenAnswer(invocation -> {
+            AiReviewConfig config = invocation.getArgument(0);
+            config.setId(CONFIG_ID);
+            return 1;
+        });
+
+        AiReviewConfigRequest noModel = new AiReviewConfigRequest(
+                PROVIDER_ID, null, "Review this answer.", List.of("accuracy"),
+                new BigDecimal("85.00"), new BigDecimal("60.00"),
+                3, null, null, null, null, null, null, null);
+
+        service.save(OWNER_ID, TASK_ID, noModel);
+
+        ArgumentCaptor<AiReviewConfig> captor = ArgumentCaptor.forClass(AiReviewConfig.class);
+        verify(aiReviewConfigMapper).insert(captor.capture());
+        assertThat(captor.getValue().getModelName()).isEqualTo("qwen-plus");
+    }
+
+    @Test
     void rejectsDisabledProvider() {
         when(taskMapper.selectById(TASK_ID)).thenReturn(draftTask());
         when(llmProviderService.findEnabledById(PROVIDER_ID)).thenReturn(Optional.empty());
@@ -133,9 +169,8 @@ class AiReviewConfigServiceTest {
                 List.of("accuracy"),
                 new BigDecimal("60.00"),
                 new BigDecimal("80.00"),
-                Map.of("type", "object"),
                 3,
-                null, null, null, null, null, null
+                null, null, null, null, null, null, null
         );
         when(taskMapper.selectById(TASK_ID)).thenReturn(draftTask());
         when(llmProviderService.findEnabledById(PROVIDER_ID)).thenReturn(Optional.of(provider()));
@@ -154,6 +189,16 @@ class AiReviewConfigServiceTest {
         assertThatThrownBy(() -> service.save(OWNER_ID, TASK_ID, request()))
                 .isInstanceOfSatisfying(BusinessException.class,
                         ex -> assertThat(ex.getCode()).isEqualTo(404001));
+    }
+
+    @Test
+    void rejectsProviderOwnedByAnotherOwner() {
+        when(taskMapper.selectById(TASK_ID)).thenReturn(draftTask());
+        when(llmProviderService.findEnabledById(PROVIDER_ID)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.save(OWNER_ID, TASK_ID, request()))
+                .isInstanceOfSatisfying(BusinessException.class,
+                        ex -> assertThat(ex.getCode()).isEqualTo(400401));
     }
 
     @Test
@@ -234,9 +279,8 @@ class AiReviewConfigServiceTest {
                 List.of("accuracy", "safety"),
                 new BigDecimal("85.00"),
                 new BigDecimal("60.00"),
-                Map.of("type", "object", "required", List.of("decision")),
                 3,
-                null, null, null, null, null, null
+                null, null, null, null, null, null, null
         );
     }
 

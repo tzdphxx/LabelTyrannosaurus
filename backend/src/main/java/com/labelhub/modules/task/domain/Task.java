@@ -31,11 +31,19 @@ public class Task {
 
     private Integer overlapCount;
 
+    private ClaimStrategy strategy;
+
+    private Integer maxClaimsPerLabeler;
+
+    private Long assignedLabelerId;
+
     private LocalDateTime deadlineAt;
 
     private Long publishedTemplateVersionId;
 
     private Long aiReviewConfigId;
+
+    private Integer reviewLevelCount;
 
     private Boolean rewardVisible;
 

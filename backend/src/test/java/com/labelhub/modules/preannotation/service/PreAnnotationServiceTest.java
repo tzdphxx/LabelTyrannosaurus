@@ -13,11 +13,14 @@ import static org.mockito.Mockito.when;
 import com.labelhub.common.audit.AuditAppender;
 import com.labelhub.common.audit.AuditCommand;
 import com.labelhub.common.exception.BusinessException;
+import com.labelhub.common.security.CurrentUser;
+import com.labelhub.common.security.RoleCode;
 import com.labelhub.common.web.TraceIdProvider;
 import com.labelhub.infrastructure.llm.LlmGateway;
 import com.labelhub.infrastructure.llm.LlmGatewayRequest;
 import com.labelhub.infrastructure.llm.LlmGatewayResponse;
 import com.labelhub.infrastructure.llm.LlmGatewayStatus;
+import com.labelhub.infrastructure.llmtask.LlmTaskQueueService;
 import com.labelhub.infrastructure.redis.RedisLockService;
 import com.labelhub.modules.agent.domain.AgentRun;
 import com.labelhub.modules.agent.domain.AgentRunStatus;
@@ -27,6 +30,7 @@ import com.labelhub.modules.ai.domain.LlmProvider;
 import com.labelhub.modules.ai.mapper.AiReviewConfigMapper;
 import com.labelhub.modules.ai.service.DefaultMediaPromptContextBuilder;
 import com.labelhub.modules.ai.service.LlmProviderService;
+import com.labelhub.modules.ai.service.PromptTemplateEngine;
 import com.labelhub.modules.ai.service.ProviderCapability;
 import com.labelhub.modules.assignment.domain.Assignment;
 import com.labelhub.modules.assignment.domain.AssignmentStatus;
@@ -49,6 +53,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.function.Supplier;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -56,8 +61,11 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.mockito.junit.jupiter.MockitoSettings;
+import org.mockito.quality.Strictness;
 
 @ExtendWith(MockitoExtension.class)
+@MockitoSettings(strictness = Strictness.LENIENT)
 class PreAnnotationServiceTest {
 
     private static final Long ASSIGNMENT_ID = 10L;
@@ -80,6 +88,8 @@ class PreAnnotationServiceTest {
     @Mock private AuditAppender auditAppender;
     @Mock private TraceIdProvider traceIdProvider;
     @Mock private RedisLockService redisLockService;
+    @Mock private LlmTaskQueueService llmTaskQueueService;
+    @Mock private PromptTemplateEngine promptTemplateEngine;
 
     private PreAnnotationService service;
 
@@ -88,43 +98,43 @@ class PreAnnotationServiceTest {
         service = new PreAnnotationService(
                 assignmentMapper, taskMapper, datasetItemMapper, templateVersionMapper, aiReviewConfigMapper,
                 llmProviderService, llmGateway, agentRunService, preAnnotationMapper, submissionMapper,
-                auditAppender, traceIdProvider, new DefaultMediaPromptContextBuilder(), redisLockService);
-        lenient().when(redisLockService.withLock(any(), anyLong(), anyLong(),
-                org.mockito.ArgumentMatchers.<Supplier<PreAnnotationResponse>>any()))
-                .thenAnswer(invocation -> invocation.<Supplier<PreAnnotationResponse>>getArgument(3).get());
+                auditAppender, traceIdProvider, new DefaultMediaPromptContextBuilder(), redisLockService,
+                llmTaskQueueService);
+        lenient().when(redisLockService.withLock(any(), any(Long.class), any(Long.class), any(Supplier.class)))
+                .thenAnswer(invocation -> ((Supplier<?>) invocation.getArgument(3)).get());
+        lenient().when(agentRunService.create(
+                        org.mockito.ArgumentMatchers.any(),
+                        org.mockito.ArgumentMatchers.any(),
+                        org.mockito.ArgumentMatchers.any(),
+                        org.mockito.ArgumentMatchers.any(),
+                        org.mockito.ArgumentMatchers.any(),
+                        org.mockito.ArgumentMatchers.any(),
+                        org.mockito.ArgumentMatchers.any(),
+                        org.mockito.ArgumentMatchers.any()))
+                .thenReturn(agentRun());
+        org.springframework.test.util.ReflectionTestUtils.setField(service, "promptTemplateEngine", promptTemplateEngine);
+        lenient().when(promptTemplateEngine.buildPreAnnotationPrompt(
+                        org.mockito.ArgumentMatchers.any(),
+                        org.mockito.ArgumentMatchers.any(),
+                        org.mockito.ArgumentMatchers.any(),
+                        org.mockito.ArgumentMatchers.any()))
+                .thenReturn("You are LabelHub pre-annotation assistant.");
     }
 
     @Test
-    void runStoresSuggestionWithoutMutatingAssignmentOrSubmission() {
+    void runEnqueuesPreAnnotationWithoutMutatingAssignmentOrSubmission() {
         when(assignmentMapper.selectOwnedAssignment(ASSIGNMENT_ID, LABELER_ID)).thenReturn(assignment());
         when(taskMapper.selectById(TASK_ID)).thenReturn(task());
         when(aiReviewConfigMapper.selectById(CONFIG_ID)).thenReturn(config());
         when(datasetItemMapper.selectById(70L)).thenReturn(datasetItem());
-        when(templateVersionMapper.selectById(80L)).thenReturn(templateVersion());
         when(llmProviderService.findEnabledById(PROVIDER_ID)).thenReturn(Optional.of(provider()));
         when(agentRunService.create(eq("PRE_ANNOTATION"), eq(null), eq(PROVIDER_ID), eq("qwen-vl"),
                 eq("v1"), any(), eq(ASSIGNMENT_ID))).thenReturn(agentRun());
-        when(llmGateway.review(any(LlmGatewayRequest.class))).thenReturn(new LlmGatewayResponse(
-                LlmGatewayStatus.SUCCESS,
-                "{\"ok\":true}",
-                "{\"suggestedAnswerJson\":{\"label\":\"cat\"},\"fieldSuggestions\":[{\"field\":\"label\"}],\"riskFlags\":[],\"overallConfidence\":0.86,\"limitations\":[]}",
-                Map.of(
-                        "suggestedAnswerJson", Map.of("label", "cat"),
-                        "fieldSuggestions", List.of(Map.of("field", "label")),
-                        "riskFlags", List.of(),
-                        "overallConfidence", 0.86,
-                        "limitations", List.of()
-                ),
-                100L,
-                null,
-                null
-        ));
 
         PreAnnotationResponse response = service.run(ASSIGNMENT_ID, LABELER_ID, null);
 
-        assertThat(response.status()).isEqualTo(PreAnnotationStatus.SUCCESS);
-        assertThat(response.suggestedAnswerJson()).containsEntry("label", "cat");
-        verify(agentRunService).complete(eq(AGENT_RUN_ID), any());
+        assertThat(response.status()).isEqualTo(PreAnnotationStatus.RUNNING);
+        verify(llmTaskQueueService).enqueue(any());
         verify(preAnnotationMapper).insert(any(PreAnnotation.class));
         verify(assignmentMapper, never()).updateById(any(Assignment.class));
         verify(submissionMapper, never()).insert(any(Submission.class));
@@ -132,8 +142,17 @@ class PreAnnotationServiceTest {
     }
 
     @Test
-    void runPersistsPendingThenRunningThenSuccessAndFiltersIllegalFields() {
-        when(assignmentMapper.selectOwnedAssignment(ASSIGNMENT_ID, LABELER_ID)).thenReturn(assignment());
+    void workerPersistsSuccessAndFiltersIllegalFields() {
+        PreAnnotation record = new PreAnnotation();
+        record.setId(99L);
+        record.setAssignmentId(ASSIGNMENT_ID);
+        record.setTaskId(TASK_ID);
+        record.setDatasetItemId(70L);
+        record.setLabelerId(LABELER_ID);
+        record.setAgentRunId(AGENT_RUN_ID);
+        record.setStatus(PreAnnotationStatus.RUNNING);
+        when(preAnnotationMapper.selectById(99L)).thenReturn(record);
+        when(assignmentMapper.selectById(ASSIGNMENT_ID)).thenReturn(assignment());
         when(taskMapper.selectById(TASK_ID)).thenReturn(task());
         when(aiReviewConfigMapper.selectById(CONFIG_ID)).thenReturn(config());
         when(datasetItemMapper.selectById(70L)).thenReturn(datasetItem());
@@ -141,8 +160,7 @@ class PreAnnotationServiceTest {
         when(llmProviderService.findEnabledById(PROVIDER_ID)).thenReturn(Optional.of(provider()));
         when(llmProviderService.capability(any(LlmProvider.class))).thenReturn(
                 new ProviderCapability(true, true, 10, null));
-        when(agentRunService.create(eq("PRE_ANNOTATION"), eq(null), eq(PROVIDER_ID), eq("qwen-vl"),
-                eq("v1"), any(), eq(ASSIGNMENT_ID))).thenReturn(agentRun());
+        when(agentRunService.findActive(AGENT_RUN_ID)).thenReturn(Optional.of(runningRun(AGENT_RUN_ID)));
         when(llmGateway.review(any(LlmGatewayRequest.class))).thenReturn(new LlmGatewayResponse(
                 LlmGatewayStatus.SUCCESS,
                 "{\"ok\":true}",
@@ -159,13 +177,6 @@ class PreAnnotationServiceTest {
                 null
         ));
 
-        List<PreAnnotationStatus> insertStatuses = new ArrayList<>();
-        org.mockito.Mockito.doAnswer(inv -> {
-            PreAnnotation pa = inv.getArgument(0);
-            insertStatuses.add(pa.getStatus());
-            return 1;
-        }).when(preAnnotationMapper).insert(any(PreAnnotation.class));
-
         List<PreAnnotationStatus> updateStatuses = new ArrayList<>();
         org.mockito.Mockito.doAnswer(inv -> {
             PreAnnotation pa = inv.getArgument(0);
@@ -173,19 +184,62 @@ class PreAnnotationServiceTest {
             return 1;
         }).when(preAnnotationMapper).updateById(any(PreAnnotation.class));
 
-        PreAnnotationResponse response = service.run(ASSIGNMENT_ID, LABELER_ID, new PreAnnotationRunRequest(
-                80L,
-                70L,
-                "{\"label\":\"draft\"}",
-                "SUGGEST_ONLY"
+        service.executeQueuedPreAnnotation(99L);
+
+        assertThat(updateStatuses).contains(PreAnnotationStatus.SUCCESS);
+        assertThat(record.getSuggestedAnswerJson()).contains("cat");
+        assertThat(record.getIgnoredFieldsJson()).contains("showOnly");
+        assertThat(record.getMediaUnderstandingJson()).contains("usedMedia");
+    }
+
+    @Test
+    void workerCreatesNewAgentRunWhenExistingRunIsNoLongerPendingOrRunning() {
+        Long staleRunId = 61L;
+        Long newRunId = 62L;
+        PreAnnotation record = new PreAnnotation();
+        record.setId(99L);
+        record.setAssignmentId(ASSIGNMENT_ID);
+        record.setTaskId(TASK_ID);
+        record.setDatasetItemId(70L);
+        record.setLabelerId(LABELER_ID);
+        record.setAgentRunId(staleRunId);
+        record.setStatus(PreAnnotationStatus.RUNNING);
+        when(preAnnotationMapper.selectById(99L)).thenReturn(record);
+        when(assignmentMapper.selectById(ASSIGNMENT_ID)).thenReturn(assignment());
+        when(taskMapper.selectById(TASK_ID)).thenReturn(task());
+        when(aiReviewConfigMapper.selectById(CONFIG_ID)).thenReturn(config());
+        when(datasetItemMapper.selectById(70L)).thenReturn(datasetItem());
+        when(templateVersionMapper.selectById(80L)).thenReturn(templateVersion());
+        when(llmProviderService.findEnabledById(PROVIDER_ID)).thenReturn(Optional.of(provider()));
+        when(llmProviderService.capability(any(LlmProvider.class))).thenReturn(
+                new ProviderCapability(true, true, 10, null));
+        when(agentRunService.findActive(staleRunId)).thenReturn(Optional.empty());
+        when(agentRunService.create(eq("PRE_ANNOTATION"), eq(null), eq(PROVIDER_ID), eq("qwen-vl"),
+                eq("v1"), any(), eq(ASSIGNMENT_ID))).thenReturn(agentRun(newRunId));
+        when(agentRunService.create(eq("PRE_ANNOTATION"), eq(null), eq(PROVIDER_ID), eq("qwen-vl"),
+                eq("v1"), any(), eq(ASSIGNMENT_ID), any())).thenReturn(agentRun(newRunId));
+        when(llmGateway.review(any(LlmGatewayRequest.class))).thenReturn(new LlmGatewayResponse(
+                LlmGatewayStatus.SUCCESS,
+                "{\"ok\":true}",
+                "{\"suggestedAnswerJson\":{\"label\":\"cat\"},\"fieldSuggestions\":[{\"field\":\"label\"}],\"riskFlags\":[],\"overallConfidence\":0.86,\"limitations\":[]}",
+                Map.of(
+                        "suggestedAnswerJson", Map.of("label", "cat"),
+                        "fieldSuggestions", List.of(Map.of("field", "label")),
+                        "riskFlags", List.of(),
+                        "overallConfidence", 0.86,
+                        "limitations", List.of()
+                ),
+                100L,
+                null,
+                null
         ));
 
-        assertThat(insertStatuses).containsExactly(PreAnnotationStatus.PENDING);
-        assertThat(updateStatuses).contains(PreAnnotationStatus.RUNNING, PreAnnotationStatus.SUCCESS);
-        assertThat(response.suggestedAnswerJson()).containsEntry("label", "cat");
-        assertThat(response.suggestedAnswerJson()).doesNotContainKey("showOnly");
-        assertThat(response.ignoredFields()).contains("showOnly");
-        assertThat(response.mediaUnderstanding()).containsEntry("usedMedia", true);
+        service.executeQueuedPreAnnotation(99L);
+
+        assertThat(record.getAgentRunId()).isEqualTo(newRunId);
+        verify(agentRunService).findActive(staleRunId);
+        verify(agentRunService).start(newRunId);
+        verify(agentRunService, never()).complete(eq(staleRunId), any());
     }
 
     @Test
@@ -197,6 +251,34 @@ class PreAnnotationServiceTest {
                         ex -> assertThat(ex.getCode()).isEqualTo(403801));
     }
 
+    @Test
+    void reviewerCannotReadPreAnnotationForUnassignedSubmission() {
+        PreAnnotation record = preAnnotationRecord();
+        when(preAnnotationMapper.selectById(99L)).thenReturn(record);
+        when(assignmentMapper.selectById(ASSIGNMENT_ID)).thenReturn(assignment());
+        when(taskMapper.selectById(TASK_ID)).thenReturn(task());
+        when(submissionMapper.selectLatestActiveByAssignmentId(ASSIGNMENT_ID)).thenReturn(submission(88L));
+
+        assertThatThrownBy(() -> service.getDetail(99L,
+                new CurrentUser(30L, "reviewer", "r@test.dev", Set.of(RoleCode.REVIEWER), 1)))
+                .isInstanceOfSatisfying(BusinessException.class,
+                        ex -> assertThat(ex.getCode()).isEqualTo(403801));
+    }
+
+    @Test
+    void assignedReviewerCanReadPreAnnotationDetail() {
+        PreAnnotation record = preAnnotationRecord();
+        when(preAnnotationMapper.selectById(99L)).thenReturn(record);
+        when(assignmentMapper.selectById(ASSIGNMENT_ID)).thenReturn(assignment());
+        when(taskMapper.selectById(TASK_ID)).thenReturn(task());
+        when(submissionMapper.selectLatestActiveByAssignmentId(ASSIGNMENT_ID)).thenReturn(submission(30L));
+
+        PreAnnotationResponse response = service.getDetail(99L,
+                new CurrentUser(30L, "reviewer", "r@test.dev", Set.of(RoleCode.REVIEWER), 1));
+
+        assertThat(response.preAnnotationId()).isEqualTo(99L);
+    }
+
     private Assignment assignment() {
         Assignment assignment = new Assignment();
         assignment.setId(ASSIGNMENT_ID);
@@ -206,6 +288,31 @@ class PreAnnotationServiceTest {
         assignment.setTemplateVersionId(80L);
         assignment.setStatus(AssignmentStatus.DRAFTING);
         return assignment;
+    }
+
+    private PreAnnotation preAnnotationRecord() {
+        PreAnnotation record = new PreAnnotation();
+        record.setId(99L);
+        record.setAssignmentId(ASSIGNMENT_ID);
+        record.setTaskId(TASK_ID);
+        record.setDatasetItemId(70L);
+        record.setLabelerId(LABELER_ID);
+        record.setStatus(PreAnnotationStatus.SUCCESS);
+        record.setSuggestedAnswerJson("{}");
+        record.setFieldSuggestions("[]");
+        record.setRiskFlags("[]");
+        record.setLimitations("[]");
+        record.setIgnoredFieldsJson("[]");
+        record.setMediaUnderstandingJson("{}");
+        return record;
+    }
+
+    private Submission submission(Long assignedReviewerId) {
+        Submission submission = new Submission();
+        submission.setId(100L);
+        submission.setAssignmentId(ASSIGNMENT_ID);
+        submission.setAssignedReviewerId(assignedReviewerId);
+        return submission;
     }
 
     private Task task() {
@@ -260,8 +367,18 @@ class PreAnnotationServiceTest {
     }
 
     private AgentRun agentRun() {
+        return agentRun(AGENT_RUN_ID);
+    }
+
+    private AgentRun agentRun(Long id) {
         AgentRun run = new AgentRun();
-        run.setId(AGENT_RUN_ID);
+        run.setId(id);
+        return run;
+    }
+
+    private AgentRun runningRun(Long id) {
+        AgentRun run = agentRun(id);
+        run.setStatus(AgentRunStatus.RUNNING);
         return run;
     }
 }

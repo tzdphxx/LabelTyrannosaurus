@@ -7,6 +7,10 @@ public class NoOpSubmissionEventPublisher implements SubmissionEventPublisher {
     }
 
     @Override
+    public void publishRejected(Long submissionId, Long reviewerId, String reason) {
+    }
+
+    @Override
     public void publishGoldenSelected(Long conflictGroupId, Long submissionId, Long reviewerId) {
     }
 }

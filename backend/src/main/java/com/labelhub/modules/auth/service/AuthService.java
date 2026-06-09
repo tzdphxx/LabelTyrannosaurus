@@ -12,6 +12,8 @@ import com.labelhub.modules.auth.dto.LoginRequest;
 import com.labelhub.modules.auth.dto.RegisterRequest;
 import com.labelhub.modules.auth.dto.TokenResponse;
 import com.labelhub.modules.auth.dto.UserProfileResponse;
+import com.labelhub.modules.auth.dto.ChangePasswordRequest;
+import com.labelhub.modules.auth.dto.UpdateProfileRequest;
 import com.labelhub.modules.auth.repository.UserMapper;
 import com.labelhub.modules.auth.repository.UserRoleMapper;
 import lombok.extern.slf4j.Slf4j;
@@ -31,7 +33,7 @@ import java.util.Set;
 @Slf4j
 public class AuthService {
 
-    private static final Set<RoleCode> REGISTERABLE_ROLES = Set.of(RoleCode.LABELER, RoleCode.OWNER, RoleCode.REVIEWER);
+    private static final Set<RoleCode> REGISTERABLE_ROLES = Set.of(RoleCode.LABELER, RoleCode.OWNER);
 
     private final UserMapper userMapper;
     private final UserRoleMapper userRoleMapper;
@@ -51,17 +53,16 @@ public class AuthService {
     /**
      * 注册普通用户并签发令牌。
      *
-     * <p>注册用户固定为 {@code USER} 类型，默认可登录、可用，并授予 {@code LABELER}
-     * 角色。用户名和邮箱任一重复都会返回参数非法错误。</p>
+     * <p>注册用户固定为 {@code USER} 类型，默认可登录、可用，并授予公开注册允许的
+     * {@code LABELER} 或 {@code OWNER} 角色。用户名和邮箱任一重复都会返回参数非法错误。</p>
      */
     @Transactional
     public TokenResponse register(RegisterRequest request) {
         RoleCode registerRole = parseRegisterRole(request.role());
 
         if (userMapper.selectByUsername(request.username()) != null || userMapper.selectByEmail(request.email()) != null) {
-            throw new BusinessException(400102, "Username or email already exists");
+            throw new BusinessException(400102, "用户名或邮箱已存在");
         }
-        RoleCode selectedRole = RoleCode.valueOf(request.role().toUpperCase());
         UserEntity user = new UserEntity();
         user.setUsername(request.username());
         user.setEmail(request.email());
@@ -84,7 +85,7 @@ public class AuthService {
     public TokenResponse login(LoginRequest request) {
         UserEntity user = userMapper.selectByUsernameOrEmail(request.account());
         if (!canLogin(user) || !passwordEncoder.matches(request.password(), user.getPasswordHash())) {
-            throw new BusinessException(401001, "Invalid account or password");
+            throw new BusinessException(401001, "账号或密码错误");
         }
         Set<RoleCode> roles = userRoleMapper.selectRoleCodesByUserId(user.getId());
         RoleCode role = requireSingleRole(roles);
@@ -102,7 +103,7 @@ public class AuthService {
         JwtTokenService.TokenClaims claims = jwtTokenService.parseRefreshToken(refreshToken);
         UserEntity user = userMapper.selectById(claims.userId());
         if (!canLogin(user) || !user.getTokenVersion().equals(claims.tokenVersion())) {
-            throw new BusinessException(401001, "Invalid refresh token");
+            throw new BusinessException(401001, "刷新令牌无效");
         }
         Set<RoleCode> roles = userRoleMapper.selectRoleCodesByUserId(user.getId());
         RoleCode role = requireSingleRole(roles);
@@ -129,23 +130,23 @@ public class AuthService {
 
     private RoleCode requireSingleRole(Set<RoleCode> roles) {
         if (roles == null || roles.size() != 1) {
-            throw new BusinessException(400102, "User must have exactly one role");
+            throw new BusinessException(400102, "用户必须且只能拥有一个角色");
         }
         return roles.iterator().next();
     }
 
     private RoleCode parseRegisterRole(String rawRole) {
         if (rawRole == null || rawRole.isBlank()) {
-            throw new BusinessException(400102, "Invalid register role");
+            throw new BusinessException(400102, "注册角色不合法");
         }
         try {
             RoleCode role = RoleCode.valueOf(rawRole.trim().toUpperCase());
             if (!REGISTERABLE_ROLES.contains(role)) {
-                throw new BusinessException(400102, "Invalid register role");
+                throw new BusinessException(400102, "注册角色不合法");
             }
             return role;
         } catch (IllegalArgumentException ex) {
-            throw new BusinessException(400102, "Invalid register role");
+            throw new BusinessException(400102, "注册角色不合法");
         }
     }
 
@@ -155,5 +156,38 @@ public class AuthService {
                 && Boolean.TRUE.equals(user.getEnabled())
                 && Boolean.TRUE.equals(user.getLoginEnabled())
                 && user.getPasswordHash() != null;
+    }
+
+    @Transactional
+    public void changePassword(Long userId, ChangePasswordRequest request) {
+        UserEntity user = userMapper.selectById(userId);
+        if (user == null) {
+            throw new BusinessException(401001, "用户不存在");
+        }
+        if (!passwordEncoder.matches(request.oldPassword(), user.getPasswordHash())) {
+            throw new BusinessException(401001, "旧密码不正确");
+        }
+        user.setPasswordHash(passwordEncoder.encode(request.newPassword()));
+        userMapper.updateById(user);
+        userMapper.incrementTokenVersion(userId);
+    }
+
+    @Transactional
+    public void updateProfile(Long userId, UpdateProfileRequest request) {
+        UserEntity user = userMapper.selectById(userId);
+        if (user == null) {
+            throw new BusinessException(401001, "用户不存在");
+        }
+        if (request.email() != null && !request.email().isBlank()) {
+            UserEntity existing = userMapper.selectByEmail(request.email());
+            if (existing != null && !existing.getId().equals(userId)) {
+                throw new BusinessException(400102, "邮箱已被使用");
+            }
+            user.setEmail(request.email());
+        }
+        if (request.displayName() != null) {
+            user.setDisplayName(request.displayName());
+        }
+        userMapper.updateById(user);
     }
 }

@@ -1,6 +1,8 @@
 package com.labelhub.common.web;
 
 import jakarta.servlet.http.HttpServletRequest;
+import com.labelhub.infrastructure.llmtask.LlmTaskExecutionContext;
+import java.util.UUID;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Component;
 
@@ -15,11 +17,23 @@ public class RequestTraceIdProvider implements TraceIdProvider {
 
     @Override
     public String currentTraceId() {
+        String queuedTraceId = LlmTaskExecutionContext.currentTraceId();
+        if (queuedTraceId != null && !queuedTraceId.isBlank()) {
+            return queuedTraceId;
+        }
         HttpServletRequest request = requestProvider.getIfAvailable();
         if (request == null) {
-            return null;
+            return newTraceId();
         }
-        String traceId = request.getHeader("X-Trace-Id");
-        return traceId == null || traceId.isBlank() ? null : traceId;
+        try {
+            String traceId = request.getHeader("X-Trace-Id");
+            return traceId == null || traceId.isBlank() ? newTraceId() : traceId;
+        } catch (IllegalStateException ex) {
+            return newTraceId();
+        }
+    }
+
+    private String newTraceId() {
+        return UUID.randomUUID().toString();
     }
 }

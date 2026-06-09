@@ -5,6 +5,7 @@ import com.labelhub.common.audit.AuditAppender;
 import com.labelhub.common.audit.AuditCommand;
 import com.labelhub.modules.agent.domain.SystemActorContext;
 import com.labelhub.modules.agent.service.SystemAgentProvider;
+import com.labelhub.modules.ai.domain.AiFlowAction;
 import com.labelhub.modules.ai.domain.AiReviewResult;
 import com.labelhub.modules.ai.domain.AiReviewStatus;
 import com.labelhub.modules.ai.mapper.AiReviewResultMapper;
@@ -35,23 +36,33 @@ public class AiReviewRecoveryRunner implements ApplicationRunner {
     private final AiAutoReviewService aiAutoReviewService;
     private final SystemAgentProvider systemAgentProvider;
     private final AuditAppender auditAppender;
+    private final com.labelhub.modules.review.service.ReviewOwnershipResolver reviewOwnershipResolver;
+    private final AiReviewSchemaReadiness schemaReadiness;
 
     public AiReviewRecoveryRunner(SubmissionMapper submissionMapper,
                                   AiReviewResultMapper aiReviewResultMapper,
                                   AiReviewDispatcher dispatcher,
                                   AiAutoReviewService aiAutoReviewService,
                                   SystemAgentProvider systemAgentProvider,
-                                  AuditAppender auditAppender) {
+                                  AuditAppender auditAppender,
+                                  com.labelhub.modules.review.service.ReviewOwnershipResolver reviewOwnershipResolver,
+                                  AiReviewSchemaReadiness schemaReadiness) {
         this.submissionMapper = submissionMapper;
         this.aiReviewResultMapper = aiReviewResultMapper;
         this.dispatcher = dispatcher;
         this.aiAutoReviewService = aiAutoReviewService;
         this.systemAgentProvider = systemAgentProvider;
         this.auditAppender = auditAppender;
+        this.reviewOwnershipResolver = reviewOwnershipResolver;
+        this.schemaReadiness = schemaReadiness;
     }
 
     @Override
     public void run(ApplicationArguments args) {
+        if (!schemaReadiness.isReady()) {
+            log.warn("Skipping AI review recovery because required database tables are not ready");
+            return;
+        }
         List<Submission> stuck = submissionMapper.selectList(
                 new LambdaQueryWrapper<Submission>()
                         .eq(Submission::getStatus, SubmissionStatus.AI_REVIEWING));
@@ -88,12 +99,33 @@ public class AiReviewRecoveryRunner implements ApplicationRunner {
     }
 
     private void moveToFinalStatus(Submission submission, AiReviewResult result) {
-        if (result.getStatus() == AiReviewStatus.MANUAL_REQUIRED
-                || result.getStatus() == AiReviewStatus.SUCCESS) {
-            submission.setStatus(SubmissionStatus.PENDING_FINAL);
-            submissionMapper.updateById(submission);
-            appendRecoveryAudit(submission.getId(), "MOVED_TO_PENDING_FINAL");
+        if (result.getStatus() == AiReviewStatus.MANUAL_REQUIRED) {
+            updateRecoveredStatus(submission, SubmissionStatus.PENDING_FINAL, "MOVED_TO_PENDING_FINAL");
+            return;
         }
+        if (result.getStatus() != AiReviewStatus.SUCCESS) {
+            return;
+        }
+        try {
+            aiAutoReviewService.applyRecoveredFlowAction(submission, result);
+        } catch (Exception e) {
+            log.error("Failed to apply recovered flow action for submission {} (action={}) — "
+                    + "falling back to PENDING_FINAL",
+                    submission.getId(), result.getFlowAction(), e);
+            updateRecoveredStatus(submission, SubmissionStatus.PENDING_FINAL,
+                    "FALLBACK_TO_PENDING_FINAL");
+            return;
+        }
+        appendRecoveryAudit(submission.getId(), "RECOVERED_" + result.getFlowAction());
+    }
+
+    private void updateRecoveredStatus(Submission submission, SubmissionStatus status, String action) {
+        submission.setStatus(status);
+        submissionMapper.updateById(submission);
+        if (status == SubmissionStatus.PENDING_FINAL) {
+            reviewOwnershipResolver.assignToClaimant(submission);
+        }
+        appendRecoveryAudit(submission.getId(), action);
     }
 
     private void appendRecoveryAudit(Long submissionId, String action) {

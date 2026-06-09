@@ -10,11 +10,7 @@ import com.labelhub.common.exception.BusinessException;
 import com.labelhub.common.security.CurrentUser;
 import com.labelhub.common.security.CurrentUserContext;
 import com.labelhub.common.security.RoleCode;
-import com.labelhub.modules.ai.dto.CreateLlmProviderRequest;
 import com.labelhub.modules.ai.dto.LlmProviderResponse;
-import com.labelhub.modules.ai.dto.LlmProviderTestResponse;
-import com.labelhub.modules.ai.dto.TestLlmProviderRequest;
-import com.labelhub.modules.ai.dto.UpdateLlmProviderRequest;
 import com.labelhub.modules.ai.service.LlmProviderService;
 import java.util.List;
 import java.util.Map;
@@ -37,6 +33,19 @@ class LlmProviderControllerTest {
     }
 
     @Test
+    void ownerCanListEnabledProviders() {
+        CurrentUserContext.set(owner());
+        LlmProviderController controller = new LlmProviderController(llmProviderService);
+        LlmProviderResponse serviceResponse = response();
+        when(llmProviderService.listEnabled()).thenReturn(List.of(serviceResponse));
+
+        ApiResponse<List<LlmProviderResponse>> response = controller.list();
+
+        assertThat(response.data()).containsExactly(serviceResponse);
+        verify(llmProviderService).listEnabled();
+    }
+
+    @Test
     void labelerCannotListProviders() {
         CurrentUserContext.set(labeler());
         LlmProviderController controller = new LlmProviderController(llmProviderService);
@@ -46,88 +55,12 @@ class LlmProviderControllerTest {
                         ex -> assertThat(ex.getCode()).isEqualTo(403001));
     }
 
-    @Test
-    void ownerCreateUsesCurrentUserId() {
-        CurrentUserContext.set(owner());
-        LlmProviderController controller = new LlmProviderController(llmProviderService);
-        CreateLlmProviderRequest request = createRequest();
-        LlmProviderResponse serviceResponse = response();
-        when(llmProviderService.create(1L, request)).thenReturn(serviceResponse);
-
-        ApiResponse<LlmProviderResponse> response = controller.create(request);
-
-        assertThat(response.data()).isEqualTo(serviceResponse);
-        verify(llmProviderService).create(1L, request);
-    }
-
-    @Test
-    void labelerCannotUpdateProvider() {
-        CurrentUserContext.set(labeler());
-        LlmProviderController controller = new LlmProviderController(llmProviderService);
-
-        assertThatThrownBy(() -> controller.update(10L, updateRequest()))
-                .isInstanceOfSatisfying(BusinessException.class,
-                        ex -> assertThat(ex.getCode()).isEqualTo(403001));
-    }
-
-    @Test
-    void labelerCannotTestProvider() {
-        CurrentUserContext.set(labeler());
-        LlmProviderController controller = new LlmProviderController(llmProviderService);
-
-        assertThatThrownBy(() -> controller.test(10L, new TestLlmProviderRequest(null, "qwen-plus", Map.of())))
-                .isInstanceOfSatisfying(BusinessException.class,
-                        ex -> assertThat(ex.getCode()).isEqualTo(403001));
-    }
-
-    @Test
-    void ownerCanTestProvider() {
-        CurrentUserContext.set(owner());
-        LlmProviderController controller = new LlmProviderController(llmProviderService);
-        TestLlmProviderRequest request = new TestLlmProviderRequest(null, "qwen-plus", Map.of());
-        LlmProviderTestResponse serviceResponse = new LlmProviderTestResponse(true, 12L, "OK");
-        when(llmProviderService.test(1L, 10L, request)).thenReturn(serviceResponse);
-
-        ApiResponse<LlmProviderTestResponse> response = controller.test(10L, request);
-
-        assertThat(response.data()).isEqualTo(serviceResponse);
-        verify(llmProviderService).test(1L, 10L, request);
-    }
-
     private CurrentUser owner() {
         return new CurrentUser(1L, "owner", "owner@labelhub.dev", Set.of(RoleCode.OWNER), 1);
     }
 
     private CurrentUser labeler() {
         return new CurrentUser(2L, "labeler", "labeler@labelhub.dev", Set.of(RoleCode.LABELER), 1);
-    }
-
-    private CreateLlmProviderRequest createRequest() {
-        return new CreateLlmProviderRequest(
-                "dashscope",
-                "DashScope",
-                "https://dashscope.aliyuncs.com/compatible-mode/v1",
-                "sk-test",
-                "qwen-plus",
-                Map.of(),
-                60,
-                30,
-                10
-        );
-    }
-
-    private UpdateLlmProviderRequest updateRequest() {
-        return new UpdateLlmProviderRequest(
-                "dashscope",
-                "DashScope",
-                "https://dashscope.aliyuncs.com/compatible-mode/v1",
-                null,
-                "qwen-plus",
-                Map.of(),
-                60,
-                30,
-                10
-        );
     }
 
     private LlmProviderResponse response() {
@@ -146,8 +79,8 @@ class LlmProviderControllerTest {
                 false,
                 10,
                 null,
+                "NONE",
                 true,
-                1L,
                 1L,
                 null,
                 null

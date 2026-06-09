@@ -9,12 +9,16 @@ import com.labelhub.modules.auth.domain.UserRoleEntity;
 import com.labelhub.modules.auth.domain.UserType;
 import com.labelhub.modules.auth.repository.UserMapper;
 import com.labelhub.modules.auth.repository.UserRoleMapper;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 /**
  * Admin 用户管理服务。
@@ -24,6 +28,10 @@ import java.util.Set;
  */
 @Service
 public class AdminUserService {
+
+    private static final Logger log = LoggerFactory.getLogger(AdminUserService.class);
+    private static final List<RoleCode> ROLE_DISPLAY_PRIORITY = List.of(
+            RoleCode.ADMIN, RoleCode.OWNER, RoleCode.REVIEWER, RoleCode.LABELER);
 
     private final UserMapper userMapper;
     private final UserRoleMapper userRoleMapper;
@@ -39,8 +47,15 @@ public class AdminUserService {
      * 查询用户列表，默认由 Controller 传入 {@code includeSystem=false} 过滤系统用户。
      */
     public List<AdminUserResponse> listUsers(boolean includeSystem) {
-        return userMapper.selectAdminUsers(includeSystem).stream()
-                .map(user -> toResponse(user, userRoleMapper.selectRoleCodesByUserId(user.getId())))
+        List<UserEntity> users = userMapper.selectAdminUsers(includeSystem);
+        Map<Long, Set<RoleCode>> rolesByUserId = userRoleMapper.selectRoleCodesByUserIds(
+                        users.stream().map(UserEntity::getId).toList())
+                .stream()
+                .collect(Collectors.groupingBy(
+                        row -> toLong(row.get("userId")),
+                        Collectors.mapping(row -> toRoleCode(row.get("roleCode")), Collectors.toSet())));
+        return users.stream()
+                .map(user -> toResponse(user, rolesByUserId.getOrDefault(user.getId(), Set.of()), false))
                 .toList();
     }
 
@@ -53,14 +68,14 @@ public class AdminUserService {
     @Transactional
     public void changeRole(Long userId, RoleCode role) {
         if (role == null) {
-            throw new BusinessException(400102, "User role is required");
+            throw new BusinessException(400102, "用户角色不能为空");
         }
         UserEntity user = requireUser(userId);
         Set<RoleCode> oldRoles = userRoleMapper.selectRoleCodesByUserId(user.getId());
         RoleCode oldRole = requireSingleRole(oldRoles);
         if (oldRole == RoleCode.ADMIN && role != RoleCode.ADMIN
                 && userRoleMapper.countUsersWithRole(RoleCode.ADMIN) <= 1) {
-            throw new BusinessException(400101, "Cannot remove the last admin");
+            throw new BusinessException(400101, "不能移除最后一个管理员");
         }
         userRoleMapper.replaceRoles(userId, Set.of(role));
         userMapper.incrementTokenVersion(userId);
@@ -88,7 +103,7 @@ public class AdminUserService {
     public AdminUserResponse createReviewer(CreateReviewerRequest request) {
         if (userMapper.selectByUsername(request.username()) != null
                 || userMapper.selectByEmail(request.email()) != null) {
-            throw new BusinessException(400102, "Username or email already exists");
+            throw new BusinessException(400102, "用户名或邮箱已存在");
         }
         UserEntity user = new UserEntity();
         user.setUsername(request.username());
@@ -100,18 +115,18 @@ public class AdminUserService {
         user.setTokenVersion(1);
         userMapper.insert(user);
         userRoleMapper.insert(new UserRoleEntity(user.getId(), RoleCode.REVIEWER));
-        return toResponse(user, Set.of(RoleCode.REVIEWER));
+        return toResponse(user, Set.of(RoleCode.REVIEWER), true);
     }
 
     private UserEntity requireUser(Long userId) {
         UserEntity user = userMapper.selectById(userId);
         if (user == null) {
-            throw new BusinessException(400102, "User not found");
+            throw new BusinessException(400102, "用户不存在");
         }
         return user;
     }
 
-    private AdminUserResponse toResponse(UserEntity user, Set<RoleCode> roles) {
+    private AdminUserResponse toResponse(UserEntity user, Set<RoleCode> roles, boolean strict) {
         return new AdminUserResponse(
                 user.getId(),
                 user.getUsername(),
@@ -120,14 +135,43 @@ public class AdminUserService {
                 user.getEnabled(),
                 user.getLoginEnabled(),
                 user.getTokenVersion(),
-                requireSingleRole(roles)
+                strict ? requireSingleRole(roles) : displayRole(user, roles)
         );
+    }
+
+    private RoleCode displayRole(UserEntity user, Set<RoleCode> roles) {
+        if (roles != null && roles.size() == 1) {
+            return roles.iterator().next();
+        }
+        log.warn("User {} has invalid role data: {}", user.getId(), roles);
+        if (roles != null) {
+            for (RoleCode role : ROLE_DISPLAY_PRIORITY) {
+                if (roles.contains(role)) {
+                    return role;
+                }
+            }
+        }
+        return RoleCode.LABELER;
     }
 
     private RoleCode requireSingleRole(Set<RoleCode> roles) {
         if (roles == null || roles.size() != 1) {
-            throw new BusinessException(400102, "User must have exactly one role");
+            throw new BusinessException(400102, "用户必须且只能拥有一个角色");
         }
         return roles.iterator().next();
+    }
+
+    private Long toLong(Object value) {
+        if (value instanceof Number number) {
+            return number.longValue();
+        }
+        return Long.valueOf(String.valueOf(value));
+    }
+
+    private RoleCode toRoleCode(Object value) {
+        if (value instanceof RoleCode roleCode) {
+            return roleCode;
+        }
+        return RoleCode.valueOf(String.valueOf(value));
     }
 }

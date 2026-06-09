@@ -39,11 +39,11 @@ abstract class AbstractDatasetParser implements DatasetParser {
      */
     protected DatasetImportRow toRow(int rowNo, JsonNode rawRow) {
         if (!rawRow.isObject()) {
-            throw new IllegalArgumentException("Dataset row must be a JSON object");
+            throw new IllegalArgumentException("数据集行必须是 JSON 对象");
         }
         String externalId = extractExternalId(rawRow);
         if (externalId.isBlank()) {
-            throw new IllegalArgumentException("externalId is required");
+            throw new IllegalArgumentException("externalId 不能为空");
         }
         ObjectNode itemJson = rawRow.deepCopy();
         JsonNode metadataJson = itemJson.remove("metadata");

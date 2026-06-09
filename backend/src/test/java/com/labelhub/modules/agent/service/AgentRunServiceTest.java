@@ -50,6 +50,22 @@ class AgentRunServiceTest {
     }
 
     @Test
+    void createsRunWithTraceIdAndQueuedAt() {
+        when(agentRunMapper.insert(any(AgentRun.class))).thenAnswer(inv -> {
+            AgentRun run = inv.getArgument(0);
+            run.setId(1L);
+            return 1;
+        });
+
+        AgentRun run = service.create("AI_REVIEW", 10L, 1L, "qwen-plus", "v1",
+                "{\"q\":\"test\"}", null, "trace-ai");
+
+        assertThat(run.getTraceId()).isEqualTo("trace-ai");
+        assertThat(run.getQueuedAt()).isNotNull();
+        verify(agentRunMapper).insert(any(AgentRun.class));
+    }
+
+    @Test
     void eachCreateProducesNewRun() {
         when(agentRunMapper.insert(any(AgentRun.class))).thenReturn(1);
 
@@ -75,6 +91,7 @@ class AgentRunServiceTest {
     @Test
     void completeSetsSuccessOutputAndFinishedAt() {
         AgentRun run = runningRun();
+        run.setStartedAt(java.time.LocalDateTime.now().minusNanos(123_000_000));
         when(agentRunMapper.selectById(1L)).thenReturn(run);
 
         service.complete(1L, "{\"score\":0.9}");
@@ -82,6 +99,7 @@ class AgentRunServiceTest {
         assertThat(run.getStatus()).isEqualTo(AgentRunStatus.SUCCESS);
         assertThat(run.getOutputSnapshot()).isEqualTo("{\"score\":0.9}");
         assertThat(run.getFinishedAt()).isNotNull();
+        assertThat(run.getLatencyMs()).isGreaterThanOrEqualTo(0L);
         verify(agentRunMapper).updateById(run);
     }
 
@@ -142,6 +160,32 @@ class AgentRunServiceTest {
         assertThatThrownBy(() -> service.start(99L))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("99");
+    }
+
+    @Test
+    void findPendingReturnsRunOnlyWhenStatusIsPending() {
+        AgentRun pending = pendingRun();
+        when(agentRunMapper.selectById(1L)).thenReturn(pending);
+        when(agentRunMapper.selectById(2L)).thenReturn(runningRun());
+
+        assertThat(service.findPending(1L)).contains(pending);
+        assertThat(service.findPending(2L)).isEmpty();
+        assertThat(service.findPending(null)).isEmpty();
+    }
+
+    @Test
+    void findActiveReturnsPendingOrRunningRunOnly() {
+        AgentRun pending = pendingRun();
+        AgentRun running = runningRun();
+        AgentRun failed = pendingRun();
+        failed.setStatus(AgentRunStatus.FAILED);
+        when(agentRunMapper.selectById(1L)).thenReturn(pending);
+        when(agentRunMapper.selectById(2L)).thenReturn(running);
+        when(agentRunMapper.selectById(3L)).thenReturn(failed);
+
+        assertThat(service.findActive(1L)).contains(pending);
+        assertThat(service.findActive(2L)).contains(running);
+        assertThat(service.findActive(3L)).isEmpty();
     }
 
     private AgentRun pendingRun() {

@@ -1,17 +1,22 @@
 package com.labelhub.modules.submission.web;
 
 import com.labelhub.common.api.ApiResponse;
+import com.labelhub.common.exception.BusinessException;
 import com.labelhub.common.security.CurrentUserContext;
 import com.labelhub.common.security.RoleCode;
 import com.labelhub.modules.submission.dto.AnswerDiffResponse;
+import com.labelhub.modules.submission.dto.MultiVersionCompareResponse;
+import com.labelhub.modules.submission.dto.SubmissionItemHistoryResponse;
 import com.labelhub.modules.submission.dto.VersionHistoryItem;
 import com.labelhub.modules.submission.service.AnswerDiffService;
+import com.labelhub.modules.submission.service.SubmissionItemHistoryService;
 import com.labelhub.modules.submission.service.SubmissionVersionService;
 import com.labelhub.modules.submission.domain.Submission;
 import com.labelhub.modules.submission.mapper.SubmissionMapper;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Set;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -27,13 +32,16 @@ public class SubmissionTraceController {
 
     private final AnswerDiffService answerDiffService;
     private final SubmissionVersionService versionService;
+    private final SubmissionItemHistoryService itemHistoryService;
     private final SubmissionMapper submissionMapper;
 
     public SubmissionTraceController(AnswerDiffService answerDiffService,
                                      SubmissionVersionService versionService,
+                                     SubmissionItemHistoryService itemHistoryService,
                                      SubmissionMapper submissionMapper) {
         this.answerDiffService = answerDiffService;
         this.versionService = versionService;
+        this.itemHistoryService = itemHistoryService;
         this.submissionMapper = submissionMapper;
     }
 
@@ -56,5 +64,31 @@ public class SubmissionTraceController {
             return ApiResponse.ok(List.of());
         }
         return ApiResponse.ok(versionService.getVersionHistory(submission.getAssignmentId()));
+    }
+
+    @GetMapping("/{submissionId}/item-history")
+    @Operation(summary = "题目提交审核历史",
+            description = "从指定提交定位题目，按当前角色返回该题目的提交、AI 审核和多轮人工审核历史。Labeler 只能看到自己的提交历史。")
+    public ApiResponse<SubmissionItemHistoryResponse> itemHistory(
+            @Parameter(description = "提交 ID") @PathVariable Long submissionId) {
+        return ApiResponse.ok(itemHistoryService.getItemHistory(submissionId));
+    }
+
+    @GetMapping("/compare")
+    @Operation(summary = "多版本对比", description = "传入多个提交 ID，返回按版本的字段级并排对比。所有 ID 必须属于同一 assignment。OWNER、REVIEWER、LABELER 可用。")
+    public ApiResponse<MultiVersionCompareResponse> compare(
+            @Parameter(description = "提交 ID 列表，逗号分隔，例如 101,102,103") @RequestParam String ids) {
+        CurrentUserContext.requireAnyRole(Set.of(RoleCode.OWNER, RoleCode.REVIEWER, RoleCode.LABELER));
+        List<Long> submissionIds;
+        try {
+            submissionIds = Arrays.stream(ids.split(","))
+                    .map(String::trim)
+                    .filter(s -> !s.isEmpty())
+                    .map(Long::parseLong)
+                    .toList();
+        } catch (NumberFormatException ex) {
+            throw new BusinessException(400801, "Invalid submission ID in parameter: " + ids);
+        }
+        return ApiResponse.ok(answerDiffService.multiCompare(submissionIds));
     }
 }

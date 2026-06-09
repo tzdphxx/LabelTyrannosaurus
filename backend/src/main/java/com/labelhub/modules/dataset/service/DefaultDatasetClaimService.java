@@ -31,6 +31,18 @@ public class DefaultDatasetClaimService implements DatasetClaimService {
     }
 
     @Override
+    public Optional<DatasetItemSnapshot> reserveSpecificItem(Long taskId, Long labelerId, Long datasetItemId) {
+        if (datasetItemMapper.reserveIfAvailable(datasetItemId, 1) != 1) {
+            return Optional.empty();
+        }
+        DatasetItem datasetItem = datasetItemMapper.selectById(datasetItemId);
+        if (datasetItem == null) {
+            return Optional.empty();
+        }
+        return Optional.of(new DatasetItemSnapshot(datasetItem.getId(), datasetItem.getItemJson()));
+    }
+
+    @Override
     public void increaseSubmittedCount(Long itemId) {
         datasetItemMapper.increaseSubmittedCount(itemId);
     }

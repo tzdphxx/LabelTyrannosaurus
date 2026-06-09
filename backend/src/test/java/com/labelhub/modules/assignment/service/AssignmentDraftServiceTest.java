@@ -6,11 +6,13 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.lenient;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.labelhub.common.audit.AuditAppender;
 import com.labelhub.common.audit.AuditCommand;
 import com.labelhub.common.exception.BusinessException;
+import com.labelhub.common.web.TraceIdProvider;
 import com.labelhub.modules.assignment.domain.Assignment;
 import com.labelhub.modules.assignment.domain.AssignmentStatus;
 import com.labelhub.modules.assignment.dto.AssignmentDraftResponse;
@@ -42,6 +44,9 @@ class AssignmentDraftServiceTest {
     @Mock
     private AuditAppender auditAppender;
 
+    @Mock
+    private TraceIdProvider traceIdProvider;
+
     private AssignmentDraftService assignmentDraftService;
 
     @BeforeEach
@@ -50,8 +55,10 @@ class AssignmentDraftServiceTest {
                 assignmentMapper,
                 assignmentDraftCacheService,
                 auditAppender,
-                new ObjectMapper()
+                new ObjectMapper(),
+                traceIdProvider
         );
+        lenient().when(traceIdProvider.currentTraceId()).thenReturn("trace-draft");
     }
 
     @Test
@@ -205,6 +212,7 @@ class AssignmentDraftServiceTest {
         verify(auditAppender).append(commandCaptor.capture());
         assertThat(commandCaptor.getValue().afterJson()).containsEntry("answerLength", ANSWER_JSON.length());
         assertThat(commandCaptor.getValue().afterJson()).doesNotContainKey("draftAnswerJson");
+        assertThat(commandCaptor.getValue().traceId()).isEqualTo("trace-draft");
     }
 
     private Assignment assignment(AssignmentStatus status, Integer draftVersion, String draftAnswerJson) {

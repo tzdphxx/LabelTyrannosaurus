@@ -30,14 +30,21 @@ public class AiReviewConfigController {
     }
 
     @PostMapping
-    @Operation(summary = "保存 AI 审核配置", description = "创建或保存任务 AI 审核配置。")
+    @Operation(summary = "保存 AI 审核配置", description = """
+            创建或保存任务 AI 审核配置。
+            providerId、promptTemplate、scoringDimensions、passThreshold、manualReviewThreshold 必填；
+            modelName 可选，缺省或空白时使用所选 Provider 的 defaultModel。
+            aiFlowPolicy 用于描述 AI 结果是否可直接过审/打回，缺省为 MANUAL_FIRST。""")
     public ApiResponse<AiReviewConfigResponse> save(@PathVariable Long taskId,
                                                     @Valid @RequestBody AiReviewConfigRequest request) {
         return ApiResponse.ok(aiReviewConfigService.save(CurrentUserContext.getUserId(), taskId, request));
     }
 
     @PutMapping("/{configId}")
-    @Operation(summary = "更新 AI 审核配置", description = "更新指定 AI 审核配置。")
+    @Operation(summary = "更新 AI 审核配置", description = """
+            更新指定 AI 审核配置。
+            modelName 可选，缺省或空白时使用所选 Provider 的 defaultModel；
+            修改后 promptVersion 会递增，任务仍需处于 DRAFT 状态。""")
     public ApiResponse<AiReviewConfigResponse> update(@PathVariable Long taskId,
                                                       @PathVariable Long configId,
                                                       @Valid @RequestBody AiReviewConfigRequest request) {

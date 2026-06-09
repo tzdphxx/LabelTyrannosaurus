@@ -1,12 +1,12 @@
-# Template 模板版本接口
+# Template OWNER 模板版本接口
 
-## 创建模板
+## 创建 OWNER 模板
 
-Description: Creates a template and its first draft version for a task.
+Description: Creates a reusable template and its first draft version for the current OWNER.
 
-- URL: `/api/v1/tasks/{taskId}/templates`
+- URL: `/api/v1/owner/templates`
 - Method: `POST`
-- 权限角色: `ADMIN`、任务 `OWNER`
+- 权限角色: `OWNER`
 - Owner 模块: BE-B
 
 请求体：
@@ -31,13 +31,15 @@ Description: Creates a template and its first draft version for a task.
   "message": "OK",
   "data": {
     "templateId": 100,
-    "taskId": 1,
+    "taskId": null,
+    "ownerId": 10,
     "name": "质检模板",
     "currentVersionNo": 1,
     "currentVersion": {
       "versionId": 200,
       "templateId": 100,
-      "taskId": 1,
+      "taskId": null,
+      "ownerId": 10,
       "versionNo": 1,
       "schemaJson": {
         "components": [
@@ -60,16 +62,17 @@ Description: Creates a template and its first draft version for a task.
 
 说明：
 - 创建模板会同步创建 `versionNo=1` 的首个版本。
+- 新建模板先于任务存在，因此 `taskId=null`，模板归属由 `ownerId` 决定。
 - 保存前必须调用 schema 校验。Task7 当前只保证 schema 是合法 JSON object，完整组件规则由 Task8 补齐。
 - Task7 不修改 `tasks.published_template_version_id`。
 
-## 查询任务模板
+## 查询 OWNER 模板库
 
-Description: Lists templates and their current versions under a task.
+Description: Lists reusable templates and their current versions owned by the current OWNER.
 
-- URL: `/api/v1/tasks/{taskId}/templates`
+- URL: `/api/v1/owner/templates`
 - Method: `GET`
-- 权限角色: `ADMIN`、任务 `OWNER`
+- 权限角色: `OWNER`
 - Owner 模块: BE-B
 
 响应体：
@@ -81,13 +84,15 @@ Description: Lists templates and their current versions under a task.
   "data": [
     {
       "templateId": 100,
-      "taskId": 1,
+      "taskId": null,
+      "ownerId": 10,
       "name": "质检模板",
       "currentVersionNo": 2,
       "currentVersion": {
         "versionId": 201,
         "templateId": 100,
-        "taskId": 1,
+        "taskId": null,
+        "ownerId": 10,
         "versionNo": 2,
         "schemaJson": {"components": []},
         "publishedSnapshot": false,
@@ -118,9 +123,26 @@ Description: Reads one immutable or draft template version by id for rendering o
 
 说明：
 - 版本不存在返回 `400102`。
-- 非管理员且不是任务 Owner 返回 `403001`。
+- 非管理员且不是模板 Owner 返回 `403001`。
 
 ## Fork 模板版本
+
+## List template versions
+
+Description: Lists all versions of a template owned by the current OWNER. ADMIN can query any template.
+
+- URL: `/api/v1/templates/{templateId}/versions`
+- Method: `GET`
+- Roles: `ADMIN`, template `OWNER`
+- Owner module: BE-B
+
+Response body is `List<TemplateVersionResponse>`, sorted by `versionNo DESC, id DESC`.
+
+Notes:
+- Template not found returns `400102`.
+- Non-admin users who are not the template owner receive `403001`.
+
+## Fork template version
 
 Description: Creates a new template version from an existing version or the current template version.
 
@@ -149,6 +171,20 @@ Description: Creates a new template version from an existing version or the curr
 - fork 只插入新版本，不修改旧版本。
 - 新版本号为 `templates.current_version_no + 1`，并同步更新 `templates.current_version_no`。
 - `publishedSnapshot=true` 的版本不可原地修改，必须通过 fork 生成新版本。
+- fork 后的新版本仍属于原模板 Owner，`taskId` 保持原值；owner 模板库中新建模板的版本 `taskId=null`。
+
+## 兼容任务模板接口
+
+以下旧接口仅用于兼容历史任务内模板，不作为新功能主入口：
+
+```text
+POST /api/v1/tasks/{taskId}/templates
+GET  /api/v1/tasks/{taskId}/templates
+```
+
+说明：
+- 旧接口创建的模板会写入 `ownerId=tasks.owner_id`，并保留 `taskId` 作为历史来源。
+- 前端 Owner 模板库和新任务创建应使用 `/api/v1/owner/templates`。
 
 ## 内部 schema 读取能力
 
@@ -164,7 +200,7 @@ TemplateVersionService.getTemplateSchema(templateVersionId)
 {
   "versionId": 200,
   "templateId": 100,
-  "taskId": 1,
+  "ownerId": 10,
   "versionNo": 1,
   "schemaJson": {"components": []},
   "publishedSnapshot": true
@@ -173,7 +209,7 @@ TemplateVersionService.getTemplateSchema(templateVersionId)
 
 说明：
 - 该内部能力不推进任务状态。
-- BE-A 发布任务时可读取版本 schema，并自行冻结 `tasks.published_template_version_id`。
+- BE-A 创建、编辑或发布任务时必须校验模板版本属于任务 Owner，再冻结 `tasks.published_template_version_id`。
 
 ## 错误码
 

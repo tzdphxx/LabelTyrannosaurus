@@ -35,8 +35,6 @@ public class LlmProvider {
 
     private Integer userRateLimitPerMinute;
 
-    private Long ownerId;
-
     private Boolean supportVision;
 
     private Boolean supportMultiImage;
@@ -44,6 +42,8 @@ public class LlmProvider {
     private Integer maxImageCount;
 
     private String visionModel;
+
+    private String structuredOutputMode;
 
     private Long createdBy;
 

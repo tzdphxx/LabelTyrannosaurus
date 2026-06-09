@@ -6,6 +6,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -57,6 +58,10 @@ class ConflictResolveServiceTest {
 
     @BeforeEach
     void setUp() {
+        lenient().when(submissionMapper.markApprovedIfPendingFinal(org.mockito.ArgumentMatchers.anyLong()))
+                .thenReturn(1);
+        lenient().when(submissionMapper.markConflictRejectedIfPendingFinal(org.mockito.ArgumentMatchers.anyLong()))
+                .thenReturn(1);
         service = new ConflictResolveService(
                 conflictGroupMapper, submissionMapper, reviewRecordMapper,
                 aiReviewResultMapper, eventPublisher, auditAppender, datasetClaimService);
@@ -205,6 +210,23 @@ class ConflictResolveServiceTest {
         service.resolve(GROUP_ID, REVIEWER_ID, new ConflictResolveRequest(50L, "Best"));
 
         verify(submissionMapper).clearGoldenByDatasetItem(ITEM_ID);
+    }
+
+    @Test
+    void resolveDoesNotOverwriteGoldenWhenConditionalApproveFails() {
+        ConflictGroup group = openGroup();
+        Submission golden = submissionInGroup(50L);
+        when(conflictGroupMapper.selectByIdForUpdate(GROUP_ID)).thenReturn(group);
+        when(submissionMapper.selectById(50L)).thenReturn(golden);
+        when(submissionMapper.markApprovedIfPendingFinal(50L)).thenReturn(0);
+
+        assertThatThrownBy(() -> service.resolve(
+                GROUP_ID, REVIEWER_ID, new ConflictResolveRequest(50L, "Best")))
+                .isInstanceOfSatisfying(BusinessException.class,
+                        ex -> assertThat(ex.getCode()).isEqualTo(400703));
+
+        verify(eventPublisher, never()).publishGoldenSelected(any(), any(), any());
+        verify(conflictGroupMapper, never()).updateById(any(ConflictGroup.class));
     }
 
     // --- detectAndCreateConflict ---

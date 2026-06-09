@@ -78,6 +78,9 @@ memory.md
 .codex-cache/
 codex-cache/
 codex-*.log
+
+# Archived discarded local changes
+bak/
 .opencode/
 .opencode-cache/
 opencode-cache/
@@ -93,3 +96,8 @@ CLAUDE.local.md
 frontend-labelerApi/
 frontend-ownerApi/
 frontend-reviewerApi/
+frontend-adminApi/
+frontend-label/
+frontend-performance/
+nul
+*.ps1

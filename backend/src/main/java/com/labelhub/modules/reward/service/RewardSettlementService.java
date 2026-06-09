@@ -101,7 +101,7 @@ public class RewardSettlementService {
         }
         RewardLedgerEntity positive = rewardLedgerMapper.selectLatestPositiveBySubmissionId(event.submissionId());
         if (positive == null) {
-            throw new BusinessException(400102, "Positive reward not found");
+            throw new BusinessException(400102, "正向奖励记录不存在");
         }
         if (alreadyReversed(event.submissionId())) {
             return;
@@ -164,7 +164,7 @@ public class RewardSettlementService {
     private RewardRuleEntity requireLatestRule(Long taskId) {
         RewardRuleEntity rule = rewardRuleMapper.selectLatestByTaskId(taskId);
         if (rule == null) {
-            throw new BusinessException(400102, "Reward rule not found");
+            throw new BusinessException(400102, "奖励规则不存在");
         }
         return rule;
     }
@@ -172,7 +172,7 @@ public class RewardSettlementService {
     private SubmissionSnapshot requireSubmissionSnapshot(Long submissionId) {
         SubmissionSnapshot snapshot = submissionSnapshotMapper.selectRewardSnapshotById(submissionId);
         if (snapshot == null) {
-            throw new BusinessException(400102, "Submission not found");
+            throw new BusinessException(400102, "提交记录不存在");
         }
         return snapshot;
     }

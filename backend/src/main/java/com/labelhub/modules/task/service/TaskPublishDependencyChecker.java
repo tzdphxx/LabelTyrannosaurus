@@ -10,6 +10,10 @@ public interface TaskPublishDependencyChecker {
 
     boolean templateVersionExists(Long templateVersionId);
 
+    boolean templateVersionOwnedBy(Long ownerId, Long templateVersionId);
+
+    boolean templateVersionUsableByTask(Long taskId, Long templateVersionId);
+
     boolean aiReviewConfigExists(Long taskId, Long aiReviewConfigId);
 
     boolean rewardRuleExists(Long taskId);

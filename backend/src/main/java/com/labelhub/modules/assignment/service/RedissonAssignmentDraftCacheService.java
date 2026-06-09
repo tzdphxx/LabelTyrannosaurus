@@ -1,5 +1,6 @@
 package com.labelhub.modules.assignment.service;
 
+import com.labelhub.infrastructure.redis.RedisKeyBuilder;
 import java.util.Optional;
 import java.util.concurrent.TimeUnit;
 import org.redisson.api.RBucket;
@@ -28,6 +29,6 @@ public class RedissonAssignmentDraftCacheService implements AssignmentDraftCache
     }
 
     private RBucket<AssignmentDraftCacheEntry> bucket(Long assignmentId) {
-        return redissonClient.getBucket("cache:assignment:draft:" + assignmentId);
+        return redissonClient.getBucket(RedisKeyBuilder.assignmentDraft(assignmentId));
     }
 }

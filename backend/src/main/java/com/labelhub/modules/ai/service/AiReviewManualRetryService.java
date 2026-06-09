@@ -4,12 +4,16 @@ import com.labelhub.common.audit.AuditAppender;
 import com.labelhub.common.audit.AuditCommand;
 import com.labelhub.common.exception.BusinessException;
 import com.labelhub.common.web.TraceIdProvider;
+import com.labelhub.infrastructure.llmtask.LlmTaskQueueMessage;
+import com.labelhub.infrastructure.llmtask.LlmTaskQueueService;
+import com.labelhub.infrastructure.llmtask.LlmTaskType;
 import com.labelhub.modules.ai.domain.AiReviewResult;
 import com.labelhub.modules.ai.domain.AiReviewStatus;
 import com.labelhub.modules.ai.dto.AiReviewResultResponse;
 import com.labelhub.modules.ai.mapper.AiReviewResultMapper;
 import com.labelhub.modules.submission.domain.Submission;
 import com.labelhub.modules.submission.mapper.SubmissionMapper;
+import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Set;
@@ -32,28 +36,31 @@ public class AiReviewManualRetryService {
     private final AiAutoReviewService aiAutoReviewService;
     private final AuditAppender auditAppender;
     private final TraceIdProvider traceIdProvider;
+    private final LlmTaskQueueService queueService;
 
     public AiReviewManualRetryService(AiReviewResultMapper aiReviewResultMapper,
                                       SubmissionMapper submissionMapper,
                                       AiAutoReviewService aiAutoReviewService,
                                       AuditAppender auditAppender,
-                                      TraceIdProvider traceIdProvider) {
+                                      TraceIdProvider traceIdProvider,
+                                      LlmTaskQueueService queueService) {
         this.aiReviewResultMapper = aiReviewResultMapper;
         this.submissionMapper = submissionMapper;
         this.aiAutoReviewService = aiAutoReviewService;
         this.auditAppender = auditAppender;
         this.traceIdProvider = traceIdProvider;
+        this.queueService = queueService;
     }
 
     public AiReviewResultResponse retry(Long submissionId, Long reviewerId) {
         Submission submission = submissionMapper.selectById(submissionId);
         if (submission == null) {
-            throw new BusinessException(NOT_FOUND, "Submission not found");
+            throw new BusinessException(NOT_FOUND, "提交记录不存在");
         }
 
         AiReviewResult existing = aiReviewResultMapper.selectBySubmissionId(submissionId);
         if (existing == null) {
-            throw new BusinessException(NOT_FOUND, "AI review result not found");
+            throw new BusinessException(NOT_FOUND, "AI 审核结果不存在");
         }
         if (!RETRYABLE_STATUSES.contains(existing.getStatus())) {
             throw new BusinessException(NOT_RETRYABLE,
@@ -69,7 +76,19 @@ public class AiReviewManualRetryService {
         }
 
         appendRetryAudit(submissionId, reviewerId, existing.getEffectiveRunId());
-        aiAutoReviewService.retryReview(submissionId);
+        queueService.enqueue(new LlmTaskQueueMessage(
+                LlmTaskType.AI_REVIEW,
+                submissionId,
+                submission.getTaskId(),
+                submission.getAssignmentId(),
+                submissionId,
+                null,
+                null,
+                existing.getEffectiveRunId(),
+                traceIdProvider.currentTraceId(),
+                existing.getRetryCount() + 1,
+                Instant.now()
+        ));
 
         AiReviewResult updated = aiReviewResultMapper.selectBySubmissionId(submissionId);
         return aiAutoReviewService.toResponse(updated);

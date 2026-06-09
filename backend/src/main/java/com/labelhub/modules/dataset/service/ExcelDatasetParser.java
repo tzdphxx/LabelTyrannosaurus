@@ -40,7 +40,7 @@ public class ExcelDatasetParser extends AbstractDatasetParser {
             var sheet = workbook.getSheetAt(0);
             Row header = sheet.getRow(0);
             if (header == null) {
-                throw new IllegalArgumentException("Excel dataset header is required");
+                throw new IllegalArgumentException("Excel 数据集表头不能为空");
             }
             List<String> headers = new ArrayList<>();
             for (Cell cell : header) {
@@ -75,7 +75,7 @@ public class ExcelDatasetParser extends AbstractDatasetParser {
                 }
             }
         } catch (Exception ex) {
-            throw new IllegalStateException("Read Excel dataset failed", ex);
+            throw new IllegalStateException("读取 Excel 数据集失败", ex);
         }
         return new DatasetParseResult(rows, errors);
     }

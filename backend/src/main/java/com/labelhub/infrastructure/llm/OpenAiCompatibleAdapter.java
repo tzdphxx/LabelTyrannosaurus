@@ -73,37 +73,45 @@ public class OpenAiCompatibleAdapter {
 
     public OpenAiCompatibleResponse chat(LlmProviderRuntimeConfig config, List<LlmMessage> messages,
                                          Integer maxTokens, List<ToolDefinition> tools) {
+        return chat(config, messages, maxTokens, tools, ResponseFormat.none());
+    }
+
+    public OpenAiCompatibleResponse chat(LlmProviderRuntimeConfig config, List<LlmMessage> messages,
+                                         Integer maxTokens, List<ToolDefinition> tools,
+                                         ResponseFormat responseFormat) {
         Instant startedAt = Instant.now();
         try {
-            HttpRequest request = buildRequest(config, messages, maxTokens, tools);
+            HttpRequest request = buildRequest(config, messages, maxTokens, tools, responseFormat);
             HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
             long latencyMs = Duration.between(startedAt, Instant.now()).toMillis();
             if (response.statusCode() >= 200 && response.statusCode() < 300) {
                 return OpenAiCompatibleResponse.success(response.statusCode(), response.body(), latencyMs);
             }
             return OpenAiCompatibleResponse.failure(response.statusCode(), response.body(), latencyMs,
-                    sanitize("Provider call failed with status " + response.statusCode() + ": " + response.body(),
+                    sanitize("Provider 调用失败，HTTP 状态码 " + response.statusCode() + "：" + response.body(),
                             config.apiKey()),
                     false);
         } catch (HttpConnectTimeoutException ex) {
-            return failed(startedAt, "Provider call timed out", config.apiKey(), true);
+            return failed(startedAt, "Provider 调用超时", config.apiKey(), true);
         } catch (IOException ex) {
-            return failed(startedAt, "Provider call I/O failure: " + ex.getMessage(), config.apiKey(), isTimeout(ex));
+            return failed(startedAt, "Provider 调用发生 I/O 异常：" + ex.getMessage(), config.apiKey(), isTimeout(ex));
         } catch (InterruptedException ex) {
             Thread.currentThread().interrupt();
-            return failed(startedAt, "Provider call was interrupted", config.apiKey(), false);
+            return failed(startedAt, "Provider 调用被中断", config.apiKey(), false);
         } catch (RuntimeException ex) {
-            return failed(startedAt, "Provider call failed: " + ex.getMessage(), config.apiKey(), false);
+            return failed(startedAt, "Provider 调用失败：" + ex.getMessage(), config.apiKey(), false);
         }
     }
 
     private HttpRequest buildRequest(LlmProviderRuntimeConfig config, List<LlmMessage> messages,
-                                     Integer maxTokens, List<ToolDefinition> tools)
+                                     Integer maxTokens, List<ToolDefinition> tools,
+                                     ResponseFormat responseFormat)
             throws JsonProcessingException {
-        validateBaseUrl(config.baseUrl());
+        URI originalUri = URI.create(config.baseUrl() + CHAT_COMPLETIONS_PATH);
+        URI requestUri = resolveAndValidateUri(config.baseUrl(), originalUri);
         HttpRequest.Builder builder = HttpRequest.newBuilder()
-                .uri(URI.create(config.baseUrl() + CHAT_COMPLETIONS_PATH))
-                .timeout(containsImagePart(messages) ? visionTimeout : timeout)
+                .uri(requestUri)
+                .timeout(containsMediaPart(messages) ? visionTimeout : timeout)
                 .header("Content-Type", "application/json");
         if (config.customHeaders() != null) {
             config.customHeaders().forEach((key, value) -> {
@@ -116,11 +124,12 @@ public class OpenAiCompatibleAdapter {
         if (config.apiKey() != null && !config.apiKey().isBlank()) {
             builder.setHeader("Authorization", "Bearer " + config.apiKey());
         }
-        return builder.POST(HttpRequest.BodyPublishers.ofString(requestBody(config.modelName(), messages, maxTokens, tools))).build();
+        return builder.POST(HttpRequest.BodyPublishers.ofString(
+                requestBody(config.modelName(), messages, maxTokens, tools, responseFormat))).build();
     }
 
     private String requestBody(String modelName, List<LlmMessage> messages, Integer maxTokens,
-                               List<ToolDefinition> tools) throws JsonProcessingException {
+                               List<ToolDefinition> tools, ResponseFormat responseFormat) throws JsonProcessingException {
         Map<String, Object> payload = new LinkedHashMap<>();
         payload.put("model", modelName);
         payload.put("messages", serializeMessages(messages));
@@ -130,8 +139,31 @@ public class OpenAiCompatibleAdapter {
         if (tools != null && !tools.isEmpty()) {
             payload.put("tools", tools);
         }
+        Map<String, Object> responseFormatPayload = serializeResponseFormat(responseFormat);
+        if (responseFormatPayload != null) {
+            payload.put("response_format", responseFormatPayload);
+        }
         payload.put("temperature", 0);
         return objectMapper.writeValueAsString(payload);
+    }
+
+    private Map<String, Object> serializeResponseFormat(ResponseFormat responseFormat) {
+        if (responseFormat == null || responseFormat.mode() == ResponseFormat.Mode.NONE) {
+            return null;
+        }
+        if (responseFormat.mode() == ResponseFormat.Mode.JSON_OBJECT) {
+            return Map.of("type", "json_object");
+        }
+        if (responseFormat.mode() == ResponseFormat.Mode.JSON_SCHEMA
+                && responseFormat.jsonSchema() != null) {
+            Map<String, Object> jsonSchema = new LinkedHashMap<>();
+            jsonSchema.put("name", responseFormat.schemaName() != null ? responseFormat.schemaName() : "response");
+            jsonSchema.put("schema", responseFormat.jsonSchema());
+            jsonSchema.put("strict", true);
+            return Map.of("type", "json_schema", "json_schema", jsonSchema);
+        }
+        // JSON_SCHEMA without a schema falls back to json_object
+        return Map.of("type", "json_object");
     }
 
     private List<Map<String, Object>> serializeMessages(List<LlmMessage> messages) {
@@ -184,17 +216,23 @@ public class OpenAiCompatibleAdapter {
             map.put("image_url", imageUrl);
             return map;
         }
+        if (part instanceof LlmMessage.VideoUrlPart videoUrlPart) {
+            map.put("type", "video_url");
+            map.put("video_url", Map.of("url", videoUrlPart.url()));
+            return map;
+        }
         throw new IllegalArgumentException("Unsupported content part: " + part);
     }
 
-    private boolean containsImagePart(List<LlmMessage> messages) {
+    private boolean containsMediaPart(List<LlmMessage> messages) {
         if (messages == null) {
             return false;
         }
         return messages.stream()
                 .filter(message -> message.contentParts() != null)
                 .flatMap(message -> message.contentParts().stream())
-                .anyMatch(LlmMessage.ImageUrlPart.class::isInstance);
+                .anyMatch(part -> part instanceof LlmMessage.ImageUrlPart
+                        || part instanceof LlmMessage.VideoUrlPart);
     }
 
     private OpenAiCompatibleResponse failed(Instant startedAt, String message, String apiKey, boolean timedOut) {
@@ -214,7 +252,7 @@ public class OpenAiCompatibleAdapter {
     }
 
     private String sanitize(String message, String apiKey) {
-        String sanitized = message == null ? "Provider call failed" : message;
+        String sanitized = message == null ? "Provider 调用失败" : message;
         if (apiKey != null && !apiKey.isBlank()) {
             sanitized = sanitized.replace(apiKey, "***");
         }
@@ -224,15 +262,15 @@ public class OpenAiCompatibleAdapter {
         return sanitized;
     }
 
-    private void validateBaseUrl(String baseUrl) {
+    private URI resolveAndValidateUri(String baseUrl, URI originalUri) {
         if (!validateUrls) {
-            return;
+            return originalUri;
         }
         if (baseUrl == null || baseUrl.isBlank()) {
             throw new IllegalArgumentException("LLM baseUrl must not be empty");
         }
-        URI uri = URI.create(baseUrl);
-        String host = uri.getHost();
+        URI baseUri = URI.create(baseUrl);
+        String host = baseUri.getHost();
         if (host == null) {
             throw new IllegalArgumentException("LLM baseUrl must have a valid host");
         }
@@ -243,8 +281,11 @@ public class OpenAiCompatibleAdapter {
                 throw new IllegalArgumentException(
                         "LLM baseUrl must not resolve to a private/loopback address");
             }
+            return new URI(originalUri.toString());
         } catch (UnknownHostException e) {
             throw new IllegalArgumentException("LLM baseUrl host cannot be resolved: " + host);
+        } catch (java.net.URISyntaxException e) {
+            throw new IllegalArgumentException("LLM baseUrl 解析后的 URI 不合法：" + host);
         }
     }
 }

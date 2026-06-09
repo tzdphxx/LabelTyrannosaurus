@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.labelhub.common.audit.AuditAppender;
 import com.labelhub.common.audit.AuditCommand;
 import com.labelhub.common.exception.BusinessException;
+import com.labelhub.common.web.TraceIdProvider;
 import com.labelhub.modules.assignment.domain.Assignment;
 import com.labelhub.modules.assignment.domain.AssignmentStatus;
 import com.labelhub.modules.assignment.dto.AssignmentDraftResponse;
@@ -37,15 +38,18 @@ public class AssignmentDraftService {
     private final AssignmentDraftCacheService assignmentDraftCacheService;
     private final AuditAppender auditAppender;
     private final ObjectMapper objectMapper;
+    private final TraceIdProvider traceIdProvider;
 
     public AssignmentDraftService(AssignmentMapper assignmentMapper,
                                   AssignmentDraftCacheService assignmentDraftCacheService,
                                   AuditAppender auditAppender,
-                                  ObjectMapper objectMapper) {
+                                  ObjectMapper objectMapper,
+                                  TraceIdProvider traceIdProvider) {
         this.assignmentMapper = assignmentMapper;
         this.assignmentDraftCacheService = assignmentDraftCacheService;
         this.auditAppender = auditAppender;
         this.objectMapper = objectMapper;
+        this.traceIdProvider = traceIdProvider;
     }
 
     @Transactional
@@ -66,7 +70,7 @@ public class AssignmentDraftService {
                 AssignmentStatus.DRAFTING
         );
         if (updated != 1) {
-            throw new BusinessException(DRAFT_VERSION_CONFLICT, "Draft version conflict");
+            throw new BusinessException(DRAFT_VERSION_CONFLICT, "草稿版本冲突，请刷新后重试");
         }
         LocalDateTime updatedAt = LocalDateTime.now();
         AssignmentDraftCacheEntry cacheEntry = new AssignmentDraftCacheEntry(
@@ -106,14 +110,14 @@ public class AssignmentDraftService {
     private Assignment loadOwnedAssignment(Long assignmentId, Long labelerId) {
         Assignment assignment = assignmentMapper.selectOwnedAssignment(assignmentId, labelerId);
         if (assignment == null) {
-            throw new BusinessException(ASSIGNMENT_NOT_FOUND, "Assignment not found");
+            throw new BusinessException(ASSIGNMENT_NOT_FOUND, "领取记录不存在");
         }
         return assignment;
     }
 
     private void requireEditable(Assignment assignment) {
         if (!EDITABLE_STATUSES.contains(assignment.getStatus())) {
-            throw new BusinessException(ASSIGNMENT_STATUS_NOT_EDITABLE, "Assignment status is not editable");
+            throw new BusinessException(ASSIGNMENT_STATUS_NOT_EDITABLE, "当前领取记录状态不可编辑");
         }
     }
 
@@ -121,13 +125,13 @@ public class AssignmentDraftService {
         try {
             objectMapper.readTree(answerJson);
         } catch (JsonProcessingException ex) {
-            throw new BusinessException(INVALID_ANSWER_JSON, "Answer JSON is invalid");
+            throw new BusinessException(INVALID_ANSWER_JSON, "作答 JSON 格式不合法");
         }
     }
 
     private void requireCurrentVersion(Assignment assignment, Integer clientDraftVersion) {
         if (!Objects.equals(assignment.getDraftVersion(), clientDraftVersion)) {
-            throw new BusinessException(DRAFT_VERSION_CONFLICT, "Draft version conflict");
+            throw new BusinessException(DRAFT_VERSION_CONFLICT, "草稿版本冲突，请刷新后重试");
         }
     }
 
@@ -145,7 +149,7 @@ public class AssignmentDraftService {
 
         auditAppender.append(new AuditCommand(USER_ACTOR_TYPE, afterEntry.labelerId(),
                 ASSIGNMENT_BIZ_TYPE, afterEntry.assignmentId(),
-                "ASSIGNMENT_DRAFT_SAVED", beforeJson, afterJson, null, null));
+                "ASSIGNMENT_DRAFT_SAVED", beforeJson, afterJson, traceIdProvider.currentTraceId(), null));
     }
 
     private AssignmentDraftResponse toResponse(AssignmentDraftCacheEntry entry) {

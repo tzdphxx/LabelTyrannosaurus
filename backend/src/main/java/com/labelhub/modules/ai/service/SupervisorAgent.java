@@ -56,13 +56,13 @@ public class SupervisorAgent {
         var runtimeConfig = llmProviderService
                 .findEnabledRuntimeConfig(request.providerId(), request.modelName());
         if (runtimeConfig.isEmpty()) {
-            return SupervisorResult.failure("PROVIDER_UNAVAILABLE", "LLM provider is unavailable", null);
+            return SupervisorResult.failure("PROVIDER_UNAVAILABLE", "LLM Provider 当前不可用", null);
         }
 
         for (int i = 0; i < request.maxIterations(); i++) {
             OpenAiCompatibleResponse response = adapter.chat(runtimeConfig.get(), messages, null, request.tools());
             if (response.timedOut()) {
-                return SupervisorResult.failure("TIMEOUT", "Provider timed out", serializeMessages(messages));
+                return SupervisorResult.failure("TIMEOUT", "LLM Provider 调用超时", serializeMessages(messages));
             }
             if (!response.success()) {
                 return SupervisorResult.failure("PROVIDER_ERROR", response.errorMessage(), serializeMessages(messages));
@@ -70,7 +70,7 @@ public class SupervisorAgent {
 
             ParsedResponse parsed = parseResponse(response.rawResponse());
             if (parsed == null) {
-                return SupervisorResult.failure("INVALID_RESPONSE", "Cannot parse LLM response", serializeMessages(messages));
+                return SupervisorResult.failure("INVALID_RESPONSE", "无法解析 LLM 响应", serializeMessages(messages));
             }
 
             if (parsed.toolCalls != null && !parsed.toolCalls.isEmpty()) {
@@ -85,25 +85,25 @@ public class SupervisorAgent {
             } else if (parsed.content != null) {
                 return parseResult(parsed.content, serializeMessages(messages));
             } else {
-                return SupervisorResult.failure("EMPTY_RESPONSE", "LLM returned empty response", serializeMessages(messages));
+                return SupervisorResult.failure("EMPTY_RESPONSE", "LLM 返回内容为空", serializeMessages(messages));
             }
         }
-        return SupervisorResult.failure("MAX_ITERATIONS", "Exceeded max iterations", serializeMessages(messages));
+        return SupervisorResult.failure("MAX_ITERATIONS", "LLM 工具调用超过最大轮次", serializeMessages(messages));
     }
 
     private ToolResult executeTool(ToolCall call, com.labelhub.modules.ai.tool.ToolContext context) {
         ReviewTool tool = toolRegistry.getTool(call.function().name());
         if (tool == null) {
-            return ToolResult.error("Unknown tool: " + call.function().name());
+            return ToolResult.error("未知工具：" + call.function().name());
         }
         try {
             Map<String, Object> args = objectMapper.readValue(call.function().arguments(), OBJECT_MAP);
             return tool.execute(args, context);
         } catch (JsonProcessingException e) {
-            return ToolResult.error("Invalid arguments JSON: " + e.getMessage());
+            return ToolResult.error("工具参数 JSON 不合法：" + e.getMessage());
         } catch (Exception e) {
             log.error("Tool {} execution failed", call.function().name(), e);
-            return ToolResult.error("Tool execution failed: " + e.getMessage());
+            return ToolResult.error("工具执行失败：" + e.getMessage());
         }
     }
 
@@ -138,7 +138,7 @@ public class SupervisorAgent {
             Map<String, Object> json = objectMapper.readValue(stripJsonFence(content), OBJECT_MAP);
             if (!json.containsKey("decision")) {
                 return SupervisorResult.failure("INVALID_AI_REVIEW_OUTPUT",
-                        "AI review decision is required", rawConversation);
+                        "AI 审核结论不能为空", rawConversation);
             }
             String decision = String.valueOf(json.get("decision"));
             BigDecimal averageScore = json.containsKey("averageScore")

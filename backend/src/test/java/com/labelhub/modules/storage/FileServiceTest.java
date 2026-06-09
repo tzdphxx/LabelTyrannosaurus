@@ -84,6 +84,82 @@ class FileServiceTest {
     }
 
     @Test
+    void uploadAcceptsMediaBusinessTypeAndReturnsChecksum() throws Exception {
+        CurrentUserContext.set(new CurrentUser(10L, "owner", "owner@example.com", Set.of(RoleCode.OWNER), 1));
+        byte[] bytes = "image-bytes".getBytes();
+        when(objectStorageService.generatePresignedDownloadUrl(eq("labelhub-test"), any(), eq("cat.png"), any()))
+                .thenReturn(new URL("https://cos.example.com/cat"));
+        when(objectFileMapper.insert(any(ObjectFileEntity.class))).thenAnswer(invocation -> {
+            ObjectFileEntity entity = invocation.getArgument(0);
+            entity.setId(100L);
+            return 1;
+        });
+        MockMultipartFile file = new MockMultipartFile("file", "cat.png", "image/png", bytes);
+
+        FileUploadResponse response = fileService.upload(file, "media");
+
+        ArgumentCaptor<ObjectFileEntity> entityCaptor = ArgumentCaptor.forClass(ObjectFileEntity.class);
+        verify(objectFileMapper).insert(entityCaptor.capture());
+        assertThat(entityCaptor.getValue().getObjectKey()).startsWith("uploads/media/");
+        assertThat(entityCaptor.getValue().getChecksum())
+                .isEqualTo("2c8648d103e3dd7ad87660da0f126a1443b6d21ac1bd3ec000c5e24e2373a90c");
+        assertThat(response.checksum()).isEqualTo(entityCaptor.getValue().getChecksum());
+    }
+
+    @Test
+    void uploadGeneratedStoresExportFileForProvidedOwner() throws Exception {
+        byte[] bytes = "{\"submissionId\":200}\n".getBytes();
+        when(objectStorageService.generatePresignedDownloadUrl(eq("labelhub-test"), any(),
+                eq("task-1-approved-submissions.jsonl"), any()))
+                .thenReturn(new URL("https://cos.example.com/export"));
+        when(objectFileMapper.insert(any(ObjectFileEntity.class))).thenAnswer(invocation -> {
+            ObjectFileEntity entity = invocation.getArgument(0);
+            entity.setId(101L);
+            return 1;
+        });
+
+        FileUploadResponse response = fileService.uploadGenerated(
+                bytes,
+                "task-1-approved-submissions.jsonl",
+                "application/x-ndjson",
+                10L,
+                "export"
+        );
+
+        ArgumentCaptor<ObjectFileEntity> entityCaptor = ArgumentCaptor.forClass(ObjectFileEntity.class);
+        verify(objectStorageService).upload(eq("labelhub-test"), any(), eq("application/x-ndjson"), any(), eq((long) bytes.length));
+        verify(objectFileMapper).insert(entityCaptor.capture());
+        assertThat(entityCaptor.getValue().getOwnerId()).isEqualTo(10L);
+        assertThat(entityCaptor.getValue().getObjectKey()).startsWith("uploads/export/");
+        assertThat(response.fileId()).isEqualTo(101L);
+        assertThat(response.checksum()).isEqualTo(entityCaptor.getValue().getChecksum());
+        assertThat(response.downloadUrl()).isEqualTo("https://cos.example.com/export");
+    }
+
+    @Test
+    void uploadGeneratedAllowsEmptyExportFile() throws Exception {
+        when(objectStorageService.generatePresignedDownloadUrl(eq("labelhub-test"), any(),
+                eq("empty.jsonl"), any()))
+                .thenReturn(new URL("https://cos.example.com/empty"));
+        when(objectFileMapper.insert(any(ObjectFileEntity.class))).thenAnswer(invocation -> {
+            ObjectFileEntity entity = invocation.getArgument(0);
+            entity.setId(102L);
+            return 1;
+        });
+
+        FileUploadResponse response = fileService.uploadGenerated(
+                new byte[0],
+                "empty.jsonl",
+                "application/x-ndjson",
+                10L,
+                "export"
+        );
+
+        assertThat(response.fileSize()).isZero();
+        verify(objectStorageService).upload(eq("labelhub-test"), any(), eq("application/x-ndjson"), any(), eq(0L));
+    }
+
+    @Test
     void uploadClosesInputStreamWhenObjectStorageFails() throws Exception {
         CurrentUserContext.set(new CurrentUser(10L, "owner", "owner@example.com", Set.of(RoleCode.OWNER), 1));
         AtomicBoolean closed = new AtomicBoolean(false);

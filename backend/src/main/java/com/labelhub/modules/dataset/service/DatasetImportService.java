@@ -1,7 +1,9 @@
 package com.labelhub.modules.dataset.service;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.labelhub.common.exception.BusinessException;
 import com.labelhub.common.security.CurrentUser;
 import com.labelhub.common.security.CurrentUserContext;
@@ -10,25 +12,31 @@ import com.labelhub.infrastructure.async.AsyncJobCommand;
 import com.labelhub.infrastructure.async.AsyncJobService;
 import com.labelhub.infrastructure.async.AsyncJobType;
 import com.labelhub.infrastructure.storage.ObjectStorageService;
+import com.labelhub.modules.assignment.domain.AssignmentDispatch;
+import com.labelhub.modules.assignment.mapper.AssignmentDispatchMapper;
 import com.labelhub.modules.dataset.domain.DatasetFileEntity;
 import com.labelhub.modules.dataset.domain.DatasetFileFormat;
 import com.labelhub.modules.dataset.domain.DatasetImportJobEntity;
 import com.labelhub.modules.dataset.domain.DatasetImportMode;
 import com.labelhub.modules.dataset.domain.DatasetImportStatus;
+import com.labelhub.modules.dataset.domain.DatasetItem;
 import com.labelhub.modules.dataset.domain.DatasetItemChangeLogEntity;
-import com.labelhub.modules.dataset.domain.DatasetItemEntity;
+import com.labelhub.modules.dataset.dto.BatchAppendJsonItemsRequest;
 import com.labelhub.modules.dataset.dto.DatasetImportJobResponse;
 import com.labelhub.modules.dataset.dto.DatasetImportRequest;
+import com.labelhub.modules.dataset.dto.DatasetItemAppendRequest;
+import com.labelhub.modules.dataset.mapper.DatasetItemMapper;
 import com.labelhub.modules.dataset.repository.DatasetFileMapper;
 import com.labelhub.modules.dataset.repository.DatasetImportJobMapper;
 import com.labelhub.modules.dataset.repository.DatasetItemChangeLogMapper;
-import com.labelhub.modules.dataset.repository.DatasetItemRepositoryMapper;
+import com.labelhub.modules.media.service.MediaProcessingService;
 import com.labelhub.modules.storage.domain.ObjectFileEntity;
 import com.labelhub.modules.storage.repository.ObjectFileMapper;
 import com.labelhub.modules.storage.service.FileStorageProperties;
-import com.labelhub.modules.task.domain.TaskEntity;
+import com.labelhub.modules.task.domain.Task;
 import com.labelhub.modules.task.domain.TaskStatus;
-import com.labelhub.modules.task.repository.TaskRepositoryMapper;
+import com.labelhub.modules.task.domain.ClaimStrategy;
+import com.labelhub.modules.task.mapper.TaskMapper;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -41,11 +49,14 @@ import java.io.ByteArrayInputStream;
 import java.io.InputStream;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.ArrayList;
+import java.util.HexFormat;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -65,77 +76,86 @@ import java.util.stream.Collectors;
 @Service
 public class DatasetImportService {
 
-    private final TaskRepositoryMapper taskMapper;
+    private final TaskMapper taskMapper;
     private final ObjectFileMapper objectFileMapper;
     private final DatasetFileMapper datasetFileMapper;
     private final DatasetImportJobMapper importJobMapper;
-    private final DatasetItemRepositoryMapper datasetItemMapper;
+    private final DatasetItemMapper datasetItemMapper;
     private final DatasetItemChangeLogMapper changeLogMapper;
+    private final AssignmentDispatchMapper assignmentDispatchMapper;
     private final ObjectStorageService objectStorageService;
     private final FileStorageProperties storageProperties;
     private final AsyncJobService asyncJobService;
     private final TransactionOperations transactionOperations;
     private final ObjectMapper objectMapper;
     private final Map<DatasetFileFormat, DatasetParser> parsers;
+    private final MediaProcessingService mediaProcessingService;
 
     @Autowired
-    public DatasetImportService(TaskRepositoryMapper taskMapper,
+    public DatasetImportService(TaskMapper taskMapper,
                                 ObjectFileMapper objectFileMapper,
                                 DatasetFileMapper datasetFileMapper,
                                 DatasetImportJobMapper importJobMapper,
-                                DatasetItemRepositoryMapper datasetItemMapper,
+                                DatasetItemMapper datasetItemMapper,
                                 DatasetItemChangeLogMapper changeLogMapper,
+                                AssignmentDispatchMapper assignmentDispatchMapper,
                                 ObjectStorageService objectStorageService,
                                 FileStorageProperties storageProperties,
                                 AsyncJobService asyncJobService,
                                 PlatformTransactionManager transactionManager,
                                 ObjectMapper objectMapper,
-                                List<DatasetParser> parsers) {
+                                List<DatasetParser> parsers,
+                                @Autowired(required = false) MediaProcessingService mediaProcessingService) {
         this(taskMapper, objectFileMapper, datasetFileMapper, importJobMapper, datasetItemMapper, changeLogMapper,
-                objectStorageService, storageProperties, asyncJobService, new TransactionTemplate(transactionManager),
-                objectMapper, parsers);
+                assignmentDispatchMapper, objectStorageService, storageProperties, asyncJobService,
+                new TransactionTemplate(transactionManager), objectMapper, parsers, mediaProcessingService);
     }
 
-    public DatasetImportService(TaskRepositoryMapper taskMapper,
+    public DatasetImportService(TaskMapper taskMapper,
                                 ObjectFileMapper objectFileMapper,
                                 DatasetFileMapper datasetFileMapper,
                                 DatasetImportJobMapper importJobMapper,
-                                DatasetItemRepositoryMapper datasetItemMapper,
+                                DatasetItemMapper datasetItemMapper,
                                 DatasetItemChangeLogMapper changeLogMapper,
+                                AssignmentDispatchMapper assignmentDispatchMapper,
                                 ObjectStorageService objectStorageService,
                                 FileStorageProperties storageProperties,
                                 AsyncJobService asyncJobService,
                                 ObjectMapper objectMapper,
                                 List<DatasetParser> parsers) {
         this(taskMapper, objectFileMapper, datasetFileMapper, importJobMapper, datasetItemMapper, changeLogMapper,
-                objectStorageService, storageProperties, asyncJobService, new ImmediateTransactionOperations(),
-                objectMapper, parsers);
+                assignmentDispatchMapper, objectStorageService, storageProperties, asyncJobService,
+                new ImmediateTransactionOperations(), objectMapper, parsers, null);
     }
 
-    private DatasetImportService(TaskRepositoryMapper taskMapper,
+    private DatasetImportService(TaskMapper taskMapper,
                                  ObjectFileMapper objectFileMapper,
                                  DatasetFileMapper datasetFileMapper,
                                  DatasetImportJobMapper importJobMapper,
-                                 DatasetItemRepositoryMapper datasetItemMapper,
+                                 DatasetItemMapper datasetItemMapper,
                                  DatasetItemChangeLogMapper changeLogMapper,
+                                 AssignmentDispatchMapper assignmentDispatchMapper,
                                  ObjectStorageService objectStorageService,
                                  FileStorageProperties storageProperties,
                                  AsyncJobService asyncJobService,
                                  TransactionOperations transactionOperations,
                                  ObjectMapper objectMapper,
-                                 List<DatasetParser> parsers) {
+                                 List<DatasetParser> parsers,
+                                 MediaProcessingService mediaProcessingService) {
         this.taskMapper = taskMapper;
         this.objectFileMapper = objectFileMapper;
         this.datasetFileMapper = datasetFileMapper;
         this.importJobMapper = importJobMapper;
         this.datasetItemMapper = datasetItemMapper;
         this.changeLogMapper = changeLogMapper;
+        this.assignmentDispatchMapper = assignmentDispatchMapper;
         this.objectStorageService = objectStorageService;
         this.storageProperties = storageProperties;
         this.asyncJobService = asyncJobService;
         this.transactionOperations = transactionOperations;
         this.objectMapper = objectMapper;
         this.parsers = parsers.stream().collect(Collectors.toMap(DatasetParser::format, Function.identity()));
+        this.mediaProcessingService = mediaProcessingService;
     }
 
     /**
@@ -146,6 +166,26 @@ public class DatasetImportService {
     @Transactional
     public DatasetImportJobResponse createAppendImport(Long taskId, DatasetImportRequest request) {
         return createImport(taskId, request, DatasetImportMode.APPEND);
+    }
+
+    /**
+     * Create an append import job from direct JSON request content.
+     */
+    @Transactional
+    public DatasetImportJobResponse createAppendImportFromJson(Long taskId, BatchAppendJsonItemsRequest request) {
+        Task task = requireWritableTask(taskId);
+        CurrentUser currentUser = CurrentUserContext.requireCurrentUser();
+        DatasetParseResult result = parseDirectAppendItems(request.items());
+        ObjectFileEntity sourceFile = createDirectJsonSourceFile(task.getId(), currentUser.userId(), request.items());
+        DatasetImportJobEntity job = createImportJob(task, sourceFile, DatasetFileFormat.JSON,
+                DatasetImportMode.APPEND, currentUser.userId());
+        asyncJobService.submit(new AsyncJobCommand(
+                AsyncJobType.DATASET_IMPORT,
+                job.getId(),
+                null,
+                () -> runParsedImport(job, DatasetImportMode.APPEND, result, currentUser.userId())
+        ));
+        return toResponse(job);
     }
 
     /**
@@ -162,33 +202,49 @@ public class DatasetImportService {
      * 查询导入任务详情，并在存在错误报告时补充签名下载地址。
      */
     public DatasetImportJobResponse getImportJob(Long taskId, Long jobId) {
-        TaskEntity task = requireWritableTask(taskId);
+        Task task = requireWritableTask(taskId);
         DatasetImportJobEntity job = importJobMapper.selectByTaskAndJob(task.getId(), jobId);
         if (job == null) {
-            throw new BusinessException(400102, "Import job not found");
+            throw new BusinessException(400102, "导入任务不存在");
         }
         return toResponse(job);
     }
 
     private DatasetImportJobResponse createImport(Long taskId, DatasetImportRequest request, DatasetImportMode mode) {
-        TaskEntity task = requireWritableTask(taskId);
+        Task task = requireWritableTask(taskId);
         if (mode == DatasetImportMode.OVERWRITE && task.getStatus() != TaskStatus.DRAFT) {
-            throw new BusinessException(409301, "Overwrite import only allowed for draft task");
+            throw new BusinessException(409301, "只有草稿状态任务允许覆盖导入");
         }
         ObjectFileEntity sourceFile = requireSourceFile(request.fileId());
         DatasetFileFormat format = resolveFormat(sourceFile);
         DatasetParser parser = parsers.get(format);
         if (parser == null || format == DatasetFileFormat.CSV) {
-            throw new BusinessException(400102, "Unsupported dataset file format");
+            throw new BusinessException(400102, "不支持的数据集文件格式");
         }
 
         CurrentUser currentUser = CurrentUserContext.requireCurrentUser();
         // 源文件和导入任务先落库，后台任务执行失败时仍可查询到失败状态。
+        DatasetImportJobEntity job = createImportJob(task, sourceFile, format, mode, currentUser.userId());
+
+        asyncJobService.submit(new AsyncJobCommand(
+                AsyncJobType.DATASET_IMPORT,
+                job.getId(),
+                null,
+                () -> runImport(job, sourceFile, mode, parser, currentUser.userId())
+        ));
+        return toResponse(job);
+    }
+
+    private DatasetImportJobEntity createImportJob(Task task,
+                                                   ObjectFileEntity sourceFile,
+                                                   DatasetFileFormat format,
+                                                   DatasetImportMode mode,
+                                                   Long actorId) {
         DatasetFileEntity datasetFile = new DatasetFileEntity();
         datasetFile.setTaskId(task.getId());
         datasetFile.setFileId(sourceFile.getId());
         datasetFile.setFileFormat(format.name());
-        datasetFile.setCreatedBy(currentUser.userId());
+        datasetFile.setCreatedBy(actorId);
         datasetFileMapper.insert(datasetFile);
 
         DatasetImportJobEntity job = new DatasetImportJobEntity();
@@ -199,34 +255,94 @@ public class DatasetImportService {
         job.setTotalCount(0);
         job.setSuccessCount(0);
         job.setFailedCount(0);
-        job.setCreatedBy(currentUser.userId());
+        job.setCreatedBy(actorId);
         importJobMapper.insert(job);
-
-        asyncJobService.submit(new AsyncJobCommand(
-                AsyncJobType.DATASET_IMPORT,
-                job.getId(),
-                null,
-                () -> runImport(job, sourceFile, request, mode, parser, currentUser.userId())
-        ));
-        return toResponse(job);
+        return job;
     }
 
-    private TaskEntity requireWritableTask(Long taskId) {
+    private DatasetParseResult parseDirectAppendItems(List<DatasetItemAppendRequest> requests) {
+        List<DatasetImportRow> rows = new ArrayList<>();
+        int rowNo = 0;
+        for (DatasetItemAppendRequest request : requests) {
+            rowNo++;
+            String externalId = request.externalId().trim();
+            JsonNode itemJson = objectMapper.valueToTree(request.itemJson());
+            JsonNode metadataJson = objectMapper.valueToTree(
+                    request.metadataJson() == null ? Map.of() : request.metadataJson());
+            ObjectNode rawRow = objectMapper.createObjectNode();
+            rawRow.put("externalId", externalId);
+            rawRow.set("itemJson", itemJson);
+            rawRow.set("metadataJson", metadataJson);
+            rows.add(new DatasetImportRow(rowNo, externalId, itemJson, metadataJson, rawRow));
+        }
+        return new DatasetParseResult(rows, List.of());
+    }
+
+    private ObjectFileEntity createDirectJsonSourceFile(Long taskId,
+                                                        Long actorId,
+                                                        List<DatasetItemAppendRequest> items) {
+        byte[] bytes = toDirectJsonBytes(items);
+        if (bytes.length > storageProperties.maxFileSizeBytes()) {
+            throw new BusinessException(400102, "JSON content size exceeds limit");
+        }
+        String originalFilename = "direct-append-%d.json".formatted(taskId);
+        String objectKey = buildDirectJsonObjectKey(originalFilename);
+        objectStorageService.upload(storageProperties.bucket(), objectKey, "application/json",
+                new ByteArrayInputStream(bytes), bytes.length);
+
+        ObjectFileEntity entity = new ObjectFileEntity();
+        entity.setOwnerId(actorId);
+        entity.setBucketName(storageProperties.bucket());
+        entity.setObjectKey(objectKey);
+        entity.setOriginalFilename(originalFilename);
+        entity.setContentType("application/json");
+        entity.setFileSize((long) bytes.length);
+        entity.setChecksum(sha256(bytes));
+        entity.setStorageProvider("COS");
+        objectFileMapper.insert(entity);
+        return entity;
+    }
+
+    private byte[] toDirectJsonBytes(List<DatasetItemAppendRequest> items) {
+        try {
+            return objectMapper.writeValueAsBytes(Map.of("items", items));
+        } catch (JsonProcessingException ex) {
+            throw new BusinessException(400102, "Invalid JSON request content");
+        }
+    }
+
+    private String buildDirectJsonObjectKey(String originalFilename) {
+        LocalDate today = LocalDate.now(ZoneId.systemDefault());
+        return "uploads/dataset/direct-json/%04d/%02d/%02d/%s-%s".formatted(
+                today.getYear(),
+                today.getMonthValue(),
+                today.getDayOfMonth(),
+                UUID.randomUUID(),
+                originalFilename.replaceAll("[^A-Za-z0-9._-]", "_")
+        );
+    }
+
+    private Task requireWritableTask(Long taskId) {
         CurrentUser currentUser = CurrentUserContext.requireCurrentUser();
-        TaskEntity task = taskMapper.selectById(taskId);
+        Task task = taskMapper.selectById(taskId);
         if (task == null) {
-            throw new BusinessException(400102, "Task not found");
+            throw new BusinessException(400102, "任务不存在");
         }
         if (!currentUser.roles().contains(RoleCode.ADMIN) && !currentUser.userId().equals(task.getOwnerId())) {
-            throw new BusinessException(403001, "Forbidden");
+            throw new BusinessException(403001, "当前账号没有权限执行该操作");
         }
         return task;
     }
 
     private ObjectFileEntity requireSourceFile(Long fileId) {
+        CurrentUser currentUser = CurrentUserContext.requireCurrentUser();
         ObjectFileEntity sourceFile = objectFileMapper.selectById(fileId);
         if (sourceFile == null) {
-            throw new BusinessException(400102, "Dataset source file not found");
+            throw new BusinessException(400102, "数据集源文件不存在");
+        }
+        if (!currentUser.roles().contains(RoleCode.ADMIN)
+                && (sourceFile.getOwnerId() == null || !sourceFile.getOwnerId().equals(currentUser.userId()))) {
+            throw new BusinessException(403001, "当前账号没有权限执行该操作");
         }
         return sourceFile;
     }
@@ -235,13 +351,12 @@ public class DatasetImportService {
         try {
             return DatasetFileFormat.fromFilename(sourceFile.getOriginalFilename());
         } catch (IllegalArgumentException ex) {
-            throw new BusinessException(400102, "Unsupported dataset file format");
+            throw new BusinessException(400102, "不支持的数据集文件格式");
         }
     }
 
     private void runImport(DatasetImportJobEntity job,
                            ObjectFileEntity sourceFile,
-                           DatasetImportRequest request,
                            DatasetImportMode mode,
                            DatasetParser parser,
                            Long actorId) {
@@ -252,7 +367,7 @@ public class DatasetImportService {
                 result = parser.parse(inputStream);
             }
 
-            ImportBatch batch = prepareBatch(job, request, mode, result);
+            ImportBatch batch = prepareBatch(job, mode, result);
             transactionOperations.execute(status -> {
                 applyBatch(job, mode, batch, actorId);
                 return null;
@@ -267,24 +382,43 @@ public class DatasetImportService {
         }
     }
 
+    private void runParsedImport(DatasetImportJobEntity job,
+                                 DatasetImportMode mode,
+                                 DatasetParseResult result,
+                                 Long actorId) {
+        try {
+            markRunning(job);
+            ImportBatch batch = prepareBatch(job, mode, result);
+            transactionOperations.execute(status -> {
+                applyBatch(job, mode, batch, actorId);
+                return null;
+            });
+        } catch (Throwable failure) {
+            Throwable effectiveFailure = unwrapImportFailure(failure);
+            job.setStatus(DatasetImportStatus.FAILED.name());
+            job.setErrorMessage(effectiveFailure.getMessage());
+            job.setFinishedAt(LocalDateTime.now());
+            importJobMapper.updateById(job);
+        }
+    }
+
     private ImportBatch prepareBatch(DatasetImportJobEntity job,
-                                     DatasetImportRequest request,
                                      DatasetImportMode mode,
                                      DatasetParseResult result) throws JsonProcessingException {
         List<DatasetImportError> errors = new ArrayList<>(result.errors());
-        List<DatasetItemEntity> items = new ArrayList<>();
+        List<DatasetItem> items = new ArrayList<>();
         Set<String> seenExternalIds = new HashSet<>();
         for (DatasetImportRow row : result.rows()) {
             if (!seenExternalIds.add(row.externalId())) {
                 errors.add(new DatasetImportError(row.rowNo(), row.externalId(), "DUPLICATE_EXTERNAL_ID",
-                        "externalId duplicated in source file", row.rawRow()));
+                        "源文件中 externalId 重复", row.rawRow()));
                 continue;
             }
             // 追加导入需要避开现有活跃题目；覆盖导入会先软删除旧活跃题目，允许复用原 externalId。
             if (mode == DatasetImportMode.APPEND
                     && datasetItemMapper.countActiveByTaskIdAndExternalId(job.getTaskId(), row.externalId()) > 0) {
                 errors.add(new DatasetImportError(row.rowNo(), row.externalId(), "DUPLICATE_EXTERNAL_ID",
-                        "externalId already exists in this task", row.rawRow()));
+                        "该任务中已存在相同 externalId", row.rawRow()));
                 continue;
             }
             items.add(toEntity(job.getTaskId(), row));
@@ -298,14 +432,42 @@ public class DatasetImportService {
                 // 新文件已成功解析并完成行级校验后再覆盖，避免失败任务提前删除旧题目。
                 datasetItemMapper.softDeleteActiveByTaskId(job.getTaskId());
             }
-            for (DatasetItemEntity item : batch.items()) {
+            for (DatasetItem item : batch.items()) {
                 datasetItemMapper.insert(item);
+                refreshMediaContext(job.getTaskId(), item, actorId);
                 appendChangeLog(job.getTaskId(), item, actorId, mode);
             }
+            autoDispatchImportedItems(job.getTaskId(), batch.items());
             finishJob(job, batch.totalCount(), batch.items().size(), batch.errors(), actorId);
         } catch (JsonProcessingException ex) {
             throw new ImportExecutionException(ex);
         }
+    }
+
+    private void autoDispatchImportedItems(Long taskId, List<DatasetItem> items) {
+        if (assignmentDispatchMapper == null || items.isEmpty()) {
+            return;
+        }
+        Task task = taskMapper.selectById(taskId);
+        if (task == null
+                || task.getStrategy() != ClaimStrategy.ASSIGNED
+                || task.getAssignedLabelerId() == null) {
+            return;
+        }
+        LocalDateTime dispatchedAt = LocalDateTime.now();
+        for (DatasetItem item : items) {
+            if (item.getId() == null) {
+                continue;
+            }
+            AssignmentDispatch dispatch = new AssignmentDispatch();
+            dispatch.setTaskId(taskId);
+            dispatch.setDatasetItemId(item.getId());
+            dispatch.setLabelerId(task.getAssignedLabelerId());
+            dispatch.setStatus("PENDING");
+            dispatch.setDispatchedAt(dispatchedAt);
+            assignmentDispatchMapper.insert(dispatch);
+        }
+        assignmentDispatchMapper.syncQuotaToTask(taskId);
     }
 
     private Throwable unwrapImportFailure(Throwable failure) {
@@ -321,8 +483,8 @@ public class DatasetImportService {
         importJobMapper.updateById(job);
     }
 
-    private DatasetItemEntity toEntity(Long taskId, DatasetImportRow row) throws JsonProcessingException {
-        DatasetItemEntity item = new DatasetItemEntity();
+    private DatasetItem toEntity(Long taskId, DatasetImportRow row) throws JsonProcessingException {
+        DatasetItem item = new DatasetItem();
         item.setTaskId(taskId);
         item.setExternalId(row.externalId());
         item.setItemJson(objectMapper.writeValueAsString(row.itemJson()));
@@ -334,7 +496,7 @@ public class DatasetImportService {
         return item;
     }
 
-    private void appendChangeLog(Long taskId, DatasetItemEntity item, Long actorId, DatasetImportMode mode) {
+    private void appendChangeLog(Long taskId, DatasetItem item, Long actorId, DatasetImportMode mode) {
         DatasetItemChangeLogEntity changeLog = new DatasetItemChangeLogEntity();
         changeLog.setTaskId(taskId);
         changeLog.setItemId(item.getId());
@@ -342,6 +504,12 @@ public class DatasetImportService {
         changeLog.setAfterJson(item.getItemJson());
         changeLog.setActorId(actorId);
         changeLogMapper.insert(changeLog);
+    }
+
+    private void refreshMediaContext(Long taskId, DatasetItem item, Long actorId) {
+        if (mediaProcessingService != null) {
+            mediaProcessingService.refreshContext(taskId, item.getId(), item.getItemJson(), actorId);
+        }
     }
 
     private void finishJob(DatasetImportJobEntity job,
@@ -414,6 +582,14 @@ public class DatasetImportService {
         );
     }
 
+    private String sha256(byte[] bytes) {
+        try {
+            return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(bytes));
+        } catch (NoSuchAlgorithmException ex) {
+            throw new IllegalStateException(ex);
+        }
+    }
+
     private DatasetImportJobResponse toResponse(DatasetImportJobEntity job) {
         String errorReportUrl = null;
         if (job.getErrorReportFileId() != null) {
@@ -441,7 +617,7 @@ public class DatasetImportService {
         );
     }
 
-    private record ImportBatch(int totalCount, List<DatasetItemEntity> items, List<DatasetImportError> errors) {
+    private record ImportBatch(int totalCount, List<DatasetItem> items, List<DatasetImportError> errors) {
     }
 
     private static class ImportExecutionException extends RuntimeException {

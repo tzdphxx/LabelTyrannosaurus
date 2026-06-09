@@ -11,7 +11,6 @@ import com.labelhub.common.exception.BusinessException;
 import com.labelhub.modules.review.domain.ReviewRecord;
 import com.labelhub.modules.review.dto.ApproveRequest;
 import com.labelhub.modules.review.dto.BatchApproveRequest;
-import com.labelhub.modules.review.dto.BatchAssignRequest;
 import com.labelhub.modules.review.dto.BatchMarkManualRequest;
 import com.labelhub.modules.review.dto.BatchRejectRequest;
 import com.labelhub.modules.review.dto.BatchReviewResponse;
@@ -121,18 +120,6 @@ class BatchReviewServiceTest {
     }
 
     @Test
-    void batchAssignSucceeds() {
-        Submission s = pendingFinalSubmission(100L, 1L, 1L);
-        when(submissionMapper.selectById(100L)).thenReturn(s);
-
-        BatchReviewResponse response = batchReviewService.batchAssign(
-                REVIEWER_ID, new BatchAssignRequest(List.of(100L), 2L));
-
-        assertThat(response.successCount()).isEqualTo(1);
-        verify(reviewRecordMapper).insert(any(ReviewRecord.class));
-    }
-
-    @Test
     void batchApproveNotFoundReturnsFailure() {
         when(submissionMapper.selectById(999L)).thenReturn(null);
 
@@ -140,7 +127,7 @@ class BatchReviewServiceTest {
                 REVIEWER_ID, new BatchApproveRequest(List.of(999L), "ok", 1));
 
         assertThat(response.failCount()).isEqualTo(1);
-        assertThat(response.results().get(0).error()).contains("not found");
+        assertThat(response.results().get(0).error()).contains("提交记录不存在");
     }
 
     private Submission pendingFinalSubmission(Long id, Long taskId, Long datasetItemId) {

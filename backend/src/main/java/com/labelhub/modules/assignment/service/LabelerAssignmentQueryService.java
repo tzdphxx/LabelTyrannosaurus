@@ -1,0 +1,210 @@
+package com.labelhub.modules.assignment.service;
+
+import com.labelhub.common.exception.BusinessException;
+import com.labelhub.modules.assignment.domain.AssignmentStatus;
+import com.labelhub.modules.assignment.dto.ClaimedItemResponse;
+import com.labelhub.modules.assignment.dto.ClaimedTaskResponse;
+import com.labelhub.modules.assignment.dto.LabelerAssignmentListItem;
+import com.labelhub.modules.assignment.mapper.AssignmentMapper;
+import com.labelhub.modules.task.domain.ClaimStrategy;
+import com.labelhub.modules.task.domain.TaskStatus;
+import com.labelhub.modules.task.domain.TaskTag;
+import com.labelhub.modules.task.dto.TaskSummaryResponse;
+import com.labelhub.modules.task.mapper.TaskTagMapper;
+import java.time.LocalDateTime;
+import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
+import org.springframework.stereotype.Service;
+
+@Service
+public class LabelerAssignmentQueryService {
+
+    private static final int CLAIMED_TASK_NOT_FOUND = 404402;
+    private static final int DEFAULT_ITEM_PREVIEW_SIZE = 20;
+
+    private final AssignmentMapper assignmentMapper;
+    private final TaskTagMapper taskTagMapper;
+
+    public LabelerAssignmentQueryService(AssignmentMapper assignmentMapper,
+                                         TaskTagMapper taskTagMapper) {
+        this.assignmentMapper = assignmentMapper;
+        this.taskTagMapper = taskTagMapper;
+    }
+
+    public List<LabelerAssignmentListItem> list(Long labelerId,
+                                                Long taskId,
+                                                String status,
+                                                int page,
+                                                int size) {
+        int normalizedPage = Math.max(1, page);
+        int normalizedSize = Math.min(Math.max(1, size), 100);
+        int offset = (normalizedPage - 1) * normalizedSize;
+
+        return assignmentMapper.selectLabelerAssignments(
+                        labelerId, taskId, status, normalizedSize, offset)
+                .stream()
+                .map(this::toListItem)
+                .toList();
+    }
+
+    public long count(Long labelerId, Long taskId, String status) {
+        return assignmentMapper.countLabelerAssignments(labelerId, taskId, status);
+    }
+
+    public List<ClaimedTaskResponse> listClaimedTasks(Long labelerId, int page, int size) {
+        int normalizedPage = Math.max(1, page);
+        int normalizedSize = Math.min(Math.max(1, size), 100);
+        int offset = (normalizedPage - 1) * normalizedSize;
+
+        List<Map<String, Object>> rows =
+                assignmentMapper.selectLabelerClaimedTasks(labelerId, normalizedSize, offset);
+        Map<Long, List<String>> tagsByTask = loadTags(
+                rows.stream().map(r -> toLong(r.get("task_id"))).toList());
+        return rows.stream()
+                .map(row -> toClaimedTask(labelerId, row, null, 1, DEFAULT_ITEM_PREVIEW_SIZE, tagsByTask, false))
+                .toList();
+    }
+
+    public ClaimedTaskResponse getClaimedTaskDetail(Long labelerId,
+                                                           Long taskId,
+                                                           String status,
+                                                           int page,
+                                                           int size) {
+        Map<String, Object> row = assignmentMapper.selectLabelerClaimedTask(labelerId, taskId);
+        if (row == null || row.isEmpty()) {
+            throw new BusinessException(CLAIMED_TASK_NOT_FOUND, "已领取任务不存在");
+        }
+        return toClaimedTask(labelerId, row, status, page, size, loadTags(List.of(taskId)), true);
+    }
+
+    private LabelerAssignmentListItem toListItem(Map<String, Object> row) {
+        return new LabelerAssignmentListItem(
+                toLong(row.get("id")),
+                toLong(row.get("task_id")),
+                (String) row.get("task_title"),
+                toLong(row.get("dataset_item_id")),
+                AssignmentStatus.valueOf((String) row.get("status")),
+                toInt(row.get("draft_version")),
+                toLocalDateTime(row.get("claimed_at")),
+                toLocalDateTime(row.get("returned_at")),
+                toLocalDateTime(row.get("updated_at"))
+        );
+    }
+
+    private ClaimedTaskResponse toClaimedTask(Long labelerId,
+                                                     Map<String, Object> row,
+                                                     String status,
+                                                     int itemPage,
+                                                     int itemSize,
+                                                     Map<Long, List<String>> tagsByTask,
+                                                     boolean includeItems) {
+        Long taskId = toLong(row.get("task_id"));
+        int normalizedPage = Math.max(1, itemPage);
+        int normalizedSize = Math.min(Math.max(1, itemSize), 100);
+        int offset = (normalizedPage - 1) * normalizedSize;
+        return new ClaimedTaskResponse(
+                toTaskSummary(row, tagsByTask.getOrDefault(taskId, List.of())),
+                toInt(row.get("claimed_item_count")),
+                toInt(row.get("submitted_count")),
+                toInt(row.get("approved_count")),
+                includeItems
+                        ? listClaimedItems(labelerId, taskId, status, normalizedSize, offset)
+                        : List.of()
+        );
+    }
+
+    private TaskSummaryResponse toTaskSummary(Map<String, Object> row, List<String> tags) {
+        return new TaskSummaryResponse(
+                toLong(row.get("task_id")),
+                (String) row.get("title"),
+                TaskStatus.valueOf((String) row.get("status")),
+                tags,
+                toInt(row.get("quota")),
+                toInt(row.get("claimed_count")),
+                toInt(row.get("overlap_count")),
+                toStrategy(row.get("strategy")),
+                maxClaimsPerLabeler(row),
+                toLocalDateTime(row.get("deadline_at")),
+                toLocalDateTime(row.get("published_at")),
+                toLocalDateTime(row.get("ended_at")),
+                toLocalDateTime(row.get("created_at")),
+                toLocalDateTime(row.get("updated_at"))
+        );
+    }
+
+    private Integer maxClaimsPerLabeler(Map<String, Object> row) {
+        return toStrategy(row.get("strategy")) == ClaimStrategy.QUOTA_GRAB
+                ? toInt(row.get("max_claims_per_labeler"))
+                : null;
+    }
+
+    private List<ClaimedItemResponse> listClaimedItems(Long labelerId,
+                                                              Long taskId,
+                                                              String status,
+                                                              int limit,
+                                                              int offset) {
+        return assignmentMapper.selectLabelerClaimedItems(labelerId, taskId, normalize(status), limit, offset)
+                .stream()
+                .map(this::toClaimedItem)
+                .toList();
+    }
+
+    private ClaimedItemResponse toClaimedItem(Map<String, Object> row) {
+        return new ClaimedItemResponse(
+                toLong(row.get("assignment_id")),
+                toLong(row.get("dataset_item_id")),
+                (String) row.get("external_id"),
+                ((String) row.get("assignment_status")),
+                (String) row.get("item_json"),
+                (String) row.get("metadata_json"),
+                toInt(row.get("draft_version")),
+                (String) row.get("latest_submission_status"),
+                (String) row.get("returned_reason"),
+                toLocalDateTime(row.get("returned_at")),
+                toLocalDateTime(row.get("updated_at"))
+        );
+    }
+
+    private String normalize(String value) {
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+        return value.trim();
+    }
+
+    private Map<Long, List<String>> loadTags(List<Long> taskIds) {
+        List<Long> ids = taskIds.stream().filter(java.util.Objects::nonNull).distinct().toList();
+        if (ids.isEmpty()) {
+            return Map.of();
+        }
+        return taskTagMapper.selectByTaskIds(ids).stream()
+                .collect(Collectors.groupingBy(
+                        TaskTag::getTaskId,
+                        Collectors.mapping(TaskTag::getTagName, Collectors.toList())));
+    }
+
+    private ClaimStrategy toStrategy(Object val) {
+        if (val == null) return ClaimStrategy.FCFS;
+        if (val instanceof ClaimStrategy s) return s;
+        return ClaimStrategy.valueOf(val.toString());
+    }
+
+    private Long toLong(Object val) {
+        if (val == null) return null;
+        if (val instanceof Long l) return l;
+        return ((Number) val).longValue();
+    }
+
+    private Integer toInt(Object val) {
+        if (val == null) return null;
+        if (val instanceof Integer i) return i;
+        return ((Number) val).intValue();
+    }
+
+    private LocalDateTime toLocalDateTime(Object val) {
+        if (val == null) return null;
+        if (val instanceof LocalDateTime ldt) return ldt;
+        return (LocalDateTime) val;
+    }
+}

@@ -23,6 +23,8 @@ public class Submission {
 
     private Long labelerId;
 
+    private Long createdBy;
+
     private Long templateVersionId;
 
     private Integer versionNo;

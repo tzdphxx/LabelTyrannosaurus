@@ -46,7 +46,7 @@ public class QueryTaskGuidelinesTool implements ReviewTool {
         try {
             Task task = taskMapper.selectById(context.taskId());
             if (task == null) {
-                return ToolResult.error("Task not found");
+                return ToolResult.error("任务不存在");
             }
             Map<String, Object> result = new LinkedHashMap<>();
             result.put("taskTitle", task.getTitle());
@@ -54,7 +54,7 @@ public class QueryTaskGuidelinesTool implements ReviewTool {
             result.put("instructions", task.getInstructionRichText());
             return ToolResult.ok(objectMapper.writeValueAsString(result));
         } catch (Exception e) {
-            return ToolResult.error("Failed to query guidelines: " + e.getMessage());
+            return ToolResult.error("查询任务说明失败：" + e.getMessage());
         }
     }
 }

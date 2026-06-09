@@ -8,6 +8,7 @@ import com.labelhub.common.exception.BusinessException;
 import com.labelhub.common.security.CurrentUser;
 import com.labelhub.common.security.CurrentUserContext;
 import com.labelhub.common.security.RoleCode;
+import com.labelhub.common.web.TraceIdProvider;
 import com.labelhub.infrastructure.async.AsyncJobCommand;
 import com.labelhub.infrastructure.async.AsyncJobService;
 import com.labelhub.infrastructure.async.AsyncJobType;
@@ -26,9 +27,9 @@ import com.labelhub.modules.storage.service.FileStorageProperties;
 import com.labelhub.modules.submission.dto.ExportPageRequest;
 import com.labelhub.modules.submission.dto.ExportableSubmissionSnapshot;
 import com.labelhub.modules.submission.service.SubmissionExportQueryService;
-import com.labelhub.modules.task.domain.TaskEntity;
+import com.labelhub.modules.task.domain.Task;
 import com.labelhub.modules.task.domain.TaskStatus;
-import com.labelhub.modules.task.repository.TaskRepositoryMapper;
+import com.labelhub.modules.task.mapper.TaskMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -58,7 +59,7 @@ public class ExportJobService {
     private static final Logger log = LoggerFactory.getLogger(ExportJobService.class);
     private static final int DEFAULT_PAGE_SIZE = 500;
 
-    private final TaskRepositoryMapper taskMapper;
+    private final TaskMapper taskMapper;
     private final ExportJobMapper exportJobMapper;
     private final ObjectFileMapper objectFileMapper;
     private final ObjectStorageService objectStorageService;
@@ -66,10 +67,11 @@ public class ExportJobService {
     private final AsyncJobService asyncJobService;
     private final SubmissionExportQueryService submissionExportQueryService;
     private final AuditAppender auditAppender;
+    private final TraceIdProvider traceIdProvider;
     private final ObjectMapper objectMapper;
     private final Map<String, ExportFileWriter> writerMap;
 
-    public ExportJobService(TaskRepositoryMapper taskMapper,
+    public ExportJobService(TaskMapper taskMapper,
                             ExportJobMapper exportJobMapper,
                             ObjectFileMapper objectFileMapper,
                             ObjectStorageService objectStorageService,
@@ -77,6 +79,7 @@ public class ExportJobService {
                             AsyncJobService asyncJobService,
                             SubmissionExportQueryService submissionExportQueryService,
                             AuditAppender auditAppender,
+                            TraceIdProvider traceIdProvider,
                             ObjectMapper objectMapper,
                             List<ExportFileWriter> writers) {
         this.taskMapper = taskMapper;
@@ -87,6 +90,7 @@ public class ExportJobService {
         this.asyncJobService = asyncJobService;
         this.submissionExportQueryService = submissionExportQueryService;
         this.auditAppender = auditAppender;
+        this.traceIdProvider = traceIdProvider;
         this.objectMapper = objectMapper;
         this.writerMap = writers.stream().collect(java.util.stream.Collectors.toMap(writer -> writer.format().name(), w -> w));
     }
@@ -95,8 +99,15 @@ public class ExportJobService {
      * 创建导出任务并异步执行。
      */
     @Transactional
+    public ExportJobResponse createExport(Long taskId, CreateExportRequest request) {
+        return createExport(taskId, request, traceIdProvider.currentTraceId());
+    }
+
+    @Transactional
     public ExportJobResponse createExport(Long taskId, CreateExportRequest request, String traceId) {
-        TaskEntity task = requireOwnedTask(taskId);
+        String resolvedTraceId = traceId == null || traceId.isBlank()
+                ? traceIdProvider.currentTraceId() : traceId;
+        Task task = requireOwnedTask(taskId);
         ExportFormat format = request.exportFormat() == null ? ExportFormat.JSONL : request.exportFormat();
         ExportFileWriter writer = requireWriter(format);
         CurrentUser actor = CurrentUserContext.requireCurrentUser();
@@ -111,15 +122,15 @@ public class ExportJobService {
         job.setIncludeReviewComment(normalizeFlag(request.includeReviewComment()));
         job.setIncludeLabelerInfo(normalizeFlag(request.includeLabelerInfo()));
         job.setFieldMappingJson(writeJson(request.fieldMappings()));
-        job.setTraceId(traceId);
+        job.setTraceId(resolvedTraceId);
         exportJobMapper.insert(job);
-        appendAudit("EXPORT_CREATED", actor.userId(), job, traceId);
+        appendAudit("EXPORT_CREATED", actor.userId(), job, resolvedTraceId);
 
         asyncJobService.submit(new AsyncJobCommand(
                 AsyncJobType.EXPORT,
                 job.getId(),
-                traceId,
-                () -> runExport(job.getId(), task.getId(), actor.userId(), writer, request, traceId)
+                resolvedTraceId,
+                () -> runExport(job.getId(), task.getId(), actor.userId(), writer, request, resolvedTraceId)
         ));
         return toResponse(job);
     }
@@ -146,7 +157,7 @@ public class ExportJobService {
         requireOwnedTask(taskId);
         ExportJobEntity job = exportJobMapper.selectByTaskAndJob(taskId, exportJobId);
         if (job == null) {
-            throw new BusinessException(400102, "Export job not found");
+            throw new BusinessException(400102, "导出任务不存在");
         }
         if (ExportJobStatus.SUCCESS.name().equals(job.getStatus()) && job.getResultFileId() != null) {
             refreshDownloadUrl(job);
@@ -248,18 +259,18 @@ public class ExportJobService {
         }
     }
 
-    private TaskEntity requireOwnedTask(Long taskId) {
+    private Task requireOwnedTask(Long taskId) {
         CurrentUser currentUser = CurrentUserContext.requireCurrentUser();
-        TaskEntity task = taskMapper.selectById(taskId);
+        Task task = taskMapper.selectById(taskId);
         if (task == null) {
-            throw new BusinessException(400102, "Task not found");
+            throw new BusinessException(400102, "任务不存在");
         }
         if (!currentUser.roles().contains(RoleCode.ADMIN) && !currentUser.userId().equals(task.getOwnerId())) {
-            throw new BusinessException(403001, "Forbidden");
+            throw new BusinessException(403001, "当前账号没有权限执行该操作");
         }
         if (task.getStatus() == TaskStatus.DRAFT) {
             // 导出依赖 BE-A 已生成的金标结果，草稿任务没有稳定导出范围。
-            throw new BusinessException(400101, "Task is not exportable");
+            throw new BusinessException(400101, "当前任务不可导出");
         }
         return task;
     }
@@ -267,7 +278,7 @@ public class ExportJobService {
     private ExportFileWriter requireWriter(ExportFormat format) {
         ExportFileWriter writer = writerMap.get(format.name());
         if (writer == null) {
-            throw new BusinessException(400102, "Unsupported export format");
+            throw new BusinessException(400102, "不支持的导出格式");
         }
         return writer;
     }
@@ -280,7 +291,7 @@ public class ExportJobService {
         try {
             return objectMapper.writeValueAsString(value);
         } catch (JsonProcessingException ex) {
-            throw new BusinessException(500001, "Export job serialization failed");
+            throw new BusinessException(500001, "导出任务序列化失败");
         }
     }
 
@@ -303,7 +314,7 @@ public class ExportJobService {
     private void refreshDownloadUrl(ExportJobEntity job) {
         ObjectFileEntity file = objectFileMapper.selectById(job.getResultFileId());
         if (file == null) {
-            throw new BusinessException(400102, "Export file not found");
+            throw new BusinessException(400102, "导出文件不存在");
         }
         URL downloadUrl = objectStorageService.generatePresignedDownloadUrl(
                 file.getBucketName(),

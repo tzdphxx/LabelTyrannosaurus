@@ -17,9 +17,12 @@ import org.springframework.web.multipart.MultipartFile;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.URL;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
+import java.util.HexFormat;
 import java.util.Locale;
 import java.util.Set;
 import java.util.UUID;
@@ -27,8 +30,14 @@ import java.util.UUID;
 @Service
 public class FileService {
 
-    private static final Set<String> SUPPORTED_EXTENSIONS = Set.of("json", "jsonl", "csv", "xlsx", "xls", "txt");
-    private static final Set<String> SUPPORTED_BUSINESS_TYPES = Set.of("dataset", "template", "export", "misc");
+    private static final Set<String> SUPPORTED_EXTENSIONS = Set.of(
+            "json", "jsonl", "csv", "xlsx", "xls", "txt",
+            "jpg", "jpeg", "png", "webp", "gif",
+            "mp4", "mov", "webm",
+            "mp3", "wav", "m4a",
+            "md"
+    );
+    private static final Set<String> SUPPORTED_BUSINESS_TYPES = Set.of("dataset", "template", "export", "misc", "media");
 
     private final ObjectFileMapper objectFileMapper;
     private final ObjectStorageService objectStorageService;
@@ -49,11 +58,15 @@ public class FileService {
         String originalFilename = StringUtils.cleanPath(file.getOriginalFilename());
         String contentType = StringUtils.hasText(file.getContentType()) ? file.getContentType() : "application/octet-stream";
         String objectKey = buildObjectKey(businessType, originalFilename);
+        byte[] bytes;
         try (InputStream inputStream = file.getInputStream()) {
-            objectStorageService.upload(properties.bucket(), objectKey, contentType, inputStream, file.getSize());
+            bytes = inputStream.readAllBytes();
+            objectStorageService.upload(properties.bucket(), objectKey, contentType,
+                    new java.io.ByteArrayInputStream(bytes), file.getSize());
         } catch (IOException ex) {
-            throw new BusinessException(500001, "File upload failed");
+            throw new BusinessException(500001, "文件上传失败");
         }
+        String checksum = sha256(bytes);
 
         ObjectFileEntity entity = new ObjectFileEntity();
         entity.setOwnerId(currentUser.userId());
@@ -62,6 +75,7 @@ public class FileService {
         entity.setOriginalFilename(originalFilename);
         entity.setContentType(contentType);
         entity.setFileSize(file.getSize());
+        entity.setChecksum(checksum);
         entity.setStorageProvider("COS");
         objectFileMapper.insert(entity);
 
@@ -71,17 +85,53 @@ public class FileService {
                 originalFilename,
                 Instant.now().plus(properties.signedUrlTtl())
         );
-        return new FileUploadResponse(entity.getId(), originalFilename, contentType, file.getSize(), objectKey, downloadUrl.toString());
+        return new FileUploadResponse(entity.getId(), originalFilename, contentType, file.getSize(), objectKey,
+                checksum, downloadUrl.toString());
+    }
+
+    @Transactional
+    public FileUploadResponse uploadGenerated(byte[] bytes,
+                                              String originalFilename,
+                                              String contentType,
+                                              Long ownerId,
+                                              String businessType) {
+        validateGenerated(bytes, originalFilename, businessType);
+        String safeFilename = StringUtils.cleanPath(originalFilename);
+        String resolvedContentType = StringUtils.hasText(contentType) ? contentType : "application/octet-stream";
+        String objectKey = buildObjectKey(businessType, safeFilename);
+        objectStorageService.upload(properties.bucket(), objectKey, resolvedContentType,
+                new java.io.ByteArrayInputStream(bytes), bytes.length);
+        String checksum = sha256(bytes);
+
+        ObjectFileEntity entity = new ObjectFileEntity();
+        entity.setOwnerId(ownerId);
+        entity.setBucketName(properties.bucket());
+        entity.setObjectKey(objectKey);
+        entity.setOriginalFilename(safeFilename);
+        entity.setContentType(resolvedContentType);
+        entity.setFileSize((long) bytes.length);
+        entity.setChecksum(checksum);
+        entity.setStorageProvider("COS");
+        objectFileMapper.insert(entity);
+
+        URL downloadUrl = objectStorageService.generatePresignedDownloadUrl(
+                properties.bucket(),
+                objectKey,
+                safeFilename,
+                Instant.now().plus(properties.signedUrlTtl())
+        );
+        return new FileUploadResponse(entity.getId(), safeFilename, resolvedContentType, (long) bytes.length, objectKey,
+                checksum, downloadUrl.toString());
     }
 
     public SignedUrlResponse generateSignedUrl(Long fileId) {
         CurrentUser currentUser = CurrentUserContext.requireCurrentUser();
         ObjectFileEntity file = objectFileMapper.selectById(fileId);
         if (file == null) {
-            throw new BusinessException(400102, "File not found");
+            throw new BusinessException(400102, "文件不存在");
         }
         if (!canRead(currentUser, file)) {
-            throw new BusinessException(403001, "Forbidden");
+            throw new BusinessException(403001, "当前账号没有权限执行该操作");
         }
         URL downloadUrl = objectStorageService.generatePresignedDownloadUrl(
                 file.getBucketName(),
@@ -94,10 +144,10 @@ public class FileService {
 
     private void validate(MultipartFile file, String businessType) {
         if (file == null || file.isEmpty()) {
-            throw new BusinessException(400102, "File is empty");
+            throw new BusinessException(400102, "文件不能为空");
         }
         if (file.getSize() > properties.maxFileSizeBytes()) {
-            throw new BusinessException(400102, "File is too large");
+            throw new BusinessException(400102, "文件大小超出限制");
         }
         if (!SUPPORTED_BUSINESS_TYPES.contains(normalize(businessType))) {
             throw new BusinessException(400102, "Invalid business type");
@@ -105,7 +155,24 @@ public class FileService {
         String filename = StringUtils.cleanPath(file.getOriginalFilename());
         String extension = extensionOf(filename);
         if (!SUPPORTED_EXTENSIONS.contains(extension)) {
-            throw new BusinessException(400102, "Unsupported file type");
+            throw new BusinessException(400102, "不支持的文件类型");
+        }
+    }
+
+    private void validateGenerated(byte[] bytes, String originalFilename, String businessType) {
+        if (bytes == null) {
+            throw new BusinessException(400102, "鏂囦欢涓嶈兘涓虹┖");
+        }
+        if (bytes.length > properties.maxFileSizeBytes()) {
+            throw new BusinessException(400102, "鏂囦欢澶у皬瓒呭嚭闄愬埗");
+        }
+        if (!SUPPORTED_BUSINESS_TYPES.contains(normalize(businessType))) {
+            throw new BusinessException(400102, "Invalid business type");
+        }
+        String filename = StringUtils.cleanPath(originalFilename);
+        String extension = extensionOf(filename);
+        if (!SUPPORTED_EXTENSIONS.contains(extension)) {
+            throw new BusinessException(400102, "涓嶆敮鎸佺殑鏂囦欢绫诲瀷");
         }
     }
 
@@ -142,5 +209,13 @@ public class FileService {
 
     private String normalize(String value) {
         return value == null ? "" : value.trim().toLowerCase(Locale.ROOT);
+    }
+
+    private String sha256(byte[] bytes) {
+        try {
+            return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(bytes));
+        } catch (NoSuchAlgorithmException ex) {
+            throw new IllegalStateException(ex);
+        }
     }
 }

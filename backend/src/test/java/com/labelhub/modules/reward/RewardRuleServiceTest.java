@@ -10,8 +10,8 @@ import com.labelhub.modules.reward.dto.RewardRuleRequest;
 import com.labelhub.modules.reward.dto.RewardRuleResponse;
 import com.labelhub.modules.reward.repository.RewardRuleRepositoryMapper;
 import com.labelhub.modules.reward.service.RewardRuleService;
-import com.labelhub.modules.task.domain.TaskEntity;
-import com.labelhub.modules.task.repository.TaskRepositoryMapper;
+import com.labelhub.modules.task.domain.Task;
+import com.labelhub.modules.task.mapper.TaskMapper;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -31,7 +31,7 @@ import static org.mockito.Mockito.when;
 
 class RewardRuleServiceTest {
 
-    private final TaskRepositoryMapper taskMapper = mock(TaskRepositoryMapper.class);
+    private final TaskMapper taskMapper = mock(TaskMapper.class);
     private final RewardRuleRepositoryMapper rewardRuleMapper = mock(RewardRuleRepositoryMapper.class);
     private final CapturingRedisLockService redisLockService = new CapturingRedisLockService();
     private final RewardRuleService rewardRuleService = newService(taskMapper, rewardRuleMapper, redisLockService);
@@ -88,6 +88,68 @@ class RewardRuleServiceTest {
     }
 
     @Test
+    void saveRuleDefaultsOptionalRewardFields() {
+        CurrentUserContext.set(new CurrentUser(10L, "owner", "owner@example.com", Set.of(RoleCode.OWNER), 1));
+        stubTask(10L);
+        when(rewardRuleMapper.selectMaxVersionByTaskId(1L)).thenReturn(0);
+        when(rewardRuleMapper.insert(any(RewardRuleEntity.class))).thenAnswer(invocation -> {
+            RewardRuleEntity entity = invocation.getArgument(0);
+            entity.setId(101L);
+            return 1;
+        });
+
+        RewardRuleResponse response = rewardRuleService.saveRule(1L,
+                new RewardRuleRequest(null, new BigDecimal("1.25"), null, null));
+
+        assertThat(response.ruleId()).isEqualTo(101L);
+        assertThat(response.effectiveVersion()).isEqualTo(1);
+        assertThat(response.rewardMode()).isEqualTo("APPROVED_ITEM");
+        assertThat(response.rewardCurrency()).isEqualTo("POINT");
+        assertThat(response.rewardVisible()).isTrue();
+        assertThat(response.createdBy()).isEqualTo(10L);
+    }
+
+    @Test
+    void getLatestRuleFailsWhenMissing() {
+        CurrentUserContext.set(new CurrentUser(10L, "owner", "owner@example.com", Set.of(RoleCode.OWNER), 1));
+        stubTask(10L);
+        when(rewardRuleMapper.selectLatestByTaskId(1L)).thenReturn(null);
+
+        assertThatThrownBy(() -> rewardRuleService.getLatestRule(1L))
+                .isInstanceOf(BusinessException.class)
+                .extracting("code")
+                .isEqualTo(400102);
+    }
+
+    @Test
+    void internalOwnerSaveDoesNotDependOnCurrentUserContext() {
+        stubTask(10L);
+        when(rewardRuleMapper.selectMaxVersionByTaskId(1L)).thenReturn(0);
+        when(rewardRuleMapper.insert(any(RewardRuleEntity.class))).thenAnswer(invocation -> {
+            RewardRuleEntity entity = invocation.getArgument(0);
+            entity.setId(102L);
+            return 1;
+        });
+
+        RewardRuleResponse response = rewardRuleService.saveRuleForTaskOwner(1L, 10L,
+                new RewardRuleRequest(null, new BigDecimal("1.25"), null, null));
+
+        assertThat(response.ruleId()).isEqualTo(102L);
+        assertThat(response.effectiveVersion()).isEqualTo(1);
+        assertThat(response.rewardMode()).isEqualTo("APPROVED_ITEM");
+        assertThat(response.rewardCurrency()).isEqualTo("POINT");
+        assertThat(response.rewardVisible()).isTrue();
+        assertThat(response.createdBy()).isEqualTo(10L);
+    }
+
+    @Test
+    void findLatestRuleReturnsNullWhenMissing() {
+        when(rewardRuleMapper.selectLatestByTaskId(1L)).thenReturn(null);
+
+        assertThat(rewardRuleService.findLatestRule(1L)).isNull();
+    }
+
+    @Test
     void unsupportedRewardModeFailsBeforeInsert() {
         CurrentUserContext.set(new CurrentUser(10L, "owner", "owner@example.com", Set.of(RoleCode.OWNER), 1));
         stubTask(10L);
@@ -100,13 +162,13 @@ class RewardRuleServiceTest {
     }
 
     private void stubTask(Long ownerId) {
-        TaskEntity task = new TaskEntity();
+        Task task = new Task();
         task.setId(1L);
         task.setOwnerId(ownerId);
         when(taskMapper.selectById(1L)).thenReturn(task);
     }
 
-    private static RewardRuleService newService(TaskRepositoryMapper taskMapper,
+    private static RewardRuleService newService(TaskMapper taskMapper,
                                                 RewardRuleRepositoryMapper rewardRuleMapper,
                                                 RedisLockService redisLockService) {
         for (Constructor<?> constructor : RewardRuleService.class.getConstructors()) {

@@ -77,7 +77,7 @@ public class ConflictResolveService {
     public ConflictGroupResponse getGroup(Long groupId) {
         ConflictGroup group = conflictGroupMapper.selectById(groupId);
         if (group == null) {
-            throw new BusinessException(GROUP_NOT_FOUND, "Conflict group not found");
+            throw new BusinessException(GROUP_NOT_FOUND, "冲突组不存在");
         }
         return toDetailResponse(group);
     }
@@ -86,10 +86,10 @@ public class ConflictResolveService {
     public ConflictResolveResponse resolve(Long groupId, Long reviewerId, ConflictResolveRequest request) {
         ConflictGroup group = conflictGroupMapper.selectByIdForUpdate(groupId);
         if (group == null) {
-            throw new BusinessException(GROUP_NOT_FOUND, "Conflict group not found");
+            throw new BusinessException(GROUP_NOT_FOUND, "冲突组不存在");
         }
         if (group.getStatus() == ConflictStatus.RESOLVED) {
-            throw new BusinessException(GROUP_ALREADY_RESOLVED, "Conflict group already resolved");
+            throw new BusinessException(GROUP_ALREADY_RESOLVED, "冲突组已处理");
         }
 
         Submission golden = submissionMapper.selectById(request.goldenSubmissionId());
@@ -108,7 +108,10 @@ public class ConflictResolveService {
 
         golden.setIsGolden(true);
         golden.setStatus(SubmissionStatus.APPROVED);
-        submissionMapper.updateById(golden);
+        if (submissionMapper.markApprovedIfPendingFinal(golden.getId()) == 0) {
+            throw new BusinessException(SUBMISSION_NOT_REVIEWABLE,
+                    "Submission is not in reviewable status");
+        }
 
         List<Submission> siblings = submissionMapper.selectPendingFinalByTaskAndItem(
                 group.getTaskId(), group.getDatasetItemId());
@@ -116,7 +119,7 @@ public class ConflictResolveService {
             if (!s.getId().equals(golden.getId())) {
                 s.setStatus(SubmissionStatus.REJECTED);
                 s.setIsGolden(false);
-                submissionMapper.updateById(s);
+                submissionMapper.markConflictRejectedIfPendingFinal(s.getId());
             }
         }
 

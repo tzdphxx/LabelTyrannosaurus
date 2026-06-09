@@ -33,6 +33,7 @@ public class DefaultMediaPromptContextBuilder implements MediaPromptContextBuild
         ProviderCapability capability = input.providerCapability() != null ? input.providerCapability() : ProviderCapability.textOnly();
         List<String> limitations = new ArrayList<>();
         List<String> imageUrls = new ArrayList<>();
+        String videoUrl = "";
         StringBuilder text = new StringBuilder();
         text.append(input.promptTemplate() == null ? "" : input.promptTemplate()).append("\n\n");
         text.append("itemSnapshot: ").append(toJson(item)).append("\n");
@@ -42,6 +43,12 @@ public class DefaultMediaPromptContextBuilder implements MediaPromptContextBuild
 
         PromptMode mode = PromptMode.TEXT_ONLY;
         boolean degraded = false;
+        limitations.addAll(stringList(item.get("media_context_limitations")));
+        String processingStatus = text(item.get("media_processing_status"));
+        if (!processingStatus.isBlank() && !"READY".equalsIgnoreCase(processingStatus)) {
+            limitations.add("MEDIA_PROCESSING_" + processingStatus.toUpperCase(Locale.ROOT));
+            degraded = true;
+        }
 
         switch (mediaType) {
             case "image" -> {
@@ -66,17 +73,37 @@ public class DefaultMediaPromptContextBuilder implements MediaPromptContextBuild
                     text.append("videoTranscript: ").append(transcript).append("\n");
                 }
                 text.append("ownerMediaDescription: ").append(text(item.get("owner_media_description"))).append("\n");
-                imageUrls.addAll(validHttpUrls(stringList(item.get("key_frame_urls")), limitations));
-                if (imageUrls.isEmpty()) {
-                    limitations.add("KEY_FRAME_MISSING");
-                    degraded = true;
-                } else if (visionAvailable(input, capability, limitations)) {
-                    mode = PromptMode.VIDEO_KEYFRAMES;
-                } else {
-                    degraded = true;
-                    imageUrls.clear();
+                String directVideoUrl = text(item.get("media_url"));
+                if (!directVideoUrl.isBlank()) {
+                    if (!isHttpUrl(directVideoUrl)) {
+                        limitations.add("MEDIA_URL_INVALID");
+                        degraded = true;
+                    } else if (visionAvailable(input, capability, limitations)) {
+                        videoUrl = directVideoUrl;
+                        mode = PromptMode.VIDEO_DIRECT;
+                    } else {
+                        degraded = true;
+                        text.append("mediaUrl: ").append(directVideoUrl).append("\n");
+                    }
                 }
-                if (transcript.isBlank()) {
+                if (videoUrl.isBlank()) {
+                    imageUrls.addAll(validHttpUrls(stringList(item.get("key_frame_urls")), limitations));
+                    if (imageUrls.isEmpty()) {
+                        limitations.add("KEY_FRAME_MISSING");
+                        degraded = true;
+                    } else if (visionAvailable(input, capability, limitations)) {
+                        mode = PromptMode.VIDEO_KEYFRAMES;
+                    } else {
+                        degraded = true;
+                        imageUrls.clear();
+                    }
+                }
+                if (videoUrl.isBlank() && imageUrls.isEmpty()) {
+                    degraded = true;
+                } else {
+                    limitations.remove("KEY_FRAME_MISSING");
+                }
+                if (transcript.isBlank() && videoUrl.isBlank()) {
                     limitations.add("TRANSCRIPT_MISSING");
                 }
             }
@@ -103,12 +130,12 @@ public class DefaultMediaPromptContextBuilder implements MediaPromptContextBuild
             mode = PromptMode.IMAGE_MULTI;
         }
 
-        String promptSnapshot = snapshot(text.toString(), mediaType, mode, degraded, limitations, imageUrls);
-        List<LlmMessage> messages = imageUrls.isEmpty()
+        String promptSnapshot = snapshot(text.toString(), mediaType, mode, degraded, limitations, imageUrls, videoUrl);
+        List<LlmMessage> messages = imageUrls.isEmpty() && videoUrl.isBlank()
                 ? List.of(new LlmMessage("user", text.toString()))
-                : List.of(LlmMessage.userParts(contentParts(text.toString(), imageUrls, input.visionDetail())));
+                : List.of(LlmMessage.userParts(contentParts(text.toString(), imageUrls, videoUrl, input.visionDetail())));
         return new MediaPromptResult(messages, mode, degraded, List.copyOf(limitations), promptSnapshot,
-                mediaUnderstanding(mediaType, mode, degraded, limitations, imageUrls, item));
+                mediaUnderstanding(mediaType, mode, degraded, limitations, imageUrls, videoUrl, item));
     }
 
     private boolean visionAvailable(MediaPromptInput input, ProviderCapability capability, List<String> limitations) {
@@ -129,9 +156,13 @@ public class DefaultMediaPromptContextBuilder implements MediaPromptContextBuild
         return limit;
     }
 
-    private List<LlmMessage.ContentPart> contentParts(String prompt, List<String> imageUrls, String detail) {
+    private List<LlmMessage.ContentPart> contentParts(String prompt, List<String> imageUrls,
+                                                      String videoUrl, String detail) {
         List<LlmMessage.ContentPart> parts = new ArrayList<>();
         parts.add(new LlmMessage.TextPart(prompt));
+        if (videoUrl != null && !videoUrl.isBlank()) {
+            parts.add(new LlmMessage.VideoUrlPart(videoUrl));
+        }
         for (String imageUrl : imageUrls) {
             parts.add(new LlmMessage.ImageUrlPart(imageUrl, detail == null || detail.isBlank() ? "auto" : detail));
         }
@@ -152,7 +183,7 @@ public class DefaultMediaPromptContextBuilder implements MediaPromptContextBuild
     }
 
     private String snapshot(String prompt, String mediaType, PromptMode promptMode, boolean degraded,
-                            List<String> limitations, List<String> imageUrls) {
+                            List<String> limitations, List<String> imageUrls, String videoUrl) {
         Map<String, Object> snapshot = new LinkedHashMap<>();
         snapshot.put("promptTemplate", safePrompt(prompt));
         snapshot.put("mediaType", mediaType);
@@ -161,16 +192,20 @@ public class DefaultMediaPromptContextBuilder implements MediaPromptContextBuild
         snapshot.put("limitations", limitations);
         snapshot.put("imageCount", imageUrls.size());
         snapshot.put("images", imageUrls.stream().map(this::safeUrlSummary).toList());
+        snapshot.put("video", videoUrl == null || videoUrl.isBlank() ? null : safeUrlSummary(videoUrl));
         return toJson(snapshot);
     }
 
     private Map<String, Object> mediaUnderstanding(String mediaType, PromptMode promptMode, boolean degraded,
-                                                   List<String> limitations, List<String> imageUrls,
+                                                   List<String> limitations, List<String> imageUrls, String videoUrl,
                                                    Map<String, Object> item) {
         Map<String, Object> summary = new LinkedHashMap<>();
         summary.put("mode", promptMode.name());
         summary.put("mediaType", mediaType);
-        summary.put("usedMedia", !imageUrls.isEmpty());
+        summary.put("processingStatus", text(item.get("media_processing_status")).isBlank()
+                ? "UNKNOWN" : text(item.get("media_processing_status")));
+        summary.put("usedMedia", !imageUrls.isEmpty() || (videoUrl != null && !videoUrl.isBlank()));
+        summary.put("usedVideo", videoUrl != null && !videoUrl.isBlank());
         summary.put("usedKeyFrames", promptMode == PromptMode.VIDEO_KEYFRAMES && !imageUrls.isEmpty());
         summary.put("usedTranscript", !text(item.get("video_transcript")).isBlank());
         summary.put("degraded", degraded);

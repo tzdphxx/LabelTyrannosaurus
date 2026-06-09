@@ -1,6 +1,7 @@
 package com.labelhub.modules.template.service;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.labelhub.common.exception.BusinessException;
@@ -22,11 +23,13 @@ import java.util.regex.PatternSyntaxException;
  * 模板 schema 与答案 JSON 的统一校验服务。
  *
  * <p>保存模板版本时通过 {@link TemplateSchemaValidator} 校验 schema；BE-A 提交答案时通过
- * {@link #validateAnswer(Long, Map)} 获取字段级错误明细。</p>
+ * {@link AnswerSchemaValidator} 入口复用同一套字段级规则。</p>
  */
 @Service
 @Primary
-public class SchemaValidationService implements TemplateSchemaValidator {
+public class SchemaValidationService implements TemplateSchemaValidator, AnswerSchemaValidator {
+
+    private static final int INVALID_ANSWER_JSON = 400402;
 
     private final ObjectMapper objectMapper;
     private final TemplateVersionService templateVersionService;
@@ -53,6 +56,28 @@ public class SchemaValidationService implements TemplateSchemaValidator {
      */
     public List<SchemaValidationError> validateAnswer(Long schemaVersionId, Map<String, Object> answerJson) {
         JsonNode schema = templateVersionService.getVersion(schemaVersionId).schemaJson();
+        return validateAnswerAgainstSchema(schema, answerJson);
+    }
+
+    /**
+     * BE-A 提交主链路使用的校验入口。
+     *
+     * <p>提交链路已经通过 assignment 校验了 labeler 对题目的访问权限，因此这里读取内部
+     * schema 快照，避免复用 Owner 侧 schema 查询权限导致标注员提交被误拒绝。</p>
+     */
+    @Override
+    public void validateAnswer(Long templateVersionId, String answerJson) {
+        Map<String, Object> parsedAnswer = readAnswerObject(answerJson);
+        JsonNode schema = templateVersionService.getTemplateSchema(templateVersionId).schemaJson();
+        List<SchemaValidationError> errors = validateAnswerAgainstSchema(schema, parsedAnswer);
+        if (!errors.isEmpty()) {
+            SchemaValidationError first = errors.get(0);
+            throw new BusinessException(INVALID_ANSWER_JSON,
+                    first.path() + " " + first.errorMessage());
+        }
+    }
+
+    private List<SchemaValidationError> validateAnswerAgainstSchema(JsonNode schema, Map<String, Object> answerJson) {
         SchemaRules rules = parseSchema(schema);
         if (!rules.errors().isEmpty()) {
             SchemaValidationError first = rules.errors().get(0);
@@ -62,13 +87,13 @@ public class SchemaValidationService implements TemplateSchemaValidator {
         JsonNode answer = objectMapper.valueToTree(answerJson == null ? Map.of() : answerJson);
         List<SchemaValidationError> errors = new ArrayList<>();
         if (!answer.isObject()) {
-            errors.add(SchemaValidationError.of("/", "answerJson must be a JSON object"));
+            errors.add(SchemaValidationError.of("/", "answerJson 必须是 JSON 对象"));
             return errors;
         }
 
         for (String field : rules.showItemFields()) {
             if (answer.has(field)) {
-                errors.add(SchemaValidationError.of(answerPath(field), "ShowItem is not allowed in answer fields"));
+                errors.add(SchemaValidationError.of(answerPath(field), "ShowItem 字段不允许出现在作答内容中"));
             }
         }
         for (ComponentRule rule : rules.answerRules()) {
@@ -77,20 +102,31 @@ public class SchemaValidationService implements TemplateSchemaValidator {
         return errors;
     }
 
+    private Map<String, Object> readAnswerObject(String answerJson) {
+        try {
+            Map<String, Object> parsed = objectMapper.readValue(answerJson,
+                    new TypeReference<Map<String, Object>>() {
+                    });
+            return parsed == null ? Map.of() : parsed;
+        } catch (JsonProcessingException ex) {
+            throw new BusinessException(INVALID_ANSWER_JSON, "作答 JSON 格式不合法");
+        }
+    }
+
     private void validateFieldAnswer(ComponentRule rule, JsonNode answer, List<SchemaValidationError> errors) {
         JsonNode value = answer.get(rule.field());
         if (isMissing(value)) {
             if (rule.required()) {
-                errors.add(SchemaValidationError.of(answerPath(rule.field()), "Required answer is missing"));
+                errors.add(SchemaValidationError.of(answerPath(rule.field()), "必填答案缺失"));
             }
             return;
         }
         if (!rule.enumValues().isEmpty() && rule.enumValues().stream().noneMatch(option -> option.equals(value))) {
-            errors.add(SchemaValidationError.of(answerPath(rule.field()), "Answer is not in enum values"));
+            errors.add(SchemaValidationError.of(answerPath(rule.field()), "答案不在可选值范围内"));
         }
         if (rule.regexPattern() != null) {
             if (!value.isTextual() || !rule.regexPattern().matcher(value.asText()).matches()) {
-                errors.add(SchemaValidationError.of(answerPath(rule.field()), "Answer does not match regex"));
+                errors.add(SchemaValidationError.of(answerPath(rule.field()), "答案不符合正则规则"));
             }
         }
     }
@@ -105,11 +141,11 @@ public class SchemaValidationService implements TemplateSchemaValidator {
         try {
             JsonNode schema = objectMapper.readTree(schemaJson);
             if (!schema.isObject()) {
-                throw new BusinessException(409301, "Schema must be a JSON object");
+                throw new BusinessException(409301, "Schema 必须是 JSON 对象");
             }
             return schema;
         } catch (JsonProcessingException ex) {
-            throw new BusinessException(409301, "Invalid schema JSON");
+            throw new BusinessException(409301, "Schema JSON 格式不合法");
         }
     }
 
@@ -121,7 +157,7 @@ public class SchemaValidationService implements TemplateSchemaValidator {
 
         JsonNode components = schema.get("components");
         if (components == null || !components.isArray()) {
-            errors.add(SchemaValidationError.of("/components", "components must be a JSON array"));
+            errors.add(SchemaValidationError.of("/components", "components 必须是 JSON 数组"));
             return new SchemaRules(answerRules, showItemFields, errors);
         }
 
@@ -139,7 +175,7 @@ public class SchemaValidationService implements TemplateSchemaValidator {
             JsonNode component = components.get(i);
             String componentPath = componentsPath + "/" + i;
             if (!component.isObject()) {
-                errors.add(SchemaValidationError.of(componentPath, "component must be a JSON object"));
+                errors.add(SchemaValidationError.of(componentPath, "component 必须是 JSON 对象"));
                 continue;
             }
             collectComponent(component, componentPath, fieldPaths, answerRules, showItemFields, errors);
@@ -154,13 +190,13 @@ public class SchemaValidationService implements TemplateSchemaValidator {
                                   List<SchemaValidationError> errors) {
         String type = textValue(component.get("type"));
         if (!StringUtils.hasText(type)) {
-            errors.add(SchemaValidationError.of(componentPath + "/type", "component type is required"));
+            errors.add(SchemaValidationError.of(componentPath + "/type", "component type 不能为空"));
         }
 
         String field = textValue(component.get("field"));
         boolean showItem = "ShowItem".equals(type);
         if (!showItem && !StringUtils.hasText(field) && !hasNestedComponents(component)) {
-            errors.add(SchemaValidationError.of(componentPath + "/field", "component field is required"));
+            errors.add(SchemaValidationError.of(componentPath + "/field", "component field 不能为空"));
         }
         if (StringUtils.hasText(field)) {
             detectDuplicateField(field, componentPath, fieldPaths, errors);
@@ -185,7 +221,7 @@ public class SchemaValidationService implements TemplateSchemaValidator {
                                       List<SchemaValidationError> errors) {
         String previousPath = fieldPaths.putIfAbsent(field, componentPath + "/field");
         if (previousPath != null) {
-            errors.add(SchemaValidationError.of(componentPath + "/field", "Duplicate field: " + field));
+            errors.add(SchemaValidationError.of(componentPath + "/field", "字段重复：" + field));
         }
     }
 
@@ -200,7 +236,7 @@ public class SchemaValidationService implements TemplateSchemaValidator {
             if (requiredNode.isBoolean()) {
                 required = requiredNode.asBoolean();
             } else {
-                errors.add(SchemaValidationError.of(componentPath + "/required", "required must be a boolean"));
+                errors.add(SchemaValidationError.of(componentPath + "/required", "required 必须是布尔值"));
             }
         }
 
@@ -210,7 +246,7 @@ public class SchemaValidationService implements TemplateSchemaValidator {
             if (enumNode.isArray()) {
                 enumNode.forEach(value -> enumValues.add(value.deepCopy()));
             } else {
-                errors.add(SchemaValidationError.of(componentPath + "/enum", "enum must be a JSON array"));
+                errors.add(SchemaValidationError.of(componentPath + "/enum", "enum 必须是 JSON 数组"));
             }
         }
 
@@ -221,10 +257,10 @@ public class SchemaValidationService implements TemplateSchemaValidator {
                 try {
                     regexPattern = Pattern.compile(regexNode.asText());
                 } catch (PatternSyntaxException ex) {
-                    errors.add(SchemaValidationError.of(componentPath + "/regex", "regex is invalid"));
+                    errors.add(SchemaValidationError.of(componentPath + "/regex", "regex 不合法"));
                 }
             } else {
-                errors.add(SchemaValidationError.of(componentPath + "/regex", "regex must be a string"));
+                errors.add(SchemaValidationError.of(componentPath + "/regex", "regex 必须是字符串"));
             }
         }
         return new ComponentRule(type, field, required, enumValues, regexPattern);
@@ -243,7 +279,7 @@ public class SchemaValidationService implements TemplateSchemaValidator {
         }
         String childPath = componentPath + "/" + childKey;
         if (!children.isArray()) {
-            errors.add(SchemaValidationError.of(childPath, childKey + " must be a JSON array"));
+            errors.add(SchemaValidationError.of(childPath, childKey + " 必须是 JSON 数组"));
             return;
         }
         collectComponents(children, childPath, fieldPaths, answerRules, showItemFields, errors);

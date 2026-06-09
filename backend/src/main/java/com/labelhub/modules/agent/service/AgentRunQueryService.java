@@ -43,7 +43,7 @@ public class AgentRunQueryService {
     public AgentRunDetailResponse getDetail(CurrentUser currentUser, Long agentRunId) {
         AgentRun run = agentRunMapper.selectById(agentRunId);
         if (run == null) {
-            throw new BusinessException(AGENT_RUN_NOT_FOUND, "AgentRun not found");
+            throw new BusinessException(AGENT_RUN_NOT_FOUND, "Agent 运行记录不存在");
         }
         Submission submission = run.getSubmissionId() == null ? null : submissionMapper.selectById(run.getSubmissionId());
         Assignment assignment = null;
@@ -58,7 +58,7 @@ public class AgentRunQueryService {
             }
         }
         if (submission == null && assignment == null) {
-            throw new BusinessException(AGENT_RUN_NOT_FOUND, "AgentRun not found");
+            throw new BusinessException(AGENT_RUN_NOT_FOUND, "Agent 运行记录不存在");
         }
 
         boolean labelerSummary = requireAccess(currentUser, submission, assignment, task);
@@ -85,7 +85,7 @@ public class AgentRunQueryService {
                 && currentUser.userId().equals(assignment.getLabelerId())) {
             return true;
         }
-        throw new BusinessException(FORBIDDEN, "Forbidden");
+        throw new BusinessException(FORBIDDEN, "当前账号没有权限执行该操作");
     }
 
     private AgentRunDetailResponse toResponse(AgentRun run, boolean labelerSummary) {
@@ -108,6 +108,9 @@ public class AgentRunQueryService {
                 inputSnapshot,
                 outputSnapshot,
                 run.getErrorMessage(),
+                run.getTraceId(),
+                run.getLatencyMs(),
+                run.getQueuedAt(),
                 run.getStartedAt(),
                 run.getFinishedAt(),
                 run.getCreatedAt(),

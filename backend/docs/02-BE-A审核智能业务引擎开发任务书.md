@@ -82,9 +82,13 @@ BE\-A 负责 LabelHub 的审核智能业务引擎：
 
     - overlapCount。
 
+    - rewardRule（可选）：传入后自动创建初始奖励规则，支持 rewardMode、unitReward、rewardCurrency、rewardVisible。
+
 2. 编辑任务
 
     - 仅 `DRAFT` 可编辑核心字段。
+
+    - rewardRule（可选）：传入后自动创建或更新奖励规则。
 
 3. 发布任务
 
@@ -904,5 +908,41 @@ AI 失败后 aiReview.status=MANUAL_REQUIRED 且 submission.status=PENDING_FINAL
 冲突仲裁测试通过。
 审核通过事件发布测试通过。
 导出快照查询测试通过。
+```
+
+## 8\. LLM 异步任务可靠性补充
+
+### 8\.1 AgentRun 定义
+
+`AgentRun` 是一次具体 LLM/Agent 执行记录，不是 Admin 配置、Owner 选择的 Agent 配置实体。Admin 配置的是全局 `LlmProvider`，Owner 在任务 AI 配置中选择 Provider、model、prompt、agentMode 和相关参数。预审、预标注、LlmTrigger 在运行时创建 `AgentRun`，用于保存输入快照、输出快照、状态、错误原因和审计关联。
+
+### 8\.2 Redis Stream 与 MySQL 状态边界
+
+Redis Stream 只负责异步投递和 pending 消息恢复，MySQL 是业务状态权威。worker 从 Redis 取到旧消息时，必须重新读取 MySQL 中的 `agent_runs`、`ai_review_results` 或 `pre_annotations` 状态，再决定是否执行、跳过或创建新的 run。
+
+AI 预审规则：
+
+- 队列消息中的 `agentRunId` 只有在对应 `agent_runs.status=PENDING` 时才能复用。
+- 如果 queued run 已经是 `FAILED`、`RATE_LIMITED`、`MANUAL_REQUIRED`、`SUCCESS` 或不存在，必须创建新的 `AI_REVIEW` run。
+- 如果 `ai_review_results` 已经是终态 `SUCCESS` 或 `MANUAL_REQUIRED`，worker 应视为已完成并 ack 旧消息，不重复调用 LLM。
+
+预标注规则：
+
+- `pre_annotations` 缺失或已处于 `SUCCESS`、`FAILED`、`RATE_LIMITED`、`MANUAL_REQUIRED` 时，worker 应视为已完成并 ack。
+- 非终态预标注记录只能继续使用 `PENDING` 或 `RUNNING` 的 `agentRunId`。
+- 如果记录指向的 run 已终态或不存在，应创建新的 `PRE_ANNOTATION` run 并更新 `pre_annotations.agent_run_id`。
+
+### 8\.3 TraceId 贯穿
+
+每条 Redis LLM 任务消息必须携带 `traceId`。worker 执行 handler 时将该 traceId 放入当前线程执行上下文，`TraceIdProvider` 优先读取队列 traceId，再回退到 HTTP `X-Trace-Id` 或生成 UUID。审计日志、Redis 消息、AgentRun 引用和业务结果应能通过 `traceId` 与 `agentRunId` 串联排查。
+
+验收：
+
+```Plaintext
+Redis pending 旧消息不会把 FAILED AgentRun 重新 start。
+失败重试会产生新的 AgentRun。
+终态 AI 预审 / 预标注消息会被 ack，不重复调用 LLM。
+队列 traceId 能贯穿 worker 内的 AuditAppender 调用。
+AgentRun inputSnapshot / outputSnapshot 不包含 API Key 或敏感 header。
 ```
 

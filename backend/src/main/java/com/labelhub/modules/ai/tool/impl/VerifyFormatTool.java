@@ -40,12 +40,12 @@ public class VerifyFormatTool implements ReviewTool {
     public ToolResult execute(Map<String, Object> arguments, ToolContext context) {
         try {
             if (context.answerJson() == null || context.answerJson().isBlank()) {
-                return ToolResult.ok("{\"valid\":false,\"reason\":\"Answer is empty\"}");
+                return ToolResult.ok("{\"valid\":false,\"reason\":\"答案为空\"}");
             }
             objectMapper.readTree(context.answerJson());
-            return ToolResult.ok("{\"valid\":true,\"reason\":\"Answer is valid JSON\"}");
+            return ToolResult.ok("{\"valid\":true,\"reason\":\"答案是合法 JSON\"}");
         } catch (Exception e) {
-            return ToolResult.ok("{\"valid\":false,\"reason\":\"Answer is not valid JSON: " + e.getMessage() + "\"}");
+            return ToolResult.ok("{\"valid\":false,\"reason\":\"答案不是合法 JSON：" + e.getMessage() + "\"}");
         }
     }
 }

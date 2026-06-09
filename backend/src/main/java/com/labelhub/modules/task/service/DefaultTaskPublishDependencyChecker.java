@@ -3,7 +3,10 @@ package com.labelhub.modules.task.service;
 import com.labelhub.modules.ai.domain.AiReviewConfig;
 import com.labelhub.modules.ai.mapper.AiReviewConfigMapper;
 import com.labelhub.modules.dataset.mapper.DatasetItemMapper;
-import com.labelhub.modules.reward.mapper.RewardRuleMapper;
+import com.labelhub.modules.reward.repository.RewardRuleRepositoryMapper;
+import com.labelhub.modules.task.domain.Task;
+import com.labelhub.modules.task.mapper.TaskMapper;
+import com.labelhub.modules.template.domain.TemplateVersion;
 import com.labelhub.modules.template.mapper.TemplateVersionMapper;
 import org.springframework.stereotype.Component;
 
@@ -12,13 +15,16 @@ public class DefaultTaskPublishDependencyChecker implements TaskPublishDependenc
 
     private final AiReviewConfigMapper aiReviewConfigMapper;
     private final DatasetItemMapper datasetItemMapper;
+    private final TaskMapper taskMapper;
     private final TemplateVersionMapper templateVersionMapper;
-    private final RewardRuleMapper rewardRuleMapper;
+    private final RewardRuleRepositoryMapper rewardRuleMapper;
 
-    public DefaultTaskPublishDependencyChecker(AiReviewConfigMapper aiReviewConfigMapper,
+    public DefaultTaskPublishDependencyChecker(TaskMapper taskMapper,
+                                               AiReviewConfigMapper aiReviewConfigMapper,
                                                DatasetItemMapper datasetItemMapper,
                                                TemplateVersionMapper templateVersionMapper,
-                                               RewardRuleMapper rewardRuleMapper) {
+                                               RewardRuleRepositoryMapper rewardRuleMapper) {
+        this.taskMapper = taskMapper;
         this.aiReviewConfigMapper = aiReviewConfigMapper;
         this.datasetItemMapper = datasetItemMapper;
         this.templateVersionMapper = templateVersionMapper;
@@ -32,7 +38,25 @@ public class DefaultTaskPublishDependencyChecker implements TaskPublishDependenc
 
     @Override
     public boolean templateVersionExists(Long templateVersionId) {
-        return templateVersionMapper.selectById(templateVersionId) != null;
+        return templateVersionId != null && templateVersionMapper.selectById(templateVersionId) != null;
+    }
+
+    @Override
+    public boolean templateVersionOwnedBy(Long ownerId, Long templateVersionId) {
+        if (ownerId == null || templateVersionId == null) {
+            return false;
+        }
+        TemplateVersion version = templateVersionMapper.selectById(templateVersionId);
+        return version != null && ownerId.equals(version.getOwnerId());
+    }
+
+    @Override
+    public boolean templateVersionUsableByTask(Long taskId, Long templateVersionId) {
+        if (taskId == null || templateVersionId == null) {
+            return false;
+        }
+        Task task = taskMapper.selectById(taskId);
+        return task != null && templateVersionOwnedBy(task.getOwnerId(), templateVersionId);
     }
 
     @Override
@@ -46,6 +70,6 @@ public class DefaultTaskPublishDependencyChecker implements TaskPublishDependenc
 
     @Override
     public boolean rewardRuleExists(Long taskId) {
-        return rewardRuleMapper.countByTaskId(taskId) > 0;
+        return rewardRuleMapper.selectLatestByTaskId(taskId) != null;
     }
 }

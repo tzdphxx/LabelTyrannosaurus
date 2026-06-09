@@ -38,6 +38,24 @@ public class SpringSubmissionEventPublisher implements SubmissionEventPublisher 
     }
 
     @Override
+    public void publishRejected(Long submissionId, Long reviewerId, String reason) {
+        Submission submission = submissionMapper.selectById(submissionId);
+        if (submission == null) {
+            return;
+        }
+        applicationEventPublisher.publishEvent(new SubmissionRejectedEvent(
+                this,
+                submission.getTaskId(),
+                submission.getAssignmentId(),
+                submission.getId(),
+                submission.getLabelerId(),
+                reviewerId,
+                reason,
+                LocalDateTime.now()
+        ));
+    }
+
+    @Override
     public void publishGoldenSelected(Long conflictGroupId, Long submissionId, Long reviewerId) {
         Submission submission = submissionMapper.selectById(submissionId);
         if (submission == null) {

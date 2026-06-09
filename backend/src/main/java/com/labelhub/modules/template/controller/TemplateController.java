@@ -10,6 +10,7 @@ import com.labelhub.modules.template.service.TemplateVersionService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import java.util.List;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -18,12 +19,10 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-import java.util.List;
-
 /**
  * 模板版本管理接口。
  *
- * <p>接口只处理模板和版本资源；任务发布、暂停和发布版本冻结仍由 BE-A 任务模块负责。</p>
+ * <p>接口只处理 OWNER 模板库和版本资源；任务发布、暂停和发布版本冻结仍由 BE-A 任务模块负责。</p>
  */
 @RestController
 @RequestMapping("/api/v1")
@@ -37,6 +36,24 @@ public class TemplateController {
     public TemplateController(TemplateService templateService, TemplateVersionService templateVersionService) {
         this.templateService = templateService;
         this.templateVersionService = templateVersionService;
+    }
+
+    /**
+     * 创建 OWNER 可复用模板并生成首个版本。
+     */
+    @PostMapping("/owner/templates")
+    @Operation(summary = "创建 OWNER 模板", description = "创建当前 OWNER 可复用模板并生成首个版本。")
+    public ApiResponse<TemplateResponse> createOwnerTemplate(@Valid @RequestBody CreateTemplateRequest request) {
+        return ApiResponse.ok(templateService.createOwnerTemplate(request));
+    }
+
+    /**
+     * 查询当前 OWNER 的可复用模板库。
+     */
+    @GetMapping("/owner/templates")
+    @Operation(summary = "OWNER 模板列表", description = "查询当前 OWNER 的可复用模板列表。")
+    public ApiResponse<List<TemplateResponse>> listOwnerTemplates() {
+        return ApiResponse.ok(templateService.listOwnerTemplates());
     }
 
     /**
@@ -65,6 +82,15 @@ public class TemplateController {
     @Operation(summary = "模板版本详情", description = "查询指定模板版本详情。")
     public ApiResponse<TemplateVersionResponse> getVersion(@PathVariable Long versionId) {
         return ApiResponse.ok(templateVersionService.getVersion(versionId));
+    }
+
+    /**
+     * 查询模板的所有版本。
+     */
+    @GetMapping("/templates/{templateId}/versions")
+    @Operation(summary = "模板版本列表", description = "查询指定模板的所有版本，最新版本在前。")
+    public ApiResponse<List<TemplateVersionResponse>> listVersions(@PathVariable Long templateId) {
+        return ApiResponse.ok(templateVersionService.listVersions(templateId));
     }
 
     /**

@@ -59,25 +59,25 @@ class AuthServiceTest {
     }
 
     @Test
-    void registerIssuesTokenWithRequestedReviewerRole() {
-        when(userMapper.selectByUsername("reviewer")).thenReturn(null);
-        when(userMapper.selectByEmail("reviewer@example.com")).thenReturn(null);
+    void registerIssuesTokenWithRequestedLabelerRole() {
+        when(userMapper.selectByUsername("labeler")).thenReturn(null);
+        when(userMapper.selectByEmail("labeler@example.com")).thenReturn(null);
         when(passwordEncoder.encode("Password123")).thenReturn("$2a$hash");
         doAnswer(invocation -> {
             UserEntity user = invocation.getArgument(0);
-            user.setId(20L);
+            user.setId(30L);
             return 1;
         }).when(userMapper).insert(any(UserEntity.class));
-        when(jwtTokenService.createAccessToken(20L, "reviewer", Set.of(RoleCode.REVIEWER), 1)).thenReturn("access");
-        when(jwtTokenService.createRefreshToken(20L, "reviewer", 1)).thenReturn("refresh");
+        when(jwtTokenService.createAccessToken(30L, "labeler", Set.of(RoleCode.LABELER), 1)).thenReturn("access");
+        when(jwtTokenService.createRefreshToken(30L, "labeler", 1)).thenReturn("refresh");
 
-        var response = authService.register(new RegisterRequest("reviewer", "reviewer@example.com", "Password123", "REVIEWER"));
+        var response = authService.register(new RegisterRequest("labeler", "labeler@example.com", "Password123", "LABELER"));
 
         assertThat(response.accessToken()).isEqualTo("access");
-        assertThat(response.role()).isEqualTo(RoleCode.REVIEWER);
+        assertThat(response.role()).isEqualTo(RoleCode.LABELER);
         var roleCaptor = forClass(UserRoleEntity.class);
         verify(userRoleMapper).insert(roleCaptor.capture());
-        assertThat(roleCaptor.getValue().getRoleCode()).isEqualTo(RoleCode.REVIEWER);
+        assertThat(roleCaptor.getValue().getRoleCode()).isEqualTo(RoleCode.LABELER);
     }
 
     @Test
@@ -85,6 +85,14 @@ class AuthServiceTest {
         when(userMapper.selectByUsername("labeler")).thenReturn(new UserEntity());
 
         assertThatThrownBy(() -> authService.register(new RegisterRequest("labeler", "new@example.com", "Password123", "LABELER")))
+                .isInstanceOf(BusinessException.class)
+                .extracting("code")
+                .isEqualTo(400102);
+    }
+
+    @Test
+    void registerRejectsReviewerRole() {
+        assertThatThrownBy(() -> authService.register(new RegisterRequest("reviewer", "reviewer@example.com", "Password123", "REVIEWER")))
                 .isInstanceOf(BusinessException.class)
                 .extracting("code")
                 .isEqualTo(400102);

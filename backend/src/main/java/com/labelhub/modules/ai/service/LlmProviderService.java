@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.labelhub.common.audit.AuditAppender;
 import com.labelhub.common.audit.AuditCommand;
 import com.labelhub.common.exception.BusinessException;
+import com.labelhub.common.web.TraceIdProvider;
 import com.labelhub.modules.ai.domain.LlmProvider;
 import com.labelhub.modules.ai.dto.CreateLlmProviderRequest;
 import com.labelhub.modules.ai.dto.LlmProviderResponse;
@@ -40,31 +41,43 @@ public class LlmProviderService {
     private final LlmApiKeyEncryptor encryptor;
     private final LlmProviderTester llmProviderTester;
     private final AuditAppender auditAppender;
+    private final TraceIdProvider traceIdProvider;
     private final ObjectMapper objectMapper;
 
     @Autowired
     public LlmProviderService(LlmProviderMapper llmProviderMapper,
                               LlmApiKeyEncryptor encryptor,
                               LlmProviderTester llmProviderTester,
-                              AuditAppender auditAppender) {
-        this(llmProviderMapper, encryptor, llmProviderTester, auditAppender, new ObjectMapper());
+                              AuditAppender auditAppender,
+                              TraceIdProvider traceIdProvider) {
+        this(llmProviderMapper, encryptor, llmProviderTester, auditAppender, traceIdProvider, new ObjectMapper());
     }
 
     LlmProviderService(LlmProviderMapper llmProviderMapper,
                        LlmApiKeyEncryptor encryptor,
                        LlmProviderTester llmProviderTester,
                        AuditAppender auditAppender,
+                       TraceIdProvider traceIdProvider,
                        ObjectMapper objectMapper) {
         this.llmProviderMapper = llmProviderMapper;
         this.encryptor = encryptor;
         this.llmProviderTester = llmProviderTester;
         this.auditAppender = auditAppender;
+        this.traceIdProvider = traceIdProvider;
         this.objectMapper = objectMapper;
     }
 
-    public List<LlmProviderResponse> list(Long ownerId) {
+    public List<LlmProviderResponse> listEnabled() {
         return llmProviderMapper.selectList(new QueryWrapper<LlmProvider>()
-                        .eq("owner_id", ownerId)
+                        .eq("enabled", true)
+                        .orderByDesc("updated_at"))
+                .stream()
+                .map(this::toResponse)
+                .toList();
+    }
+
+    public List<LlmProviderResponse> listAllForAdmin() {
+        return llmProviderMapper.selectList(new QueryWrapper<LlmProvider>()
                         .orderByDesc("updated_at"))
                 .stream()
                 .map(this::toResponse)
@@ -77,31 +90,32 @@ public class LlmProviderService {
         applyProviderFields(provider, request.providerCode(), request.providerName(), request.baseUrl(),
                 request.defaultModel(), request.customHeaders(), request.platformRateLimitPerMinute(),
                 request.taskRateLimitPerMinute(), request.userRateLimitPerMinute(),
-                request.supportVision(), request.supportMultiImage(), request.maxImageCount(), request.visionModel());
+                request.supportVision(), request.supportMultiImage(), request.maxImageCount(), request.visionModel(),
+                request.structuredOutputMode());
         provider.setEncryptedApiKey(encryptor.encrypt(request.apiKey()));
         provider.setEnabled(true);
-        provider.setOwnerId(actorId);
         provider.setCreatedBy(actorId);
         llmProviderMapper.insert(provider);
         auditAppender.append(new AuditCommand(USER_ACTOR_TYPE, actorId, BIZ_TYPE, provider.getId(), "LLM_PROVIDER_CREATED",
-                null, auditSnapshot(provider), null, null));
+                null, auditSnapshot(provider), traceIdProvider.currentTraceId(), null));
         return toResponse(provider);
     }
 
     @Transactional
     public LlmProviderResponse update(Long actorId, Long providerId, UpdateLlmProviderRequest request) {
-        LlmProvider provider = loadOwnedProvider(actorId, providerId);
+        LlmProvider provider = loadProvider(providerId);
         Map<String, Object> beforeJson = auditSnapshot(provider);
         applyProviderFields(provider, request.providerCode(), request.providerName(), request.baseUrl(),
                 request.defaultModel(), request.customHeaders(), request.platformRateLimitPerMinute(),
                 request.taskRateLimitPerMinute(), request.userRateLimitPerMinute(),
-                request.supportVision(), request.supportMultiImage(), request.maxImageCount(), request.visionModel());
+                request.supportVision(), request.supportMultiImage(), request.maxImageCount(), request.visionModel(),
+                request.structuredOutputMode());
         if (hasText(request.apiKey())) {
             provider.setEncryptedApiKey(encryptor.encrypt(request.apiKey().trim()));
         }
         llmProviderMapper.updateById(provider);
         auditAppender.append(new AuditCommand(USER_ACTOR_TYPE, actorId, BIZ_TYPE, provider.getId(), "LLM_PROVIDER_UPDATED",
-                beforeJson, auditSnapshot(provider), null, null));
+                beforeJson, auditSnapshot(provider), traceIdProvider.currentTraceId(), null));
         return toResponse(provider);
     }
 
@@ -134,8 +148,8 @@ public class LlmProviderService {
                 ));
     }
 
-    public LlmProviderTestResponse test(Long ownerId, Long providerId, TestLlmProviderRequest request) {
-        LlmProvider provider = loadOwnedProvider(ownerId, providerId);
+    public LlmProviderTestResponse test(Long actorId, Long providerId, TestLlmProviderRequest request) {
+        LlmProvider provider = loadProvider(providerId);
         Map<String, String> headers = parseHeaders(provider.getCustomHeadersJson());
         headers.putAll(normalizeHeaders(request.customHeaders()));
         String apiKey = hasText(request.apiKey())
@@ -146,12 +160,12 @@ public class LlmProviderService {
     }
 
     private LlmProviderResponse setEnabled(Long actorId, Long providerId, boolean enabled, String action) {
-        LlmProvider provider = loadOwnedProvider(actorId, providerId);
+        LlmProvider provider = loadProvider(providerId);
         Map<String, Object> beforeJson = auditSnapshot(provider);
         provider.setEnabled(enabled);
         llmProviderMapper.updateById(provider);
         auditAppender.append(new AuditCommand(USER_ACTOR_TYPE, actorId, BIZ_TYPE, provider.getId(), action,
-                beforeJson, auditSnapshot(provider), null, null));
+                beforeJson, auditSnapshot(provider), traceIdProvider.currentTraceId(), null));
         return toResponse(provider);
     }
 
@@ -167,7 +181,8 @@ public class LlmProviderService {
                                      Boolean supportVision,
                                      Boolean supportMultiImage,
                                      Integer maxImageCount,
-                                     String visionModel) {
+                                     String visionModel,
+                                     String structuredOutputMode) {
         provider.setProviderCode(providerCode.trim());
         provider.setProviderName(providerName.trim());
         provider.setBaseUrl(trimTrailingSlash(baseUrl.trim()));
@@ -180,20 +195,24 @@ public class LlmProviderService {
         provider.setSupportMultiImage(Boolean.TRUE.equals(supportMultiImage));
         provider.setMaxImageCount(maxImageCount != null ? maxImageCount : 10);
         provider.setVisionModel(hasText(visionModel) ? visionModel.trim() : null);
+        provider.setStructuredOutputMode(normalizeStructuredOutputMode(structuredOutputMode));
+    }
+
+    private String normalizeStructuredOutputMode(String mode) {
+        if (!hasText(mode)) {
+            return null;
+        }
+        String normalized = mode.trim().toUpperCase(java.util.Locale.ROOT);
+        return switch (normalized) {
+            case "JSON_OBJECT", "JSON_SCHEMA", "NONE" -> normalized;
+            default -> null;
+        };
     }
 
     private LlmProvider loadProvider(Long providerId) {
         LlmProvider provider = llmProviderMapper.selectById(providerId);
         if (provider == null) {
-            throw new BusinessException(PROVIDER_NOT_FOUND, "LLM provider not found");
-        }
-        return provider;
-    }
-
-    private LlmProvider loadOwnedProvider(Long ownerId, Long providerId) {
-        LlmProvider provider = loadProvider(providerId);
-        if (!ownerId.equals(provider.getOwnerId())) {
-            throw new BusinessException(PROVIDER_NOT_FOUND, "LLM provider not found");
+            throw new BusinessException(PROVIDER_NOT_FOUND, "LLM Provider 不存在");
         }
         return provider;
     }
@@ -210,12 +229,12 @@ public class LlmProviderService {
                 provider.getPlatformRateLimitPerMinute(),
                 provider.getTaskRateLimitPerMinute(),
                 provider.getUserRateLimitPerMinute(),
-                Boolean.TRUE.equals(provider.getSupportVision()),
-                Boolean.TRUE.equals(provider.getSupportMultiImage()),
-                provider.getMaxImageCount() != null ? provider.getMaxImageCount() : 10,
+                provider.getSupportVision(),
+                provider.getSupportMultiImage(),
+                provider.getMaxImageCount(),
                 provider.getVisionModel(),
+                provider.getStructuredOutputMode(),
                 hasText(provider.getEncryptedApiKey()),
-                provider.getOwnerId(),
                 provider.getCreatedBy(),
                 provider.getCreatedAt(),
                 provider.getUpdatedAt()
@@ -238,6 +257,8 @@ public class LlmProviderService {
         snapshot.put("supportMultiImage", Boolean.TRUE.equals(provider.getSupportMultiImage()));
         snapshot.put("maxImageCount", provider.getMaxImageCount() != null ? provider.getMaxImageCount() : 10);
         snapshot.put("visionModel", provider.getVisionModel());
+        snapshot.put("structuredOutputMode",
+                hasText(provider.getStructuredOutputMode()) ? provider.getStructuredOutputMode() : "NONE");
         snapshot.put("apiKeyConfigured", hasText(provider.getEncryptedApiKey()));
         return snapshot;
     }
@@ -250,7 +271,8 @@ public class LlmProviderService {
                 Boolean.TRUE.equals(provider.getSupportVision()),
                 Boolean.TRUE.equals(provider.getSupportMultiImage()),
                 provider.getMaxImageCount() != null ? provider.getMaxImageCount() : 10,
-                provider.getVisionModel()
+                provider.getVisionModel(),
+                hasText(provider.getStructuredOutputMode()) ? provider.getStructuredOutputMode() : "NONE"
         );
     }
 
@@ -265,7 +287,7 @@ public class LlmProviderService {
             }
             String normalizedKey = key.trim();
             if (normalizedKey.contains("\r") || normalizedKey.contains("\n")) {
-                throw new BusinessException(PROVIDER_HEADER_INVALID, "LLM provider header name is invalid");
+                throw new BusinessException(PROVIDER_HEADER_INVALID, "LLM Provider 请求头名称不合法");
             }
             normalized.put(normalizedKey, value.trim());
         });
@@ -279,7 +301,7 @@ public class LlmProviderService {
         try {
             return new LinkedHashMap<>(objectMapper.readValue(headersJson, STRING_MAP));
         } catch (JsonProcessingException ex) {
-            throw new BusinessException(PROVIDER_JSON_INVALID, "LLM provider headers are invalid");
+            throw new BusinessException(PROVIDER_JSON_INVALID, "LLM Provider 请求头配置不合法");
         }
     }
 
@@ -287,7 +309,7 @@ public class LlmProviderService {
         try {
             return objectMapper.writeValueAsString(headers == null ? Collections.emptyMap() : headers);
         } catch (JsonProcessingException ex) {
-            throw new BusinessException(PROVIDER_JSON_INVALID, "LLM provider headers are invalid");
+            throw new BusinessException(PROVIDER_JSON_INVALID, "LLM Provider 请求头配置不合法");
         }
     }
 

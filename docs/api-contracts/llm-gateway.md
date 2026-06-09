@@ -76,6 +76,34 @@ Environment override: LABELHUB_LLM_GATEWAY_TIMEOUT_MS
 Default: 30000
 ```
 
+## Metrics
+
+AI model calls and business flows are instrumented with Micrometer. Metrics are available from Spring Boot Actuator after at least one AI call has been executed by the current application process.
+
+```text
+GET /actuator/metrics/labelhub.ai.requests
+GET /actuator/metrics/labelhub.ai.latency
+```
+
+Metric tags:
+
+```text
+biz_type: LLM_GATEWAY, AI_REVIEW, PRE_ANNOTATION, LLM_TRIGGER
+provider_id: provider id when known, otherwise unknown
+model_name: model name when known, otherwise unknown
+status: SUCCESS, FAILED, RATE_LIMITED, TIMEOUT, INVALID_JSON, PROVIDER_ERROR, PROVIDER_UNAVAILABLE, MANUAL_REQUIRED
+error_code: backend/provider error code when present, otherwise none
+```
+
+Rules:
+
+```text
+labelhub.ai.requests is a counter for success, failure, timeout, invalid JSON, provider unavailable, provider error, rate limited, and manual-required outcomes.
+labelhub.ai.latency is a timer in milliseconds for measured AI execution time.
+Gateway-level metrics are recorded by DefaultLlmGateway.
+Business-level metrics are recorded by AI review, pre-annotation, and LlmTrigger services.
+```
+
 Security:
 
 ```text

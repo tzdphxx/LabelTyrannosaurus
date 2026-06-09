@@ -18,6 +18,7 @@ const statusOptions = [
   { label: 'Available', value: 'available' },
   { label: 'Claimed', value: 'claimed' },
   { label: 'In progress', value: 'in_progress' },
+  { label: 'Paused', value: 'paused' },
   { label: 'Returned', value: 'rejected' },
   { label: 'Ended', value: 'ended' },
 ]
@@ -29,6 +30,10 @@ function getActionLabel(status: LabelerTaskStatus) {
 
   if (status === 'claimed' || status === 'in_progress' || status === 'rejected') {
     return 'Open workbench'
+  }
+
+  if (status === 'paused') {
+    return 'Task paused'
   }
 
   return 'View records'
@@ -118,6 +123,11 @@ export function LabelerMarketPage() {
 
     if (task.status === 'ended') {
       messageApi.info('This task has ended')
+      return
+    }
+
+    if (task.status === 'paused') {
+      messageApi.info('This task is paused')
       return
     }
 
@@ -232,7 +242,7 @@ export function LabelerMarketPage() {
               width: 150,
               render: (_, task) => (
                 <Button
-                  disabled={task.status === 'ended'}
+                  disabled={task.status === 'ended' || task.status === 'paused'}
                   icon={<ArrowRightOutlined />}
                   loading={isClaiming}
                   size="small"

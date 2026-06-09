@@ -1,5 +1,5 @@
 import { Alert, Button, Card, Descriptions, List, Modal, Space, Tag, Timeline, Typography, message } from 'antd'
-import { ArrowLeftOutlined, SaveOutlined, SendOutlined } from '@ant-design/icons'
+import { ArrowLeftOutlined, KeyOutlined, SaveOutlined, SendOutlined } from '@ant-design/icons'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router'
 import { ContentShell } from '../../components/page/ContentShell'
@@ -260,6 +260,26 @@ export function LabelerWorkbenchPage() {
     setCurrentQuestion(questionId)
   }
 
+  const goPreviousQuestion = () => {
+    const previous = questions[currentQuestionIndex - 1]
+
+    if (previous) {
+      selectQuestion(previous.id)
+    }
+  }
+
+  const goNextQuestion = () => {
+    const next = questions[currentQuestionIndex + 1]
+
+    if (next) {
+      selectQuestion(next.id)
+    }
+  }
+
+  const skipQuestion = () => {
+    goNextQuestion()
+  }
+
   const submitCurrentQuestion = async () => {
     if (!taskId || !currentQuestion || !currentUser) {
       messageApi.error('当前题目不可提交')
@@ -314,6 +334,61 @@ export function LabelerWorkbenchPage() {
       onOk: () => submitCurrentQuestion(),
     })
   }
+
+  useEffect(() => {
+    function handleShortcut(event: KeyboardEvent) {
+      if (event.defaultPrevented || event.isComposing || isWorkbenchLoading) {
+        return
+      }
+
+      const key = event.key.toLowerCase()
+      const isSaveShortcut = (event.ctrlKey || event.metaKey) && key === 's'
+      const isSubmitShortcut = (event.ctrlKey || event.metaKey) && key === 'enter'
+      const isPreviousShortcut = event.altKey && key === 'arrowup'
+      const isNextShortcut = event.altKey && key === 'arrowdown'
+      const isSkipShortcut = event.altKey && key === 'n'
+
+      if (isPreviousShortcut) {
+        event.preventDefault()
+        goPreviousQuestion()
+        return
+      }
+
+      if (isNextShortcut) {
+        event.preventDefault()
+        goNextQuestion()
+        return
+      }
+
+      if (isSkipShortcut) {
+        event.preventDefault()
+        skipQuestion()
+        return
+      }
+
+      if (isSaveShortcut) {
+        event.preventDefault()
+
+        if (!isCurrentSchemaEmpty && !isDraftSaving) {
+          void handleSaveDraft()
+        }
+
+        return
+      }
+
+      if (isSubmitShortcut) {
+        event.preventDefault()
+
+        if (!isCurrentSchemaEmpty && !isSubmitting) {
+          confirmSubmitQuestion()
+        }
+      }
+    }
+
+    window.addEventListener('keydown', handleShortcut)
+
+    return () => window.removeEventListener('keydown', handleShortcut)
+  })
 
   if (!taskId) {
     return <StatePlaceholder status="empty" message="缺少任务 ID，无法打开标注工作台。" />
@@ -423,25 +498,13 @@ export function LabelerWorkbenchPage() {
                 <Space className="labeler-workbench__pager">
                   <Button
                     disabled={!canGoPrevious}
-                    onClick={() => {
-                      const previous = questions[currentQuestionIndex - 1]
-
-                      if (previous) {
-                        selectQuestion(previous.id)
-                      }
-                    }}
+                    onClick={goPreviousQuestion}
                   >
                     上一题
                   </Button>
                   <Button
                     disabled={!canGoNext}
-                    onClick={() => {
-                      const next = questions[currentQuestionIndex + 1]
-
-                      if (next) {
-                        selectQuestion(next.id)
-                      }
-                    }}
+                    onClick={goNextQuestion}
                   >
                     下一题
                   </Button>
@@ -474,6 +537,35 @@ export function LabelerWorkbenchPage() {
 
         <Card className="labeler-workbench__side" loading={isWorkbenchLoading || isQuestionHistoryLoading} title="题目状态与流程">
           <Space direction="vertical" size={16}>
+            <Card className="labeler-shortcut-card" size="small" title={<Space size={6}><KeyOutlined />快捷键</Space>}>
+              <div className="labeler-shortcut-list">
+                <div className={canGoPrevious ? 'labeler-shortcut-item' : 'labeler-shortcut-item labeler-shortcut-item--disabled'}>
+                  <span>上一题</span>
+                  <kbd>Alt</kbd>
+                  <kbd>↑</kbd>
+                </div>
+                <div className={canGoNext ? 'labeler-shortcut-item' : 'labeler-shortcut-item labeler-shortcut-item--disabled'}>
+                  <span>下一题</span>
+                  <kbd>Alt</kbd>
+                  <kbd>↓</kbd>
+                </div>
+                <div className={canGoNext ? 'labeler-shortcut-item' : 'labeler-shortcut-item labeler-shortcut-item--disabled'}>
+                  <span>跳题</span>
+                  <kbd>Alt</kbd>
+                  <kbd>N</kbd>
+                </div>
+                <div className={isCurrentSchemaEmpty ? 'labeler-shortcut-item labeler-shortcut-item--disabled' : 'labeler-shortcut-item'}>
+                  <span>保存草稿</span>
+                  <kbd>Ctrl</kbd>
+                  <kbd>S</kbd>
+                </div>
+                <div className={isCurrentSchemaEmpty ? 'labeler-shortcut-item labeler-shortcut-item--disabled' : 'labeler-shortcut-item'}>
+                  <span>提交</span>
+                  <kbd>Ctrl</kbd>
+                  <kbd>Enter</kbd>
+                </div>
+              </div>
+            </Card>
             <Descriptions column={1} size="small">
               <Descriptions.Item label="当前题目">{currentQuestion?.title ?? '-'}</Descriptions.Item>
               <Descriptions.Item label="题目状态">

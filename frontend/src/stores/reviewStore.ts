@@ -10,6 +10,7 @@ import type {
   ReviewClaimResponse,
   ReviewDetail,
   ReviewerClaimFilters,
+  ReviewerReviewTaskClaimScope,
   ReviewQueueItem,
   ReviewQueueQuery,
   ReviewerSubmissionListItem,
@@ -64,11 +65,11 @@ interface ReviewStore {
   setSelectedReviewerTask: (task: ReviewerTaskSummary | null) => void
   setTaskItemQuery: (query: Partial<ReviewerTaskItemQuery>) => void
   setSelectedReviewIds: (reviewIds: string[]) => void
-  loadReviewerTasks: () => Promise<void>
+  loadReviewerTasks: (claimScope?: ReviewerReviewTaskClaimScope) => Promise<void>
   loadReviewerTaskItems: (taskId: string | number, query?: Partial<ReviewerTaskItemQuery>) => Promise<ReviewerTaskItemPageResponse | null>
   loadQueue: () => Promise<void>
   loadClaimableSubmissions: () => Promise<void>
-  claimReviewerSubmissions: (taskId: string) => Promise<ReviewClaimResponse | null>
+  claimReviewerSubmissions: (taskId: string, refreshClaimScope?: ReviewerReviewTaskClaimScope) => Promise<ReviewClaimResponse | null>
   loadHistory: () => Promise<void>
   loadAllAiReviewLogs: () => Promise<void>
   loadSubmissionAiReview: (submissionId: string) => Promise<AiReviewResultResponse | null>
@@ -191,11 +192,11 @@ export const useReviewStore = create<ReviewStore>((set, get) => ({
   setSelectedReviewIds: (reviewIds) => {
     set({ selectedReviewIds: reviewIds })
   },
-  loadReviewerTasks: async () => {
+  loadReviewerTasks: async (claimScope = 'ALL') => {
     set({ isReviewerTasksLoading: true, error: null })
 
     try {
-      const reviewerTasks = await reviewService.listReviewerTasks()
+      const reviewerTasks = await reviewService.listReviewerTasks(claimScope)
       set((state) => ({
         reviewerTasks,
         selectedReviewerTask: state.selectedReviewerTask
@@ -252,13 +253,13 @@ export const useReviewStore = create<ReviewStore>((set, get) => ({
       set({ isClaimableSubmissionsLoading: false })
     }
   },
-  claimReviewerSubmissions: async (taskId) => {
+  claimReviewerSubmissions: async (taskId, refreshClaimScope = 'ALL') => {
     set({ isClaimingSubmissions: true, error: null, latestClaimResult: null })
 
     try {
       const latestClaimResult = await reviewService.claimReviewerSubmissions(taskId)
       set({ latestClaimResult })
-      await get().loadReviewerTasks()
+      await get().loadReviewerTasks(refreshClaimScope)
 
       return latestClaimResult
     } catch {

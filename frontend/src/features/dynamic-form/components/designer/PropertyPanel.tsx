@@ -1,6 +1,6 @@
 import { DeleteOutlined } from '@ant-design/icons'
 import { Button, Divider, Empty, Input, InputNumber, Space, Switch, Tag } from 'antd'
-import type { DynamicFieldOption, DynamicSchemaNode } from '../../../../types/dynamicForm'
+import type { DynamicFieldOption, DynamicSchemaNode, DynamicValidationRule } from '../../../../types/dynamicForm'
 import { dynamicMaterialRegistry } from '../../materialRegistry'
 import { ChoiceOptionsEditor } from './ChoiceOptionsEditor'
 import { ConditionRuleEditor } from './ConditionRuleEditor'
@@ -24,17 +24,39 @@ interface PropertyPanelProps {
   onUpdate: (updates: Partial<DynamicSchemaNode>) => void
 }
 
-function syncExistingEnumRule(node: DynamicSchemaNode, options: DynamicFieldOption[]) {
+function syncChoiceEnumRule(node: DynamicSchemaNode, options: DynamicFieldOption[]) {
   const rules = node.rules ?? []
-  const hasEnumRule = rules.some((rule) => rule.type === 'enum')
+  const enumRuleIndex = rules.findIndex((rule) => rule.type === 'enum')
+  const values = options.map((option) => option.value)
+  const shouldKeepEnumRule = node.type === 'radio' || node.type === 'checkbox' || enumRuleIndex >= 0
 
-  if (!hasEnumRule) {
+  if (!shouldKeepEnumRule) {
     return rules
   }
 
-  const values = options.map((option) => option.value)
+  if (!values.length) {
+    return rules.filter((rule) => rule.type !== 'enum')
+  }
+
+  if (enumRuleIndex < 0) {
+    return [...rules, { type: 'enum', values } satisfies DynamicValidationRule]
+  }
 
   return rules.map((rule) => (rule.type === 'enum' ? { ...rule, values } : rule))
+}
+
+function syncRequiredRule(rules: DynamicValidationRule[] | undefined, checked: boolean) {
+  const currentRules = rules ?? []
+
+  if (!checked) {
+    return currentRules.filter((rule) => rule.type !== 'required')
+  }
+
+  if (currentRules.some((rule) => rule.type === 'required')) {
+    return currentRules
+  }
+
+  return [{ type: 'required' } satisfies DynamicValidationRule, ...currentRules]
 }
 
 export function PropertyPanel({ fieldKeys, node, onDelete, onUpdate }: PropertyPanelProps) {
@@ -134,7 +156,7 @@ export function PropertyPanel({ fieldKeys, node, onDelete, onUpdate }: PropertyP
           <ChoiceOptionsEditor
             nodeId={node.id}
             options={node.props.options}
-            onCommit={(options) => onUpdate({ props: { options }, rules: syncExistingEnumRule(node, options) })}
+            onCommit={(options) => onUpdate({ props: { options }, rules: syncChoiceEnumRule(node, options) })}
           />
         </label>
       ) : null}
@@ -148,7 +170,7 @@ export function PropertyPanel({ fieldKeys, node, onDelete, onUpdate }: PropertyP
               checked={required}
               onChange={(checked) =>
                 onUpdate({
-                  rules: checked ? [{ type: 'required' }] : node.rules?.filter((rule) => rule.type !== 'required') ?? [],
+                  rules: syncRequiredRule(node.rules, checked),
                 })
               }
             />

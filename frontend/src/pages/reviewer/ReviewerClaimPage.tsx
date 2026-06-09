@@ -1,13 +1,27 @@
-import { Alert, Button, Empty, Progress, Space, Tag, Typography, message } from 'antd'
+import { Alert, Button, Empty, Progress, Segmented, Space, Tag, Typography, message } from 'antd'
 import { CheckCircleOutlined, ReloadOutlined, RightOutlined } from '@ant-design/icons'
-import { useEffect, useMemo } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import type { MouseEvent } from 'react'
 import { useNavigate } from 'react-router'
 import { ContentShell } from '../../components/page/ContentShell'
 import { PageHeader } from '../../components/page/PageHeader'
 import { useReviewStore } from '../../stores/reviewStore'
-import type { ReviewerTaskSummary } from '../../types/review'
+import type { ReviewerReviewTaskClaimScope, ReviewerTaskSummary } from '../../types/review'
 import styles from './ReviewerPages.module.css'
+
+const claimScopeOptions: Array<{ label: string; value: ReviewerReviewTaskClaimScope }> = [
+  { label: 'All', value: 'ALL' },
+  { label: 'Mine', value: 'MINE' },
+  { label: 'Claimed', value: 'CLAIMED' },
+  { label: 'Unclaimed', value: 'UNCLAIMED' },
+]
+
+const emptyDescriptionMap: Record<ReviewerReviewTaskClaimScope, string> = {
+  ALL: 'No review tasks',
+  MINE: 'No tasks claimed by you',
+  CLAIMED: 'No tasks claimed by others',
+  UNCLAIMED: 'No unclaimed tasks',
+}
 
 function getTaskTitle(task: ReviewerTaskSummary) {
   return task.taskTitle?.trim() || `Task ${task.taskId}`
@@ -23,9 +37,78 @@ function getWorkloadPercent(task: ReviewerTaskSummary) {
   return Math.round((task.totalReviewedCount / total) * 100)
 }
 
+function getTaskViewState(task: ReviewerTaskSummary) {
+  if (task.claimedByMe) {
+    return 'mine'
+  }
+
+  if (task.claimed) {
+    return 'claimed'
+  }
+
+  return 'unclaimed'
+}
+
+function getTaskStatusLabel(task: ReviewerTaskSummary) {
+  const state = getTaskViewState(task)
+
+  if (state === 'mine') {
+    return 'Mine'
+  }
+
+  if (state === 'claimed') {
+    return 'Claimed by others'
+  }
+
+  return task.claimable === false ? 'Unavailable' : 'Open'
+}
+
+function getTaskStatusColor(task: ReviewerTaskSummary) {
+  const state = getTaskViewState(task)
+
+  if (state === 'mine') {
+    return 'success'
+  }
+
+  if (state === 'claimed') {
+    return 'default'
+  }
+
+  return task.claimable === false ? 'default' : 'blue'
+}
+
+function canOpenTask(task: ReviewerTaskSummary) {
+  return task.claimedByMe
+}
+
+function canClaimTask(task: ReviewerTaskSummary) {
+  return !task.claimed && task.claimable !== false && task.pendingCount > 0
+}
+
+function getTaskCardClassName(task: ReviewerTaskSummary) {
+  const state = getTaskViewState(task)
+  const classNames = [styles.taskCard]
+
+  if (state === 'mine') {
+    classNames.push(styles.taskCardMine)
+  } else if (state === 'claimed') {
+    classNames.push(styles.taskCardClaimed)
+  } else {
+    classNames.push(styles.taskCardUnclaimed)
+  }
+
+  if (!canOpenTask(task)) {
+    classNames.push(styles.taskCardLocked)
+  }
+
+  return classNames.join(' ')
+}
+
 export function ReviewerClaimPage() {
   const navigate = useNavigate()
   const [messageApi, contextHolder] = message.useMessage()
+  const [claimScope, setClaimScope] = useState<ReviewerReviewTaskClaimScope>('ALL')
+  const [claimingTaskId, setClaimingTaskId] = useState<string | null>(null)
   const reviewerTasks = useReviewStore((state) => state.reviewerTasks)
   const latestClaimResult = useReviewStore((state) => state.latestClaimResult)
   const error = useReviewStore((state) => state.error)
@@ -35,29 +118,39 @@ export function ReviewerClaimPage() {
   const claimReviewerSubmissions = useReviewStore((state) => state.claimReviewerSubmissions)
 
   useEffect(() => {
-    void loadReviewerTasks()
-  }, [loadReviewerTasks])
+    void loadReviewerTasks(claimScope)
+  }, [claimScope, loadReviewerTasks])
 
   const claimableTasks = useMemo(
     () =>
       reviewerTasks
-        .filter((task) => task.pendingCount > 0 || task.claimed)
         .sort((first, second) => second.pendingCount - first.pendingCount || first.taskId - second.taskId),
     [reviewerTasks],
   )
 
   const openTask = (task: ReviewerTaskSummary) => {
+    if (!canOpenTask(task)) {
+      return
+    }
+
     navigate(`/app/reviewer/tasks/${task.taskId}`)
   }
 
   const claimTask = async (event: MouseEvent<HTMLElement>, task: ReviewerTaskSummary) => {
     event.stopPropagation()
-    const result = await claimReviewerSubmissions(String(task.taskId))
+    const taskId = String(task.taskId)
+    setClaimingTaskId(taskId)
 
-    if (result) {
-      messageApi.success(`Claimed ${result.claimedCount} submissions`)
-    } else {
-      messageApi.error('Claim failed')
+    try {
+      const result = await claimReviewerSubmissions(taskId, claimScope)
+
+      if (result) {
+        messageApi.success(`Claimed ${result.claimedCount} submissions`)
+      } else {
+        messageApi.error('Claim failed')
+      }
+    } finally {
+      setClaimingTaskId(null)
     }
   }
 
@@ -66,10 +159,10 @@ export function ReviewerClaimPage() {
       {contextHolder}
       <ContentShell>
         <PageHeader
-          title="Claim Review Tasks"
-          description="Claim submitted work by task, then review items in the task detail page."
+          title="领取审核任务"
+          description="按任务提交领取相关题目，再在任务详情页完成题目审核。"
           extra={
-            <Button icon={<ReloadOutlined />} loading={isReviewerTasksLoading} onClick={() => void loadReviewerTasks()}>
+            <Button icon={<ReloadOutlined />} loading={isReviewerTasksLoading} onClick={() => void loadReviewerTasks(claimScope)}>
               Refresh
             </Button>
           }
@@ -87,13 +180,31 @@ export function ReviewerClaimPage() {
         />
       ) : null}
 
+      <div className={styles.taskScopeBar}>
+        <Segmented
+          className={styles.taskScopeTabs}
+          options={claimScopeOptions}
+          value={claimScope}
+          onChange={(value) => setClaimScope(value as ReviewerReviewTaskClaimScope)}
+        />
+      </div>
+
       <section className={styles.taskBoard}>
         {claimableTasks.length > 0 ? (
           claimableTasks.map((task) => {
             const percent = getWorkloadPercent(task)
+            const taskCanOpen = canOpenTask(task)
+            const taskCanClaim = canClaimTask(task)
+            const taskId = String(task.taskId)
+            const isCurrentTaskClaiming = isClaimingSubmissions && claimingTaskId === taskId
 
             return (
-              <article key={task.taskId} className={styles.taskCard} onClick={() => openTask(task)}>
+              <article
+                key={task.taskId}
+                aria-disabled={!taskCanOpen}
+                className={getTaskCardClassName(task)}
+                onClick={taskCanOpen ? () => openTask(task) : undefined}
+              >
                 <div className={styles.taskCardTopline} />
                 <Space direction="vertical" size={14} className={styles.taskCardContent}>
                   <div className={styles.taskCardHeader}>
@@ -101,9 +212,7 @@ export function ReviewerClaimPage() {
                       <Typography.Text className={styles.taskEyebrow}>TASK #{task.taskId}</Typography.Text>
                       <Typography.Title level={4}>{getTaskTitle(task)}</Typography.Title>
                     </div>
-                    <Tag color={task.claimedByMe ? 'success' : task.claimed ? 'processing' : 'warning'}>
-                      {task.claimedByMe ? 'Mine' : task.claimed ? 'Claimed' : 'Open'}
-                    </Tag>
+                    <Tag color={getTaskStatusColor(task)}>{getTaskStatusLabel(task)}</Tag>
                   </div>
 
                   <div className={styles.taskMetricGrid}>
@@ -125,15 +234,16 @@ export function ReviewerClaimPage() {
 
                   <Space wrap className={styles.taskCardActions}>
                     <Button
-                      disabled={task.pendingCount <= 0}
+                      disabled={!taskCanClaim || (isClaimingSubmissions && !isCurrentTaskClaiming)}
                       icon={<CheckCircleOutlined />}
-                      loading={isClaimingSubmissions}
+                      loading={isCurrentTaskClaiming}
                       type="primary"
                       onClick={(event) => void claimTask(event, task)}
+                      style={{ color: 'white' }}
                     >
                       Claim
                     </Button>
-                    <Button icon={<RightOutlined />} onClick={() => openTask(task)}>
+                    <Button disabled={!taskCanOpen} icon={<RightOutlined />} onClick={() => openTask(task)}>
                       View Items
                     </Button>
                   </Space>
@@ -143,7 +253,7 @@ export function ReviewerClaimPage() {
           })
         ) : (
           <div className={styles.emptyStage}>
-            <Empty description={isReviewerTasksLoading ? 'Loading tasks...' : 'No claimable tasks'} />
+            <Empty description={isReviewerTasksLoading ? 'Loading tasks...' : emptyDescriptionMap[claimScope]} />
           </div>
         )}
       </section>

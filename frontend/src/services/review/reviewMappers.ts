@@ -234,6 +234,13 @@ export function mapReviewerAiReviewStatusToResult(item: ReviewerAiReviewStatusIt
 
 export function normalizeAiReviewResultResponse(item: AiReviewResultResponse): AiReviewResultResponse {
   const dimensionScores = item.dimensionScores ?? Object.fromEntries((item.dimensions ?? []).map((dimension) => [dimension.name, dimension.score]))
+  const reviewTrace = item.reviewTrace
+    ? {
+        ...item.reviewTrace,
+        steps: item.reviewTrace.steps ?? [],
+        metrics: item.reviewTrace.metrics ?? {},
+      }
+    : item.reviewTrace ?? null
 
   return {
     ...item,
@@ -242,6 +249,7 @@ export function normalizeAiReviewResultResponse(item: AiReviewResultResponse): A
     dimensionScores,
     riskFlags: Array.isArray(item.riskFlags) ? item.riskFlags : parseRiskFlags(item.riskFlags),
     promptSnapshot: item.promptSnapshot ?? item.rawPrompt,
+    reviewTrace,
   }
 }
 

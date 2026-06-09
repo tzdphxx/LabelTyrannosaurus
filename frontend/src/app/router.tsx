@@ -1,27 +1,67 @@
+import { lazy, Suspense } from 'react'
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router'
 import { StatePlaceholder } from '../components/states/StatePlaceholder'
-import { AdminDashboardPage } from '../pages/admin/AdminDashboardPage'
-import { AdminLlmProviderPage } from '../pages/admin/AdminLlmProviderPage'
-import { AdminReviewAssignmentPage } from '../pages/admin/AdminReviewAssignmentPage'
-import { LoginPage } from '../pages/auth/LoginPage'
-import { LabelerDashboardPage } from '../pages/labeler/LabelerDashboardPage'
-import { LabelerMarketPage } from '../pages/labeler/LabelerMarketPage'
-import { LabelerSubmissionsPage } from '../pages/labeler/LabelerSubmissionsPage'
-import { LabelerWorkbenchPage } from '../pages/labeler/LabelerWorkbenchPage'
-import { OwnerDashboardPage } from '../pages/owner/OwnerDashboardPage'
-import { OwnerTaskEditorPage } from '../pages/owner/OwnerTaskEditorPage'
-import { OwnerTasksPage } from '../pages/owner/OwnerTasksPage'
-import { OwnerTemplateDesignerPage } from '../pages/owner/templates/OwnerTemplateDesignerPage'
-import { OwnerTemplatesPage } from '../pages/owner/templates/OwnerTemplatesPage'
-import { ReviewerDashboardPage } from '../pages/reviewer/ReviewerDashboardPage'
-import { ReviewerQueuePage } from '../pages/reviewer/ReviewerQueuePage'
-import { ReviewerClaimPage } from '../pages/reviewer/ReviewerClaimPage'
-import { ReviewerAiReviewQueuePage } from '../pages/reviewer/ReviewerAiReviewQueuePage'
-import { ReviewerReviewDetailPage } from '../pages/reviewer/ReviewerReviewDetailPage'
 import { useAuthStore } from '../stores/authStore'
 import { AppLayout } from './layout/AppLayout'
 import { PublicOnlyRoute } from './guards/PublicOnlyRoute'
 import { RequireAuth } from './guards/RequireAuth'
+
+const LoginPage = lazy(() => import('../pages/auth/LoginPage').then((module) => ({ default: module.LoginPage })))
+const AdminDashboardPage = lazy(() =>
+  import('../pages/admin/AdminDashboardPage').then((module) => ({ default: module.AdminDashboardPage })),
+)
+const AdminLlmProviderPage = lazy(() =>
+  import('../pages/admin/AdminLlmProviderPage').then((module) => ({ default: module.AdminLlmProviderPage })),
+)
+const AdminReviewAssignmentPage = lazy(() =>
+  import('../pages/admin/AdminReviewAssignmentPage').then((module) => ({ default: module.AdminReviewAssignmentPage })),
+)
+const LabelerDashboardPage = lazy(() =>
+  import('../pages/labeler/LabelerDashboardPage').then((module) => ({ default: module.LabelerDashboardPage })),
+)
+const LabelerMarketPage = lazy(() =>
+  import('../pages/labeler/LabelerMarketPage').then((module) => ({ default: module.LabelerMarketPage })),
+)
+const LabelerSubmissionsPage = lazy(() =>
+  import('../pages/labeler/LabelerSubmissionsPage').then((module) => ({ default: module.LabelerSubmissionsPage })),
+)
+const LabelerWorkbenchPage = lazy(() =>
+  import('../pages/labeler/LabelerWorkbenchPage').then((module) => ({ default: module.LabelerWorkbenchPage })),
+)
+const OwnerDashboardPage = lazy(() =>
+  import('../pages/owner/OwnerDashboardPage').then((module) => ({ default: module.OwnerDashboardPage })),
+)
+const OwnerTaskEditorPage = lazy(() =>
+  import('../pages/owner/OwnerTaskEditorPage').then((module) => ({ default: module.OwnerTaskEditorPage })),
+)
+const OwnerTasksPage = lazy(() =>
+  import('../pages/owner/OwnerTasksPage').then((module) => ({ default: module.OwnerTasksPage })),
+)
+const OwnerTemplateDesignerPage = lazy(() =>
+  import('../pages/owner/templates/OwnerTemplateDesignerPage').then((module) => ({
+    default: module.OwnerTemplateDesignerPage,
+  })),
+)
+const OwnerTemplatesPage = lazy(() =>
+  import('../pages/owner/templates/OwnerTemplatesPage').then((module) => ({ default: module.OwnerTemplatesPage })),
+)
+const ReviewerDashboardPage = lazy(() =>
+  import('../pages/reviewer/ReviewerDashboardPage').then((module) => ({ default: module.ReviewerDashboardPage })),
+)
+const ReviewerQueuePage = lazy(() =>
+  import('../pages/reviewer/ReviewerQueuePage').then((module) => ({ default: module.ReviewerQueuePage })),
+)
+const ReviewerClaimPage = lazy(() =>
+  import('../pages/reviewer/ReviewerClaimPage').then((module) => ({ default: module.ReviewerClaimPage })),
+)
+const ReviewerAiReviewQueuePage = lazy(() =>
+  import('../pages/reviewer/ReviewerAiReviewQueuePage').then((module) => ({
+    default: module.ReviewerAiReviewQueuePage,
+  })),
+)
+const ReviewerReviewDetailPage = lazy(() =>
+  import('../pages/reviewer/ReviewerReviewDetailPage').then((module) => ({ default: module.ReviewerReviewDetailPage })),
+)
 
 function EntryRedirect() {
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated)
@@ -30,10 +70,15 @@ function EntryRedirect() {
   return <Navigate replace to={isAuthenticated ? roleHomePath : '/login'} />
 }
 
+function RouteFallback() {
+  return <StatePlaceholder status="loading" message="Page loading..." />
+}
+
 export function AppRouter() {
   return (
     <BrowserRouter>
-      <Routes>
+      <Suspense fallback={<RouteFallback />}>
+        <Routes>
         <Route index element={<EntryRedirect />} />
         <Route
           element={
@@ -100,7 +145,8 @@ export function AppRouter() {
           />
         </Route>
         <Route element={<Navigate replace to="/login" />} path="*" />
-      </Routes>
+        </Routes>
+      </Suspense>
     </BrowserRouter>
   )
 }

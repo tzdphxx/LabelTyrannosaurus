@@ -114,7 +114,8 @@ public class TaskLifecycleService {
                         task.getPublishedAt(),
                         task.getEndedAt(),
                         task.getCreatedAt(),
-                        task.getUpdatedAt()
+                        task.getUpdatedAt(),
+                        null
                 ))
                 .toList();
     }

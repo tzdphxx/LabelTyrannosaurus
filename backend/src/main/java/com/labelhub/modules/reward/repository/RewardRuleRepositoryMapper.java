@@ -2,6 +2,8 @@ package com.labelhub.modules.reward.repository;
 
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import com.labelhub.modules.reward.domain.RewardRuleEntity;
+import java.util.Collection;
+import java.util.List;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 import org.apache.ibatis.annotations.Select;
@@ -32,4 +34,22 @@ public interface RewardRuleRepositoryMapper extends BaseMapper<RewardRuleEntity>
             limit 1
             """)
     RewardRuleEntity selectLatestByTaskId(@Param("taskId") Long taskId);
+
+    @Select("""
+            <script>
+            select rr.*
+            from reward_rules rr
+            join (
+                select task_id, max(effective_version) as effective_version
+                from reward_rules
+                where task_id in
+                <foreach collection="taskIds" item="taskId" open="(" separator="," close=")">
+                    #{taskId}
+                </foreach>
+                group by task_id
+            ) latest on rr.task_id = latest.task_id
+                and rr.effective_version = latest.effective_version
+            </script>
+            """)
+    List<RewardRuleEntity> selectLatestByTaskIds(@Param("taskIds") Collection<Long> taskIds);
 }

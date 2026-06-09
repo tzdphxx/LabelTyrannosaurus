@@ -33,6 +33,7 @@ interface BackendTemplateSchema {
 }
 
 const layoutTypes = new Set<DynamicFieldType>(['group', 'tabs', 'tabPane'])
+const choiceTypes = new Set<DynamicFieldType>(['radio', 'checkbox', 'select', 'tagSelect'])
 
 function asStringArray(value: unknown) {
   return Array.isArray(value) ? value.map((item) => String(item)).filter(Boolean) : []
@@ -84,7 +85,29 @@ function getRequired(rules?: DynamicValidationRule[]) {
   return Boolean(rules?.some((rule) => rule.type === 'required'))
 }
 
+function isChoiceType(type: DynamicFieldType) {
+  return choiceTypes.has(type)
+}
+
+function isEnumValue(value: unknown): value is string | number | boolean {
+  return typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean'
+}
+
+function getOptionValues(options: unknown): Array<string | number | boolean> {
+  if (!Array.isArray(options)) {
+    return []
+  }
+
+  return options
+    .map((option) => (isRecord(option) ? option.value : undefined))
+    .filter(isEnumValue)
+}
+
 function getEnumValues(node: DynamicSchemaNode) {
+  if (isChoiceType(node.type) && node.props.options?.length) {
+    return node.props.options.map((option) => option.value)
+  }
+
   const enumRule = node.rules?.find((rule): rule is Extract<DynamicValidationRule, { type: 'enum' }> => rule.type === 'enum')
 
   if (enumRule) {
@@ -160,6 +183,16 @@ function fromBackendNode(component: BackendSchemaComponent): DynamicSchemaNode {
   if (component.enum?.length && !rules.some((rule) => rule.type === 'enum')) {
     rules.push({ type: 'enum', values: component.enum })
     props.options = props.options ?? toOptions(component.enum)
+  }
+
+  if (isChoiceType(type)) {
+    const optionValues = getOptionValues(props.options)
+    const enumRuleIndex = rules.findIndex((rule) => rule.type === 'enum')
+    const enumRule = rules[enumRuleIndex]
+
+    if (optionValues.length && enumRule?.type === 'enum') {
+      rules[enumRuleIndex] = { ...enumRule, values: optionValues }
+    }
   }
 
   if (type === 'llmPrompt') {

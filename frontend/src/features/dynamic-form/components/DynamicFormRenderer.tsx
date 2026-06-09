@@ -3,7 +3,7 @@ import { createSchemaField, FormProvider, RecursionField, useFieldSchema } from 
 import { Checkbox, FormItem, FormLayout, Input, Radio, Select } from '@formily/antd-v5'
 import { Alert, Button, Card, Space, Tabs, Typography, message, type TabsProps } from 'antd'
 import type { ReactNode } from 'react'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { llmService } from '../../../services/llm'
 import type { DynamicFormSchema, DynamicFormSubmitResult } from '../../../types/dynamicForm'
 import type { LlmTriggerContext } from '../../../types/llm'
@@ -90,6 +90,23 @@ function TabPaneSection({ children, title }: { children?: ReactNode; title?: str
   )
 }
 
+function stringifyFormValues(value: unknown): string {
+  if (!value || typeof value !== 'object') {
+    return JSON.stringify(value ?? null)
+  }
+
+  if (Array.isArray(value)) {
+    return `[${value.map((item) => stringifyFormValues(item)).join(',')}]`
+  }
+
+  const record = value as Record<string, unknown>
+
+  return `{${Object.keys(record)
+    .sort()
+    .map((key) => `${JSON.stringify(key)}:${stringifyFormValues(record[key])}`)
+    .join(',')}}`
+}
+
 const SchemaField = createSchemaField({
   components: {
     Checkbox,
@@ -120,21 +137,31 @@ export function DynamicFormRenderer({
   const [messageApi, contextHolder] = message.useMessage()
   const [submitting, setSubmitting] = useState(false)
   const answerFieldKeys = useMemo(() => getSchemaNodeKeys(schema), [schema])
+  const onValuesChangeRef = useRef(onValuesChange)
+  const initialValuesSignature = useMemo(() => stringifyFormValues(initialValues ?? {}), [initialValues])
+
+  useEffect(() => {
+    onValuesChangeRef.current = onValuesChange
+  }, [onValuesChange])
 
   const form = useMemo(
     () =>
       createForm({
-        initialValues,
+        values: initialValues,
         pattern: readOnly ? 'readPretty' : 'editable',
         effects() {
           onFormValuesChange((formInstance) => {
             const values = { ...formInstance.values }
-            onValuesChange?.(values)
+            onValuesChangeRef.current?.(values)
           })
         },
       }),
-    [initialValues, onValuesChange, readOnly],
+    [readOnly],
   )
+
+  useEffect(() => {
+    form.setValues(initialValues ?? {}, 'overwrite')
+  }, [form, initialValuesSignature])
 
   const applyLlmValues = useCallback(
     (values: Record<string, unknown>) => {
@@ -144,9 +171,9 @@ export function DynamicFormRenderer({
       }
 
       form.setValues(nextValues)
-      onValuesChange?.(nextValues)
+      onValuesChangeRef.current?.(nextValues)
     },
-    [form, onValuesChange],
+    [form],
   )
 
   const formilySchema = useMemo(

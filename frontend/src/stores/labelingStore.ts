@@ -184,7 +184,9 @@ export const useLabelingStore = create<LabelingStore>((set, get) => ({
 
     try {
       const currentDraft = await labelingService.getDraft(taskId, questionId, userId)
-      set({ currentDraft })
+      set((state) => ({
+        currentDraft: state.currentQuestion?.id === questionId ? currentDraft : state.currentDraft,
+      }))
     } catch (error) {
       set({ error: getErrorMessage(error, '草稿加载失败') })
     }
@@ -211,7 +213,7 @@ export const useLabelingStore = create<LabelingStore>((set, get) => ({
     try {
       const currentDraft = await labelingService.saveDraft(payload)
       set((state) => ({
-        currentDraft,
+        currentDraft: state.currentQuestion?.id === currentDraft.questionId ? currentDraft : state.currentDraft,
         submitValidation: null,
         questions: state.questions.map((question) =>
           question.id === currentDraft.questionId

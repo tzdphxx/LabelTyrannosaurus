@@ -38,7 +38,7 @@ public class VoteAggregator {
 
         // 决策投票
         Map<String, Long> decisionVotes = results.stream()
-                .map(r -> stringValue(r.get("decision"), "UNCERTAIN"))
+                .map(r -> AiReviewDecisions.normalizeForStorage(r.get("decision")))
                 .filter(d -> !d.isBlank())
                 .collect(Collectors.groupingBy(Function.identity(), Collectors.counting()));
 
@@ -46,7 +46,7 @@ public class VoteAggregator {
                 .sorted(Map.Entry.<String, Long>comparingByValue().reversed())
                 .map(Map.Entry::getKey)
                 .findFirst()
-                .orElse("UNCERTAIN");
+                .orElse(AiReviewDecisions.MANUAL_REVIEW);
 
         long topVotes = decisionVotes.getOrDefault(winningDecision, 0L);
         boolean hasConsensus = topVotes >= minAgreement;
@@ -133,6 +133,7 @@ public class VoteAggregator {
 
     private AggregatedResult fromSingle(Map<String, Object> single) {
         Map<String, Object> result = new LinkedHashMap<>(single);
+        result.put("decision", AiReviewDecisions.normalizeForStorage(single.get("decision")));
         result.put("_voteCount", 1);
         result.put("_topVotes", 1L);
         result.put("_hasConsensus", true);

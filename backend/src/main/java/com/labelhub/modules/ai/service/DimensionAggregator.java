@@ -113,8 +113,8 @@ public class DimensionAggregator {
                 .average().orElse(0);
 
         // 整体决策 — 使用任务配置的阈值
-        String decision = overallScore >= passThreshold ? "PASS"
-                : overallScore >= manualReviewThreshold ? "UNCERTAIN" : "REJECT";
+        String decision = overallScore >= passThreshold ? AiReviewDecisions.PASS
+                : overallScore >= manualReviewThreshold ? AiReviewDecisions.MANUAL_REVIEW : AiReviewDecisions.REJECT;
 
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("decision", decision);

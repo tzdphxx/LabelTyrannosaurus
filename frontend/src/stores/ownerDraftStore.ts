@@ -63,6 +63,7 @@ const emptyDraft: TaskDraftInput = {
     aiPassThreshold: 80,
     aiManualReviewThreshold: 60,
     aiReviewStrategy: 'LIGHTWEIGHT',
+    aiFlowPolicy: 'MANUAL_FIRST',
   },
   reviewLevelCount: 1,
   overlapCount: 1,

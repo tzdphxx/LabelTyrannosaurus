@@ -14,6 +14,7 @@ import type {
   LabelingSubmission,
   LabelingSubmitResult,
   LabelingSubmitValidationResult,
+  SubmissionItemHistoryResponse,
 } from '../types/labeling'
 import type { DynamicFormSubmitResult } from '../types/dynamicForm'
 
@@ -26,6 +27,7 @@ interface LabelingStore {
   currentQuestion: LabelingQuestion | null
   currentDraft: LabelingDraft | null
   reviewSummary: LabelingReviewSummary | null
+  currentQuestionHistory: SubmissionItemHistoryResponse | null
   submitValidation: LabelingSubmitValidationResult | null
   assignmentStats: LabelerAssignmentStats | null
   assignments: LabelerAssignmentSummary[]
@@ -36,6 +38,7 @@ interface LabelingStore {
   isWorkbenchLoading: boolean
   isDraftSaving: boolean
   isSubmitting: boolean
+  isQuestionHistoryLoading: boolean
   isAssignmentsLoading: boolean
   isSubmissionsLoading: boolean
   error: string | null
@@ -45,6 +48,7 @@ interface LabelingStore {
   claimTask: (taskId: string, options: LabelerClaimOptions) => Promise<LabelerTaskSummary | null>
   loadWorkbench: (taskId: string) => Promise<void>
   loadDraft: (taskId: string, questionId: string, userId: string) => Promise<void>
+  loadQuestionHistory: (submissionId: string) => Promise<SubmissionItemHistoryResponse | null>
   saveDraft: (payload: Omit<LabelingDraft, 'id' | 'updatedAt'>) => Promise<LabelingDraft | null>
   submitAnswers: (taskId: string, userId: string, answers: DynamicFormSubmitResult[]) => Promise<LabelingSubmission | null>
   submitQuestionDraft: (taskId: string, questionId: string, userId: string) => Promise<LabelingSubmitResult>
@@ -78,6 +82,7 @@ export const useLabelingStore = create<LabelingStore>((set, get) => ({
   currentQuestion: null,
   currentDraft: null,
   reviewSummary: null,
+  currentQuestionHistory: null,
   submitValidation: null,
   assignmentStats: null,
   assignments: [],
@@ -88,6 +93,7 @@ export const useLabelingStore = create<LabelingStore>((set, get) => ({
   isWorkbenchLoading: false,
   isDraftSaving: false,
   isSubmitting: false,
+  isQuestionHistoryLoading: false,
   isAssignmentsLoading: false,
   isSubmissionsLoading: false,
   error: null,
@@ -103,6 +109,7 @@ export const useLabelingStore = create<LabelingStore>((set, get) => ({
     set((state) => ({
       currentQuestion: state.questions.find((question) => question.id === questionId) ?? state.currentQuestion,
       currentDraft: null,
+      currentQuestionHistory: null,
     }))
   },
   loadMarket: async () => {
@@ -140,7 +147,7 @@ export const useLabelingStore = create<LabelingStore>((set, get) => ({
     }
   },
   loadWorkbench: async (taskId) => {
-    set({ isWorkbenchLoading: true, error: null })
+    set({ isWorkbenchLoading: true, error: null, currentQuestionHistory: null })
 
     const [taskResult, questionsResult, reviewSummaryResult] = await Promise.allSettled([
       labelingService.getTaskDetail(taskId),
@@ -180,6 +187,22 @@ export const useLabelingStore = create<LabelingStore>((set, get) => ({
       set({ currentDraft })
     } catch (error) {
       set({ error: getErrorMessage(error, '草稿加载失败') })
+    }
+  },
+  loadQuestionHistory: async (submissionId) => {
+    set({ isQuestionHistoryLoading: true, error: null, currentQuestionHistory: null })
+
+    try {
+      const currentQuestionHistory = await labelingService.getSubmissionItemHistory(submissionId)
+      set({ currentQuestionHistory })
+
+      return currentQuestionHistory
+    } catch (error) {
+      set({ error: getErrorMessage(error, '题目审核历史加载失败'), currentQuestionHistory: null })
+
+      return null
+    } finally {
+      set({ isQuestionHistoryLoading: false })
     }
   },
   saveDraft: async (payload) => {
@@ -238,14 +261,16 @@ export const useLabelingStore = create<LabelingStore>((set, get) => ({
     try {
       const result = await labelingService.submitQuestionDraft(taskId, questionId, userId)
       set((state) => {
+        const submissionId = result.submission?.id
         const submittedQuestion = result.submission
           ? state.questions.find((question) => question.id === questionId)
           : null
-        const nextQuestions = result.submission
+        const nextQuestions = submissionId
           ? state.questions.map((question) =>
               question.id === questionId
                 ? {
                     ...question,
+                    submissionId,
                     status: 'submitted' as const,
                   }
                 : question,
@@ -259,6 +284,7 @@ export const useLabelingStore = create<LabelingStore>((set, get) => ({
           currentQuestion: submittedQuestion
             ? {
                 ...submittedQuestion,
+                submissionId,
                 status: 'submitted',
               }
             : state.currentQuestion,

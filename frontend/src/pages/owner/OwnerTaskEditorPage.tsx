@@ -27,11 +27,26 @@ import { PageHeader } from '../../components/page/PageHeader'
 import { ownerModelService, ownerTemplateService } from '../../services'
 import { useOwnerDraftStore } from '../../stores/ownerDraftStore'
 import { useOwnerTaskStore } from '../../stores/ownerTaskStore'
-import type { DatasetItemResponse, OwnerLabelerOption, OwnerModelOptionResponse } from '../../types/task'
+import type { AiFlowPolicy, AiReviewStrategy, DatasetItemResponse, OwnerLabelerOption, OwnerModelOptionResponse } from '../../types/task'
 import type { TemplateSummary, TemplateVersionSnapshot } from '../../types/template'
 import { distributionStrategyLabels, formatCount } from '../../utils/ownerTasks'
 import styles from './OwnerTaskEditorPage.module.css'
 import { AssigneePickerDrawer } from './task-editor/AssigneePickerDrawer'
+
+const aiReviewStrategyOptions: Array<{ label: string, value: AiReviewStrategy }> = [
+  { label: '单路 LLM（默认，兼容存量）', value: 'LIGHTWEIGHT' },
+  { label: '多模型并行投票', value: 'PARALLEL_VOTE' },
+  { label: '维度专项模型 + 维度内投票', value: 'DEEP_DIMENSION' },
+  { label: '多 Agent 辩论', value: 'AGENT_DEBATE' },
+]
+
+const aiFlowPolicyOptions: Array<{ label: string, value: AiFlowPolicy }> = [
+  { label: 'AI 只提建议，结果一律转人工', value: 'MANUAL_FIRST' },
+  { label: 'AI 可直接过审，打回转人工', value: 'AI_PASS_ONLY' },
+  { label: 'AI 可直接打回，通过转人工', value: 'AI_REJECT_ONLY' },
+  { label: 'AI 可直接过审与打回', value: 'AI_PASS_AND_REJECT' },
+  { label: '始终转人工', value: 'ALWAYS_MANUAL' },
+]
 
 type DatasetDraftRow = {
   rowType: 'draft'
@@ -243,12 +258,6 @@ export function OwnerTaskEditorPage() {
     }
   }, [draft.quota, importPreview, taskId, updateDraft])
 
-  useEffect(() => {
-    if (!draft.assignedLabelerId) {
-      setSelectedAssigneeName('')
-    }
-  }, [draft.assignedLabelerId])
-
   const templateOptions = templates.map((template) => ({
     label: template.name,
     value: template.id,
@@ -259,7 +268,7 @@ export function OwnerTaskEditorPage() {
     value: version.versionId,
   }))
   const modelSelectOptions = modelOptions.map((option) => ({
-    label: option.defaultModel,
+    label: `${option.providerName} / ${option.defaultModel}`,
     value: String(option.id),
   }))
   const isReadonlyTask = Boolean(taskId && currentTaskDetail?.task.status !== 'draft')
@@ -422,6 +431,7 @@ export function OwnerTaskEditorPage() {
     draftDatasetExternalId,
     draftDatasetItem,
     isAppendingDatasetItems,
+    submitDatasetItemDraft,
   ])
 
   const formatFileSize = (fileSize: number) => {
@@ -548,324 +558,332 @@ export function OwnerTaskEditorPage() {
 
       <section className={styles.workspace}>
         <Card className={styles.formCard} loading={isLoadingDraft} title="基础信息">
-            <div className={styles.formGrid}>
-              <label className={styles.field}>
-                <span>任务标题</span>
-                <Input value={draft.title} onChange={(event) => updateDraft({ title: event.target.value })} />
-              </label>
-              <label className={styles.field}>
-                <span>截止时间</span>
-                <DatePicker
-                  format="YYYY-MM-DD HH:mm:ss"
-                  showTime
-                  value={deadlineValue}
-                  onChange={(value) => updateDraft({ deadline: value ? value.format('YYYY-MM-DDTHH:mm:ss') : '' })}
-                />
-              </label>
-              <label className={`${styles.field} ${styles.fieldWide}`}>
-                <span>任务描述</span>
-                <Input.TextArea
-                  autoSize={{ minRows: 2, maxRows: 4 }}
-                  value={draft.description}
-                  onChange={(event) => updateDraft({ description: event.target.value })}
-                />
-              </label>
-              <label className={`${styles.field} ${styles.fieldWide}`}>
-                <span>标注说明</span>
-                <Input.TextArea
-                  autoSize={{ minRows: 3, maxRows: 6 }}
-                  value={draft.instruction}
-                  onChange={(event) => updateDraft({ instruction: event.target.value })}
-                />
-              </label>
-              <label className={styles.field}>
-                <span>标签</span>
-                <Select
-                  mode="tags"
-                  options={draft.tags.map((tag) => ({ label: tag, value: tag }))}
-                  placeholder="输入标签后回车添加"
-                  tokenSeparators={[',', '，', ' ']}
-                  value={draft.tags}
-                  onChange={(tags) => updateDraft({ tags })}
-                />
-              </label>
-              <label className={styles.field}>
-                <span>关联模板</span>
-                <Select
-                  allowClear
-                  disabled={isReadonlyTask}
-                  loading={isLoadingTemplates}
-                  options={templateOptions}
-                  placeholder="选择模板"
-                  value={selectedTemplateId}
-                  onChange={(templateId) => selectTemplateForTask(templateId ?? null)}
-                  onOpenChange={(open) => {
-                    if (open) {
-                      void loadTemplateOptions()
-                    }
-                  }}
-                />
-              </label>
-              <label className={styles.field}>
-                <span>模板版本</span>
-                <Select
-                  allowClear
-                  disabled={isReadonlyTask || !selectedTemplateId}
-                  loading={isLoadingTemplateVersions}
-                  options={templateVersionOptions}
-                  placeholder={selectedTemplateId ? '选择模板版本' : '请先选择模板'}
-                  value={draft.publishedTemplateVersionId}
-                  onChange={(publishedTemplateVersionId) => updateDraft({ publishedTemplateVersionId: publishedTemplateVersionId ?? null })}
-                  onOpenChange={(open) => {
-                    if (open && selectedTemplateId) {
-                      void loadTemplateVersionOptions(selectedTemplateId)
-                    }
-                  }}
-                />
-                {isUnresolvedTemplateVersion ? (
-                  <Typography.Text type="warning">当前模板版本不在可选模板列表中</Typography.Text>
-                ) : null}
-              </label>
-              <label className={styles.field}>
-                <span>审核级别数</span>
-                <InputNumber min={1} precision={0} value={draft.reviewLevelCount} onChange={(reviewLevelCount) => updateDraft({ reviewLevelCount: reviewLevelCount ?? 1 })} />
-              </label>
-              <label className={styles.field}>
-                <span>一致性次数</span>
-                <InputNumber min={1} precision={0} value={draft.overlapCount} onChange={(overlapCount) => updateDraft({ overlapCount: overlapCount ?? 1 })} />
-              </label>
-              <label className={styles.field}>
-                <span>奖励单价</span>
-                <InputNumber
-                  min={0}
-                  precision={2}
-                  prefix="¥"
-                  value={draft.rewardRule.unitPrice}
-                  onChange={(unitPrice) =>
-                    updateDraft({
-                      rewardRule: {
-                        ...draft.rewardRule,
-                        unitPrice: unitPrice ?? 0,
-                      },
-                    })
-                  }
-                />
-              </label>
-              <label className={styles.field}>
-                <span>奖励模式</span>
-                <Select
-                  options={[{ label: '按通过题目', value: 'APPROVED_ITEM' }]}
-                  value={draft.rewardRule.rewardMode}
-                  onChange={(rewardMode) =>
-                    updateDraft({
-                      rewardRule: {
-                        ...draft.rewardRule,
-                        rewardMode,
-                      },
-                    })
-                  }
-                />
-              </label>
-              <label className={styles.field}>
-                <span>奖励币种</span>
-                <Select
-                  options={[{ label: '积分', value: 'POINT' }]}
-                  value={draft.rewardRule.rewardCurrency}
-                  onChange={(rewardCurrency) =>
-                    updateDraft({
-                      rewardRule: {
-                        ...draft.rewardRule,
-                        rewardCurrency,
-                      },
-                    })
-                  }
-                />
-              </label>
-              <label className={`${styles.field} ${styles.rewardVisibilityField}`}>
-                <span>展示奖励</span>
-                <Switch
-                  checked={draft.rewardRule.rewardVisible}
-                  onChange={(rewardVisible) =>
-                    updateDraft({
-                      rewardRule: {
-                        ...draft.rewardRule,
-                        rewardVisible,
-                      },
-                    })
-                  }
-                />
-              </label>
-              <label className={styles.field}>
-                <span>分发策略</span>
-                <Select
-                  options={Object.entries(distributionStrategyLabels).map(([value, label]) => ({ value, label }))}
-                  value={draft.distributionStrategy}
-                  onChange={(distributionStrategy) => {
-                    updateDraft({
-                      distributionStrategy,
-                      assignedLabelerId: distributionStrategy === '指派' ? draft.assignedLabelerId : null,
-                    })
-                  }}
-                />
-              </label>
-              {draft.distributionStrategy === '配额分发' ? (
-                <label className={styles.field}>
-                  <span>每人最大领取数</span>
-                  <InputNumber
-                    min={1}
-                    precision={0}
-                    value={draft.maxClaimsPerLabeler}
-                    onChange={(maxClaimsPerLabeler) => updateDraft({ maxClaimsPerLabeler: maxClaimsPerLabeler ?? 10 })}
-                  />
-                </label>
-              ) : null}
-              {draft.distributionStrategy === '指派' ? (
-                <div className={`${styles.field} ${styles.assignmentField}`}>
-                  <span>指派标注员</span>
-                  <Space className={styles.assignmentControl} wrap>
-                    <Button onClick={() => setIsAssigneeDrawerOpen(true)}>选择标注员</Button>
-                    <Typography.Text type={draft.assignedLabelerId ? undefined : 'secondary'}>
-                      {draft.assignedLabelerId ? selectedAssigneeName || `标注员 ID：${draft.assignedLabelerId}` : '请选择一位标注员'}
-                    </Typography.Text>
-                  </Space>
-                </div>
-              ) : null}
-              <label className={styles.field}>
-                <span>AI 审核策略</span>
-                <Select
-                  options={[{ label: '轻量审核', value: 'LIGHTWEIGHT' }]}
-                  value={draft.aiReview.aiReviewStrategy}
-                  onChange={(aiReviewStrategy) => updateDraft({ aiReview: { aiReviewStrategy } })}
-                />
-              </label>
-              <label className={`${styles.field} ${styles.fieldWide}`}>
-                <span>AI 审核 Prompt</span>
-                <Input.TextArea
-                  autoSize={{ minRows: 2, maxRows: 4 }}
-                  value={draft.aiReview.aiPrompt}
-                  onChange={(event) => updateDraft({ aiReview: { aiPrompt: event.target.value } })}
-                />
-              </label>
-              <label className={styles.field}>
-                <span>AI 模型</span>
-                <Select
-                  allowClear
-                  loading={isLoadingModels}
-                  options={modelSelectOptions}
-                  placeholder="选择大模型"
-                  value={draft.aiReview.aiProviderId ?? undefined}
-                  onChange={(aiProviderId) => {
-                    const selectedModel = modelOptions.find((option) => String(option.id) === aiProviderId)
-                    updateDraft({
-                      aiReview: {
-                        aiProviderId: aiProviderId ?? null,
-                        aiModelName: selectedModel?.defaultModel ?? '',
-                      },
-                    })
-                  }}
-                  onOpenChange={(open) => {
-                    if (open) {
-                      void loadModelOptions()
-                    }
-                  }}
-                />
-              </label>
-              <label className={styles.field}>
-                <span>评分维度</span>
-                <Select
-                  mode="tags"
-                  options={ratingDimensions.map((dimension) => ({ label: dimension, value: dimension }))}
-                  placeholder="输入维度后回车添加"
-                  tokenSeparators={[',', '，', ' ']}
-                  value={ratingDimensions}
-                  onChange={(dimensions) => updateDraft({ aiReview: { aiScoringDimensions: dimensions } })}
-                />
-              </label>
-              <label className={styles.field}>
-                <span>通过阈值</span>
-                <InputNumber
-                  max={100}
-                  min={0}
-                  precision={2}
-                  value={draft.aiReview.aiPassThreshold}
-                  onChange={(aiPassThreshold) => updateDraft({ aiReview: { aiPassThreshold: aiPassThreshold ?? 0 } })}
-                />
-              </label>
-              <label className={styles.field}>
-                <span>人工复核阈值</span>
-                <InputNumber
-                  max={100}
-                  min={0}
-                  precision={2}
-                  value={draft.aiReview.aiManualReviewThreshold}
-                  onChange={(aiManualReviewThreshold) => updateDraft({ aiReview: { aiManualReviewThreshold: aiManualReviewThreshold ?? 0 } })}
-                />
-              </label>
-            </div>
-          </Card>
-
-          <Card
-            className={styles.formCard}
-            extra={
-              <Button disabled={!hasPreviewRows} icon={<EyeOutlined />} onClick={() => setIsPreviewDrawerOpen(true)}>
-                {previewButtonText}
-              </Button>
-            }
-            title="数据集导入"
-          >
-            <Upload.Dragger
-              className={styles.uploadDragger}
-              accept=".json,.jsonl,.xlsx"
-              beforeUpload={(file) => {
-                void uploadDataset(file)
-                return false
-              }}
-              disabled={isUploadingDataset}
-              maxCount={1}
-              showUploadList={false}
-            >
-              <p className="ant-upload-drag-icon">
-                <InboxOutlined />
-              </p>
-              <p className="ant-upload-text">选择 JSON / JSONL / Excel 文件</p>
-              <p className="ant-upload-hint">选择后会上传文件并记录数据集文件 ID。</p>
-            </Upload.Dragger>
-
-            {uploadedDatasetFile ? (
-              <Alert
-                message="数据集文件已上传"
-                description={`文件：${uploadedDatasetFile.fileName}；大小：${formatFileSize(uploadedDatasetFile.fileSize)}；类型：${uploadedDatasetFile.contentType || '-'}；文件 ID：${uploadedDatasetFile.fileId}`}
-                showIcon
-                type="success"
+          <div className={styles.formGrid}>
+            <label className={styles.field}>
+              <span>任务标题</span>
+              <Input value={draft.title} onChange={(event) => updateDraft({ title: event.target.value })} />
+            </label>
+            <label className={styles.field}>
+              <span>截止时间</span>
+              <DatePicker
+                format="YYYY-MM-DD HH:mm:ss"
+                showTime
+                value={deadlineValue}
+                onChange={(value) => updateDraft({ deadline: value ? value.format('YYYY-MM-DDTHH:mm:ss') : '' })}
               />
+            </label>
+            <label className={`${styles.field} ${styles.fieldWide}`}>
+              <span>任务描述</span>
+              <Input.TextArea
+                autoSize={{ minRows: 2, maxRows: 4 }}
+                value={draft.description}
+                onChange={(event) => updateDraft({ description: event.target.value })}
+              />
+            </label>
+            <label className={`${styles.field} ${styles.fieldWide}`}>
+              <span>标注说明</span>
+              <Input.TextArea
+                autoSize={{ minRows: 3, maxRows: 6 }}
+                value={draft.instruction}
+                onChange={(event) => updateDraft({ instruction: event.target.value })}
+              />
+            </label>
+            <label className={styles.field}>
+              <span>标签</span>
+              <Select
+                mode="tags"
+                options={draft.tags.map((tag) => ({ label: tag, value: tag }))}
+                placeholder="输入标签后回车添加"
+                tokenSeparators={[',', '，', ' ']}
+                value={draft.tags}
+                onChange={(tags) => updateDraft({ tags })}
+              />
+            </label>
+            <label className={styles.field}>
+              <span>关联模板</span>
+              <Select
+                allowClear
+                disabled={isReadonlyTask}
+                loading={isLoadingTemplates}
+                options={templateOptions}
+                placeholder="选择模板"
+                value={selectedTemplateId}
+                onChange={(templateId) => selectTemplateForTask(templateId ?? null)}
+                onOpenChange={(open) => {
+                  if (open) {
+                    void loadTemplateOptions()
+                  }
+                }}
+              />
+            </label>
+            <label className={styles.field}>
+              <span>模板版本</span>
+              <Select
+                allowClear
+                disabled={isReadonlyTask || !selectedTemplateId}
+                loading={isLoadingTemplateVersions}
+                options={templateVersionOptions}
+                placeholder={selectedTemplateId ? '选择模板版本' : '请先选择模板'}
+                value={draft.publishedTemplateVersionId}
+                onChange={(publishedTemplateVersionId) => updateDraft({ publishedTemplateVersionId: publishedTemplateVersionId ?? null })}
+                onOpenChange={(open) => {
+                  if (open && selectedTemplateId) {
+                    void loadTemplateVersionOptions(selectedTemplateId)
+                  }
+                }}
+              />
+              {isUnresolvedTemplateVersion ? (
+                <Typography.Text type="warning">当前模板版本不在可选模板列表中</Typography.Text>
+              ) : null}
+            </label>
+            <label className={styles.field}>
+              <span>审核级别数</span>
+              <InputNumber min={1} precision={0} value={draft.reviewLevelCount} onChange={(reviewLevelCount) => updateDraft({ reviewLevelCount: reviewLevelCount ?? 1 })} />
+            </label>
+            <label className={styles.field}>
+              <span>一致性次数</span>
+              <InputNumber min={1} precision={0} value={draft.overlapCount} onChange={(overlapCount) => updateDraft({ overlapCount: overlapCount ?? 1 })} />
+            </label>
+            <label className={styles.field}>
+              <span>奖励单价</span>
+              <InputNumber
+                min={0}
+                precision={2}
+                prefix="¥"
+                value={draft.rewardRule.unitPrice}
+                onChange={(unitPrice) =>
+                  updateDraft({
+                    rewardRule: {
+                      ...draft.rewardRule,
+                      unitPrice: unitPrice ?? 0,
+                    },
+                  })
+                }
+              />
+            </label>
+            <label className={styles.field}>
+              <span>奖励模式</span>
+              <Select
+                options={[{ label: '按通过题目', value: 'APPROVED_ITEM' }]}
+                value={draft.rewardRule.rewardMode}
+                onChange={(rewardMode) =>
+                  updateDraft({
+                    rewardRule: {
+                      ...draft.rewardRule,
+                      rewardMode,
+                    },
+                  })
+                }
+              />
+            </label>
+            <label className={styles.field}>
+              <span>奖励币种</span>
+              <Select
+                options={[{ label: '积分', value: 'POINT' }]}
+                value={draft.rewardRule.rewardCurrency}
+                onChange={(rewardCurrency) =>
+                  updateDraft({
+                    rewardRule: {
+                      ...draft.rewardRule,
+                      rewardCurrency,
+                    },
+                  })
+                }
+              />
+            </label>
+            <label className={`${styles.field} ${styles.rewardVisibilityField}`}>
+              <span>展示奖励</span>
+              <Switch
+                checked={draft.rewardRule.rewardVisible}
+                onChange={(rewardVisible) =>
+                  updateDraft({
+                    rewardRule: {
+                      ...draft.rewardRule,
+                      rewardVisible,
+                    },
+                  })
+                }
+              />
+            </label>
+            <label className={styles.field}>
+              <span>分发策略</span>
+              <Select
+                options={Object.entries(distributionStrategyLabels).map(([value, label]) => ({ value, label }))}
+                value={draft.distributionStrategy}
+                onChange={(distributionStrategy) => {
+                  updateDraft({
+                    distributionStrategy,
+                    assignedLabelerId: distributionStrategy === '指派' ? draft.assignedLabelerId : null,
+                  })
+                }}
+              />
+            </label>
+            {draft.distributionStrategy === '配额分发' ? (
+              <label className={styles.field}>
+                <span>每人最大领取数</span>
+                <InputNumber
+                  min={1}
+                  precision={0}
+                  value={draft.maxClaimsPerLabeler}
+                  onChange={(maxClaimsPerLabeler) => updateDraft({ maxClaimsPerLabeler: maxClaimsPerLabeler ?? 10 })}
+                />
+              </label>
             ) : null}
-
-            <div className={styles.quotaSummary}>
-              <Statistic title="题目数量" value={formatCount(importPreview?.validRows ?? draft.quota)} />
-              <Typography.Text type="secondary">
-                {importPreview ? '已根据上传文件自动计算' : '上传数据集后自动计算并写入任务配额'}
-              </Typography.Text>
-            </div>
-
-            {!taskId && importPreview ? (
-              <div className={styles.datasetSummary}>
-                <Row gutter={[12, 12]}>
-                  <Col md={6} xs={12}>
-                    <Statistic title="总行数" value={formatCount(importPreview.totalRows)} />
-                  </Col>
-                  <Col md={6} xs={12}>
-                    <Statistic title="有效行" value={formatCount(importPreview.validRows)} />
-                  </Col>
-                  <Col md={6} xs={12}>
-                    <Statistic title="异常行" value={formatCount(importPreview.invalidRows)} />
-                  </Col>
-                  <Col md={6} xs={12}>
-                    <Statistic title="文件类型" value={importPreview.fileType.toUpperCase()} />
-                  </Col>
-                </Row>
+            {draft.distributionStrategy === '指派' ? (
+              <div className={`${styles.field} ${styles.assignmentField}`}>
+                <span>指派标注员</span>
+                <Space className={styles.assignmentControl} wrap>
+                  <Button onClick={() => setIsAssigneeDrawerOpen(true)}>选择标注员</Button>
+                  <Typography.Text type={draft.assignedLabelerId ? undefined : 'secondary'}>
+                    {draft.assignedLabelerId ? selectedAssigneeName || `标注员 ID：${draft.assignedLabelerId}` : '请选择一位标注员'}
+                  </Typography.Text>
+                </Space>
               </div>
             ) : null}
-          </Card>
+            <label className={styles.field}>
+              <span>AI 审核策略</span>
+              <Select
+                options={aiReviewStrategyOptions}
+                value={draft.aiReview.aiReviewStrategy}
+                onChange={(aiReviewStrategy) => updateDraft({ aiReview: { aiReviewStrategy } })}
+              />
+            </label>
+            <label className={styles.field}>
+              <span>AI 流转策略</span>
+              <Select
+                options={aiFlowPolicyOptions}
+                value={draft.aiReview.aiFlowPolicy}
+                onChange={(aiFlowPolicy) => updateDraft({ aiReview: { aiFlowPolicy } })}
+              />
+            </label>
+            <label className={`${styles.field} ${styles.fieldWide}`}>
+              <span>AI 审核 Prompt</span>
+              <Input.TextArea
+                autoSize={{ minRows: 2, maxRows: 4 }}
+                value={draft.aiReview.aiPrompt}
+                onChange={(event) => updateDraft({ aiReview: { aiPrompt: event.target.value } })}
+              />
+            </label>
+            <label className={styles.field}>
+              <span>AI 模型</span>
+              <Select
+                allowClear
+                loading={isLoadingModels}
+                options={modelSelectOptions}
+                placeholder="选择大模型"
+                value={draft.aiReview.aiProviderId ?? undefined}
+                onChange={(aiProviderId) => {
+                  const selectedModel = modelOptions.find((option) => String(option.id) === aiProviderId)
+                  updateDraft({
+                    aiReview: {
+                      aiProviderId: aiProviderId ?? null,
+                      aiModelName: selectedModel?.defaultModel ?? '',
+                    },
+                  })
+                }}
+                onOpenChange={(open) => {
+                  if (open) {
+                    void loadModelOptions()
+                  }
+                }}
+              />
+            </label>
+            <label className={styles.field}>
+              <span>评分维度</span>
+              <Select
+                mode="tags"
+                options={ratingDimensions.map((dimension) => ({ label: dimension, value: dimension }))}
+                placeholder="输入维度后回车添加"
+                tokenSeparators={[',', '，', ' ']}
+                value={ratingDimensions}
+                onChange={(dimensions) => updateDraft({ aiReview: { aiScoringDimensions: dimensions } })}
+              />
+            </label>
+            <label className={styles.field}>
+              <span>通过阈值</span>
+              <InputNumber
+                max={100}
+                min={0}
+                precision={2}
+                value={draft.aiReview.aiPassThreshold}
+                onChange={(aiPassThreshold) => updateDraft({ aiReview: { aiPassThreshold: aiPassThreshold ?? 0 } })}
+              />
+            </label>
+            <label className={styles.field}>
+              <span>人工复核阈值</span>
+              <InputNumber
+                max={100}
+                min={0}
+                precision={2}
+                value={draft.aiReview.aiManualReviewThreshold}
+                onChange={(aiManualReviewThreshold) => updateDraft({ aiReview: { aiManualReviewThreshold: aiManualReviewThreshold ?? 0 } })}
+              />
+            </label>
+          </div>
+        </Card>
+
+        <Card
+          className={styles.formCard}
+          extra={
+            <Button disabled={!hasPreviewRows} icon={<EyeOutlined />} onClick={() => setIsPreviewDrawerOpen(true)}>
+              {previewButtonText}
+            </Button>
+          }
+          title="数据集导入"
+        >
+          <Upload.Dragger
+            className={styles.uploadDragger}
+            accept=".json,.jsonl,.xlsx"
+            beforeUpload={(file) => {
+              void uploadDataset(file)
+              return false
+            }}
+            disabled={isUploadingDataset}
+            maxCount={1}
+            showUploadList={false}
+          >
+            <p className="ant-upload-drag-icon">
+              <InboxOutlined />
+            </p>
+            <p className="ant-upload-text">选择 JSON / JSONL / Excel 文件</p>
+            <p className="ant-upload-hint">选择后会上传文件并记录数据集文件 ID。</p>
+          </Upload.Dragger>
+
+          {uploadedDatasetFile ? (
+            <Alert
+              message="数据集文件已上传"
+              description={`文件：${uploadedDatasetFile.fileName}；大小：${formatFileSize(uploadedDatasetFile.fileSize)}；类型：${uploadedDatasetFile.contentType || '-'}；文件 ID：${uploadedDatasetFile.fileId}`}
+              showIcon
+              type="success"
+            />
+          ) : null}
+
+          <div className={styles.quotaSummary}>
+            <Statistic title="题目数量" value={formatCount(importPreview?.validRows ?? draft.quota)} />
+            <Typography.Text type="secondary">
+              {importPreview ? '已根据上传文件自动计算' : '上传数据集后自动计算并写入任务配额'}
+            </Typography.Text>
+          </div>
+
+          {!taskId && importPreview ? (
+            <div className={styles.datasetSummary}>
+              <Row gutter={[12, 12]}>
+                <Col md={6} xs={12}>
+                  <Statistic title="总行数" value={formatCount(importPreview.totalRows)} />
+                </Col>
+                <Col md={6} xs={12}>
+                  <Statistic title="有效行" value={formatCount(importPreview.validRows)} />
+                </Col>
+                <Col md={6} xs={12}>
+                  <Statistic title="异常行" value={formatCount(importPreview.invalidRows)} />
+                </Col>
+                <Col md={6} xs={12}>
+                  <Statistic title="文件类型" value={importPreview.fileType.toUpperCase()} />
+                </Col>
+              </Row>
+            </div>
+          ) : null}
+        </Card>
       </section>
 
       <Drawer

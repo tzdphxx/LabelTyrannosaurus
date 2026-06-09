@@ -1,4 +1,4 @@
-export { adminReviewAssignmentService } from './admin'
+export { adminDashboardService, adminLlmProviderService, adminReviewAssignmentService, adminUserService } from './admin'
 export { authService } from './auth'
 export {
   AUTH_TOKEN_STORAGE_KEY,

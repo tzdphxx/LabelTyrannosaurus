@@ -21,6 +21,7 @@ import type {
   LabelingSubmission,
   LabelingSubmitResult,
   LabelingSubmitValidationResult,
+  SubmissionItemHistoryResponse,
 } from '../../types/labeling'
 import { fromBackendTemplateSchema } from '../../features/dynamic-form/utils/backendSchema'
 import { ApiError, request } from '../http'
@@ -102,6 +103,8 @@ interface AssignmentClaimResponse {
 interface ClaimItemResponse {
   claimId: number
   itemId: number
+  submissionId?: number
+  latestSubmissionId?: number
   externalId?: string
   claimStatus?: string
   itemJson?: string
@@ -719,6 +722,7 @@ function buildQuestionFromClaimedItem(
     id: String(item.claimId),
     taskId,
     assignmentId: String(item.claimId),
+    submissionId: item.latestSubmissionId ?? item.submissionId ?? null,
     datasetItemId: String(item.itemId),
     templateVersionId,
     title: item.externalId ? `题目 ${item.externalId}` : `题目 #${item.itemId}`,
@@ -1241,6 +1245,7 @@ export const realLabelingService = {
       ...assignment,
       question: {
         ...question,
+        submissionId: submission.id,
         status: 'submitted',
       },
       task: {
@@ -1262,6 +1267,10 @@ export const realLabelingService = {
     void taskId
 
     return null
+  },
+
+  async getSubmissionItemHistory(submissionId: string): Promise<SubmissionItemHistoryResponse | null> {
+    return request.get<SubmissionItemHistoryResponse>(`/v1/submissions/${submissionId}/item-history`)
   },
 
   async getSubmissionStats(): Promise<LabelerSubmissionStats> {

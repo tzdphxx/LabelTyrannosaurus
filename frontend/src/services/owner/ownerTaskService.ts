@@ -1,6 +1,7 @@
 import { mockImportPreviews, mockTasks, mockTemplates } from '../../mocks'
 import type { ImportPreview } from '../../types/import'
 import type {
+  AiReviewStrategy,
   CreateTaskRequest,
   CreateTaskResponse,
   DatasetItemAppendInput,
@@ -57,6 +58,8 @@ const apiToDistributionStrategy: Partial<Record<DistributionStrategyCode, Distri
   QUOTA_GRAB: '配额分发',
   ASSIGNED: '指派',
 }
+
+const aiReviewStrategies: AiReviewStrategy[] = ['LIGHTWEIGHT', 'PARALLEL_VOTE', 'DEEP_DIMENSION', 'AGENT_DEBATE']
 
 const tasks: OwnerTask[] = mockTasks.map(cloneTask)
 
@@ -236,6 +239,10 @@ function toNumberId(value?: string | null) {
   return Number(value)
 }
 
+function normalizeAiReviewStrategy(value?: string | null): AiReviewStrategy {
+  return aiReviewStrategies.includes(value as AiReviewStrategy) ? value as AiReviewStrategy : 'LIGHTWEIGHT'
+}
+
 function formatTaskDate(value?: string | null) {
   if (!value) {
     return ''
@@ -303,6 +310,7 @@ function mapSummaryResponse(response: OwnerTaskSummaryResponse): OwnerTask {
       aiPassThreshold: 80,
       aiManualReviewThreshold: 60,
       aiReviewStrategy: 'LIGHTWEIGHT',
+      aiFlowPolicy: 'MANUAL_FIRST',
     },
     reviewLevelCount: 1,
     overlapCount: 1,
@@ -347,7 +355,8 @@ function mapDetailResponse(response: TaskDetailResponse): OwnerTask {
       aiScoringDimensions: aiReviewConfig?.scoringDimensions ?? response.aiScoringDimensions ?? [],
       aiPassThreshold: aiReviewConfig?.passThreshold ?? response.aiPassThreshold ?? 80,
       aiManualReviewThreshold: aiReviewConfig?.manualReviewThreshold ?? response.aiManualReviewThreshold ?? 60,
-      aiReviewStrategy: response.aiReviewStrategy ?? 'LIGHTWEIGHT',
+      aiReviewStrategy: normalizeAiReviewStrategy(aiReviewConfig?.reviewStrategy ?? response.aiReviewStrategy),
+      aiFlowPolicy: aiReviewConfig?.flowPolicy ?? response.aiFlowPolicy ?? 'MANUAL_FIRST',
     },
     reviewLevelCount: response.reviewLevelCount ?? 1,
     overlapCount: response.overlapCount ?? 1,
@@ -380,6 +389,7 @@ function buildTaskRequest(payload: TaskDraftInput, includeDatasetFileId: boolean
     aiPassThreshold: payload.aiReview.aiPassThreshold,
     aiManualReviewThreshold: payload.aiReview.aiManualReviewThreshold,
     aiReviewStrategy: payload.aiReview.aiReviewStrategy,
+    aiFlowPolicy: payload.aiReview.aiFlowPolicy,
     reviewLevelCount: payload.reviewLevelCount,
     maxClaimsPerLabeler: payload.maxClaimsPerLabeler,
   }

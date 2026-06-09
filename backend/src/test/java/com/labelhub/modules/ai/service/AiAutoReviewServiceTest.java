@@ -230,6 +230,35 @@ class AiAutoReviewServiceTest {
     }
 
     @Test
+    void directApproveSkipsAssignmentUpdateWhenStatusCasMisses() {
+        AiReviewConfig directApproveConfig = config();
+        directApproveConfig.setAiFlowPolicy("AI_PASS_ONLY");
+        directApproveConfig.setAllowAiDirectApprove(true);
+        directApproveConfig.setConfidenceThreshold(new BigDecimal("0.70"));
+        when(aiReviewResultMapper.selectBySubmissionId(SUBMISSION_ID)).thenReturn(null);
+        when(submissionMapper.selectById(SUBMISSION_ID)).thenReturn(submission());
+        Task task = task();
+        task.setOverlapCount(1);
+        when(taskMapper.selectById(TASK_ID)).thenReturn(task);
+        when(datasetItemMapper.selectById(DATASET_ITEM_ID)).thenReturn(datasetItem());
+        when(aiReviewConfigMapper.selectById(CONFIG_ID)).thenReturn(directApproveConfig);
+        when(rateLimiter.acquire(TASK_ID, PROVIDER_ID)).thenReturn(true);
+        when(agentRunService.create(eq("AI_REVIEW"), eq(SUBMISSION_ID), eq(PROVIDER_ID), eq("qwen-plus"),
+                eq("v2"), any())).thenReturn(agentRun());
+        when(llmGateway.review(any(LlmGatewayRequest.class))).thenReturn(successGateway("PASS", 95.0, 0.95));
+        when(submissionMapper.updateStatusIfCurrentIn(eq(SUBMISSION_ID), eq("APPROVED"),
+                eq("FINAL_APPROVED"), eq(Boolean.TRUE), any())).thenReturn(0);
+        when(assignmentMapper.selectById(200L)).thenReturn(assignment());
+        when(systemAgentProvider.get()).thenReturn(new SystemActorContext(900L));
+
+        service.reviewSubmission(SUBMISSION_ID);
+
+        verify(assignmentMapper, never()).updateById(any(Assignment.class));
+        verify(datasetClaimService, never()).increaseApprovedCount(anyLong());
+        verify(eventPublisher, never()).publishApproved(anyLong(), any());
+    }
+
+    @Test
     void directApproveForOverlappedTaskFallsBackToManualReview() {
         AiReviewConfig directApproveConfig = config();
         directApproveConfig.setAiFlowPolicy("AI_PASS_ONLY");
@@ -292,6 +321,34 @@ class AiAutoReviewServiceTest {
         verify(reviewRecordMapper).insert(recordCaptor.capture());
         assertThat(recordCaptor.getValue().getAction()).isEqualTo(ReviewAction.AI_DIRECT_REJECT);
         assertThat(recordCaptor.getValue().getReason()).isEqualTo("Looks good");
+    }
+
+    @Test
+    void directRejectSkipsAssignmentUpdateWhenStatusCasMisses() {
+        AiReviewConfig directRejectConfig = config();
+        directRejectConfig.setAiFlowPolicy("AI_REJECT_ONLY");
+        directRejectConfig.setAllowAiDirectReject(true);
+        directRejectConfig.setRejectThreshold(new BigDecimal("50.00"));
+        directRejectConfig.setConfidenceThreshold(new BigDecimal("0.70"));
+        when(aiReviewResultMapper.selectBySubmissionId(SUBMISSION_ID)).thenReturn(null);
+        when(submissionMapper.selectById(SUBMISSION_ID)).thenReturn(submission());
+        when(taskMapper.selectById(TASK_ID)).thenReturn(task());
+        when(datasetItemMapper.selectById(DATASET_ITEM_ID)).thenReturn(datasetItem());
+        when(aiReviewConfigMapper.selectById(CONFIG_ID)).thenReturn(directRejectConfig);
+        when(rateLimiter.acquire(TASK_ID, PROVIDER_ID)).thenReturn(true);
+        when(agentRunService.create(eq("AI_REVIEW"), eq(SUBMISSION_ID), eq(PROVIDER_ID), eq("qwen-plus"),
+                eq("v2"), any())).thenReturn(agentRun());
+        when(llmGateway.review(any(LlmGatewayRequest.class))).thenReturn(successGateway("REJECT", 20.0, 0.93));
+        when(submissionMapper.updateStatusIfCurrentIn(eq(SUBMISSION_ID), eq("REJECTED"),
+                eq("REJECTED"), org.mockito.ArgumentMatchers.isNull(), any())).thenReturn(0);
+        when(assignmentMapper.selectById(200L)).thenReturn(assignment());
+        when(systemAgentProvider.get()).thenReturn(new SystemActorContext(900L));
+
+        service.reviewSubmission(SUBMISSION_ID);
+
+        verify(assignmentMapper, never()).updateById(any(Assignment.class));
+        verify(eventPublisher, never()).publishRejected(anyLong(), any(), any());
+        verify(reviewRecordMapper, never()).insert(any(ReviewRecord.class));
     }
 
     @Test

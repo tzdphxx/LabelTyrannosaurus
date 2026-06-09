@@ -2,6 +2,15 @@
 
 # LabelHub 数据标注平台详细设计与开发文档
 
+> 当前状态说明：本文是早期详细设计与开发过程文档，保留用于说明设计演进和 AI Coding 过程，不作为最终验收口径。最终提交材料以 `docs/final-delivery/` 和当前代码为准。
+>
+> 与当前代码最相关的边界：
+> - 当前主 Demo 是单人标注链路；`CreateTaskRequest.overlapCount` 当前固定为 `1`，迁移 `V28__single_labeler_dataset_item_status.sql` 增加单活跃 assignment 约束。
+> - 冲突组/金标相关代码、表和接口仍保留，但不作为当前前端 Demo 必选环节。
+> - LLM Provider 当前由 ADMIN 通过 `/api/v1/admin/llm-providers` 管理，Owner 通过 `/api/v1/llm-providers` 查询已启用 Provider。
+> - AI 审核支持可配置 AI Flow Policy；默认可用人工终审兜底，但代码支持配置为 AI 直通/直拒。
+> - 当前接口以 `docs/api-contracts/frontend-api-reference.md`、`backend/docs/*-api.md` 和 `ApiContractMappingTest` 为准。
+
 ## 0\. 设计边界
 
 本文档面向前后端和移动端协作开发，重点描述业务模块、状态流转、核心实现逻辑和异常边界。接口与表结构只保留开发必需粒度，不展开大量字段样例和 SQL DDL。
@@ -572,7 +581,7 @@ TemplateSchema
 
 - `JsonEditor`：结构化答案。
 
-- `LlmTrigger`：字段级 AI 辅助。
+- `LlmTrigger`：AI 辅助。
 
 - `Group` / `Tabs`：布局容器。
 

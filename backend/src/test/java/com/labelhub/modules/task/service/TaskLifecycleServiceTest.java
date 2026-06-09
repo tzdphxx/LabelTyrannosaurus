@@ -464,6 +464,24 @@ class TaskLifecycleServiceTest {
     }
 
     @Test
+    void publishDoesNotAuditOrPublishEventWhenStatusUpdateConflicts() {
+        Task task = publishableDraftTask();
+        when(taskMapper.selectById(TASK_ID)).thenReturn(task);
+        when(taskMapper.updateById(any(Task.class))).thenReturn(0);
+        when(publishDependencyChecker.datasetReady(TASK_ID)).thenReturn(true);
+        when(publishDependencyChecker.templateVersionExists(100L)).thenReturn(true);
+        when(publishDependencyChecker.aiReviewConfigExists(TASK_ID, 200L)).thenReturn(true);
+        when(publishDependencyChecker.rewardRuleExists(TASK_ID)).thenReturn(true);
+
+        assertThatThrownBy(() -> taskLifecycleService.publish(OWNER_ID, TASK_ID))
+                .isInstanceOfSatisfying(BusinessException.class,
+                        ex -> assertThat(ex.getCode()).isEqualTo(400101));
+
+        verify(auditAppender, never()).append(any(AuditCommand.class));
+        verify(applicationEventPublisher, never()).publishEvent(any());
+    }
+
+    @Test
     void publishAssignedTaskWithAssignedLabelerAutoClaimsItemsAndAlignsCounts() {
         Task task = publishableDraftTask();
         task.setStrategy(ClaimStrategy.ASSIGNED);

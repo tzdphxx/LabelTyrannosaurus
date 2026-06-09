@@ -131,6 +131,28 @@ public interface SubmissionMapper extends BaseMapper<Submission> {
                         @Param("newStatus") String newStatus);
 
     @Update("""
+            <script>
+            UPDATE submissions
+            SET status = #{newStatus},
+                review_flow_status = #{reviewFlowStatus},
+                <if test="isGolden != null">
+                is_golden = #{isGolden},
+                </if>
+                updated_at = CURRENT_TIMESTAMP(3)
+            WHERE id = #{submissionId}
+              AND status IN
+              <foreach collection="currentStatuses" item="status" open="(" separator="," close=")">
+                #{status}
+              </foreach>
+            </script>
+            """)
+    int updateStatusIfCurrentIn(@Param("submissionId") Long submissionId,
+                                @Param("newStatus") String newStatus,
+                                @Param("reviewFlowStatus") String reviewFlowStatus,
+                                @Param("isGolden") Boolean isGolden,
+                                @Param("currentStatuses") List<String> currentStatuses);
+
+    @Update("""
             UPDATE submissions
             SET status = 'APPROVED',
                 is_golden = 1,

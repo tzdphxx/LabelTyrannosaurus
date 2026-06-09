@@ -926,6 +926,24 @@ Authorization: Bearer <accessToken>
 
 ---
 
+### 5.3.1 GET /api/v1/templates/{templateId}/versions
+
+**Purpose**: List all versions of a template. The newest version is returned first.
+
+**Roles**: ADMIN or template OWNER.
+
+**Path parameters**:
+
+| Parameter | Type | Description |
+|------|------|------|
+| templateId | Long | Template ID |
+
+**Response body**: `List<TemplateVersionResponse>`.
+
+**Errors**: `400102` when the template does not exist; `403001` when the current user is not ADMIN and not the template owner.
+
+---
+
 ### 5.4 POST /api/v1/templates/{templateId}/fork
 
 **作用**：基于已有模板版本派生新版本。用于迭代模板设计，保留历史版本不变。

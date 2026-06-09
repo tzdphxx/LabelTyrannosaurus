@@ -1,0 +1,485 @@
+.page {
+  --owner-primary: #0075de;
+  --owner-primary-active: #005bab;
+  --owner-canvas: #f6f5f4;
+  --owner-surface: #ffffff;
+  --owner-ink: #000000;
+  --owner-ink-secondary: #31302e;
+  --owner-ink-muted: #615d59;
+  --owner-hairline: #e6e6e6;
+  --owner-shadow: 0 0.175px 1.041px rgba(0, 0, 0, 0.01), 0 0.8px 2.925px rgba(0, 0, 0, 0.02), 0 2.025px 7.847px rgba(0, 0, 0, 0.027), 0 4px 18px rgba(0, 0, 0, 0.04);
+  display: flex;
+  min-height: 100dvh;
+  flex-direction: column;
+  gap: clamp(14px, 1.6vw, 20px);
+  overflow: visible;
+  background: var(--owner-canvas);
+  color: var(--owner-ink);
+}
+
+.headerShell {
+  flex: 0 0 auto;
+  border-color: var(--owner-hairline);
+  background: var(--owner-surface);
+  box-shadow: var(--owner-shadow);
+}
+
+.headerShell :global(.page-header__title.ant-typography) {
+  color: var(--owner-ink);
+  letter-spacing: -0.625px;
+}
+
+.headerShell :global(.ant-btn-primary) {
+  border-color: var(--owner-primary);
+  border-radius: 9999px;
+  background: var(--owner-primary);
+  box-shadow: none;
+}
+
+.workspace {
+  display: flex;
+  width: 100%;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: clamp(14px, 1.6vw, 20px);
+  overflow: visible;
+}
+
+.formCard {
+  flex: 0 0 auto;
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid var(--owner-hairline);
+  border-radius: 12px;
+  background: var(--owner-surface);
+  box-shadow: var(--owner-shadow);
+  animation: cardEnter 220ms ease-out both;
+  transition:
+    border-color 180ms ease,
+    box-shadow 180ms ease,
+    transform 180ms ease;
+}
+
+.formCard:hover {
+  border-color: #d8d8d8;
+  box-shadow: 0 0.8px 2.925px rgba(0, 0, 0, 0.02), 0 4px 18px rgba(0, 0, 0, 0.045);
+  transform: translateY(-1px);
+}
+
+.formCard :global(.ant-card-head) {
+  min-height: 48px;
+  border-bottom-color: var(--owner-hairline);
+  background: var(--owner-surface);
+}
+
+.formCard :global(.ant-card-head-title) {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--owner-ink);
+}
+
+.formCard :global(.ant-card-body) {
+  padding: clamp(12px, 1.5vw, 16px);
+}
+
+.formGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr));
+  gap: clamp(12px, 1.3vw, 18px);
+}
+
+.field {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 6px;
+  color: var(--owner-ink-secondary);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.fieldWide {
+  grid-column: 1 / -1;
+}
+
+.assignmentField {
+  justify-content: flex-start;
+}
+
+.assignmentControl {
+  min-width: 0;
+}
+
+.rewardVisibilityField {
+  max-width: 180px;
+}
+
+.rewardVisibilityField :global(.ant-switch) {
+  max-width: 68px;
+}
+
+.field :global(.ant-input),
+.field :global(.ant-input-number),
+.field :global(.ant-picker),
+.field :global(.ant-select) {
+  width: 100%;
+}
+
+.field :global(.ant-input),
+.field :global(.ant-input-number-input),
+.field :global(.ant-picker),
+.field :global(.ant-select-selector) {
+  min-height: 36px;
+}
+
+.field :global(.ant-input:hover),
+.field :global(.ant-input-number:hover),
+.field :global(.ant-picker:hover),
+.field :global(.ant-select-selector:hover) {
+  border-color: var(--owner-primary);
+}
+
+.field :global(.ant-input:focus),
+.field :global(.ant-input-number-focused),
+.field :global(.ant-picker-focused),
+.field :global(.ant-select-focused .ant-select-selector) {
+  border-color: var(--owner-primary);
+  box-shadow: 0 0 0 3px rgba(0, 117, 222, 0.14);
+}
+
+.uploadDragger :global(.ant-upload-drag-container) {
+  padding: 4px 0;
+}
+
+.uploadDragger :global(.ant-upload-drag-icon) {
+  margin-bottom: 6px;
+}
+
+.uploadDragger :global(.ant-upload-text) {
+  margin-bottom: 2px;
+  font-size: 14px;
+}
+
+.uploadDragger :global(.ant-upload-hint) {
+  font-size: 12px;
+}
+
+.datasetSummary {
+  margin-top: 12px;
+}
+
+.quotaSummary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--owner-hairline);
+  border-radius: 8px;
+  background: var(--owner-canvas);
+}
+
+.quotaSummary :global(.ant-statistic-title) {
+  margin-bottom: 2px;
+  color: var(--owner-ink-muted);
+  font-size: 12px;
+}
+
+.quotaSummary :global(.ant-statistic-content) {
+  color: var(--owner-ink);
+  font-size: 18px;
+}
+
+.datasetSummary :global(.ant-row) {
+  row-gap: 10px;
+}
+
+.datasetSummary :global(.ant-statistic) {
+  min-width: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--owner-hairline);
+  border-radius: 8px;
+  background: var(--owner-canvas);
+}
+
+.datasetSummary :global(.ant-statistic-title) {
+  margin-bottom: 2px;
+  color: var(--owner-ink-muted);
+  font-size: 12px;
+}
+
+.datasetSummary :global(.ant-statistic-content) {
+  color: var(--owner-ink);
+  font-size: 18px;
+}
+
+.previewDrawer :global(.ant-drawer-body) {
+  padding: 18px;
+}
+
+.previewDrawer :global(.ant-drawer-content-wrapper) {
+  max-width: 100vw;
+}
+
+.previewPanel {
+  display: flex;
+  min-height: 100%;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.assigneeDrawerBody {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.assigneeSearch {
+  width: 100%;
+}
+
+.assigneeList {
+  min-height: 360px;
+}
+
+.assigneeList :global(.ant-list-items) {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.assigneeItem {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  gap: 12px;
+  padding: 14px 16px !important;
+  border: 1px solid var(--owner-hairline) !important;
+  border-radius: 8px;
+  background: var(--owner-surface);
+  cursor: pointer;
+  transition:
+    border-color 180ms ease,
+    box-shadow 180ms ease,
+    transform 180ms ease;
+}
+
+.assigneeItem:hover {
+  border-color: var(--owner-primary) !important;
+  box-shadow: var(--owner-shadow);
+  transform: translateY(-1px);
+}
+
+.assigneeItemSelected {
+  border-color: var(--owner-primary) !important;
+  background: #f4f9ff;
+  box-shadow: 0 0 0 2px rgba(0, 117, 222, 0.12);
+}
+
+.assigneeNameBlock {
+  min-width: 0;
+}
+
+.assigneeNameBlock :global(.ant-typography) {
+  display: block;
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.assigneeMetrics {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 10px;
+}
+
+.assigneeMetrics > span {
+  display: flex;
+  min-width: 82px;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: var(--owner-canvas);
+}
+
+.assigneeMetrics :global(.ant-typography-secondary) {
+  font-size: 12px;
+}
+
+.assigneePagination {
+  align-self: flex-end;
+}
+
+.previewPanel :global(.ant-typography) {
+  margin-bottom: 0;
+}
+
+.datasetTitlebar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.datasetTable {
+  overflow: hidden;
+  border: 1px solid var(--owner-hairline);
+  border-radius: 8px;
+}
+
+.datasetTable :global(.ant-table) {
+  color: var(--owner-ink-secondary);
+}
+
+.datasetTable :global(.ant-table-thead > tr > th) {
+  background: var(--owner-canvas);
+  font-weight: 600;
+}
+
+.datasetTable :global(.ant-table-cell) {
+  vertical-align: top;
+}
+
+.datasetTable :global(.ant-typography) {
+  max-width: 320px;
+  margin-bottom: 0;
+  overflow-wrap: anywhere;
+}
+
+.datasetDraftRow > td {
+  background: #f4f9ff !important;
+}
+
+.datasetStats {
+  color: var(--owner-ink-muted);
+  font-size: 12px;
+}
+
+.datasetFieldTone1 {
+  color: var(--owner-primary);
+  border-color: #c7e2fb;
+  background: #eef8ff;
+}
+
+.datasetFieldTone2 {
+  color: #7a4d00;
+  border-color: #f3cd7a;
+  background: #fff7df;
+}
+
+.datasetFieldTone3 {
+  color: #7b1f45;
+  border-color: #ee9dbd;
+  background: #fff0f6;
+}
+
+.datasetFieldTone4 {
+  color: #075985;
+  border-color: #bae6fd;
+  background: #f0f9ff;
+}
+
+.datasetFieldTone5 {
+  color: #345214;
+  border-color: #b7d77e;
+  background: #f4fbe8;
+}
+
+.datasetFieldTone6 {
+  color: #5b3a84;
+  border-color: #c7a8ee;
+  background: #f7f0ff;
+}
+
+@keyframes cardEnter {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .formCard {
+    animation: none;
+    transition: none;
+  }
+
+  .assigneeItem {
+    transition: none;
+  }
+}
+
+@media (min-width: 1280px) {
+  .formGrid {
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  }
+}
+
+@media (max-width: 900px) {
+  .workspace {
+    width: 100%;
+  }
+}
+
+@media (max-width: 760px) {
+  .formCard :global(.ant-card-head) {
+    align-items: flex-start;
+    padding: 10px 12px;
+  }
+
+  .formCard :global(.ant-card-extra) {
+    padding-top: 0;
+  }
+
+  .formCard :global(.ant-card-body) {
+    padding: 12px;
+  }
+
+  .rewardVisibilityField {
+    max-width: 100%;
+  }
+
+  .fieldWide {
+    grid-column: auto;
+  }
+
+  .quotaSummary {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .datasetTitlebar {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .assigneeItem {
+    align-items: flex-start !important;
+    flex-direction: column;
+  }
+
+  .assigneeMetrics {
+    width: 100%;
+  }
+
+  .assigneeMetrics > span {
+    flex: 1 1 0;
+    min-width: 0;
+  }
+
+  .previewDrawer :global(.ant-drawer-body) {
+    padding: 12px;
+  }
+
+  .datasetTable :global(.ant-typography) {
+    max-width: 220px;
+  }
+}

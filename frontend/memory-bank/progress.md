@@ -39,10 +39,7 @@
 - 阶段一没有接入 Mock 业务数据。
 - 当前认证仅为前端演示态，刷新后不会持久化登录态。
 
-### 未验证
 
-- 按要求未运行 `npm run build`。
-- 按要求未运行 `npm run lint`。
 
 ## 2026-05-30 - 计划三：动态表单核心 P0
 
@@ -98,13 +95,7 @@
 - P0 未实现富文本、文件/图片上传、JSON 编辑器和 LLM 交互组件。
 - P0 未加入虚拟化、缓存、懒加载等性能优化手段。
 
-### 未验证
 
-- `npm run build` 因当前 shell 找不到 `npm` 未能执行。
-- `npm run lint` 因当前 shell 找不到 `npm` 未能执行。
-- `node_modules/.bin/tsc.cmd -b` 因当前 shell 找不到 `node` 未能执行。
-- `node_modules/.bin/eslint.cmd .` 因当前 shell 找不到 `node` 未能执行。
-- 已执行 `git diff --check`，未发现空白错误，仅有 Git 行尾转换提示。
 
 ## 2026-05-30 - 计划二：Owner 闭环 P0
 
@@ -145,10 +136,7 @@
 - `npm` 与 `nvm` 在当前环境中不可用，无法实际执行构建和 lint 验证。
 - 目前任务发布仍依赖前端 Mock 服务层和状态流转，不接真实后端接口。
 
-### 未验证
 
-- 按要求未运行 `npm run build`。
-- 按要求未运行 `npm run lint`。
 
 ## 2026-05-31 - 计划三：动态表单核心修复与 P1 启动
 
@@ -203,10 +191,7 @@
 - 联动选项当前实现为单条命中规则的基础版本，后续可扩展多 case 配置。
 - 没有加入虚拟化、缓存、懒加载等性能优化手段。
 
-### 未验证
 
-- 本阶段验证流程被中断，尚未完成 `npm run build` 和 `npm run lint`。
-- 当前环境此前多次出现 `nvm`、`npm`、`node` 不可用，后续需要在可用 Node 环境中重新执行验证。
 
 ## 2026-05-31 - 计划四：标注闭环 P0-P7
 
@@ -282,10 +267,7 @@
 - 提交前校验当前覆盖静态必填规则，复杂条件显隐下的跨题整单校验后续可增强。
 - 我的数据页面当前展示 Mock/前端内存提交记录，不接真实审核结果接口。
 
-### 未验证
 
-- 按用户要求，本阶段未运行 `npm run build`。
-- 按用户要求，本阶段未运行 `npm run lint`。
 
 ## 2026-05-31 - 计划五：AI 前置审核与人工复核闭环 P0-P7
 
@@ -368,10 +350,718 @@
 - 批量人工复核当前使用统一原因，不支持逐条填写不同原因。
 - 审核历史、审计时间线和提交快照都来自前端 Mock，不具备真实持久化能力。
 
-### 未验证
 
 - 本阶段未运行 `npm run build`。
 - 本阶段未运行 `npm run lint`。
 - 此前执行 `nvm list` 时当前 shell 找不到 `nvm`。
 - 此前尝试 `npm run build` 时被用户中断，后续按用户意图未继续执行 npm 命令。
 - 已执行 `git diff --check -- .\src`，未发现空白错误，仅有 Git 行尾转换提示。
+
+## 2026-06-01 - Owner 模板 Designer 画布体验与 CSS Module 迁移
+
+### 已实现
+
+- 调整 Owner 模板 Designer 页面顶部区域：
+  - 为顶部 `ContentShell` 增加页面专属 CSS Module 样式。
+  - 移除较长描述文案并压缩标题区域高度，使页面顶部更紧凑。
+- 优化物料面板展示：
+  - `MaterialPalette` 改为图标 + 标题 + 简短描述的紧凑物料项。
+  - 物料列不再使用内部滚动条，桌面端通过紧凑布局展示物料。
+  - 保持 dnd-kit 物料拖拽数据结构不变。
+- 将模板 Designer 页面相关样式从 `src/index.css` 迁移到 `OwnerTemplateDesignerPage.module.css`：
+  - 页面布局、三列面板、物料面板、画布、属性面板、拖拽浮层、Schema 面板等样式集中到页面 CSS Module。
+  - `src/index.css` 不再保留 `.designer-*` 样式。
+- 完善画布区域渲染器：
+  - 新增 `CanvasFieldPreview`，按 `DynamicSchemaNode.type` 在画布中渲染接近实际预览的字段外观。
+  - `CanvasNodeCard` 不再以 schema key/tag 为主展示节点，改为显示表单控件预览。
+  - 画布与实际预览的主要差异保留为设计态操作条、拖拽按钮、删除按钮、选中态和 drop 区域分割线。
+  - 容器类节点仍支持子节点拖放、排序和删除。
+- 迁移运行态表单渲染器样式：
+  - 新增 `DynamicFormRenderer.module.css`。
+  - `DynamicFormRenderer.tsx` 和 `rendererFields.tsx` 改用 CSS Module class。
+  - `src/index.css` 不再保留 `.dynamic-renderer*` 样式。
+
+### 当前约束
+
+- 未处理与本次需求无关的既有 TypeScript / lint 问题。
+- 工作区中存在无关修改，例如 `src/app/navigation.tsx` 和若干未跟踪目录，本次没有回退或修改它们。
+- 画布渲染器采用轻量 Ant Design 预览控件，不直接嵌入 Formily 运行态表单，以避免破坏节点级拖拽、选中和删除交互。
+
+### 已验证
+
+- 已执行 `nvm list`，当前 Node 为 `22.14.0`。
+- 已执行 `npm exec vite build`，通过。
+- 已执行 `npm run build`，失败于既有 TypeScript 错误：
+  - `src/app/navigation.tsx` 未使用导入。
+  - `RoleBadge.tsx` role key 类型不匹配。
+  - `designerDrag.ts` 与 `OwnerTemplateDesignerPage.tsx` 中已有 `never` 类型收窄问题。
+- 已执行 `npm run lint`，失败于既有 lint / React hooks 规则问题；新增 `CanvasFieldPreview` 未产生 lint 报错。
+## 2026-06-02 - Owner 真实接口接入启动
+
+### 已实现
+
+- 接入 OWNER 模板库真实创建流程：
+  - 新增 BE-B 模板创建/响应 DTO。
+  - `ownerTemplateService` 支持 `VITE_SERVICE_MODE=real` 时调用 `POST /v1/owner/templates`。
+  - 创建模板请求补齐 `schemaJson` 和 `changeNote`。
+  - 前端创建弹窗继续使用 `description` 输入，并映射为后端 `changeNote`。
+  - `schemaJson` 使用当前 Designer 可识别的 `DynamicFormSchema` 空 schema。
+  - 模板列表/详情 real 模式读取 `GET /v1/owner/templates`，并映射 `currentVersion.versionId` 为 `currentVersionId`。
+- 对接 OWNER 任务管理真实接口骨架：
+  - 新增任务分页、创建、编辑、详情、生命周期、统计 DTO。
+  - `ownerTaskService` 支持 mock/real 双模式。
+  - real 模式任务列表调用分页版 `GET /v1/owner/tasks`。
+  - real 模式创建任务调用 `POST /v1/tasks`。
+  - real 模式编辑草稿调用 `PUT /v1/tasks/{taskId}`。
+  - real 模式详情调用 `GET /v1/tasks/{taskId}`。
+  - real 模式发布、暂停、恢复、结束分别调用 `/publish`、`/pause`、`/resume`、`/end`。
+  - real 模式删除草稿调用 `DELETE /v1/tasks/{taskId}`。
+  - real 模式任务进度改为调用 `GET /v1/tasks/{taskId}/statistics`。
+- 调整任务字段模型：
+  - `id` 映射 `taskId`。
+  - `instruction` 映射 `instructionRichText`。
+  - `deadline` 映射 `deadlineAt`。
+  - `templateId` 调整为 `publishedTemplateVersionId`，使用模板当前版本 ID。
+  - 新增 `quota`、`claimedCount`、`reviewLevelCount`。
+  - AI 审核配置调整为 `prompt`、`model`、`rating`。
+  - `reward` 使用奖励单价字符串。
+  - `strategy` 固定为 `先到先得`、`配额分发`、`指派`。
+  - 状态在服务层处理 `DRAFT/PUBLISHED/PAUSED/ENDED` 与前端小写状态映射。
+- 调整 Owner 任务页面：
+  - 任务列表支持分页。
+  - 草稿任务增加删除入口。
+  - 创建/编辑页补充任务配额、审核级别数、AI 审核配置字段。
+  - 模板选择改为提交模板当前版本 ID。
+  - 发布前保留前端基础校验。
+- 接入真实文件上传接口：
+  - 新增 `FileUploadResponse`。
+  - `ownerImportService.uploadDatasetFile(file)` real 模式调用 `POST /v1/files/upload`。
+  - 使用 `FormData`，字段名为 `file`。
+  - 上传成功后将 `fileId` 写入草稿 `datasetFileId`。
+  - 创建任务时 `datasetFileId` 会随 `POST /v1/tasks` 提交。
+  - 创建页上传成功后展示文件名、大小、类型和文件 ID。
+  - mock 模式继续保留当前 mock 导入预览。
+
+### 当前约束
+
+- 数据集上传接口只返回文件元数据，不返回字段映射、样本预览或异常行；real 模式下暂不展示真实预览。
+- `GET /v1/tasks/{taskId}` 文档未返回 `datasetFileId`，刷新已保存草稿后前端无法从详情恢复上传文件元数据。
+- 任务详情接口未返回模板名称，当前 real 映射只能展示模板版本 ID 或占位名称。
+- `src/app/navigation.tsx` 存在非本次任务产生的未提交改动，未处理也未回退。
+
+### 已验证
+
+- 已执行针对本次任务相关文件的 `npx eslint`，通过。
+- 已执行 `git diff --check`，未发现空白错误，仅有 Git 行尾转换提示。
+- 已执行 `npm run build`，仍失败于既有问题：
+  - `src/app/navigation.tsx` 未使用导入和角色 key 不匹配。
+  - `src/components/navigation/RoleBadge.tsx` 角色 key 不匹配。
+  - dynamic-form Designer 相关 `never` 推断错误。
+  - 本次新增的模板、任务和上传接口改动未再产生新的 TypeScript 错误。
+
+## 2026-06-02 - Owner 创建任务 AI 字段与模板列表对接
+
+### 已实现
+
+- 调整创建任务 AI 审核配置字段，前端草稿、类型和请求组装统一使用后端新字段：
+  - `aiProviderId`
+  - `aiModelName`
+  - `aiPrompt`
+  - `aiScoringDimensions`
+  - `aiPassThreshold`
+  - `aiManualReviewThreshold`
+- 创建任务页补充 AI 审核配置能力：
+  - 大模型下拉继续调用 `GET /v1/llm-providers`，展示 `defaultModel`。
+  - 选择模型后保存 provider ID 和模型名。
+  - 评分维度改为可添加的标签式输入，并以字符串数组保存。
+  - 新增“通过阈值”和“人工复核阈值”两个 0-100 数值输入。
+- 更新创建/编辑任务请求：
+  - `POST /v1/tasks` 和 `PUT /v1/tasks/{taskId}` 不再提交旧的 `providerId`、`model`、`prompt`、`rating`。
+  - 请求 payload 改为提交后端要求的 AI 字段。
+  - 模板字段继续使用 `publishedTemplateVersionId`，值来自模板当前版本 ID。
+- 更新发布前校验：
+  - 校验 AI 模型、Prompt、评分维度和两个阈值。
+  - 校验 Prompt、模型名、评分维度长度，以及阈值范围。
+- 调整 OWNER 模板列表映射：
+  - `GET /v1/owner/templates` 继续通过现有 request 层自动解包 `ApiResponse.data`。
+  - `templateId` 映射为模板 ID。
+  - `currentVersion.versionId` 映射为 `currentVersionId`，用于创建任务时提交版本 ID。
+  - 支持 `PUBLISHED_SNAPSHOT -> ready`，未知或空状态按 `draft` 处理。
+- 同步更新 mock 任务数据中的 AI 审核配置结构，保持 mock mode 可用。
+
+### 当前约束
+
+- 工作区仍包含此前任务产生的 owner 上传、文件解析、CSS 迁移等未提交改动，本次没有回滚。
+- 完整 TypeScript build 仍被无关既有错误阻塞：
+  - `src/app/navigation.tsx`
+  - `src/components/navigation/RoleBadge.tsx`
+  - dynamic-form Designer 相关 `never` 推断错误。
+- `npm run lint` 仍被无关既有 lint 错误阻塞：
+  - `src/app/navigation.tsx`
+  - `LinkageRuleEditor.tsx`
+  - `SchemaManagerPanel.tsx`
+
+### 已验证
+
+- 已执行 `nvm list`，当前 Node 为 `22.14.0`。
+- 已执行 `npm exec vite build`，通过，仅有 chunk size warning。
+- 已执行 `npm run lint`，失败于无关既有 lint 错误。
+- 已执行 `npm run build`，失败于无关既有 TypeScript 错误。
+## 2026-06-05 - Owner 真实接口与页面交互补充
+
+### 已实现
+
+- 接入 Admin 审核分配查询业务：
+  - 新增 `ADMIN` 角色入口、导航与 `/app/admin` 路由。
+  - 新增 Admin 审核分配页面，展示可分配任务、可分配审核员和审核员进度。
+  - 新增 `adminReviewAssignmentService`，对接：
+    - `GET /v1/admin/review/tasks/assignable`
+    - `GET /v1/admin/review/reviewers/assignable`
+    - `GET /v1/admin/review/reviewers/progress`
+- 完善 Owner 任务详情题目渲染：
+  - 接入 `GET /v1/tasks/{taskId}/dataset/items` 分页查询题目。
+  - 接入 `POST /v1/tasks/{taskId}/dataset/items/batch-append-json`，支持在任务详情中手动追加题目。
+  - 题目展示改为 Ant Design Table，动态字段列来自 `itemJson` keys。
+  - 点击加号可在表格中新增一条可编辑空白行，确认后组装 `externalId`、`itemJson`、`metadataJson` 调用接口。
+- 调整 Owner 创建任务请求体：
+  - `POST /v1/tasks` 请求体改为新版接口结构。
+  - 新增并提交 `overlapCount`、`maxClaimsPerLabeler`、`aiReviewStrategy`。
+  - 奖励字段从旧 `reward` 字符串改为 `rewardRule` 对象：
+    - `rewardMode`
+    - `unitReward`
+    - `rewardCurrency`
+    - `rewardVisible`
+  - 分发策略从前端中文值映射为后端编码：
+    - `先到先得 -> FCFS`
+    - `配额分发 -> QUOTA`
+    - `指派 -> ASSIGN`
+  - `aiReviewConfigId` 按当前决策暂不传，继续使用内联 AI 字段。
+  - 创建任务页面新增一致性次数、每人最大领取数、AI 审核策略、奖励模式、奖励币种、奖励展示开关。
+- 优化 Owner 模板详情 Designer 页面：
+  - 模板详情页 `<main>` 增加页面级 CSS Module class。
+  - 页面高度锁定在 app 内容区内，外层 `overflow: hidden`，避免浏览器页面级滚动条。
+  - Designer 主体区改为 flex 剩余空间布局，移除原先撑开页面的固定 `min-height`。
+  - 保留画布和属性面板的局部滚动。
+- 维护 mock 模式：
+  - mock 任务补齐新增创建任务字段默认值。
+  - mock 题目追加逻辑同步更新本地 mock 数据集样本。
+
+### 当前约束
+
+- `aiReviewConfigId` 暂无前端来源，本阶段不传。
+- `aiReviewStrategy` 当前只提供接口示例中的 `LIGHTWEIGHT`。
+- `rewardMode` 当前只提供 `APPROVED_ITEM`，`rewardCurrency` 当前只提供 `POINT`。
+- 完整 TypeScript build 仍被既有 dynamic-form Designer `never` 类型错误阻塞。
+- Vite dev server 曾因本地 `spawn EPERM` 无法在沙箱内启动，未强制继续启动。
+
+### 已验证
+
+- 已执行 `nvm list`，当前 Node 为 `22.14.0`。
+- 已多次执行 `npm exec vite build`，通过，仅有 chunk size warning。
+- 已执行 `npm run build`，失败于既有 TypeScript 错误：
+  - `src/features/dynamic-form/utils/designerDrag.ts` 的 `never` 属性访问。
+  - `src/pages/owner/templates/OwnerTemplateDesignerPage.tsx` 的 `never` 属性访问。
+## 2026-06-01 - 标注工作台题目级提交与状态流程调整
+
+### 已实现
+
+- 扩展标注题目状态，题目导航支持展示：待标注、进行中、已打回、已提交、草稿。
+- 新增题目状态文案与颜色映射，工作台左侧题目导航和右侧状态展示复用统一映射。
+- 将工作台提交逻辑从任务级提交调整为题目级提交：
+  - 新增题目级草稿校验。
+  - 新增 `submitQuestionDraft` 服务层方法。
+  - 新增 `labelingStore.submitQuestionDraft` action。
+  - 当前题提交成功后只更新当前题为已提交，不再把整任务所有题目置为已提交。
+- 调整标注工作台布局：
+  - 上一题/下一题移动到中间表单区域左下方。
+  - 保存草稿/提交当前题移动到中间表单区域右下方。
+  - 右侧栏改为“题目状态与流程”，展示当前题状态、回填来源、保存状态、最近保存和本题流程时间线。
+- Mock 数据中将返修任务题目标记为已打回，用于覆盖已打回状态展示。
+- 优化工作台页面内部表单值处理，避免在 effect 中同步重置 state 导致 ESLint `react-hooks/set-state-in-effect` 命中。
+
+### 当前约束
+
+- 本次仍基于前端 Mock 服务层实现，不接真实后端接口。
+- 题目级提交生成的提交记录仍复用现有 `LabelingSubmission` 结构，后续接后端时可进一步拆分为题目级提交实体。
+- “进行中”当前作为页面临时编辑态展示：当前题有未保存修改时显示为进行中，保存后显示为草稿。
+- 全量构建和 lint 仍受既有问题阻塞，阻塞点不在本次工作改动文件中。
+
+### 已验证
+
+- 已执行 `nvm list`，当前可用 Node 版本为 `22.14.0`。
+- 已执行 `npm ci` 安装 lockfile 依赖。
+- 已执行本次修改文件的局部 ESLint： 
+  - `npx eslint src\pages\labeler\LabelerWorkbenchPage.tsx src\stores\labelingStore.ts src\services\labeler\labelingService.ts src\services\labeler\labelingServiceHelpers.ts src\types\labeling.ts src\utils\labeling.ts src\mocks\labeling.mock.ts`
+  - 结果通过。
+- 已执行 `git diff --check -- src\pages\labeler\LabelerWorkbenchPage.tsx src\stores\labelingStore.ts src\services\labeler\labelingService.ts src\services\labeler\labelingServiceHelpers.ts src\types\labeling.ts src\utils\labeling.ts src\mocks\labeling.mock.ts src\index.css`，未发现空白错误，仅有 Git LF/CRLF 提示。
+- 已执行 `npm run build`，失败于既有 TypeScript 错误：
+  - `src/app/navigation.tsx`
+  - `src/components/navigation/RoleBadge.tsx`
+  - `src/features/dynamic-form/utils/designerDrag.ts`
+  - `src/pages/owner/templates/OwnerTemplateDesignerPage.tsx`
+- 已执行全量 `npm run lint`，失败于既有 lint 错误：
+  - `src/app/navigation.tsx`
+  - `src/features/dynamic-form/components/DynamicFormRenderer.tsx`
+  - `src/features/dynamic-form/components/designer/LinkageRuleEditor.tsx`
+  - `src/features/dynamic-form/components/designer/SchemaManagerPanel.tsx`
+  - `src/features/dynamic-form/materialRegistry.ts`
+  - `src/pages/owner/templates/OwnerTemplatesPage.ts`
+## 2026-06-02 - 标注员市场领取真实服务接入
+
+### 已实现
+
+- 阅读并对齐标注市场与领取接口文档，按文档契约接入真实服务。
+- 新增 `src/services/labeler/labelingRealService.ts`：
+  - 接入 `GET /v1/market/tasks` 查询标注市场任务。
+  - 接入 `POST /v1/tasks/{taskId}/assignments/claim` 领取 assignment。
+  - 接入 `GET /v1/assignments/{assignmentId}` 加载 assignment 详情、题目材料、schema 和草稿。
+  - 接入 `GET /v1/labeler/assignments` 查询当前标注员已领取 assignment，用于市场页找回已领取任务。
+  - 接入 assignment 草稿读取、保存和题目级提交接口。
+- 将原 mock 标注服务改名为 `mockLabelingService`，并在 `src/services/labeler/index.ts` 按 `VITE_SERVICE_MODE` 切换：
+  - `mock` 模式继续使用原 mock 行为。
+  - `real` 模式使用真实接口服务。
+- 保持市场页和工作台现有调用方式不变：
+  - 领取后仍跳转 `/app/labeler/workbench/:taskId`。
+  - 真实服务内部维护 `taskId -> assignmentId` 映射。
+- 完成字段降级策略：
+  - 进度使用 `quota - remainingQuota` 和 `quota` 计算。
+  - `instruction` 使用 `description` 兜底。
+  - `templateName`、`templateId`、审核详情等接口缺失字段使用空值或占位展示。
+  - assignment 题目标题使用 `题目 #datasetItemId` 生成。
+  - `itemList` / `itemJson` 转换为工作台材料区可展示的键值结构。
+- 增加真实状态到前端状态的映射：
+  - `CLAIMED`、`DRAFTING`、`RETURNED`、`SUBMITTED`、`APPROVED`、`CANCELLED` 映射到现有任务/题目状态。
+
+### 当前约束
+
+- 本次不调整工作台路由，仍以 `taskId` 作为 URL 参数。
+- 本次不实现取消领取接口。
+- 真实审核历史、上一轮答案、AI/人工审核详情接口当前仍未接入，相关字段保留为空或占位。
+- 如果 `GET /v1/labeler/assignments` 暂不可用，市场列表仍可通过 `GET /v1/market/tasks` 展示可领取任务，但已领取任务找回会受限。
+
+### 已验证
+
+- 已执行 `nvm list`，当前 Node 版本为 `22.14.0`；项目无 `.nvmrc`，`package.json` 未声明 `engines.node`。
+- 已执行本次相关文件的局部 ESLint：
+  - `npx eslint src\services\labeler\labelingService.ts src\services\labeler\labelingRealService.ts src\services\labeler\index.ts src\stores\labelingStore.ts src\pages\labeler\LabelerMarketPage.tsx src\pages\labeler\LabelerWorkbenchPage.tsx`
+  - 结果通过。
+- 已执行相关文件 `git diff --check`，未发现空白错误，仅有 Git LF/CRLF 提示。
+- 已执行 `npm run build`，失败于既有无关 TypeScript 错误：
+  - `src/app/navigation.tsx`
+  - `src/components/navigation/RoleBadge.tsx`
+  - `src/features/dynamic-form/utils/designerDrag.ts`
+  - `src/pages/owner/templates/OwnerTemplateDesignerPage.tsx`
+
+## 2026-06-05 - Labeler draft autosave and submit check
+
+### Implemented
+- Fixed workbench draft autosave so `PUT /v1/claims/{claimId}/draft` is only sent when answer values differ from the last loaded or saved draft.
+- Added stable answer-value signatures in `LabelerWorkbenchPage` to avoid treating form initialization or save-result refresh as a new edit.
+- Manual draft save now skips the API call when values are unchanged.
+- Submit flow now saves first only when needed, and stops before `POST /v1/claims/{claimId}/submit` if draft save fails.
+- Confirmed real submit endpoint is connected through `LabelerWorkbenchPage.submitCurrentQuestion` -> `labelingStore.submitQuestionDraft` -> `realLabelingService.submitQuestionDraft`.
+
+### Pending verification
+- Run local ESLint for `src/pages/labeler/LabelerWorkbenchPage.tsx`.
+- Optionally verify in browser network panel that idle workbench no longer sends repeated draft saves.
+
+## 2026-06-02 - 草稿提交与我的领取真实接口补强
+
+### 已实现
+
+- 补强 assignment 草稿与提交真实接口：
+  - `GET /v1/assignments/{assignmentId}/draft` 用于读取后端草稿并回填工作台表单。
+  - `PUT /v1/assignments/{assignmentId}/draft` 按契约提交 `answerJson` 和 `clientVersion`，保存成功后同步最新 `draftVersion`。
+  - `POST /v1/assignments/{assignmentId}/submit` 按契约提交最终答案和当前 `draftVersion`。
+- 增加 assignment 相关错误码映射：
+  - `400101`：当前 assignment 状态不允许提交。
+  - `409101`：草稿版本冲突，提示刷新后重试。
+  - `409301`：Schema 校验失败，提示检查答案后重试。
+- `labelingStore` 支持透传 `ApiError.message`，避免真实接口错误被统一吞成默认保存/提交失败文案。
+- 新增 assignment 列表前端类型：
+  - `LabelerAssignmentStatus`
+  - `LabelerAssignmentListQuery`
+  - `LabelerAssignmentSummary`
+  - `LabelerAssignmentStats`
+- “我的领取”页面改为 assignment 维度列表：
+  - 页面进入时调用 `GET /v1/labeler/assignments`。
+  - 支持按 `status` 重新请求后端筛选。
+  - 展示 `assignmentId`、`taskId`、`datasetItemId`、`status`、`draftVersion`、`claimedAt`、`returnedAt`、`updatedAt`。
+  - 点击“进入工作台”仍沿用当前路由 `/app/labeler/workbench/:taskId`。
+- Mock 服务补齐 `listAssignments` 和 `getAssignmentStats`，保持 `mock` / `real` 服务模式切换兼容。
+
+### 当前约束
+
+- “我的领取”页面文件仍沿用 `LabelerSubmissionsPage.tsx` 和现有 `/app/labeler/submissions` 路由，仅页面语义和数据源已改为 assignment。
+- 工作台路由暂不改为 assignmentId 级别；如果后续允许同一任务下多个 assignment，需要进一步调整为 assignment 级路由。
+- `getSubmissionStats` 和 `listSubmissions` 在真实服务中仍保留 mock 回退，本次“我的领取”已改用新的 assignment 数据源，不再依赖提交记录接口。
+- assignment 统计当前通过额外一次 `GET /v1/labeler/assignments` 聚合生成，后续如后端提供统计接口可替换。
+
+### 已验证
+
+- 已执行 `nvm list`，当前 Node 版本为 `22.14.0`；项目无 `.nvmrc`，`package.json` 未声明 `engines.node`。
+- 已执行草稿与提交补强相关文件的局部 ESLint：
+  - `npx eslint src\services\labeler\labelingRealService.ts src\stores\labelingStore.ts src\pages\labeler\LabelerWorkbenchPage.tsx`
+  - 结果通过。
+- 已执行“我的领取”assignment 接入相关文件的局部 ESLint：
+  - `npx eslint src\types\labeling.ts src\services\labeler\labelingService.ts src\services\labeler\labelingRealService.ts src\stores\labelingStore.ts src\pages\labeler\LabelerSubmissionsPage.tsx`
+  - 结果通过。
+- 已执行相关文件 `git diff --check`，未发现空白错误，仅有 Git LF/CRLF 提示。
+- 已执行 `npm run build`，本次改动未引入新的构建错误，仍失败于既有无关 TypeScript 错误：
+  - `src/app/navigation.tsx`
+  - `src/components/navigation/RoleBadge.tsx`
+  - `src/features/dynamic-form/utils/designerDrag.ts`
+  - `src/pages/owner/templates/OwnerTemplateDesignerPage.tsx`
+
+## 2026-06-05 - 标注答案提交接口核对
+
+### 已确认
+
+- 标注工作台“提交当前题目”已接入真实提交接口：
+  - 页面入口：`LabelerWorkbenchPage.submitCurrentQuestion`
+  - Store action：`labelingStore.submitQuestionDraft`
+  - 真实服务：`realLabelingService.submitQuestionDraft`
+- 实际接口为：
+  - `POST /v1/claims/{claimId}/submit`
+- 请求体与 `labeler-task-workflow-api.md` 一致：
+  - `answerJson: JSON.stringify(draft.values)`
+  - `clientVersion: assignment.draftVersion ?? 0`
+- 当前提交流程会先保存草稿：
+  - `PUT /v1/claims/{claimId}/draft`
+  - 然后提交最终答案：
+  - `POST /v1/claims/{claimId}/submit`
+
+### 当前差异
+
+- 提交成功后当前会刷新任务广场和提交记录 mock 回退。
+- 暂未在提交成功后重新调用 `GET /v1/claims` 刷新“我的领取”聚合状态。
+- 暂未重新调用工作台的 `GET /v1/claims?taskId=...` 刷新当前任务下题目状态。
+
+## 2026-06-04 - 模板 schemaJson components 解析修复
+
+### 已实现
+
+- 修复真实模板接口返回 `{ "components": [...] }` 时无法渲染的问题。
+- `parseSchema` 新增 `components` 数组识别，并转换为前端 `DynamicFormSchema.nodes`。
+- 支持后端组件字段映射：
+  - `type` 映射为前端字段类型。
+  - `field` 映射为 `key`。
+  - `label` 映射为 `title`。
+  - `required: true` 映射为必填规则。
+- `ShowItem` 在没有显式 `props.text` 时，自动使用 `label` 或 `field` 作为展示文本。
+- 字段类型识别改为同时参考 `type` 和组件名，支持 `ShowItem`、`Input` 等首字母大写类型。
+
+### 已验证
+
+- 已执行 `nvm list`，当前 Node 版本为 `22.14.0`；项目无 `.nvmrc`，`package.json` 未声明 `engines.node`。
+- 已执行局部 ESLint：
+  - `npx eslint src\services\labeler\labelingRealService.ts src\pages\labeler\LabelerWorkbenchPage.tsx`
+  - 结果通过。
+- 已执行 `git diff --check -- src\services\labeler\labelingRealService.ts`，未发现空白错误，仅有 Git LF/CRLF 提示。
+- 已执行 `npm run build`，本次改动未引入新的构建错误，仍失败于既有无关 TypeScript 错误：
+  - `src/app/navigation.tsx`
+  - `src/components/navigation/RoleBadge.tsx`
+  - `src/features/dynamic-form/utils/designerDrag.ts`
+  - `src/pages/owner/templates/OwnerTemplateDesignerPage.tsx`
+
+## 2026-06-04 - Labeler 任务流接口按新文档重构
+
+### 已实现
+
+- 按 `labeler-task-workflow-api.md` 重构标注员真实服务接口，只保留文档中的接口：
+  - `GET /v1/market/tasks`
+  - `GET /v1/claims`
+  - `GET /v1/labeler/tasks/{taskId}/answer-template`
+  - `POST /v1/tasks/{taskId}/items/claim`
+  - `GET /v1/claims/{claimId}/draft`
+  - `PUT /v1/claims/{claimId}/draft`
+  - `POST /v1/claims/{claimId}/submit`
+- 移除真实服务对旧接口的调用：
+  - `/v1/assignments/{assignmentId}`
+  - `/v1/labeler/claimed-tasks/{taskId}`
+  - `/v1/tasks/{taskId}/assignments/claim`
+  - `/v1/assignments/{assignmentId}/draft`
+  - `/v1/assignments/{assignmentId}/submit`
+  - `/v1/labeler/assignments`
+- 任务广场进入时只通过 `GET /v1/market/tasks` 加载列表，标签由列表数据派生。
+- “我的领取”改为任务聚合视图，使用 `GET /v1/claims`，统计由本次列表结果聚合。
+- 工作台使用 `GET /v1/claims?taskId=...` 获取已领取题目，使用 `GET /v1/labeler/tasks/{taskId}/answer-template` 获取模板。
+- 草稿和提交统一改为基于 `claimId` 的 `/claims/{claimId}` 接口。
+
+### 已验证
+
+- 已执行 `nvm list`，当前 Node 版本为 `22.14.0`；项目无 `.nvmrc`，`package.json` 未声明 `engines.node`。
+- 已执行局部 ESLint：
+  - `npx eslint src\services\labeler\labelingRealService.ts src\stores\labelingStore.ts src\pages\labeler\LabelerMarketPage.tsx src\pages\labeler\LabelerSubmissionsPage.tsx src\pages\labeler\LabelerWorkbenchPage.tsx src\types\labeling.ts`
+  - 结果通过。
+- 已执行 `git diff --check`，未发现空白错误，仅有 Git LF/CRLF 提示。
+- 已执行 `npm run build`，本次改动未引入新的构建错误，仍失败于既有无关 TypeScript 错误：
+  - `src/app/navigation.tsx`
+  - `src/components/navigation/RoleBadge.tsx`
+  - `src/features/dynamic-form/utils/designerDrag.ts`
+  - `src/pages/owner/templates/OwnerTemplateDesignerPage.tsx`
+
+## 2026-06-03 - Assignment schemaJson 模板解析修复
+
+### 已实现
+
+- 修复真实服务中 assignment 详情的模板解析：
+  - `GET /v1/assignments/{assignmentId}` 返回后继续从 `schemaJson` 字段读取模板。
+  - 支持 `schemaJson` 为字符串、对象、二次转义 JSON 字符串。
+  - 支持前端动态表单格式 `{ id, version, title, nodes }`。
+  - 支持 `nodes` 数组直接作为模板内容。
+  - 支持 Formily 风格 `{ type: "object", properties: {...} }` 并转换为 `DynamicFormSchema.nodes`。
+- 增加真实 schema 字段降级：
+  - 自动补齐缺失的 `id`、`key`、`title`、`props`。
+  - 将常见 Formily 组件映射为前端动态表单字段类型。
+  - 未识别字段默认降级为 `input`，避免页面崩溃。
+- 保持 mock 服务不变，工作台仍通过真实 assignment 详情中的 `schemaJson` 渲染题目。
+
+### 已验证
+
+- 已执行 `nvm list`，当前 Node 版本为 `22.14.0`；项目无 `.nvmrc`，`package.json` 未声明 `engines.node`。
+- 已执行局部 ESLint：
+  - `npx eslint src\services\labeler\labelingRealService.ts src\stores\labelingStore.ts src\pages\labeler\LabelerWorkbenchPage.tsx`
+  - 结果通过。
+- 已执行 `git diff --check -- src\services\labeler\labelingRealService.ts`，未发现空白错误，仅有 Git LF/CRLF 提示。
+- 已执行 `npm run build`，本次改动未引入新的构建错误，仍失败于既有无关 TypeScript 错误：
+  - `src/app/navigation.tsx`
+  - `src/components/navigation/RoleBadge.tsx`
+  - `src/features/dynamic-form/utils/designerDrag.ts`
+  - `src/pages/owner/templates/OwnerTemplateDesignerPage.tsx`
+
+## 2026-06-02 - Reviewer 真实接口接入与 AI 审核队列页
+
+### 已实现
+
+- 改造 Reviewer 审核详情页为真实接口驱动：
+  - `GET /api/v1/reviewer/submissions/{submissionId}` 作为提交基础详情来源。
+  - `GET /api/v1/submissions/{submissionId}/versions` 作为历史提交记录来源。
+  - `POST /api/v1/reviewer/submissions/{submissionId}/approve` 提交通过。
+  - `POST /api/v1/reviewer/submissions/{submissionId}/reject` 提交打回。
+  - 页面调整为三列工作台：左侧题目状态，中间详情、历史版本、AI 预审和人工意见，右侧今日工作状态和审计日志替代展示。
+  - 只保留“通过”和“打回”两个人工操作按钮，打回原因必填。
+- 扩展 Review 真实接口类型：
+  - `ReviewerSubmissionListItem`
+  - `SubmissionVersion`
+  - `ReviewActionResponse`
+  - `BatchReviewResponse`
+  - `AiReviewResultResponse`
+  - `AiReviewResultPageResponse`
+  - `AiReviewLogQuery`
+  - `AiReviewQueueStatusFilter`
+- 扩展 Review 服务层：
+  - 人工审核队列、审核详情、通过、打回和批量操作改为调用真实 reviewer 接口。
+  - 新增 AI 审核接口：
+    - `GET /api/v1/tasks/ai-review-logs`
+    - `GET /api/v1/tasks/{taskId}/ai-review-logs`
+    - `GET /api/v1/submissions/{submissionId}/ai-review`
+    - `POST /api/v1/submissions/{submissionId}/ai-review/retry`
+- 扩展 `reviewStore`：
+  - 增加历史版本状态。
+  - 增加 AI 审核日志列表、选中记录、分页、加载状态和重试状态。
+  - 增加今日审核数量的前端会话内统计。
+- 新增 Reviewer AI 审核队列页：
+  - 页面文件：`frontend/src/pages/reviewer/ReviewerAiReviewQueuePage.tsx`
+  - 路由：`/app/reviewer/ai-reviews`
+  - 导航入口：审核员侧边栏新增“AI审核队列”。
+  - 左侧展示 AI 审核题目队列，支持按全部、待审核、已通过、已打回、转人工、失败切换。
+  - 右侧展示选中记录的 AI 评语、评分维度、风险标记、处理日志、Prompt 快照和 LLM 原始响应。
+  - 当记录包含 `submissionId` 且状态为失败或需人工时，支持触发 AI 审核重试。
+- 补充 Reviewer 页面样式：
+  - 新增详情页三列布局样式。
+  - 新增 AI 审核队列左右分栏、队列选中态、评分行、代码块和响应式单列布局。
+
+### 当前约束
+
+- 当前 `GET /api/v1/reviewer/submissions/{submissionId}` 仅按已确认字段展示基础信息，不包含完整标注答案和审核模板。
+- AI 审核队列中的“标注内容”和“审核模板”区域按用户决策显示空态。
+- `GET /api/v1/tasks/ai-review-logs` 为新增约定接口，前端按与按任务查询相同的分页响应结构接入。
+- AI 审核日志项如果不返回 `submissionId`，前端只能以 `agentRunId` 作为队列 key，无法触发单提交详情刷新和 AI 重试。
+- Review 服务层仍保留部分 Mock 编排能力，用于标注员提交流程中的前端模拟 AI 分流。
+
+### 已验证
+
+- 已执行 `nvm list`，当前 Node 版本为 `22.14.0`。
+- 已执行 `npm run build`，构建未通过。
+- 构建失败点为既有类型问题，未出现在新增 AI 审核队列页：
+  - `src/components/navigation/RoleBadge.tsx` 中角色 key 大小写与 `Role` 类型不匹配。
+  - `src/features/dynamic-form/utils/designerDrag.ts` 中若干 `never` 类型访问。
+  - `src/pages/owner/templates/OwnerTemplateDesignerPage.tsx` 中若干 `never` 类型访问。
+
+
+
+## 2026-06-02 - Reviewer queue empty state and AI review status API update
+
+### Implemented
+
+- Fixed reviewer manual queue empty-data behavior:
+  - When `queue` is empty, not loading, and has no error, the page keeps the header context and shows `暂无数据`.
+  - Empty state hides batch actions, refresh action, filters, table, and batch reject modal entry.
+  - `reviewService` now accepts both `[]` and `{ items: [] }` list responses for reviewer submissions to avoid `.map` failures on empty paged responses.
+- Changed reviewer AI review queue list API:
+  - New endpoint: `GET /api/v1/reviewer/ai-review-status`.
+  - Frontend request path is `/v1/reviewer/ai-review-status` because the API base URL is `/api`.
+- Added/extended review types:
+  - Added `ReviewerAiReviewStatusItem`.
+  - Extended `AiReviewResultResponse` with `taskTitle`, `submissionStatus`, and `submittedAt`.
+- Updated `reviewService.listAllAiReviewLogs`:
+  - Maps `aiDecision` to the existing `decision` field.
+  - Applies status/decision filtering on the client.
+  - Applies page/pageSize pagination on the client.
+  - Still returns `{ items, page, pageSize, total }` so the store/page contract stays stable.
+- Updated `reviewStore` AI review queue state handling:
+  - Reloading, filtering, or paging clears stale selected records when they are no longer in the current list.
+  - Detail and retry responses are merged with lightweight list fields so `taskTitle`, `submissionStatus`, and `submittedAt` are preserved.
+- Updated `ReviewerAiReviewQueuePage` display:
+  - Queue items show task title, submission ID, AI status, AI decision, average score, and submitted time/status.
+  - Detail summary now includes task title, submission status, and submitted time.
+
+### Current Constraints
+
+- `GET /api/v1/reviewer/ai-review-status` is a lightweight list API and does not directly provide `dimensionScores`, `riskFlags`, `promptSnapshot`, or `rawResponse`.
+- Selecting a record still depends on `GET /api/v1/submissions/{submissionId}/ai-review` to load detailed AI review fields.
+- Status filtering and pagination are currently client-side because the new endpoint spec does not define query parameters.
+
+### Verification
+
+- Ran `nvm list`; current Node version is `22.14.0`.
+- Ran `npm run build`; build still fails due to existing unrelated TypeScript errors outside the changed reviewer files:
+  - `src/components/navigation/RoleBadge.tsx` role key mismatch.
+  - `src/features/dynamic-form/utils/designerDrag.ts` `never` type property access.
+  - `src/pages/owner/templates/OwnerTemplateDesignerPage.tsx` `never` type property access.
+
+
+
+## 2026-06-08 - Owner template versioning, task template selection, and Modal v5 update
+
+### Implemented
+
+- Added Owner template version workflow support:
+  - Added `TemplateForkInput` and `TemplateVersionSnapshot` template types.
+  - Added `ownerTemplateService.forkTemplateVersion(templateId, input)` using `POST /v1/templates/{templateId}/fork`.
+  - Added `ownerTemplateService.listTemplateVersions(templateId)` using `GET /v1/templates/{templateId}/versions`.
+  - Kept `saveTemplateSchema()` compatible by delegating schema saving to the fork-version flow.
+- Extended Owner template list behavior:
+  - Template name can load and display all versions for that template.
+  - Selecting a version updates the current table row fields: version id, version label, status, field count, and change note.
+  - Entering the designer after selecting a version passes the selected version schema snapshot through router state.
+  - Added a Fork entry that opens the current template in designer fork mode with a change note.
+- Extended template designer behavior:
+  - Designer can initialize from a selected template version snapshot instead of always loading the current version.
+  - Fork mode is tracked in `templateDesignerStore` and saved as a new template version.
+  - Delete-field confirmation now uses Ant Design v5 `Modal.useModal()` instead of static `Modal.confirm`.
+- Updated Owner task creation/editing template selection:
+  - The task editor now selects template first, then template version.
+  - Only `publishedTemplateVersionId` is written to the draft and submitted to task create/update APIs.
+  - Existing draft tasks with only a version id attempt to resolve and preselect the owning template.
+- Updated template modal usage for Ant Design v5:
+  - Controlled template modals already use `open`.
+  - Replaced template modal `destroyOnClose` with `destroyOnHidden` for current `antd@5.29.3`.
+
+### Current Constraints
+
+- Template version switching in the template list is a page-local display choice; it does not persist the backend current version.
+- Existing task detail APIs still return only `publishedTemplateVersionId`, so edit-page template preselection may query template versions to resolve the owner template.
+- Template designer build errors remain in existing dynamic-form type narrowing code and are not caused by the Modal v5 migration.
+
+### Verification
+
+- Ran `git diff --check` for the changed Owner template and task editor files; only Git line-ending warnings were reported.
+- Ran `nvm list`; current Node version is `22.14.0`.
+- Ran `npm run build`; build still fails due to existing unrelated TypeScript errors:
+  - `src/features/dynamic-form/utils/designerDrag.ts` `never` type property access.
+  - `src/pages/owner/templates/OwnerTemplateDesignerPage.tsx` `never` type property access.
+
+## 2026-06-09 - Reviewer AI review queue layout scroll fix
+
+### Implemented
+
+- Updated reviewer AI review queue layout behavior:
+  - Right-side detail panel now scrolls independently with `overflow-y: auto`.
+  - Removed the right detail panel row-height constraint that could compress content and visually cut off cards.
+  - Preserved the fixed-height two-column workbench and left queue internal scrolling.
+  - Mobile layout still expands naturally without nested right-panel scrolling.
+
+### Current Constraints
+
+- The reviewer AI detail content can still be long because AI comments, annotation JSON, and Prompt snapshots render as raw detail blocks.
+- This change only fixes layout scrolling and does not change reviewer APIs, store logic, or displayed fields.
+
+### Verification
+
+- Ran `git diff --check` for `src/pages/reviewer/ReviewerPages.module.css`; only Git line-ending warnings were reported.
+
+
+## 2026-06-08 - Owner template designer choice options editor optimization
+
+### Implemented
+
+- Added `ChoiceOptionsEditor` for dynamic-form choice option editing:
+  - File: `src/features/dynamic-form/components/designer/ChoiceOptionsEditor.tsx`.
+  - Uses local `draftText` state so textarea editing keeps intermediate text states such as blank lines and unfinished `label=` input.
+  - Debounces global schema commits with a `300ms` trailing timer.
+  - Flushes the latest draft on blur and normalizes the displayed text after blur.
+  - Clears pending timers on unmount to avoid stale delayed commits.
+- Updated `PropertyPanel` choice option editing:
+  - File: `src/features/dynamic-form/components/designer/PropertyPanel.tsx`.
+  - Replaced direct `Input.TextArea -> textToOptions -> onUpdate` binding with `ChoiceOptionsEditor`.
+  - Keeps the existing `label=value` option text format.
+  - Applies to `radio`, `checkbox`, and `select` through the existing `isChoiceNode` branch.
+- Documented the optimization plan and behavior:
+  - File: `memory-bank/owner-template-choice-options-editor-optimization.md`.
+
+### Current Constraints
+
+- Canvas option preview is now updated after a short debounce instead of every keystroke; textarea input remains immediate.
+- `textToOptions()` still filters blank lines at commit time, so persisted schema options remain clean.
+- Choice linkage still supports only the first `linkedOptions?.[0]` case; this was not changed in this optimization.
+
+### Verification
+
+- Ran `nvm list`; current Node version is `22.14.0`.
+- Ran `npm run build`; build still fails due to existing unrelated TypeScript errors:
+  - `src/features/dynamic-form/utils/designerDrag.ts` `never` type property access.
+  - `src/pages/owner/templates/OwnerTemplateDesignerPage.tsx` `never` type property access.
+<<<<<<< HEAD
+## 2026-06-09 - Labeler item review history API integration
+
+### Implemented
+
+- Added submission item history support for the labeler workbench:
+  - `GET /api/v1/submissions/{submissionId}/item-history` is called through the existing frontend path convention: `/v1/submissions/{submissionId}/item-history`.
+  - The request runs when a labeler selects a question that has a `submissionId`.
+  - Questions without a `submissionId` do not call the API and continue to show the original right-side flow UI.
+- Extended labeler data types:
+  - `LabelingQuestion.submissionId`.
+  - `SubmissionItemHistoryResponse`.
+  - `SubmissionItemHistory`.
+  - `SubmissionReviewRoundHistory`.
+  - `SubmissionAiReviewHistory`.
+- Extended labeler services:
+  - Real service reads `latestSubmissionId` or `submissionId` from claimed items.
+  - Real service writes the returned `submissionId` back to the submitted question after single-question submit.
+  - Mock service exposes an empty `getSubmissionItemHistory` implementation so mock mode remains usable.
+- Extended `labelingStore`:
+  - Added `currentQuestionHistory`.
+  - Added `isQuestionHistoryLoading`.
+  - Added `loadQuestionHistory(submissionId)`.
+  - Clears stale history when switching questions or loading a new workbench.
+- Updated `LabelerWorkbenchPage`:
+  - Reuses the existing right-side "题目状态与流程" card and Timeline.
+  - Appends flattened `histories[].reviewRounds` entries to the Timeline.
+  - Only displays reviewer, review action, and review time for each manual review round.
+
+### Verification
+
+- Ran `nvm list`; current Node version is `22.14.0`.
+- `.nvmrc` does not exist and `package.json` has no `engines.node` constraint.
+- Ran targeted ESLint:
+  - `npx eslint src\types\labeling.ts src\services\labeler\labelingRealService.ts src\services\labeler\labelingService.ts src\stores\labelingStore.ts src\pages\labeler\LabelerWorkbenchPage.tsx`
+  - Result: passed.
+- Ran `npm run build`; build still fails only on existing unrelated TypeScript errors:
+  - `src/features/dynamic-form/utils/designerDrag.ts`
+  - `src/pages/owner/templates/OwnerTemplateDesignerPage.tsx`
+=======
+  - The new `ChoiceOptionsEditor.tsx` and updated `PropertyPanel.tsx` were not listed in the TypeScript error output.
+>>>>>>> feature/label

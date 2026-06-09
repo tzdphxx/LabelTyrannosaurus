@@ -13,13 +13,14 @@ import com.labelhub.modules.template.dto.TemplateSchemaResponse;
 import com.labelhub.modules.template.dto.TemplateVersionResponse;
 import com.labelhub.modules.template.repository.TemplateMapper;
 import com.labelhub.modules.template.repository.TemplateVersionRepositoryMapper;
+import java.util.List;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
  * 模板版本读取服务。
  *
- * <p>该服务承接 HTTP 查询和 BE-A 内部读取 schema 的需求。模板版本归属于 OWNER；
+ * <p>该服务承接 HTTP 查询和 BE-A 内部读取 schema 的需求。模板版本归属于 OWNER，
  * BE-B 不在这里修改任务发布引用，只按 versionId 返回稳定 schema 快照。</p>
  */
 @Service
@@ -38,12 +39,22 @@ public class TemplateVersionService {
     }
 
     /**
-     * 查询模板版本详情，并校验当前用户对任务的访问权限。
+     * 查询模板版本详情，并校验当前用户对模板的访问权限。
      */
     public TemplateVersionResponse getVersion(Long versionId) {
         TemplateVersionEntity version = requireVersion(versionId);
         requireOwnedTemplate(version);
         return toResponse(version);
+    }
+
+    /**
+     * 查询模板的所有版本，并校验当前用户对模板的访问权限。
+     */
+    public List<TemplateVersionResponse> listVersions(Long templateId) {
+        requireOwnedTemplate(templateId);
+        return templateVersionMapper.selectByTemplateIdOrderByVersionNoDesc(templateId).stream()
+                .map(this::toResponse)
+                .toList();
     }
 
     /**
@@ -101,6 +112,18 @@ public class TemplateVersionService {
         if (!currentUser.roles().contains(RoleCode.ADMIN) && !currentUser.userId().equals(ownerId)) {
             throw new BusinessException(403001, "当前账号没有权限执行该操作");
         }
+    }
+
+    private TemplateEntity requireOwnedTemplate(Long templateId) {
+        TemplateEntity template = templateMapper.selectById(templateId);
+        if (template == null) {
+            throw new BusinessException(400102, "模板不存在");
+        }
+        CurrentUser currentUser = CurrentUserContext.requireCurrentUser();
+        if (!currentUser.roles().contains(RoleCode.ADMIN) && !currentUser.userId().equals(template.getOwnerId())) {
+            throw new BusinessException(403001, "当前账号没有权限执行该操作");
+        }
+        return template;
     }
 
     private Long resolveOwnerId(TemplateVersionEntity version) {

@@ -140,17 +140,15 @@ public interface SubmissionMapper extends BaseMapper<Submission> {
                 </if>
                 updated_at = CURRENT_TIMESTAMP(3)
             WHERE id = #{submissionId}
-              AND status IN
-              <foreach collection="currentStatuses" item="status" open="(" separator="," close=")">
-                #{status}
-              </foreach>
+              AND status IN (#{firstCurrentStatus}, #{secondCurrentStatus})
             </script>
             """)
     int updateStatusIfCurrentIn(@Param("submissionId") Long submissionId,
                                 @Param("newStatus") String newStatus,
                                 @Param("reviewFlowStatus") String reviewFlowStatus,
                                 @Param("isGolden") Boolean isGolden,
-                                @Param("currentStatuses") List<String> currentStatuses);
+                                @Param("firstCurrentStatus") String firstCurrentStatus,
+                                @Param("secondCurrentStatus") String secondCurrentStatus);
 
     @Update("""
             UPDATE submissions

@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.nullable;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -12,6 +13,7 @@ import com.labelhub.common.exception.BusinessException;
 import com.labelhub.modules.agent.domain.AgentRun;
 import com.labelhub.modules.agent.domain.AgentRunStatus;
 import com.labelhub.modules.agent.mapper.AgentRunMapper;
+import java.time.LocalDateTime;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -82,20 +84,23 @@ class AgentRunServiceTest {
     void startSetsRunningAndStartedAt() {
         AgentRun run = pendingRun();
         when(agentRunMapper.selectById(1L)).thenReturn(run);
-        when(agentRunMapper.startIfPending(eq(1L), eq(AgentRunStatus.RUNNING), any())).thenReturn(1);
+        when(agentRunMapper.startIfStatus(eq(1L), eq(AgentRunStatus.PENDING), eq(AgentRunStatus.RUNNING),
+                any(LocalDateTime.class))).thenReturn(1);
 
         service.start(1L);
 
         assertThat(run.getStatus()).isEqualTo(AgentRunStatus.RUNNING);
         assertThat(run.getStartedAt()).isNotNull();
-        verify(agentRunMapper).startIfPending(1L, AgentRunStatus.RUNNING, run.getStartedAt());
+        verify(agentRunMapper).startIfStatus(eq(1L), eq(AgentRunStatus.PENDING), eq(AgentRunStatus.RUNNING),
+                eq(run.getStartedAt()));
     }
 
     @Test
-    void startThrowsBusinessExceptionWhenCasDoesNotUpdate() {
+    void startThrowsBusinessExceptionWhenCasUpdateMisses() {
         AgentRun run = pendingRun();
         when(agentRunMapper.selectById(1L)).thenReturn(run);
-        when(agentRunMapper.startIfPending(eq(1L), eq(AgentRunStatus.RUNNING), any())).thenReturn(0);
+        when(agentRunMapper.startIfStatus(eq(1L), eq(AgentRunStatus.PENDING), eq(AgentRunStatus.RUNNING),
+                any(LocalDateTime.class))).thenReturn(0);
 
         assertThatThrownBy(() -> service.start(1L))
                 .isInstanceOf(BusinessException.class);
@@ -106,8 +111,8 @@ class AgentRunServiceTest {
         AgentRun run = runningRun();
         run.setStartedAt(java.time.LocalDateTime.now().minusNanos(123_000_000));
         when(agentRunMapper.selectById(1L)).thenReturn(run);
-        when(agentRunMapper.completeIfRunning(eq(1L), eq(AgentRunStatus.SUCCESS), eq("{\"score\":0.9}"),
-                any(), any())).thenReturn(1);
+        when(agentRunMapper.completeIfStatus(eq(1L), eq(AgentRunStatus.RUNNING), eq(AgentRunStatus.SUCCESS),
+                eq("{\"score\":0.9}"), any(LocalDateTime.class), nullable(Long.class))).thenReturn(1);
 
         service.complete(1L, "{\"score\":0.9}");
 
@@ -115,18 +120,18 @@ class AgentRunServiceTest {
         assertThat(run.getOutputSnapshot()).isEqualTo("{\"score\":0.9}");
         assertThat(run.getFinishedAt()).isNotNull();
         assertThat(run.getLatencyMs()).isGreaterThanOrEqualTo(0L);
-        verify(agentRunMapper).completeIfRunning(1L, AgentRunStatus.SUCCESS, "{\"score\":0.9}",
-                run.getFinishedAt(), run.getLatencyMs());
+        verify(agentRunMapper).completeIfStatus(eq(1L), eq(AgentRunStatus.RUNNING), eq(AgentRunStatus.SUCCESS),
+                eq("{\"score\":0.9}"), eq(run.getFinishedAt()), eq(run.getLatencyMs()));
     }
 
     @Test
-    void completeThrowsBusinessExceptionWhenCasDoesNotUpdate() {
+    void completeThrowsBusinessExceptionWhenCasUpdateMisses() {
         AgentRun run = runningRun();
         when(agentRunMapper.selectById(1L)).thenReturn(run);
-        when(agentRunMapper.completeIfRunning(eq(1L), eq(AgentRunStatus.SUCCESS), eq("{}"),
-                any(), any())).thenReturn(0);
+        when(agentRunMapper.completeIfStatus(eq(1L), eq(AgentRunStatus.RUNNING), eq(AgentRunStatus.SUCCESS),
+                eq("{\"score\":0.9}"), any(LocalDateTime.class), nullable(Long.class))).thenReturn(0);
 
-        assertThatThrownBy(() -> service.complete(1L, "{}"))
+        assertThatThrownBy(() -> service.complete(1L, "{\"score\":0.9}"))
                 .isInstanceOf(BusinessException.class);
     }
 
@@ -134,24 +139,24 @@ class AgentRunServiceTest {
     void failSetsFailedStatusAndError() {
         AgentRun run = runningRun();
         when(agentRunMapper.selectById(1L)).thenReturn(run);
-        when(agentRunMapper.failIfStatusMatches(eq(1L), eq(AgentRunStatus.RUNNING), eq(AgentRunStatus.FAILED),
-                eq("LLM timeout"), any(), any())).thenReturn(1);
+        when(agentRunMapper.failIfStatus(eq(1L), eq(AgentRunStatus.RUNNING), eq(AgentRunStatus.FAILED),
+                eq("LLM timeout"), any(LocalDateTime.class), nullable(Long.class))).thenReturn(1);
 
         service.fail(1L, AgentRunStatus.FAILED, "LLM timeout");
 
         assertThat(run.getStatus()).isEqualTo(AgentRunStatus.FAILED);
         assertThat(run.getErrorMessage()).isEqualTo("LLM timeout");
         assertThat(run.getFinishedAt()).isNotNull();
-        verify(agentRunMapper).failIfStatusMatches(1L, AgentRunStatus.RUNNING, AgentRunStatus.FAILED,
-                "LLM timeout", run.getFinishedAt(), run.getLatencyMs());
+        verify(agentRunMapper).failIfStatus(eq(1L), eq(AgentRunStatus.RUNNING), eq(AgentRunStatus.FAILED),
+                eq("LLM timeout"), eq(run.getFinishedAt()), eq(run.getLatencyMs()));
     }
 
     @Test
-    void failThrowsBusinessExceptionWhenCasDoesNotUpdate() {
+    void failThrowsBusinessExceptionWhenCasUpdateMisses() {
         AgentRun run = runningRun();
         when(agentRunMapper.selectById(1L)).thenReturn(run);
-        when(agentRunMapper.failIfStatusMatches(eq(1L), eq(AgentRunStatus.RUNNING), eq(AgentRunStatus.FAILED),
-                eq("LLM timeout"), any(), any())).thenReturn(0);
+        when(agentRunMapper.failIfStatus(eq(1L), eq(AgentRunStatus.RUNNING), eq(AgentRunStatus.FAILED),
+                eq("LLM timeout"), any(LocalDateTime.class), nullable(Long.class))).thenReturn(0);
 
         assertThatThrownBy(() -> service.fail(1L, AgentRunStatus.FAILED, "LLM timeout"))
                 .isInstanceOf(BusinessException.class);
@@ -161,30 +166,30 @@ class AgentRunServiceTest {
     void failSetsRateLimitedStatus() {
         AgentRun run = runningRun();
         when(agentRunMapper.selectById(1L)).thenReturn(run);
-        when(agentRunMapper.failIfStatusMatches(eq(1L), eq(AgentRunStatus.RUNNING), eq(AgentRunStatus.RATE_LIMITED),
-                eq("quota exceeded"), any(), any())).thenReturn(1);
+        when(agentRunMapper.failIfStatus(eq(1L), eq(AgentRunStatus.RUNNING), eq(AgentRunStatus.RATE_LIMITED),
+                eq("quota exceeded"), any(LocalDateTime.class), nullable(Long.class))).thenReturn(1);
 
         service.fail(1L, AgentRunStatus.RATE_LIMITED, "quota exceeded");
 
         assertThat(run.getStatus()).isEqualTo(AgentRunStatus.RATE_LIMITED);
         assertThat(run.getFinishedAt()).isNotNull();
-        verify(agentRunMapper).failIfStatusMatches(1L, AgentRunStatus.RUNNING, AgentRunStatus.RATE_LIMITED,
-                "quota exceeded", run.getFinishedAt(), run.getLatencyMs());
+        verify(agentRunMapper).failIfStatus(eq(1L), eq(AgentRunStatus.RUNNING), eq(AgentRunStatus.RATE_LIMITED),
+                eq("quota exceeded"), eq(run.getFinishedAt()), eq(run.getLatencyMs()));
     }
 
     @Test
     void failSetsManualRequiredStatus() {
         AgentRun run = runningRun();
         when(agentRunMapper.selectById(1L)).thenReturn(run);
-        when(agentRunMapper.failIfStatusMatches(eq(1L), eq(AgentRunStatus.RUNNING),
-                eq(AgentRunStatus.MANUAL_REQUIRED), eq("max retries exceeded"), any(), any())).thenReturn(1);
+        when(agentRunMapper.failIfStatus(eq(1L), eq(AgentRunStatus.RUNNING), eq(AgentRunStatus.MANUAL_REQUIRED),
+                eq("max retries exceeded"), any(LocalDateTime.class), nullable(Long.class))).thenReturn(1);
 
         service.fail(1L, AgentRunStatus.MANUAL_REQUIRED, "max retries exceeded");
 
         assertThat(run.getStatus()).isEqualTo(AgentRunStatus.MANUAL_REQUIRED);
         assertThat(run.getFinishedAt()).isNotNull();
-        verify(agentRunMapper).failIfStatusMatches(1L, AgentRunStatus.RUNNING, AgentRunStatus.MANUAL_REQUIRED,
-                "max retries exceeded", run.getFinishedAt(), run.getLatencyMs());
+        verify(agentRunMapper).failIfStatus(eq(1L), eq(AgentRunStatus.RUNNING), eq(AgentRunStatus.MANUAL_REQUIRED),
+                eq("max retries exceeded"), eq(run.getFinishedAt()), eq(run.getLatencyMs()));
     }
 
     @Test

@@ -3,16 +3,21 @@ import { createSchemaField, FormProvider } from '@formily/react'
 import { Checkbox, FormItem, FormLayout, Input, Radio, Select } from '@formily/antd-v5'
 import { Alert, Button, Card, Space, Tabs, Typography, message } from 'antd'
 import type { ReactNode } from 'react'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
+import { llmService } from '../../../services/llm'
 import type { DynamicFormSchema, DynamicFormSubmitResult } from '../../../types/dynamicForm'
+import type { LlmTriggerContext } from '../../../types/llm'
 import { schemaToFormilySchema } from '../utils/formilySchema'
+import { getSchemaNodeKeys } from '../utils/schemaTree'
 import { FileUploadField, JsonEditorField, LlmPromptBlock, RichTextEditor } from './rendererFields'
+import styles from './DynamicFormRenderer.module.css'
 
 interface DynamicFormRendererProps {
   schema: DynamicFormSchema
   initialValues?: Record<string, unknown>
   readOnly?: boolean
   submitText?: string
+  llmContext?: LlmTriggerContext
   onValuesChange?: (values: Record<string, unknown>) => void
   onSubmit?: (result: DynamicFormSubmitResult) => void
 }
@@ -20,7 +25,7 @@ interface DynamicFormRendererProps {
 function ShowItem(props: { text?: string }) {
   return (
     <Alert
-      className="dynamic-renderer__show-item"
+      className={styles.showItem}
       message={props.text ?? '展示信息'}
       showIcon
       type="info"
@@ -30,7 +35,7 @@ function ShowItem(props: { text?: string }) {
 
 function GroupSection({ children, title }: { children?: ReactNode; title?: string }) {
   return (
-    <Card className="dynamic-renderer__group" size="small" title={title}>
+    <Card className={styles.group} size="small" title={title}>
       {children}
     </Card>
   )
@@ -38,7 +43,7 @@ function GroupSection({ children, title }: { children?: ReactNode; title?: strin
 
 function TabsSection({ children, title }: { children?: ReactNode; title?: string }) {
   return (
-    <Card className="dynamic-renderer__group" size="small" title={title}>
+    <Card className={styles.group} size="small" title={title}>
       <Tabs
         items={[
           {
@@ -54,7 +59,7 @@ function TabsSection({ children, title }: { children?: ReactNode; title?: string
 
 function TabPaneSection({ children, title }: { children?: ReactNode; title?: string }) {
   return (
-    <div className="dynamic-renderer__tab-pane">
+    <div className={styles.tabPane}>
       <Typography.Text strong>{title}</Typography.Text>
       <div>{children}</div>
     </div>
@@ -84,16 +89,13 @@ export function DynamicFormRenderer({
   initialValues,
   readOnly = false,
   submitText = '提交预览',
+  llmContext,
   onSubmit,
   onValuesChange,
 }: DynamicFormRendererProps) {
   const [messageApi, contextHolder] = message.useMessage()
   const [submitting, setSubmitting] = useState(false)
-  const onValuesChangeRef = useRef(onValuesChange)
-
-  useEffect(() => {
-    onValuesChangeRef.current = onValuesChange
-  }, [onValuesChange])
+  const answerFieldKeys = useMemo(() => getSchemaNodeKeys(schema), [schema])
 
   const form = useMemo(
     () =>
@@ -102,13 +104,35 @@ export function DynamicFormRenderer({
         pattern: readOnly ? 'readPretty' : 'editable',
         effects() {
           onFormValuesChange((formInstance) => {
-            onValuesChangeRef.current?.({ ...formInstance.values })
+            const values = { ...formInstance.values }
+            onValuesChange?.(values)
           })
         },
       }),
-    [initialValues, readOnly, schema.id, schema.version],
+    [initialValues, onValuesChange, readOnly],
   )
-  const formilySchema = useMemo(() => schemaToFormilySchema(schema), [schema])
+
+  const applyLlmValues = useCallback((values: Record<string, unknown>) => {
+    const nextValues = {
+      ...form.values,
+      ...values,
+    }
+
+    form.setValues(nextValues)
+    onValuesChange?.(nextValues)
+  }, [form, onValuesChange])
+
+  const formilySchema = useMemo(
+    () =>
+      schemaToFormilySchema(schema, {
+        answerFieldKeys,
+        getCurrentValues: () => ({ ...form.values }),
+        llmContext,
+        onApplyLlmValues: applyLlmValues,
+        onRunLlmTrigger: llmService.runTrigger,
+      }),
+    [answerFieldKeys, applyLlmValues, form, llmContext, schema],
+  )
 
   async function submitForm() {
     setSubmitting(true)
@@ -129,7 +153,7 @@ export function DynamicFormRenderer({
   }
 
   return (
-    <div className="dynamic-renderer">
+    <div className={styles.renderer}>
       {contextHolder}
       <FormProvider form={form}>
         <FormLayout layout="vertical">
@@ -137,7 +161,7 @@ export function DynamicFormRenderer({
         </FormLayout>
       </FormProvider>
       {!readOnly ? (
-        <Space className="dynamic-renderer__actions">
+        <Space className={styles.actions}>
           <Button loading={submitting} onClick={() => void submitForm()} type="primary">
             {submitText}
           </Button>

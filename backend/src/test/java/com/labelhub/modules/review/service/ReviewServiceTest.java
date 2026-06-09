@@ -190,6 +190,32 @@ class ReviewServiceTest {
                         ex -> assertThat(ex.getCode()).isEqualTo(404601));
     }
 
+    @Test
+    void approveRejectsRequestLevelDifferentFromCurrentReviewLevelWithoutRecord() {
+        Submission submission = pendingFinalSubmission();
+        submission.setCurrentReviewLevel(2);
+        when(submissionMapper.selectById(SUBMISSION_ID)).thenReturn(submission);
+        when(escalationService.getMaxReviewLevel(any())).thenReturn(2);
+
+        assertThatThrownBy(() -> reviewService.approve(
+                SUBMISSION_ID, REVIEWER_ID, new ApproveRequest("stale level", 1, null)))
+                .isInstanceOf(BusinessException.class);
+
+        verify(reviewRecordMapper, never()).insert(any(ReviewRecord.class));
+    }
+
+    @Test
+    void approveRejectsRequestLevelGreaterThanMaxReviewLevelWithoutRecord() {
+        when(submissionMapper.selectById(SUBMISSION_ID)).thenReturn(pendingFinalSubmission());
+        when(escalationService.getMaxReviewLevel(any())).thenReturn(2);
+
+        assertThatThrownBy(() -> reviewService.approve(
+                SUBMISSION_ID, REVIEWER_ID, new ApproveRequest("too high", 3, null)))
+                .isInstanceOf(BusinessException.class);
+
+        verify(reviewRecordMapper, never()).insert(any(ReviewRecord.class));
+    }
+
     // --- approve with revision ---
 
     @Test
@@ -353,6 +379,32 @@ class ReviewServiceTest {
 
         verify(assignmentMapper, never()).updateById(any(Assignment.class));
         verify(eventPublisher, never()).publishRejected(any(), any(), any());
+    }
+
+    @Test
+    void rejectRejectsRequestLevelDifferentFromCurrentReviewLevelWithoutRecord() {
+        Submission submission = pendingFinalSubmission();
+        submission.setCurrentReviewLevel(2);
+        when(submissionMapper.selectById(SUBMISSION_ID)).thenReturn(submission);
+        when(escalationService.getMaxReviewLevel(any())).thenReturn(2);
+
+        assertThatThrownBy(() -> reviewService.reject(
+                SUBMISSION_ID, REVIEWER_ID, new RejectRequest("stale level", 1)))
+                .isInstanceOf(BusinessException.class);
+
+        verify(reviewRecordMapper, never()).insert(any(ReviewRecord.class));
+    }
+
+    @Test
+    void rejectRejectsRequestLevelGreaterThanMaxReviewLevelWithoutRecord() {
+        when(submissionMapper.selectById(SUBMISSION_ID)).thenReturn(pendingFinalSubmission());
+        when(escalationService.getMaxReviewLevel(any())).thenReturn(2);
+
+        assertThatThrownBy(() -> reviewService.reject(
+                SUBMISSION_ID, REVIEWER_ID, new RejectRequest("too high", 3)))
+                .isInstanceOf(BusinessException.class);
+
+        verify(reviewRecordMapper, never()).insert(any(ReviewRecord.class));
     }
 
     // --- listPendingFinal ---

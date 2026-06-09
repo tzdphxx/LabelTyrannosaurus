@@ -51,6 +51,7 @@ class ApiContractMappingTest {
                 endpoint("POST", "/api/v1/tasks/{taskId}/items/batch-delete"),
                 endpoint("POST", "/api/v1/tasks/{taskId}/templates"),
                 endpoint("GET", "/api/v1/tasks/{taskId}/templates"),
+                endpoint("GET", "/api/v1/templates/{templateId}/versions"),
                 endpoint("GET", "/api/v1/template-versions/{versionId}"),
                 endpoint("POST", "/api/v1/templates/{templateId}/fork"),
                 endpoint("POST", "/api/v1/schema/validate-answer"),

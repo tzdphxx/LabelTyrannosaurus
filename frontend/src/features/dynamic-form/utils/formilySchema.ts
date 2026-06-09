@@ -7,6 +7,15 @@ import type {
   DynamicValidationRule,
   DynamicVisibleRule,
 } from '../../../types/dynamicForm'
+import type { LlmTriggerContext, LlmTriggerRunRequest, LlmTriggerRunResponse } from '../../../types/llm'
+
+interface SchemaRuntimeOptions {
+  answerFieldKeys?: string[]
+  getCurrentValues?: () => Record<string, unknown>
+  llmContext?: LlmTriggerContext
+  onApplyLlmValues?: (values: Record<string, unknown>) => void
+  onRunLlmTrigger?: (payload: LlmTriggerRunRequest) => Promise<LlmTriggerRunResponse>
+}
 
 function getComponentName(node: DynamicSchemaNode) {
   switch (node.type) {
@@ -51,6 +60,22 @@ function getSchemaType(node: DynamicSchemaNode) {
   }
 
   return 'string'
+}
+
+function getComponentProps(node: DynamicSchemaNode, runtimeOptions: SchemaRuntimeOptions) {
+  const className = typeof node.props.className === 'string' ? node.props.className : undefined
+
+  return {
+    ...node.props,
+    answerFieldKeys: runtimeOptions.answerFieldKeys,
+    className: node.type === 'radio' ? ['dynamic-form-radio-group', className].filter(Boolean).join(' ') : className,
+    componentId: node.id,
+    getCurrentValues: runtimeOptions.getCurrentValues,
+    llmContext: runtimeOptions.llmContext,
+    onApplyValues: runtimeOptions.onApplyLlmValues,
+    onRunLlmTrigger: runtimeOptions.onRunLlmTrigger,
+    title: node.title,
+  }
 }
 
 function toValidator(rule: DynamicValidationRule, node: DynamicSchemaNode) {
@@ -185,16 +210,13 @@ function toLinkedOptionsReaction(linkage?: DynamicLinkageRule, fallbackOptions?:
   }
 }
 
-function toNodeSchema(node: DynamicSchemaNode): ISchema {
+function toNodeSchema(node: DynamicSchemaNode, runtimeOptions: SchemaRuntimeOptions): ISchema {
   const schema: ISchema = {
     type: getSchemaType(node),
     title: node.title,
     'x-decorator': node.type === 'showItem' || node.type === 'group' || node.type === 'tabs' || node.type === 'tabPane' ? undefined : 'FormItem',
     'x-component': getComponentName(node),
-    'x-component-props': {
-      ...node.props,
-      title: node.title,
-    },
+    'x-component-props': getComponentProps(node, runtimeOptions),
   }
 
   if (node.defaultValue !== undefined) {
@@ -217,15 +239,15 @@ function toNodeSchema(node: DynamicSchemaNode): ISchema {
   }
 
   if (node.children?.length) {
-    schema.properties = Object.fromEntries(node.children.map((child) => [child.key, toNodeSchema(child)]))
+    schema.properties = Object.fromEntries(node.children.map((child) => [child.key, toNodeSchema(child, runtimeOptions)]))
   }
 
   return schema
 }
 
-export function schemaToFormilySchema(schema: DynamicFormSchema): ISchema {
+export function schemaToFormilySchema(schema: DynamicFormSchema, runtimeOptions: SchemaRuntimeOptions = {}): ISchema {
   return {
     type: 'object',
-    properties: Object.fromEntries(schema.nodes.map((node) => [node.key, toNodeSchema(node)])),
+    properties: Object.fromEntries(schema.nodes.map((node) => [node.key, toNodeSchema(node, runtimeOptions)])),
   }
 }

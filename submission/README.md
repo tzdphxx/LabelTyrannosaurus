@@ -4,7 +4,7 @@ LabelHub 是一个 AI 数据标注平台，覆盖「任务创建 -> 动态模板
 
 ## 当前提交材料入口
 
-仓库评审请优先阅读：
+其余材料指引：
 
 | 文档 | 说明 |
 | --- | --- |
@@ -16,6 +16,120 @@ LabelHub 是一个 AI 数据标注平台，覆盖「任务创建 -> 动态模板
 | [FE/BE-A/BE-B 分工任务书](docs/team-division/README.md) | 按已完成交付整理的分工与关键模块 |
 
 仓库中的历史计划文档保留为过程记录。
+
+## 本地启动指引
+
+本项目根目录提供 `compose.yml`，可通过 Docker Compose 一次性启动 MySQL、Redis、后端和前端。适用于评审或演示人员拉取代码后在本地快速运行完整系统。
+
+### 1. 环境准备
+
+请先确认本机已安装：
+
+- Git
+- Docker Desktop 或 Docker Engine
+- Docker Compose v2（命令形式为 `docker compose`）
+
+默认端口占用：
+
+| 服务 | 本地端口 | 说明 |
+| --- | --- | --- |
+| 前端 | `3000` | 浏览器访问入口 |
+| 后端 | `8080` | REST API 服务 |
+| MySQL | 容器内访问 | 由后端通过 Compose 网络访问 |
+| Redis | 容器内访问 | 由后端通过 Compose 网络访问 |
+
+### 2. 拉取代码
+
+```bash
+git clone https://github.com/tzdphxx/LabelTyrannosaurus.git
+cd LabelTyrannosaurus
+```
+
+如需切换到指定分支：
+
+```bash
+git checkout tzdphxx
+```
+
+### 3. 检查 Docker 环境变量
+
+Compose 启动后端时会读取 `backend/.env.docker`。仓库已提供默认本地配置，默认连接 Compose 内部的 `mysql` 和 `redis` 服务。
+
+如果需要演示 AI 调用能力，请在启动前按实际账号修改：
+
+```text
+backend/.env.docker
+```
+
+重点变量：
+
+| 变量 | 说明 |
+| --- | --- |
+| `AI_DASHSCOPE_API_KEY` | DashScope API Key，默认留空；为空时启动会跳过默认 AI Provider 初始化 |
+| `AI_DASHSCOPE_BASE_URL` | OpenAI-compatible Base URL，例如 `https://dashscope.aliyuncs.com/compatible-mode/v1`；默认留空 |
+| `AI_DASHSCOPE_CHAT_MODEL` | DashScope 模型名，例如 `qwen-plus`；默认留空 |
+| `COS_SECRET_ID` / `COS_SECRET_KEY` | 对象存储密钥，文件上传下载演示需要配置 |
+| `COS_BUCKET` / `COS_REGION` | 对象存储 Bucket 与地域；`COS_BUCKET` 默认留空 |
+
+如果只验证登录、任务、模板、标注、审核等基础流程，可以先使用默认配置启动。
+
+### 4. 启动完整服务
+
+在仓库根目录执行：
+
+```bash
+docker compose up --build -d
+```
+
+首次启动会构建前端、后端镜像，并创建 MySQL / Redis 数据卷。启动完成后查看服务状态：
+
+```bash
+docker compose ps
+```
+
+如果需要观察启动日志：
+
+```bash
+docker compose logs -f backend
+docker compose logs -f frontend
+```
+
+### 5. 访问系统
+
+服务启动成功后访问：
+
+```text
+http://localhost:3000
+```
+
+后端健康检查：
+
+```text
+http://localhost:8080/actuator/health
+```
+
+前端 Docker 镜像使用 `/api` 作为接口前缀，并由 Nginx 将 `/api/` 反向代理到 Compose 网络中的 `backend:8080`。登录页支持注册 Owner / Labeler 账号；Reviewer 账号可通过 Admin 相关能力创建或使用演示数据流程准备。
+
+### 6. 停止和重置
+
+停止服务但保留数据库数据：
+
+```bash
+docker compose down
+```
+
+如果需要清空 MySQL / Redis 数据卷并重新初始化：
+
+```bash
+docker compose down -v
+docker compose up --build -d
+```
+
+### 7. 常见问题
+
+- 端口冲突：如果 `3000` 或 `8080` 被占用，请先停止本机占用端口的服务，或修改 `compose.yml` 中的端口映射。
+- 后端启动失败：优先查看 `docker compose logs backend`，确认 MySQL、Redis 是否健康，以及 `backend/.env.docker` 中的变量是否正确。
+- AI 或文件能力不可用：检查 `AI_DASHSCOPE_API_KEY`、`AI_DASHSCOPE_BASE_URL`、`AI_DASHSCOPE_CHAT_MODEL` 和 COS 相关变量是否已按实际环境填写；默认空值只支持基础流程启动，不会启用 AI 调用或对象存储能力。
 
 ## Demo 截图
 

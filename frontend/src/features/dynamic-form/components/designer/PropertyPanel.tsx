@@ -1,8 +1,8 @@
 import { DeleteOutlined } from '@ant-design/icons'
 import { Button, Divider, Empty, Input, InputNumber, Space, Switch, Tag } from 'antd'
 import type { DynamicSchemaNode } from '../../../../types/dynamicForm'
-import { optionsToText, textToOptions } from '../../utils/designerFields'
 import { dynamicMaterialRegistry } from '../../materialRegistry'
+import { ChoiceOptionsEditor } from './ChoiceOptionsEditor'
 import { ConditionRuleEditor } from './ConditionRuleEditor'
 import { isChoiceNode, LinkageRuleEditor } from './LinkageRuleEditor'
 
@@ -118,10 +118,10 @@ export function PropertyPanel({ fieldKeys, node, onDelete, onUpdate }: PropertyP
       {isChoice ? (
         <label className="owner-field">
           <span>选项</span>
-          <Input.TextArea
-            autoSize={{ minRows: 4, maxRows: 8 }}
-            value={optionsToText(node.props.options)}
-            onChange={(event) => onUpdate({ props: { options: textToOptions(event.target.value) } })}
+          <ChoiceOptionsEditor
+            nodeId={node.id}
+            options={node.props.options}
+            onCommit={(options) => onUpdate({ props: { options } })}
           />
         </label>
       ) : null}

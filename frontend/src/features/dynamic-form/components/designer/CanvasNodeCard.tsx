@@ -2,6 +2,7 @@ import { useSortable } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import { DeleteOutlined, DragOutlined } from '@ant-design/icons'
 import { Button, Typography } from 'antd'
+import { memo } from 'react'
 import type { DynamicSchemaNode } from '../../../../types/dynamicForm'
 import { dynamicMaterialRegistry } from '../../materialRegistry'
 import { CanvasFieldPreview } from './CanvasFieldPreview'
@@ -15,7 +16,7 @@ interface CanvasNodeCardProps {
   onSelect: (nodeId: string) => void
 }
 
-export function CanvasNodeCard({ node, parentId, selectedNodeId, onDelete, onSelect }: CanvasNodeCardProps) {
+function CanvasNodeCardComponent({ node, parentId, selectedNodeId, onDelete, onSelect }: CanvasNodeCardProps) {
   const { attributes, listeners, setNodeRef, transform, transition } = useSortable({
     id: node.id,
     data: {
@@ -83,3 +84,18 @@ export function CanvasNodeCard({ node, parentId, selectedNodeId, onDelete, onSel
     </div>
   )
 }
+
+function areCanvasNodeCardPropsEqual(previous: CanvasNodeCardProps, next: CanvasNodeCardProps) {
+  const previousSelected = previous.selectedNodeId === previous.node.id
+  const nextSelected = next.selectedNodeId === next.node.id
+
+  return (
+    previous.node === next.node &&
+    previous.parentId === next.parentId &&
+    previous.onDelete === next.onDelete &&
+    previous.onSelect === next.onSelect &&
+    previousSelected === nextSelected
+  )
+}
+
+export const CanvasNodeCard = memo(CanvasNodeCardComponent, areCanvasNodeCardPropsEqual)

@@ -240,7 +240,7 @@ public class LlmTriggerService {
         Map<String, Object> inputSnapshot = buildInputSnapshot(task, datasetItem, config, templateContext, request, traceId);
         AgentRun agentRun = agentRunService.create(AGENT_TYPE, null, config.getProviderId(),
                 config.getModelName().trim(),
-                "target:" + String.join(",", templateContext.targetFields()),
+                resolveTriggerPromptVersion(config),
                 toJson(inputSnapshot), assignmentId, traceId);
         agentRunService.start(agentRun.getId());
 
@@ -939,9 +939,17 @@ public class LlmTriggerService {
         }
     }
 
+    private String resolveTriggerPromptVersion(AiReviewConfig config) {
+        String promptVersion = config.getPromptVersion();
+        if (promptVersion == null || promptVersion.isBlank()) {
+            return "llm-trigger:v1";
+        }
+        return promptVersion.trim();
+    }
+
     private record TemplateContext(Long componentId,
                                    List<PromptTemplateEngine.SchemaField> schemaFields,
-                                     List<String> targetFields) {
+                                   List<String> targetFields) {
     }
 
     private record TriggerPrompt(List<LlmMessage> messages, PromptMode promptMode) {

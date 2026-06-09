@@ -151,7 +151,7 @@ class LlmTriggerServiceTest {
         when(aiReviewConfigMapper.selectById(AI_REVIEW_CONFIG_ID)).thenReturn(aiReviewConfig());
         when(llmProviderService.findEnabledById(PROVIDER_ID)).thenReturn(Optional.of(provider()));
         when(agentRunService.create(eq("LLM_TRIGGER"), isNull(), eq(PROVIDER_ID), eq("qwen-plus"),
-                eq("target:summary"), any(), eq(ASSIGNMENT_ID), eq("trace-1"))).thenReturn(agentRun());
+                eq("v1"), any(), eq(ASSIGNMENT_ID), eq("trace-1"))).thenReturn(agentRun());
         when(traceIdProvider.currentTraceId()).thenReturn("trace-1");
         doAnswer(invocation -> {
             LlmTriggerRun run = invocation.getArgument(0);
@@ -176,6 +176,7 @@ class LlmTriggerServiceTest {
         assertThat(insertedRun.getInputSnapshotJson())
                 .contains("\"scoringDimensions\":[\"accuracy\",\"clarity\"]")
                 .contains("\"componentId\":20")
+                .contains("\"targetFields\":[\"summary\"]")
                 .contains("\"userInstruction\":\"Make it concise\"");
 
         verify(agentRunService).start(AGENT_RUN_ID);

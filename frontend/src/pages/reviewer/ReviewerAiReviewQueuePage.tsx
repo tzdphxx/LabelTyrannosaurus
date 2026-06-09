@@ -18,7 +18,13 @@ import { useEffect, useMemo, useState } from 'react'
 import { ContentShell } from '../../components/page/ContentShell'
 import { PageHeader } from '../../components/page/PageHeader'
 import { useReviewStore } from '../../stores/reviewStore'
-import type { AiReviewLogQuery, AiReviewQueueStatusFilter, AiReviewResultResponse } from '../../types/review'
+import type {
+  AiReviewLogQuery,
+  AiReviewQueueStatusFilter,
+  AiReviewResultResponse,
+  SubmissionItemHistoryResponse,
+  SubmissionItemReviewRoundHistory,
+} from '../../types/review'
 import styles from './ReviewerPages.module.css'
 
 const statusOptions: Array<{ label: string; value: AiReviewQueueStatusFilter }> = [
@@ -33,6 +39,7 @@ const statusColors: Record<string, string> = {
   PENDING: 'default',
   RUNNING: 'processing',
   SUCCESS: 'success',
+  COMPLETED: 'success',
   FAILED: 'error',
   MANUAL_REQUIRED: 'warning',
 }
@@ -40,13 +47,26 @@ const statusColors: Record<string, string> = {
 const decisionColors: Record<string, string> = {
   PASS: 'success',
   REJECT: 'error',
+  RETURN: 'error',
   MANUAL_REVIEW: 'processing',
 }
 
 const decisionLabels: Record<string, string> = {
   PASS: '建议通过',
   REJECT: '建议打回',
+  RETURN: '建议打回',
   MANUAL_REVIEW: '转人工复核',
+}
+
+const auditActionLabels: Record<string, string> = {
+  APPROVE: '审核通过',
+  REJECT: '审核打回',
+  RETURN: '审核打回',
+  MARK_MANUAL_REQUIRED: '转人工',
+  PASS: 'AI 建议通过',
+  MANUAL_REVIEW: 'AI 建议转人工',
+  SUCCESS: 'AI 审核完成',
+  FAILED: 'AI 审核失败',
 }
 
 function formatValue(value: unknown) {
@@ -171,20 +191,81 @@ function getDimensionEntries(record: AiReviewResultResponse | null) {
   return Object.entries(record.dimensionScores ?? {})
 }
 
+function getAuditResultLabel(value: unknown) {
+  const text = formatValue(value)
+
+  return auditActionLabels[text] ?? decisionLabels[text] ?? text
+}
+
+function getAuditResultColor(value: unknown) {
+  const text = formatValue(value)
+
+  if (text === 'APPROVE' || text === 'PASS' || text === 'SUCCESS') {
+    return 'success'
+  }
+
+  if (text === 'REJECT' || text === 'RETURN' || text === 'FAILED') {
+    return 'error'
+  }
+
+  if (text === 'MANUAL_REVIEW' || text === 'MARK_MANUAL_REQUIRED') {
+    return 'processing'
+  }
+
+  return 'default'
+}
+
+function getReviewerLabel(round: SubmissionItemReviewRoundHistory) {
+  return formatValue(round.reviewerName ?? (round.reviewerId ? `审核员 ${round.reviewerId}` : undefined))
+}
+
+function getHistoryAuditItems(history: SubmissionItemHistoryResponse | null) {
+  if (!history?.histories?.length) {
+    return []
+  }
+
+  return history.histories.flatMap((item) => {
+    const versionLabel = `v${formatValue(item.versionNo)} / SUB-${formatValue(item.submissionId)}`
+    const aiItem = item.aiReview
+      ? [
+          {
+            key: `${item.submissionId}-ai`,
+            versionLabel,
+            result: item.aiReview.decision ?? item.aiReview.status,
+            reviewer: 'AI 自动预审',
+            reviewedAt: item.aiReview.reviewedAt,
+          },
+        ]
+      : []
+    const reviewItems = (item.reviewRounds ?? []).map((round) => ({
+      key: `${item.submissionId}-${round.reviewRecordId}`,
+      versionLabel,
+      result: round.action,
+      reviewer: getReviewerLabel(round),
+      reviewedAt: round.reviewedAt,
+    }))
+
+    return [...aiItem, ...reviewItems]
+  })
+}
+
 export function ReviewerAiReviewQueuePage() {
   const [messageApi, contextHolder] = message.useMessage()
   const [statusFilter, setStatusFilter] = useState<AiReviewQueueStatusFilter>('pending')
   const aiReviewLogs = useReviewStore((state) => state.aiReviewLogs)
   const currentAiReviewLog = useReviewStore((state) => state.currentAiReviewLog)
+  const currentSubmissionItemHistory = useReviewStore((state) => state.currentSubmissionItemHistory)
   const aiReviewLogQuery = useReviewStore((state) => state.aiReviewLogQuery)
   const aiReviewLogTotal = useReviewStore((state) => state.aiReviewLogTotal)
   const error = useReviewStore((state) => state.error)
   const isAiReviewLogsLoading = useReviewStore((state) => state.isAiReviewLogsLoading)
+  const isSubmissionItemHistoryLoading = useReviewStore((state) => state.isSubmissionItemHistoryLoading)
   const isAiReviewRetrying = useReviewStore((state) => state.isAiReviewRetrying)
   const setAiReviewLogQuery = useReviewStore((state) => state.setAiReviewLogQuery)
   const setCurrentAiReviewLog = useReviewStore((state) => state.setCurrentAiReviewLog)
   const loadAllAiReviewLogs = useReviewStore((state) => state.loadAllAiReviewLogs)
   const loadSubmissionAiReview = useReviewStore((state) => state.loadSubmissionAiReview)
+  const loadSubmissionItemHistory = useReviewStore((state) => state.loadSubmissionItemHistory)
   const retrySubmissionAiReview = useReviewStore((state) => state.retrySubmissionAiReview)
 
   useEffect(() => {
@@ -192,8 +273,15 @@ export function ReviewerAiReviewQueuePage() {
     void loadAllAiReviewLogs()
   }, [loadAllAiReviewLogs, setAiReviewLogQuery])
 
+  useEffect(() => {
+    if (currentAiReviewLog?.submissionId) {
+      void loadSubmissionItemHistory(String(currentAiReviewLog.submissionId))
+    }
+  }, [currentAiReviewLog?.submissionId, loadSubmissionItemHistory])
+
   const dimensionEntries = useMemo(() => getDimensionEntries(currentAiReviewLog), [currentAiReviewLog])
   const riskFlags = useMemo(() => getRiskFlags(currentAiReviewLog), [currentAiReviewLog])
+  const historyAuditItems = useMemo(() => getHistoryAuditItems(currentSubmissionItemHistory), [currentSubmissionItemHistory])
   const selectedAverageScore = toPercent(currentAiReviewLog?.averageScore)
   const selectedDecision = formatValue(currentAiReviewLog?.decision)
   const selectedDecisionLabel = decisionLabels[selectedDecision] ?? selectedDecision
@@ -336,7 +424,8 @@ export function ReviewerAiReviewQueuePage() {
                 SUB-{formatValue(currentAiReviewLog?.submissionId ?? currentAiReviewLog?.agentRunId)} · {formatValue(currentAiReviewLog?.taskTitle)}
               </Typography.Title>
               <Typography.Text type="secondary">
-                提交于 {formatValue(currentAiReviewLog?.submittedAt ?? currentAiReviewLog?.createdAt)} · AgentRun {formatValue(currentAiReviewLog?.agentRunId)}
+                提交时间 {formatValue(currentAiReviewLog?.submittedAt ?? currentAiReviewLog?.createdAt)} · AgentRun{' '}
+                {formatValue(currentAiReviewLog?.agentRunId)}
               </Typography.Text>
             </div>
             <Space wrap>
@@ -409,6 +498,7 @@ export function ReviewerAiReviewQueuePage() {
 
           <Card
             title="处理日志 / 审计"
+            loading={isSubmissionItemHistoryLoading}
             extra={
               isRetryable(currentAiReviewLog) ? (
                 <Button icon={<ThunderboltOutlined />} loading={isAiReviewRetrying} size="small" type="primary" onClick={retryCurrent}>
@@ -417,25 +507,24 @@ export function ReviewerAiReviewQueuePage() {
               ) : null
             }
           >
-            {currentAiReviewLog ? (
+            {currentAiReviewLog?.submissionId && historyAuditItems.length > 0 ? (
               <Timeline
-                items={[
-                  {
-                    children: `queue 进入 AI 预审队列：${formatValue(currentAiReviewLog.aiReviewStatus)}`,
-                  },
-                  {
-                    children: `llm 调用完成：${formatValue(currentAiReviewLog.agentRunId)}`,
-                  },
-                  {
-                    children: `verdict 结构化输出：${formatValue(currentAiReviewLog.decision)} (${formatValue(selectedAverageScore)})`,
-                  },
-                  {
-                    children: `retry 重试次数：${formatValue(currentAiReviewLog.retryCount)}`,
-                  },
-                ]}
+                items={historyAuditItems.map((item) => ({
+                  color: getAuditResultColor(item.result),
+                  children: (
+                    <Space direction="vertical" size={4}>
+                      <Space wrap size={[6, 6]}>
+                        <Tag color={getAuditResultColor(item.result)}>{getAuditResultLabel(item.result)}</Tag>
+                        <Typography.Text type="secondary">{item.versionLabel}</Typography.Text>
+                      </Space>
+                      <Typography.Text>{item.reviewer}</Typography.Text>
+                      <Typography.Text type="secondary">{formatValue(item.reviewedAt)}</Typography.Text>
+                    </Space>
+                  ),
+                }))}
               />
             ) : (
-              <Empty description="暂无处理日志" />
+              <Empty description="暂无审核历史" />
             )}
           </Card>
         </section>

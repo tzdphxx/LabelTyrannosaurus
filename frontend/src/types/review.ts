@@ -222,6 +222,43 @@ export interface AiReviewResultResponse {
   createdAt?: string
 }
 
+export interface SubmissionItemAiReviewHistory {
+  aiReviewResultId?: number
+  agentRunId?: number | null
+  status?: string
+  decision?: string | null
+  reviewedAt?: string | null
+}
+
+export interface SubmissionItemReviewRoundHistory {
+  reviewRecordId: number
+  reviewLevel?: number | null
+  reviewerId?: number | null
+  reviewerName?: string | null
+  action?: string | null
+  reason?: string | null
+  reviewComment?: string | null
+  reviewedAt?: string | null
+}
+
+export interface SubmissionItemHistory {
+  submissionId: number
+  assignmentId?: number
+  versionNo?: number
+  status?: string
+  submittedBy?: number
+  submittedByName?: string | null
+  submittedAt?: string | null
+  aiReview?: SubmissionItemAiReviewHistory | null
+  reviewRounds?: SubmissionItemReviewRoundHistory[]
+}
+
+export interface SubmissionItemHistoryResponse {
+  taskId: number
+  datasetItemId: number
+  histories: SubmissionItemHistory[]
+}
+
 export interface ReviewerReviewRecord {
   reviewRecordId: number
   reviewerId: number

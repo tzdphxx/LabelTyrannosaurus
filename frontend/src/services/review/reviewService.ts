@@ -7,6 +7,7 @@ import type {
 import {
   claimReviewerSubmissions,
   getReviewDetail,
+  getSubmissionItemHistory,
   getSubmissionAiReview,
   listAllAiReviewLogs,
   listClaimableReviewerSubmissions,
@@ -63,6 +64,7 @@ export const reviewService = {
   listAllAiReviewLogs,
   listTaskAiReviewLogs,
   getSubmissionAiReview,
+  getSubmissionItemHistory,
   retrySubmissionAiReview,
   listManualReviewRecords,
   listSubmissionVersions,

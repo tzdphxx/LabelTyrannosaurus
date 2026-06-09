@@ -822,9 +822,316 @@
   background: var(--reviewer-panel);
 }
 
+.manualReviewWorkbench {
+  display: grid;
+  grid-template-columns: 360px minmax(560px, 1fr) 300px;
+  gap: 14px;
+  height: calc(100vh - 176px);
+  min-height: 620px;
+  align-items: stretch;
+}
+
+.manualQueuePanel,
+.manualDetailPanel,
+.manualInspectorPanel {
+  min-width: 0;
+  min-height: 0;
+}
+
+.manualQueuePanel,
+.manualInspectorPanel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  overflow: hidden;
+  padding: 12px;
+  border: 1px solid var(--reviewer-border);
+  border-radius: 12px;
+  background: var(--reviewer-panel);
+  box-shadow: var(--reviewer-shadow);
+}
+
+.manualDetailPanel,
+.manualInspectorPanel {
+  overflow-x: hidden;
+  overflow-y: auto;
+  padding-right: 4px;
+  scrollbar-gutter: stable;
+}
+
+.manualDetailPanel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.manualQueueHeader,
+.manualQueueItemTop,
+.manualQueueScore,
+.manualDetailHero,
+.manualHeroMeta {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.manualQueueTabs:global(.ant-segmented) {
+  width: 100%;
+  padding: 3px;
+  background: #f1f3f5;
+}
+
+.manualQueueTabs :global(.ant-segmented-group) {
+  width: 100%;
+}
+
+.manualQueueTabs :global(.ant-segmented-item) {
+  flex: 1;
+  min-width: 0;
+  border-radius: 7px;
+  font-size: 12px;
+}
+
+.batchToolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid #d6e6ff;
+  border-radius: 8px;
+  background: #f3f8ff;
+  min-width: 0;
+}
+
+.batchToolbar :global(.ant-btn) {
+  padding-inline: 8px;
+  min-width: 0;
+  white-space: nowrap;
+}
+
+.batchToolbar :global(.ant-typography) {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.manualQueueList {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 10px;
+  overflow: auto;
+  padding-right: 2px;
+}
+
+.manualQueueItem {
+  display: grid;
+  width: 100%;
+  min-height: 132px;
+  gap: 9px;
+  padding: 12px;
+  border: 1px solid var(--reviewer-border);
+  border-radius: 8px;
+  background: #ffffff;
+  color: var(--reviewer-text);
+  cursor: pointer;
+  text-align: left;
+  transition:
+    border-color 0.16s ease,
+    box-shadow 0.16s ease,
+    transform 0.16s ease;
+}
+
+.manualQueueItem:hover {
+  border-color: var(--reviewer-border-strong);
+  box-shadow: var(--reviewer-shadow);
+  transform: translateY(-1px);
+}
+
+.manualQueueItem:disabled {
+  cursor: not-allowed;
+}
+
+.manualQueueItemActive {
+  border-color: var(--reviewer-accent);
+  background: var(--reviewer-accent-soft);
+  box-shadow: 0 0 0 2px rgba(0, 117, 222, 0.12);
+}
+
+.manualQueueItemDisabled {
+  opacity: 0.62;
+}
+
+.manualQueueItemTop {
+  justify-content: flex-start;
+}
+
+.manualQueueId,
+.manualQueueMeta,
+.manualQueueScore {
+  color: var(--reviewer-muted);
+  font-size: 12px;
+}
+
+.manualQueueTitle {
+  display: -webkit-box;
+  overflow: hidden;
+  color: var(--reviewer-text);
+  font-size: 14px;
+  font-weight: 760;
+  line-height: 1.42;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.manualQueueMeta {
+  line-height: 1.45;
+}
+
+.manualQueueScore {
+  padding-top: 8px;
+  border-top: 1px dashed var(--reviewer-border);
+}
+
+.manualHeroCard:global(.ant-card) {
+  border-color: #cddfff;
+  background: linear-gradient(135deg, #ffffff 0%, #f4f8ff 100%);
+}
+
+.manualDetailHero {
+  align-items: flex-start;
+}
+
+.manualDetailHero :global(.ant-typography) {
+  margin: 0;
+}
+
+.manualHeroMeta {
+  min-width: 150px;
+  flex-direction: column;
+  align-items: flex-end;
+  padding: 12px;
+  border: 1px solid #d6e6ff;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.78);
+}
+
+.manualHeroMeta span {
+  color: var(--reviewer-muted);
+  font-size: 12px;
+}
+
+.manualHeroMeta strong {
+  font-size: 16px;
+}
+
+.submissionCompareGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.manualCodeBlock {
+  max-height: 260px;
+  margin: 0;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: #26323f;
+  font-family:
+    "Cascadia Code",
+    Consolas,
+    monospace;
+  font-size: 12px;
+  line-height: 1.6;
+  padding: 12px;
+  border: 1px solid #dde5ee;
+  border-radius: 8px;
+  background: #f8fafc;
+}
+
+.manualAiCard:global(.ant-card) {
+  border-color: #d9cffb;
+  background: #fbf9ff;
+}
+
+.manualAiGrid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 160px;
+  gap: 12px;
+  align-items: stretch;
+}
+
+.manualAiGrid :global(.ant-typography) {
+  margin: 10px 0 0;
+}
+
+.manualScoreBox,
+.manualRiskBox {
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid #e3dbff;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.manualScoreBox span {
+  color: var(--reviewer-muted);
+  font-size: 12px;
+}
+
+.manualScoreBox strong {
+  color: #5b3cc4;
+  font-size: 28px;
+  line-height: 1;
+}
+
+.manualRiskBox {
+  grid-column: 1 / -1;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+}
+
+.manualActionGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.manualActionButton:global(.ant-btn) {
+  height: 58px;
+  border-radius: 8px;
+  font-size: 15px;
+  font-weight: 750;
+}
+
+.manualStatGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.manualStatGrid :global(.ant-statistic) {
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid var(--reviewer-border);
+  border-radius: 8px;
+  background: var(--reviewer-panel-muted);
+}
+
 @media (max-width: 960px) {
+
   .detailGrid,
   .workbench,
+  .manualReviewWorkbench,
+  .submissionCompareGrid,
+  .manualAiGrid,
+  .manualActionGrid,
   .aiShell,
   .aiDetailTopGrid,
   .aiDetailMiddleGrid,
@@ -865,5 +1172,34 @@
 
   .filterToolbar {
     display: flex;
+  }
+
+  .manualReviewWorkbench {
+    height: auto;
+    min-height: 0;
+  }
+
+  .manualQueuePanel,
+  .manualDetailPanel,
+  .manualInspectorPanel {
+    overflow: visible;
+    padding-right: 0;
+  }
+
+  .batchToolbar {
+    justify-content: flex-start;
+  }
+
+  .batchToolbar :global(.ant-btn) {
+    flex: 0 0 auto;
+  }
+
+  .manualDetailHero {
+    flex-direction: column;
+  }
+
+  .manualHeroMeta {
+    width: 100%;
+    align-items: flex-start;
   }
 }

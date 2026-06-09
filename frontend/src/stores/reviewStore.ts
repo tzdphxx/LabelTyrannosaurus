@@ -16,6 +16,7 @@ import type {
   ReviewerTaskItemPageResponse,
   ReviewerTaskItemQuery,
   ReviewerTaskSummary,
+  SubmissionItemHistoryResponse,
   SubmissionVersion,
 } from '../types/review'
 
@@ -36,6 +37,7 @@ interface ReviewStore {
   submissionVersions: SubmissionVersion[]
   aiReviewLogs: AiReviewResultResponse[]
   currentAiReviewLog: AiReviewResultResponse | null
+  currentSubmissionItemHistory: SubmissionItemHistoryResponse | null
   aiReviewLogQuery: AiReviewLogQuery
   aiReviewLogTotal: number
   selectedReviewIds: string[]
@@ -51,6 +53,7 @@ interface ReviewStore {
   isActionSubmitting: boolean
   isBatchSubmitting: boolean
   isAiReviewLogsLoading: boolean
+  isSubmissionItemHistoryLoading: boolean
   isAiReviewRetrying: boolean
   isClaimingSubmissions: boolean
   error: string | null
@@ -69,6 +72,7 @@ interface ReviewStore {
   loadHistory: () => Promise<void>
   loadAllAiReviewLogs: () => Promise<void>
   loadSubmissionAiReview: (submissionId: string) => Promise<AiReviewResultResponse | null>
+  loadSubmissionItemHistory: (submissionId: string) => Promise<SubmissionItemHistoryResponse | null>
   retrySubmissionAiReview: (submissionId: string) => Promise<AiReviewResultResponse | null>
   loadDetail: (reviewId: string) => Promise<ReviewDetail | null>
   loadAiResult: (submissionId: string) => Promise<AiReviewResult | null>
@@ -126,6 +130,7 @@ export const useReviewStore = create<ReviewStore>((set, get) => ({
   submissionVersions: [],
   aiReviewLogs: [],
   currentAiReviewLog: null,
+  currentSubmissionItemHistory: null,
   aiReviewLogQuery: initialAiReviewLogQuery,
   aiReviewLogTotal: 0,
   selectedReviewIds: [],
@@ -141,6 +146,7 @@ export const useReviewStore = create<ReviewStore>((set, get) => ({
   isActionSubmitting: false,
   isBatchSubmitting: false,
   isAiReviewLogsLoading: false,
+  isSubmissionItemHistoryLoading: false,
   isAiReviewRetrying: false,
   isClaimingSubmissions: false,
   error: null,
@@ -316,6 +322,22 @@ export const useReviewStore = create<ReviewStore>((set, get) => ({
       return null
     } finally {
       set({ isAiReviewLogsLoading: false })
+    }
+  },
+  loadSubmissionItemHistory: async (submissionId) => {
+    set({ isSubmissionItemHistoryLoading: true, error: null })
+
+    try {
+      const currentSubmissionItemHistory = await reviewService.getSubmissionItemHistory(submissionId)
+      set({ currentSubmissionItemHistory })
+
+      return currentSubmissionItemHistory
+    } catch {
+      set({ error: '审核历史加载失败', currentSubmissionItemHistory: null })
+
+      return null
+    } finally {
+      set({ isSubmissionItemHistoryLoading: false })
     }
   },
   retrySubmissionAiReview: async (submissionId) => {

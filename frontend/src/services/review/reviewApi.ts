@@ -15,6 +15,7 @@ import type {
   ReviewerTaskItemPageResponse,
   ReviewerTaskItemQuery,
   ReviewerTaskSummary,
+  SubmissionItemHistoryResponse,
   SubmissionVersion,
 } from '../../types/review'
 import {
@@ -128,6 +129,10 @@ export async function retrySubmissionAiReview(submissionId: string): Promise<AiR
 
 export function listSubmissionVersions(submissionId: string): Promise<SubmissionVersion[]> {
   return request.get<SubmissionVersion[]>(`/v1/submissions/${submissionId}/versions`)
+}
+
+export function getSubmissionItemHistory(submissionId: string): Promise<SubmissionItemHistoryResponse> {
+  return request.get<SubmissionItemHistoryResponse>(`/v1/submissions/${submissionId}/item-history`)
 }
 
 export function submitManualReviewActionRequest(reviewId: string, payload: ManualReviewActionPayload): Promise<ReviewActionResponse> {

@@ -1,6 +1,7 @@
 package com.labelhub.modules.auth.service;
 
 import com.labelhub.common.exception.BusinessException;
+import com.labelhub.common.security.AuthUserCacheService;
 import com.labelhub.common.security.CurrentUser;
 import com.labelhub.common.security.CurrentUserContext;
 import com.labelhub.common.security.JwtTokenService;
@@ -39,15 +40,18 @@ public class AuthService {
     private final UserRoleMapper userRoleMapper;
     private final PasswordEncoder passwordEncoder;
     private final JwtTokenService jwtTokenService;
+    private final AuthUserCacheService authUserCacheService;
 
     public AuthService(UserMapper userMapper,
                        UserRoleMapper userRoleMapper,
                        PasswordEncoder passwordEncoder,
-                       JwtTokenService jwtTokenService) {
+                       JwtTokenService jwtTokenService,
+                       AuthUserCacheService authUserCacheService) {
         this.userMapper = userMapper;
         this.userRoleMapper = userRoleMapper;
         this.passwordEncoder = passwordEncoder;
         this.jwtTokenService = jwtTokenService;
+        this.authUserCacheService = authUserCacheService;
     }
 
     /**
@@ -170,6 +174,7 @@ public class AuthService {
         user.setPasswordHash(passwordEncoder.encode(request.newPassword()));
         userMapper.updateById(user);
         userMapper.incrementTokenVersion(userId);
+        authUserCacheService.evict(userId);
     }
 
     @Transactional
@@ -189,5 +194,6 @@ public class AuthService {
             user.setDisplayName(request.displayName());
         }
         userMapper.updateById(user);
+        authUserCacheService.evict(userId);
     }
 }

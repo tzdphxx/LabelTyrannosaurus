@@ -415,186 +415,13 @@
 }
 ```
 
----
 
-## 10. 管理员数据看板接口
 
-管理员数据看板当前有一个聚合接口，返回管理后台首页需要的 KPI、趋势、分布、排行榜和异常提醒。
-
-**GET** `/api/v1/admin/dashboard/overview`
-
-权限：`ADMIN`
-
-代码依据：
-
-- Controller 路径：`AdminDashboardController`
-- 权限注解：`@PreAuthorize("hasRole('ADMIN')")`
-- 返回类型：`AdminDashboardOverviewResponse`
-
-查询参数：
-
-| 参数 | 类型 | 必填 | 默认值 | 说明 |
-| --- | --- | --- | --- | --- |
-| range | String | 否 | `7d` | 统计周期。仅支持 `7d` 和 `30d`。非法值返回 `400102` |
-
-响应 `data` 字段：
-
-| 字段 | 类型 | 说明 |
-| --- | --- | --- |
-| range | String | 当前统计周期：`7d` 或 `30d` |
-| kpis | Object | 平台核心 KPI |
-| userSummary | Object | 用户总量、角色分布、新增/禁用用户摘要 |
-| trend | Array | 按自然日补齐的趋势数据，长度等于 `range` 对应天数 |
-| taskStatusDistribution | Object | 任务状态分布，固定包含 `DRAFT`、`PUBLISHED`、`PAUSED`、`ENDED` |
-| topLabelers | Array | 周期内提交量靠前的标注员，最多 5 条 |
-| topTasks | Array | 周期内提交量靠前的任务，最多 5 条 |
-| alerts | Array | 看板异常提醒，仅用于展示，不自动处理业务状态 |
-| generatedAt | String | 本次看板数据生成时间 |
-
-`kpis` 字段：
-
-| 字段 | 类型 | 说明 |
-| --- | --- | --- |
-| activeTaskCount | Long | 活跃任务数，包含当前已发布任务以及周期内产生领取或提交的任务 |
-| claimedCount | Long | 周期内标注员领取次数 |
-| submittedCount | Long | 周期内有效提交数，不包含 `SUPERSEDED` 提交 |
-| pendingReviewCount | Long | 当前待终审提交数 |
-| approvalRate | Decimal | 周期内审核通过率：`approved / (approved + rejected)`，分母为 0 时返回 0 |
-| rejectionRate | Decimal | 周期内审核打回率：`rejected / (approved + rejected)`，分母为 0 时返回 0 |
-| rewardAmount | Decimal | 周期内正向奖励支出汇总金额 |
-
-`userSummary` 字段：
-
-| 字段 | 类型 | 说明 |
-| --- | --- | --- |
-| totalUserCount | Long | 非 SYSTEM 用户总数 |
-| roleCounts | Object | 角色人数分布，固定包含 `ADMIN`、`OWNER`、`LABELER`、`REVIEWER` |
-| disabledUserCount | Long | 被禁用或禁止登录的非 SYSTEM 用户数 |
-| newUserCount | Long | 统计周期内新增的非 SYSTEM 用户数 |
-
-`trend[]` 字段：
-
-| 字段 | 类型 | 说明 |
-| --- | --- | --- |
-| date | String | 自然日，格式 `yyyy-MM-dd` |
-| submittedCount | Long | 当日有效提交数 |
-| approvedCount | Long | 当日审核通过数 |
-| rejectedCount | Long | 当日审核打回数 |
-| rewardAmount | Decimal | 当日正向奖励支出金额 |
-
-`topLabelers[]` 字段：
-
-| 字段 | 类型 | 说明 |
-| --- | --- | --- |
-| labelerId | Long | 标注员用户 ID |
-| displayName | String | 标注员展示名，优先 displayName，缺失时使用 username |
-| submittedCount | Long | 周期内有效提交数 |
-| approvedCount | Long | 周期内审核通过数 |
-| rewardAmount | Decimal | 周期内获得的正向奖励金额 |
-
-`topTasks[]` 字段：
-
-| 字段 | 类型 | 说明 |
-| --- | --- | --- |
-| taskId | Long | 任务 ID |
-| title | String | 任务标题 |
-| submittedCount | Long | 周期内有效提交数 |
-| approvedCount | Long | 周期内审核通过数 |
-| rejectedCount | Long | 周期内审核打回数 |
-
-`alerts[]` 字段：
-
-| 字段 | 类型 | 说明 |
-| --- | --- | --- |
-| type | String | 提醒类型：`REVIEW_BACKLOG`、`HIGH_REJECTION_RATE_TASK`、`ZERO_SUBMISSION_ACTIVE_TASK`、`DISABLED_USER` |
-| level | String | 提醒级别：`INFO`、`WARNING`、`CRITICAL` |
-| title | String | 提醒标题 |
-| description | String | 提醒说明 |
-| targetPath | String | 前端可跳转的目标路径 |
-
-响应示例：
-
-```json
-{
-  "code": 0,
-  "message": "OK",
-  "data": {
-    "range": "7d",
-    "kpis": {
-      "activeTaskCount": 12,
-      "claimedCount": 340,
-      "submittedCount": 286,
-      "pendingReviewCount": 31,
-      "approvalRate": 0.8200,
-      "rejectionRate": 0.1800,
-      "rewardAmount": 1280.50
-    },
-    "userSummary": {
-      "totalUserCount": 126,
-      "roleCounts": {
-        "ADMIN": 2,
-        "OWNER": 10,
-        "LABELER": 100,
-        "REVIEWER": 14
-      },
-      "disabledUserCount": 3,
-      "newUserCount": 8
-    },
-    "trend": [
-      {
-        "date": "2026-06-01",
-        "submittedCount": 42,
-        "approvedCount": 35,
-        "rejectedCount": 7,
-        "rewardAmount": 188.00
-      }
-    ],
-    "taskStatusDistribution": {
-      "DRAFT": 4,
-      "PUBLISHED": 8,
-      "PAUSED": 1,
-      "ENDED": 20
-    },
-    "topLabelers": [
-      {
-        "labelerId": 20,
-        "displayName": "labeler-a",
-        "submittedCount": 46,
-        "approvedCount": 39,
-        "rewardAmount": 210.00
-      }
-    ],
-    "topTasks": [
-      {
-        "taskId": 1001,
-        "title": "商品质检任务",
-        "submittedCount": 120,
-        "approvedCount": 98,
-        "rejectedCount": 22
-      }
-    ],
-    "alerts": [
-      {
-        "type": "REVIEW_BACKLOG",
-        "level": "WARNING",
-        "title": "审核积压",
-        "description": "当前有 31 条提交待审核",
-        "targetPath": "/app/reviewer/queue"
-      }
-    ],
-    "generatedAt": "2026-06-07T10:00:00"
-  },
-  "traceId": null
-}
-```
-
----
-
-## 11. 本轮未提交代码涉及的前端重新对接点
+## 10. 本轮未提交代码涉及的前端重新对接点
 
 以下为当前未提交代码中已改变或补强的接口契约，前端需要按这些规则重新对接。
 
-### 12.1 创建任务必须配置 AI 审核
+### 10.1 创建任务必须配置 AI 审核
 
 **POST** `/api/v1/tasks`
 
@@ -632,7 +459,7 @@
 - 如果在创建任务弹窗中一次性配置 AI 审核，则传内联字段，不需要额外先调 AI 配置接口。
 - 如果需要分步配置，建议先创建带最小 AI 配置的草稿任务，再通过 `/api/v1/tasks/{taskId}/ai-review-configs` 更新完整配置。
 
-### 12.2 任务创建/编辑新增 `aiFlowPolicy`
+### 10.2 任务创建/编辑新增 `aiFlowPolicy`
 
 涉及接口：
 
@@ -659,7 +486,7 @@
 - 任务编辑页如果没有 AI 配置，传 `aiFlowPolicy` 不会创建配置；应先引导用户配置 AI 审核。
 - 如果使用完整 AI 配置接口，仍可传 `allowAiDirectApprove` / `allowAiDirectReject`，但建议与 `aiFlowPolicy` 保持一致。
 
-### 12.3 结构化输出解析失败纠错重试
+### 10.3 结构化输出解析失败纠错重试
 
 涉及后端 LLM Gateway，不新增前端请求路径。
 

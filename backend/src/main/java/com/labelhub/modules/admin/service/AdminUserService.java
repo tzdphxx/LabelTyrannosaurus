@@ -1,6 +1,7 @@
 package com.labelhub.modules.admin.service;
 
 import com.labelhub.common.exception.BusinessException;
+import com.labelhub.common.security.AuthUserCacheService;
 import com.labelhub.common.security.RoleCode;
 import com.labelhub.modules.admin.dto.AdminUserResponse;
 import com.labelhub.modules.admin.dto.CreateReviewerRequest;
@@ -36,11 +37,16 @@ public class AdminUserService {
     private final UserMapper userMapper;
     private final UserRoleMapper userRoleMapper;
     private final PasswordEncoder passwordEncoder;
+    private final AuthUserCacheService authUserCacheService;
 
-    public AdminUserService(UserMapper userMapper, UserRoleMapper userRoleMapper, PasswordEncoder passwordEncoder) {
+    public AdminUserService(UserMapper userMapper,
+                            UserRoleMapper userRoleMapper,
+                            PasswordEncoder passwordEncoder,
+                            AuthUserCacheService authUserCacheService) {
         this.userMapper = userMapper;
         this.userRoleMapper = userRoleMapper;
         this.passwordEncoder = passwordEncoder;
+        this.authUserCacheService = authUserCacheService;
     }
 
     /**
@@ -79,6 +85,7 @@ public class AdminUserService {
         }
         userRoleMapper.replaceRoles(userId, Set.of(role));
         userMapper.incrementTokenVersion(userId);
+        authUserCacheService.evict(userId);
     }
 
     /**
@@ -88,6 +95,7 @@ public class AdminUserService {
     public void enableUser(Long userId) {
         requireUser(userId);
         userMapper.setEnabled(userId, true);
+        authUserCacheService.evict(userId);
     }
 
     /**
@@ -97,6 +105,7 @@ public class AdminUserService {
     public void disableUser(Long userId) {
         requireUser(userId);
         userMapper.setEnabled(userId, false);
+        authUserCacheService.evict(userId);
     }
 
     @Transactional

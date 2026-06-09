@@ -10,6 +10,8 @@ import com.labelhub.common.audit.AuditAppender;
 import com.labelhub.common.web.TraceIdProvider;
 import com.labelhub.modules.assignment.mapper.AssignmentMapper;
 import com.labelhub.modules.dataset.mapper.DatasetItemMapper;
+import com.labelhub.modules.reward.domain.RewardRuleEntity;
+import com.labelhub.modules.reward.repository.RewardRuleRepositoryMapper;
 import com.labelhub.modules.submission.mapper.SubmissionMapper;
 import com.labelhub.modules.task.domain.Task;
 import com.labelhub.modules.task.domain.TaskStatus;
@@ -18,6 +20,8 @@ import com.labelhub.modules.task.dto.TaskStatisticsResponse;
 import com.labelhub.modules.task.dto.TaskSummaryResponse;
 import com.labelhub.modules.task.mapper.TaskMapper;
 import com.labelhub.modules.task.mapper.TaskTagMapper;
+import java.math.BigDecimal;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
@@ -33,6 +37,7 @@ class TaskManagementServiceTest {
     @Mock private AssignmentMapper assignmentMapper;
     @Mock private DatasetItemMapper datasetItemMapper;
     @Mock private SubmissionMapper submissionMapper;
+    @Mock private RewardRuleRepositoryMapper rewardRuleMapper;
     @Mock private AuditAppender auditAppender;
     @Mock private TraceIdProvider traceIdProvider;
 
@@ -47,6 +52,9 @@ class TaskManagementServiceTest {
                 .thenReturn(List.of(first, second));
         when(taskTagMapper.selectByTaskIds(List.of(10L, 11L)))
                 .thenReturn(List.of(tagA, tagB));
+        RewardRuleEntity latestRule = rewardRule(101L, 10L, 2, "3.50");
+        when(rewardRuleMapper.selectLatestByTaskIds(List.of(10L, 11L)))
+                .thenReturn(List.of(latestRule));
 
         PageResponse<TaskSummaryResponse> response = service().listOwnerTasksPage(
                 1L, null, null, 1, 20);
@@ -54,7 +62,13 @@ class TaskManagementServiceTest {
         assertThat(response.total()).isEqualTo(2);
         assertThat(response.items().get(0).tags()).containsExactly("image");
         assertThat(response.items().get(1).tags()).containsExactly("text");
+        assertThat(response.items().get(0).rewardRule()).isNotNull();
+        assertThat(response.items().get(0).rewardRule().ruleId()).isEqualTo(101L);
+        assertThat(response.items().get(0).rewardRule().effectiveVersion()).isEqualTo(2);
+        assertThat(response.items().get(0).rewardRule().unitReward()).isEqualByComparingTo("3.50");
+        assertThat(response.items().get(1).rewardRule()).isNull();
         verify(taskTagMapper).selectByTaskIds(List.of(10L, 11L));
+        verify(rewardRuleMapper).selectLatestByTaskIds(List.of(10L, 11L));
     }
 
     @Test
@@ -81,7 +95,7 @@ class TaskManagementServiceTest {
 
     private TaskManagementService service() {
         return new TaskManagementService(taskMapper, taskTagMapper, assignmentMapper,
-                datasetItemMapper, submissionMapper, auditAppender, traceIdProvider);
+                datasetItemMapper, submissionMapper, rewardRuleMapper, auditAppender, traceIdProvider);
     }
 
     private Task task(Long id, String title) {
@@ -101,5 +115,21 @@ class TaskManagementServiceTest {
         tag.setTaskId(taskId);
         tag.setTagName(name);
         return tag;
+    }
+
+    private RewardRuleEntity rewardRule(Long id, Long taskId, Integer version, String unitReward) {
+        RewardRuleEntity rule = new RewardRuleEntity();
+        LocalDateTime now = LocalDateTime.of(2026, 6, 9, 10, 0);
+        rule.setId(id);
+        rule.setTaskId(taskId);
+        rule.setEffectiveVersion(version);
+        rule.setRewardMode("APPROVED_ITEM");
+        rule.setUnitReward(new BigDecimal(unitReward));
+        rule.setRewardCurrency("POINT");
+        rule.setRewardVisible(true);
+        rule.setEffectiveAt(now);
+        rule.setCreatedBy(1L);
+        rule.setCreatedAt(now);
+        return rule;
     }
 }

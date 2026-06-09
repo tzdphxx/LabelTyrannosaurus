@@ -191,16 +191,17 @@ public interface AssignmentMapper extends BaseMapper<Assignment> {
                      ORDER BY s.version_no DESC
                      LIMIT 1
                    ) AS latest_submission_status,
-                   (
+                   CASE WHEN a.status IN ('RETURNED', 'AI_RETURNED') THEN (
                      SELECT rr.reason
                      FROM review_records rr
                      INNER JOIN submissions rs ON rs.id = rr.submission_id
                      WHERE rs.assignment_id = a.id
+                       AND rs.status != 'SUPERSEDED'
                        AND rr.action = 'REJECT'
                      ORDER BY rr.created_at DESC, rr.id DESC
                      LIMIT 1
-                   ) AS returned_reason,
-                   a.returned_at,
+                   ) ELSE NULL END AS returned_reason,
+                   CASE WHEN a.status IN ('RETURNED', 'AI_RETURNED') THEN a.returned_at ELSE NULL END AS returned_at,
                    a.updated_at
             FROM assignments a
             INNER JOIN dataset_items di ON di.id = a.dataset_item_id

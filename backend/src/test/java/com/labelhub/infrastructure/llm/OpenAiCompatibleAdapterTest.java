@@ -49,6 +49,25 @@ class OpenAiCompatibleAdapterTest {
     }
 
     @Test
+    void serializesVideoContentPartAsOpenAiCompatibleBlock() {
+        OpenAiCompatibleAdapter adapter = new OpenAiCompatibleAdapter(new ObjectMapper(), Duration.ofSeconds(1));
+        LlmMessage message = LlmMessage.userParts(List.of(
+                new LlmMessage.TextPart("watch"),
+                new LlmMessage.VideoUrlPart("https://example.com/oceans.mp4")
+        ));
+
+        List<Map<String, Object>> serialized = ReflectionTestUtils.invokeMethod(
+                adapter, "serializeMessages", List.of(message));
+
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> content = (List<Map<String, Object>>) serialized.get(0).get("content");
+        assertThat(content.get(1)).containsEntry("type", "video_url");
+        assertThat(content.get(1).get("video_url")).isEqualTo(Map.of(
+                "url", "https://example.com/oceans.mp4"
+        ));
+    }
+
+    @Test
     void buildsValidatedRequestWithoutRestrictedHostHeader() {
         OpenAiCompatibleAdapter adapter = new OpenAiCompatibleAdapter(
                 new ObjectMapper(), Duration.ofSeconds(1), Duration.ofSeconds(1), true);

@@ -28,6 +28,7 @@ function getComponentName(node: DynamicSchemaNode) {
     case 'checkbox':
       return 'Checkbox.Group'
     case 'select':
+    case 'tagSelect':
       return 'Select'
     case 'showItem':
       return 'ShowItem'
@@ -51,7 +52,7 @@ function getComponentName(node: DynamicSchemaNode) {
 }
 
 function getSchemaType(node: DynamicSchemaNode) {
-  if (node.type === 'checkbox' || node.type === 'select' || node.type === 'fileUpload') {
+  if (node.type === 'checkbox' || node.type === 'select' || node.type === 'tagSelect' || node.type === 'fileUpload') {
     return 'array'
   }
 
@@ -75,6 +76,7 @@ function getComponentProps(node: DynamicSchemaNode, runtimeOptions: SchemaRuntim
     onApplyValues: runtimeOptions.onApplyLlmValues,
     onRunLlmTrigger: runtimeOptions.onRunLlmTrigger,
     title: node.title,
+    ...(node.type === 'tagSelect' ? { mode: 'tags' } : {}),
   }
 }
 

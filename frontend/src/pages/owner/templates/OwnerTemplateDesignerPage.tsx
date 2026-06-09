@@ -45,6 +45,7 @@ export function OwnerTemplateDesignerPage() {
   const initializeDraftTemplate = useTemplateDesignerStore((state) => state.initializeDraftTemplate)
   const loadTemplate = useTemplateDesignerStore((state) => state.loadTemplate)
   const addNode = useTemplateDesignerStore((state) => state.addNode)
+  const addTabPane = useTemplateDesignerStore((state) => state.addTabPane)
   const selectNode = useTemplateDesignerStore((state) => state.selectNode)
   const updateSelectedNode = useTemplateDesignerStore((state) => state.updateSelectedNode)
   const replaceSchema = useTemplateDesignerStore((state) => state.replaceSchema)
@@ -221,6 +222,7 @@ export function OwnerTemplateDesignerPage() {
               schema={schema}
               scrollRef={canvasScrollRef}
               selectedNodeId={selectedNodeId}
+              onAddTabPane={addTabPane}
               onDelete={confirmDeleteNode}
               onSelect={selectNode}
             />

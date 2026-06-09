@@ -1,4 +1,5 @@
 import type { DynamicFormSubmitResult, DynamicSchemaNode } from '../../types/dynamicForm'
+import { cloneSchema } from '../../features/dynamic-form/utils/schemaTree'
 import type {
   LabelerTaskListQuery,
   LabelerTaskSummary,
@@ -35,10 +36,7 @@ export function cloneQuestion(question: LabelingQuestion): LabelingQuestion {
     ...question,
     source: { ...question.source },
     previousValues: question.previousValues ? { ...question.previousValues } : undefined,
-    schema: {
-      ...question.schema,
-      nodes: question.schema.nodes.map((node) => ({ ...node })),
-    },
+    schema: cloneSchema(question.schema),
   }
 }
 

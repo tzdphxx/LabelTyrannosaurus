@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import { createSchemaNodeFromMaterial } from '../features/dynamic-form/materialRegistry'
+import { createSchemaNodeFromMaterial, createTabPaneNode } from '../features/dynamic-form/materialRegistry'
 import {
   deleteSchemaNode,
   findSchemaNode,
@@ -26,6 +26,7 @@ interface TemplateDesignerStore {
   initializeDraftTemplate: (input: { description: string; name: string }) => void
   loadTemplate: (templateId: string, options?: { forkMode?: boolean; forkChangeNote?: string; templateVersion?: TemplateDetail }) => Promise<void>
   addNode: (type: DynamicFieldType, parentId?: string | null) => string | null
+  addTabPane: (parentId: string, title?: string) => string | null
   selectNode: (nodeId: string | null) => void
   updateSelectedNode: (updates: Partial<DynamicSchemaNode>) => void
   replaceSchema: (schema: DynamicFormSchema) => void
@@ -129,6 +130,34 @@ export const useTemplateDesignerStore = create<TemplateDesignerStore>((set, get)
 
     const node = createSchemaNodeFromMaterial(type)
     const nextSchema = insertSchemaNode(schema, node, parentId)
+
+    set({
+      schema: nextSchema,
+      selectedNodeId: node.id,
+      hasUnsavedChanges: true,
+    })
+
+    return node.id
+  },
+
+  addTabPane: (parentId, title = 'Tab') => {
+    const schema = get().schema
+
+    if (!schema) {
+      return null
+    }
+
+    const parent = findSchemaNode(schema, parentId)
+
+    if (!parent || parent.type !== 'tabs') {
+      return null
+    }
+
+    const node = createTabPaneNode(title)
+    const nextSchema = updateSchemaNode(schema, parentId, (currentParent) => ({
+      ...currentParent,
+      children: [...(currentParent.children ?? []), node],
+    }))
 
     set({
       schema: nextSchema,

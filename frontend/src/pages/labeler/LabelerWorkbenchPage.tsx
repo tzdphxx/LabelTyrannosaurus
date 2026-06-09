@@ -245,14 +245,14 @@ export function LabelerWorkbenchPage() {
     }
   }
 
-  const handleValuesChange = (values: Record<string, unknown>) => {
+  const handleValuesChange = useCallback((values: Record<string, unknown>) => {
     const valuesSignature = stringifyDraftValues(values)
 
     currentValuesSignatureRef.current = valuesSignature
     setLatestValues(values)
     setEditingQuestionId(currentQuestion?.id ?? null)
     setHasUnsavedChanges(valuesSignature !== savedValuesSignatureRef.current)
-  }
+  }, [currentQuestion?.id])
 
   const selectQuestion = (questionId: string) => {
     setHasUnsavedChanges(false)

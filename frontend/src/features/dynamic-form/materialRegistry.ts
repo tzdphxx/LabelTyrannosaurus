@@ -58,6 +58,18 @@ export const dynamicMaterialRegistry: Record<DynamicFieldType, MaterialDefinitio
       placeholder: '请选择或输入标签',
     },
   },
+  tagSelect: {
+    type: 'tagSelect',
+    title: '标签选择',
+    group: 'choice',
+    description: '支持选择已有标签，也支持输入新的标签值。',
+    acceptsChildren: false,
+    defaultProps: {
+      mode: 'tags',
+      options: choiceOptions,
+      placeholder: '请选择或输入标签',
+    },
+  },
   showItem: {
     type: 'showItem',
     title: '展示项',
@@ -120,7 +132,7 @@ export const dynamicMaterialRegistry: Record<DynamicFieldType, MaterialDefinitio
     group: 'layout',
     description: '把相关字段组织到一个分组内。',
     acceptsChildren: true,
-    allowedChildren: ['input', 'textarea', 'radio', 'checkbox', 'select', 'showItem', 'richText', 'fileUpload', 'jsonEditor', 'llmPrompt'],
+    allowedChildren: ['input', 'textarea', 'radio', 'checkbox', 'select', 'tagSelect', 'showItem', 'richText', 'fileUpload', 'jsonEditor', 'llmPrompt'],
     defaultProps: {},
   },
   tabs: {
@@ -138,7 +150,7 @@ export const dynamicMaterialRegistry: Record<DynamicFieldType, MaterialDefinitio
     group: 'layout',
     description: 'Tab 容器内的单个面板。',
     acceptsChildren: true,
-    allowedChildren: ['input', 'textarea', 'radio', 'checkbox', 'select', 'showItem', 'richText', 'fileUpload', 'jsonEditor', 'llmPrompt'],
+    allowedChildren: ['input', 'textarea', 'radio', 'checkbox', 'select', 'tagSelect', 'showItem', 'richText', 'fileUpload', 'jsonEditor', 'llmPrompt'],
     defaultProps: {},
   },
 }
@@ -158,6 +170,7 @@ export const paletteMaterialTypes: DynamicFieldType[] = [
   'radio',
   'checkbox',
   'select',
+  'tagSelect',
   'showItem',
   'richText',
   'fileUpload',
@@ -190,8 +203,7 @@ export function createSchemaNodeFromMaterial(type: DynamicFieldType): DynamicSch
     return {
       ...baseNode,
       children: [
-        createTabPaneNode('基础信息'),
-        createTabPaneNode('补充信息'),
+        createTabPaneNode('Tab 1'),
       ],
     }
   }

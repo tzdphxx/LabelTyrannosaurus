@@ -449,7 +449,8 @@ class TaskLifecycleServiceTest {
     void transitionsThroughLifecycle() {
         Task task = publishableDraftTask();
         when(taskMapper.selectById(TASK_ID)).thenReturn(task);
-        when(taskMapper.updateById(any(Task.class))).thenReturn(1);
+        when(taskMapper.updateStatusIfCurrent(any(), any(), any(), any(), any(), any(), any(), any()))
+                .thenReturn(1);
         when(publishDependencyChecker.datasetReady(TASK_ID)).thenReturn(true);
         when(publishDependencyChecker.templateVersionExists(100L)).thenReturn(true);
         when(publishDependencyChecker.aiReviewConfigExists(TASK_ID, 200L)).thenReturn(true);
@@ -464,6 +465,24 @@ class TaskLifecycleServiceTest {
     }
 
     @Test
+    void publishDoesNotAuditOrPublishEventWhenStatusUpdateLosesRace() {
+        Task task = publishableDraftTask();
+        when(taskMapper.selectById(TASK_ID)).thenReturn(task);
+        when(taskMapper.updateStatusIfCurrent(any(), any(), any(), any(), any(), any(), any(), any()))
+                .thenReturn(0);
+        when(publishDependencyChecker.datasetReady(TASK_ID)).thenReturn(true);
+        when(publishDependencyChecker.templateVersionExists(100L)).thenReturn(true);
+        when(publishDependencyChecker.aiReviewConfigExists(TASK_ID, 200L)).thenReturn(true);
+        when(publishDependencyChecker.rewardRuleExists(TASK_ID)).thenReturn(true);
+
+        assertThatThrownBy(() -> taskLifecycleService.publish(OWNER_ID, TASK_ID))
+                .isInstanceOf(BusinessException.class);
+
+        verify(auditAppender, never()).append(any(AuditCommand.class));
+        verify(applicationEventPublisher, never()).publishEvent(any());
+    }
+
+    @Test
     void publishAssignedTaskWithAssignedLabelerAutoClaimsItemsAndAlignsCounts() {
         Task task = publishableDraftTask();
         task.setStrategy(ClaimStrategy.ASSIGNED);
@@ -471,7 +490,8 @@ class TaskLifecycleServiceTest {
         task.setQuota(99);
         task.setClaimedCount(0);
         when(taskMapper.selectById(TASK_ID)).thenReturn(task);
-        when(taskMapper.updateById(any(Task.class))).thenReturn(1);
+        when(taskMapper.updateStatusIfCurrent(any(), any(), any(), any(), any(), any(), any(), any()))
+                .thenReturn(1);
         when(publishDependencyChecker.datasetReady(TASK_ID)).thenReturn(true);
         when(publishDependencyChecker.templateVersionExists(100L)).thenReturn(true);
         when(publishDependencyChecker.aiReviewConfigExists(TASK_ID, 200L)).thenReturn(true);
@@ -484,10 +504,15 @@ class TaskLifecycleServiceTest {
         assertThat(task.getQuota()).isEqualTo(3);
         assertThat(task.getClaimedCount()).isEqualTo(3);
         verify(assignedAutoAssignmentService).autoClaimAll(task, 20L);
-        ArgumentCaptor<Task> taskCaptor = ArgumentCaptor.forClass(Task.class);
-        verify(taskMapper).updateById(taskCaptor.capture());
-        assertThat(taskCaptor.getValue().getQuota()).isEqualTo(3);
-        assertThat(taskCaptor.getValue().getClaimedCount()).isEqualTo(3);
+        verify(taskMapper).updateStatusIfCurrent(
+                eq(TASK_ID),
+                eq(OWNER_ID),
+                eq(TaskStatus.DRAFT),
+                eq(TaskStatus.PUBLISHED),
+                any(),
+                any(),
+                eq(3),
+                eq(3));
     }
 
     @Test
@@ -495,7 +520,8 @@ class TaskLifecycleServiceTest {
         Task task = publishableDraftTask();
         task.setStrategy(ClaimStrategy.FCFS);
         when(taskMapper.selectById(TASK_ID)).thenReturn(task);
-        when(taskMapper.updateById(any(Task.class))).thenReturn(1);
+        when(taskMapper.updateStatusIfCurrent(any(), any(), any(), any(), any(), any(), any(), any()))
+                .thenReturn(1);
         when(publishDependencyChecker.datasetReady(TASK_ID)).thenReturn(true);
         when(publishDependencyChecker.templateVersionExists(100L)).thenReturn(true);
         when(publishDependencyChecker.aiReviewConfigExists(TASK_ID, 200L)).thenReturn(true);

@@ -68,8 +68,8 @@ export function ReviewerReviewDetailPage() {
   const { taskId } = useParams()
   const [searchParams, setSearchParams] = useSearchParams()
   const [messageApi, contextHolder] = message.useMessage()
+  const [modalApi, modalContextHolder] = Modal.useModal()
   const [reviewComment, setReviewComment] = useState('')
-  const [rejectReason, setRejectReason] = useState('')
   const [rejectOpen, setRejectOpen] = useState(false)
   const taskItemsPage = useReviewStore((state) => state.taskItemsPage)
   const currentDetail = useReviewStore((state) => state.currentDetail)
@@ -156,7 +156,7 @@ export function ReviewerReviewDetailPage() {
       return
     }
 
-    Modal.confirm({
+    modalApi.confirm({
       title: '确认通过',
       content: `确认通过提交 ${selectedSubmissionId} 吗？`,
       okText: '确认通过',
@@ -185,21 +185,15 @@ export function ReviewerReviewDetailPage() {
       return
     }
 
-    if (!rejectReason.trim()) {
-      messageApi.error('打回原因不能为空')
-      return
-    }
-
     const updatedDetail = await submitManualReviewAction(selectedSubmissionId, {
       reviewerId: 'current-reviewer',
       reviewerName: '当前审核员',
       decision: 'rejected',
-      reason: rejectReason.trim(),
+      reason: undefined,
     })
 
     if (updatedDetail) {
       messageApi.success('审核打回已提交')
-      setRejectReason('')
       setRejectOpen(false)
       void reloadDetail()
     } else {
@@ -214,6 +208,7 @@ export function ReviewerReviewDetailPage() {
   return (
     <main className={styles.page}>
       {contextHolder}
+      {modalContextHolder}
       <ContentShell>
         <PageHeader
           title={taskItemsPage?.taskTitle?.trim() || `任务 ${taskId}`}
@@ -245,9 +240,8 @@ export function ReviewerReviewDetailPage() {
                   return (
                     <button
                       key={getItemKey(item)}
-                      className={`${styles.taskSidebarItem} ${active ? styles.taskSidebarItemActive : ''} ${
-                        disabled ? styles.taskSidebarItemDisabled : ''
-                      }`}
+                      className={`${styles.taskSidebarItem} ${active ? styles.taskSidebarItemActive : ''} ${disabled ? styles.taskSidebarItemDisabled : ''
+                        }`}
                       disabled={disabled}
                       type="button"
                       onClick={() => openItem(item)}
@@ -406,13 +400,7 @@ export function ReviewerReviewDetailPage() {
         onOk={() => void submitReject()}
       >
         <Space direction="vertical" size={12} className={styles.actionPanel}>
-          <Typography.Text type="secondary">打回后标注员可重新修改并提交。</Typography.Text>
-          <Input.TextArea
-            rows={4}
-            placeholder="请输入打回原因"
-            value={rejectReason}
-            onChange={(event) => setRejectReason(event.target.value)}
-          />
+          <Typography.Text type="secondary">确认打回后，标注员可重新修改并提交。</Typography.Text>
         </Space>
       </Modal>
     </main>

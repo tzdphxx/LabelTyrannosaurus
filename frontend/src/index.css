@@ -945,6 +945,29 @@ select {
   width: 100%;
 }
 
+.labeler-returned-reason {
+  width: 100%;
+  border: 1px solid #f0d38a;
+  border-left: 4px solid #d9822b;
+  border-radius: 10px;
+  background: #fff8e6;
+  padding: 12px 14px;
+}
+
+.labeler-returned-reason__title.ant-typography {
+  display: block;
+  margin-bottom: 6px;
+  color: #8a4b0f;
+  font-weight: 800;
+}
+
+.labeler-returned-reason__content.ant-typography {
+  margin: 0;
+  color: #4f3422;
+  line-height: 1.7;
+  white-space: pre-wrap;
+}
+
 .labeler-workbench__side .ant-space,
 .labeler-workbench__pager {
   width: 100%;

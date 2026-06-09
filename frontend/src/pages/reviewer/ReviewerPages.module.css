@@ -173,26 +173,94 @@
 
 .aiShell {
   display: grid;
-  grid-template-columns: 360px minmax(560px, 1fr);
+  grid-template-columns: 380px minmax(560px, 1fr);
   gap: 16px;
-  align-items: start;
+  height: calc(100vh - 220px);
+  min-height: 560px;
+  align-items: stretch;
+}
+
+.aiQueue:global(.ant-card),
+.aiDetail {
+  min-height: 0;
+  height: 100%;
+}
+
+.aiQueue:global(.ant-card) {
+  display: flex;
+  flex-direction: column;
 }
 
 .aiQueue :global(.ant-card-body) {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
   padding: 12px;
+}
+
+.aiQueueFilter {
+  width: 100%;
+}
+
+.aiQueue .panelStack {
+  min-height: 0;
+  flex: 1;
+  gap: 12px;
+}
+
+.aiQueueList {
+  min-height: 0;
+  flex: 1;
+  overflow: auto;
 }
 
 .aiDetail {
-  display: flex;
   min-width: 0;
+  display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 12px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  padding-right: 4px;
+  scrollbar-gutter: stable;
+}
+
+.aiDetail :global(.ant-card-head) {
+  min-height: 44px;
+  padding: 0 14px;
+}
+
+.aiDetail :global(.ant-card-head-title) {
+  padding: 10px 0;
+}
+
+.aiDetail :global(.ant-card-body) {
+  padding: 12px;
+}
+
+.aiDetailTopGrid,
+.aiDetailMiddleGrid {
+  display: grid;
+  min-height: 0;
+  grid-template-columns: minmax(0, 1.35fr) minmax(280px, 0.65fr);
+  gap: 12px;
+}
+
+.aiDetailMiddleGrid {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.aiPromptCard {
+  min-height: 0;
 }
 
 .aiItem:global(.ant-list-item) {
-  padding: 12px;
-  border: 1px solid transparent;
+  position: relative;
+  padding: 12px 12px 12px 14px;
+  border: 1px solid var(--reviewer-border);
   border-radius: 8px;
+  background: #ffffff;
   cursor: pointer;
   transition:
     border-color 0.16s ease,
@@ -203,15 +271,80 @@
 .aiItem:global(.ant-list-item:hover) {
   border-color: var(--reviewer-border-strong);
   background: #faf9f8;
+  transform: translateY(-1px);
 }
 
 .aiItemActive:global(.ant-list-item) {
   border-color: var(--reviewer-accent);
   background: var(--reviewer-accent-soft);
+  box-shadow: 0 0 0 2px rgba(0, 117, 222, 0.1);
+}
+
+.aiItemActive:global(.ant-list-item)::before {
+  position: absolute;
+  top: 10px;
+  bottom: 10px;
+  left: 0;
+  width: 3px;
+  border-radius: 999px;
+  background: var(--reviewer-accent);
+  content: "";
 }
 
 .aiItemContent {
+  display: grid;
   width: 100%;
+  gap: 8px;
+}
+
+.aiItemHeader,
+.aiItemMeta {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.aiItemHeader :global(.ant-tag),
+.aiItemMeta :global(.ant-tag) {
+  flex: none;
+}
+
+.aiItemTitle {
+  min-width: 0;
+}
+
+.aiItemMeta {
+  justify-content: flex-start;
+  color: var(--reviewer-muted);
+  font-size: 12px;
+}
+
+.aiItemFooter {
+  max-width: 100%;
+  color: var(--reviewer-muted);
+  font-size: 12px;
+}
+
+.aiRiskCompact {
+  display: grid;
+  width: 100%;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid #f0d38a;
+  border-radius: 8px;
+  background: #fff8e6;
+}
+
+.aiRiskTitle {
+  color: #8a4b0f;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.aiRiskEmpty {
+  font-size: 12px;
 }
 
 .aiDetailGrid {
@@ -228,7 +361,7 @@
 }
 
 .codeBlock {
-  max-height: 260px;
+  max-height: 180px;
   margin: 0;
   overflow: auto;
   white-space: pre-wrap;
@@ -546,10 +679,27 @@
   .detailGrid,
   .workbench,
   .aiShell,
+  .aiDetailTopGrid,
+  .aiDetailMiddleGrid,
   .aiDetailGrid,
   .claimSummary,
   .queueItemRow {
     grid-template-columns: 1fr;
+  }
+
+  .aiShell {
+    height: auto;
+    min-height: 0;
+  }
+
+  .aiQueue:global(.ant-card),
+  .aiDetail {
+    height: auto;
+  }
+
+  .aiDetail {
+    overflow: visible;
+    padding-right: 0;
   }
 
   .queueItemSide {

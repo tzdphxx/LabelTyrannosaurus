@@ -13,7 +13,7 @@ interface OwnerDashboardStore {
 
 export const useOwnerDashboardStore = create<OwnerDashboardStore>((set) => ({
   data: null,
-  trendDays: 14,
+  trendDays: 7,
   isLoading: false,
   error: null,
   setTrendDays: (trendDays) => set({ trendDays }),

@@ -7,7 +7,7 @@ import {
   List,
   Pagination,
   Progress,
-  Segmented,
+  Select,
   Space,
   Tag,
   Timeline,
@@ -51,6 +51,26 @@ function formatValue(value: unknown) {
   }
 
   return String(value)
+}
+
+function formatJson(value: unknown) {
+  if (value === undefined || value === null || value === '') {
+    return '-'
+  }
+
+  if (typeof value === 'string') {
+    try {
+      return JSON.stringify(JSON.parse(value), null, 2)
+    } catch {
+      return value
+    }
+  }
+
+  try {
+    return JSON.stringify(value, null, 2)
+  } catch {
+    return String(value)
+  }
 }
 
 function toPercent(value: unknown) {
@@ -192,13 +212,14 @@ export function ReviewerAiReviewQueuePage() {
       <div className={styles.aiShell}>
         <Card className={styles.aiQueue} title="题目队列">
           <Space direction="vertical" size={12} className={styles.panelStack}>
-            <Segmented
-              block
+            <Select
+              className={styles.aiQueueFilter}
               options={statusOptions}
               value={statusFilter}
               onChange={(value) => changeStatus(value as AiReviewQueueStatusFilter)}
             />
             <List
+              className={styles.aiQueueList}
               dataSource={aiReviewLogs}
               loading={isAiReviewLogsLoading}
               locale={{ emptyText: '暂无 AI 审核记录' }}
@@ -213,19 +234,22 @@ export function ReviewerAiReviewQueuePage() {
                     className={`${styles.aiItem} ${recordKey === selectedKey ? styles.aiItemActive : ''}`}
                     onClick={() => selectRecord(record)}
                   >
-                    <Space direction="vertical" size={6} className={styles.aiItemContent}>
-                      <Space wrap>
-                        <Typography.Text strong>{recordTitle}</Typography.Text>
+                    <div className={styles.aiItemContent}>
+                      <div className={styles.aiItemHeader}>
+                        <Typography.Text className={styles.aiItemTitle} ellipsis={{ tooltip: recordTitle }} strong>
+                          {recordTitle}
+                        </Typography.Text>
                         <Tag color={statusColors[record.aiReviewStatus] ?? 'default'}>{formatValue(record.aiReviewStatus)}</Tag>
-                      </Space>
-                      <Space wrap>
+                      </div>
+                      <div className={styles.aiItemMeta}>
                         <Tag color={decisionColors[record.decision] ?? 'default'}>{formatValue(record.decision)}</Tag>
                         <Typography.Text type="secondary">平均分 {formatValue(record.averageScore)}</Typography.Text>
-                      </Space>
-                      <Typography.Text type="secondary" ellipsis>
+                        <Typography.Text type="secondary">{formatValue(record.submissionStatus)}</Typography.Text>
+                      </div>
+                      <Typography.Text className={styles.aiItemFooter} ellipsis={{ tooltip: recordSummary }} type="secondary">
                         {recordSummary}
                       </Typography.Text>
-                    </Space>
+                    </div>
                   </List.Item>
                 )
               }}
@@ -242,6 +266,7 @@ export function ReviewerAiReviewQueuePage() {
         </Card>
 
         <section className={styles.aiDetail}>
+          <div className={styles.aiDetailTopGrid}>
           <Card
             title="AI 评语"
             extra={
@@ -272,50 +297,53 @@ export function ReviewerAiReviewQueuePage() {
                   <Descriptions.Item label="重试次数">{formatValue(currentAiReviewLog.retryCount)}</Descriptions.Item>
                 </Descriptions>
                 <Alert message={formatValue(currentAiReviewLog.suggestion)} showIcon type="info" />
+                <div className={styles.aiRiskCompact}>
+                  <Typography.Text className={styles.aiRiskTitle}>风险标记</Typography.Text>
+                  {riskFlags.length ? (
+                    <Space wrap size={[4, 4]}>
+                      {riskFlags.map((flag) => (
+                        <Tag key={flag} color="warning">
+                          {flag}
+                        </Tag>
+                      ))}
+                    </Space>
+                  ) : (
+                    <Typography.Text className={styles.aiRiskEmpty} type="secondary">
+                      暂无风险标记
+                    </Typography.Text>
+                  )}
+                </div>
               </Space>
             ) : (
               <Empty description="请选择一条 AI 审核记录" />
             )}
           </Card>
 
-          <div className={styles.aiDetailGrid}>
-            <Card title="AI评分维度">
-              {dimensionEntries.length > 0 ? (
-                <Space direction="vertical" size={12} className={styles.panelStack}>
-                  <Progress percent={toPercent(currentAiReviewLog?.averageScore)} size="small" status="active" />
-                  {dimensionEntries.map(([name, score]) => (
-                    <div key={name} className={styles.scoreRow}>
-                      <Typography.Text>{name}</Typography.Text>
-                      <Progress percent={toPercent(score)} size="small" />
-                    </div>
-                  ))}
-                </Space>
-              ) : (
-                <Empty description="暂无评分维度" />
-              )}
-            </Card>
+          <Card title="AI评分维度">
+            {dimensionEntries.length > 0 ? (
+              <Space direction="vertical" size={12} className={styles.panelStack}>
+                <Progress percent={toPercent(currentAiReviewLog?.averageScore)} size="small" status="active" />
+                {dimensionEntries.map(([name, score]) => (
+                  <div key={name} className={styles.scoreRow}>
+                    <Typography.Text>{name}</Typography.Text>
+                    <Progress percent={toPercent(score)} size="small" />
+                  </div>
+                ))}
+              </Space>
+            ) : (
+              <Empty description="暂无评分维度" />
+            )}
+          </Card>
 
-            <Card title="风险标记">
-              {riskFlags.length ? (
-                <Space wrap>
-                  {riskFlags.map((flag) => (
-                    <Tag key={flag} color="warning">
-                      {flag}
-                    </Tag>
-                  ))}
-                </Space>
-              ) : (
-                <Empty description="暂无风险标记" />
-              )}
-            </Card>
           </div>
 
-          <div className={styles.aiDetailGrid}>
+          <div className={styles.aiDetailMiddleGrid}>
             <Card title="标注内容">
-              <Empty description="暂无标注内容" />
-            </Card>
-            <Card title="审核模板">
-              <Empty description="暂无审核模板" />
+              {currentAiReviewLog?.answerJson ? (
+                <pre className={styles.codeBlock}>{formatJson(currentAiReviewLog.answerJson)}</pre>
+              ) : (
+                <Empty description="暂无标注内容" />
+              )}
             </Card>
           </div>
 
@@ -339,14 +367,9 @@ export function ReviewerAiReviewQueuePage() {
             )}
           </Card>
 
-          <div className={styles.aiDetailGrid}>
-            <Card title="Prompt 快照">
-              <pre className={styles.codeBlock}>{formatValue(currentAiReviewLog?.promptSnapshot)}</pre>
-            </Card>
-            <Card title="LLM 原始响应">
-              <pre className={styles.codeBlock}>{formatValue(currentAiReviewLog?.rawResponse)}</pre>
-            </Card>
-          </div>
+          <Card className={styles.aiPromptCard} title="Prompt 快照">
+            <pre className={styles.codeBlock}>{formatValue(currentAiReviewLog?.promptSnapshot)}</pre>
+          </Card>
         </section>
       </div>
     </main>

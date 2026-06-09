@@ -207,6 +207,7 @@ export interface AiReviewResultResponse {
     score: number | string
     comment?: string
   }>
+  answerJson?: string
   riskFlags?: string | string[]
   suggestion?: string
   errorCode?: string | null

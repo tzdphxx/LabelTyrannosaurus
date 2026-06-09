@@ -186,7 +186,7 @@ export function LabelerWorkbenchPage() {
           savingValuesSignatureRef.current = null
         }
       })
-    }, 1200)
+    }, 30000)
 
     return () => window.clearTimeout(timer)
   }, [currentQuestion, currentUser, effectiveValues, hasUnsavedChanges, markDraftSaved, saveDraft, taskId])
@@ -364,6 +364,14 @@ export function LabelerWorkbenchPage() {
         <Card className="labeler-workbench__form" loading={isWorkbenchLoading} title={currentQuestion?.title ?? '当前题目'}>
           {currentQuestion ? (
             <Space className="labeler-workbench__form-content" direction="vertical" size={16}>
+              {currentQuestion.returnedReason?.trim() ? (
+                <div className="labeler-returned-reason">
+                  <Typography.Text className="labeler-returned-reason__title">打回原因</Typography.Text>
+                  <Typography.Paragraph className="labeler-returned-reason__content">
+                    {currentQuestion.returnedReason}
+                  </Typography.Paragraph>
+                </div>
+              ) : null}
               <Descriptions bordered column={1} size="small" title="题目材料">
                 {Object.entries(currentQuestion.source).map(([label, value]) => (
                   <Descriptions.Item key={label} label={label}>

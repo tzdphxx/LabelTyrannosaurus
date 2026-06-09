@@ -96,6 +96,7 @@ export interface LabelingQuestion {
   source: Record<string, string>
   schema: DynamicFormSchema
   previousValues?: Record<string, unknown>
+  returnedReason?: string | null
   status: 'pending' | 'in_progress' | 'rejected' | 'submitted' | 'draft'
 }
 

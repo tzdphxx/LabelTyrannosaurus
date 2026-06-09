@@ -2,7 +2,6 @@ import type { DashboardAttentionLevel } from '../types/dashboard'
 
 export const dashboardRangeOptions = [
   { label: '7 天', value: 7 },
-  { label: '14 天', value: 14 },
   { label: '30 天', value: 30 },
 ]
 

@@ -13,7 +13,7 @@ interface ReviewerDashboardStore {
 
 export const useReviewerDashboardStore = create<ReviewerDashboardStore>((set, get) => ({
   data: null,
-  range: 14,
+  range: 7,
   isLoading: false,
   error: null,
   setRange: (range) => set({ range }),

@@ -108,6 +108,7 @@ interface ClaimItemResponse {
   metadataJson?: string
   draftVersion?: number
   latestSubmissionStatus?: string
+  returnedReason?: string | null
   updatedAt?: string
 }
 
@@ -159,38 +160,10 @@ interface CachedAssignmentContext {
   updatedAt?: string
 }
 
-interface CachedClaimedTaskContext {
-  task: LabelerTaskSummary
-  questions: LabelingQuestion[]
-}
-
-const assignmentCacheKey = 'labelhub-real-labeler-assignments'
-const assignmentCache = readAssignmentCache()
-const claimedTaskCache: Record<string, CachedClaimedTaskContext> = {}
-
-function readAssignmentCache(): Record<string, CachedAssignmentContext> {
-  if (typeof window === 'undefined') {
-    return {}
-  }
-
-  try {
-    const rawValue = window.sessionStorage.getItem(assignmentCacheKey)
-    const parsedValue = rawValue ? JSON.parse(rawValue) : {}
-
-    return parsedValue && typeof parsedValue === 'object' && !Array.isArray(parsedValue)
-      ? parsedValue as Record<string, CachedAssignmentContext>
-      : {}
-  } catch {
-    return {}
-  }
-}
+const assignmentCache: Record<string, CachedAssignmentContext> = {}
 
 function persistAssignmentCache() {
-  if (typeof window === 'undefined') {
-    return
-  }
-
-  window.sessionStorage.setItem(assignmentCacheKey, JSON.stringify(assignmentCache))
+  // Disabled while /v1/claims returnedReason must always reflect the latest server response.
 }
 
 function cacheAssignment(context: CachedAssignmentContext) {
@@ -750,6 +723,7 @@ function buildQuestionFromClaimedItem(
     templateVersionId,
     title: item.externalId ? `题目 ${item.externalId}` : `题目 #${item.itemId}`,
     description: '',
+    returnedReason: item.returnedReason?.trim() ? item.returnedReason : null,
     source: buildClaimedItemSource(item),
     schema,
     status: mapQuestionStatus(item.claimStatus),
@@ -959,7 +933,7 @@ async function resolveAssignmentForTask(taskId: string) {
     return cachedAssignment
   }
 
-  const claimedTask = claimedTaskCache[taskId] ?? await loadClaimedTask(taskId)
+  const claimedTask = await loadClaimedTask(taskId)
   const firstQuestion = claimedTask.questions[0]
 
   return firstQuestion ? assignmentCache[firstQuestion.id] : null
@@ -1011,12 +985,10 @@ async function loadClaimedTask(taskId: string) {
     })
   })
 
-  claimedTaskCache[resolvedTaskId] = {
+  return {
     task,
     questions,
   }
-
-  return claimedTaskCache[resolvedTaskId]
 }
 
 async function ensureAssignmentDetailForTask(taskId: string) {
@@ -1058,7 +1030,7 @@ export const realLabelingService = {
   },
 
   async getTaskDetail(taskId: string): Promise<LabelerTaskSummary | null> {
-    const claimedTask = claimedTaskCache[taskId] ?? await loadClaimedTask(taskId)
+    const claimedTask = await loadClaimedTask(taskId)
 
     return {
       ...claimedTask.task,
@@ -1073,28 +1045,21 @@ export const realLabelingService = {
     )
     const assignmentId = String(claimResponse.assignmentId)
     const question = claimResponse.schemaJson ? buildQuestion(claimResponse, taskId) : undefined
-    const task = claimedTaskCache[taskId]?.task
-    const nextTask: LabelerTaskSummary = task
-      ? {
-          ...task,
-          status: 'claimed',
-          claimedAt: getNowLabel(),
-        }
-      : {
-          id: taskId,
-          title: `任务 #${taskId}`,
-          description: '',
-          instruction: '',
-          tags: [],
-          status: 'claimed',
-          templateId: '',
-          templateName: '-',
-          deadline: '-',
-          rewardText: '-',
-          totalQuestions: 1,
-          completedQuestions: 0,
-          claimedAt: getNowLabel(),
-        }
+    const nextTask: LabelerTaskSummary = {
+      id: taskId,
+      title: `任务 #${taskId}`,
+      description: '',
+      instruction: '',
+      tags: [],
+      status: 'claimed',
+      templateId: '',
+      templateName: '-',
+      deadline: '-',
+      rewardText: '-',
+      totalQuestions: 1,
+      completedQuestions: 0,
+      claimedAt: getNowLabel(),
+    }
 
     cacheAssignment({
       assignmentId,
@@ -1115,7 +1080,7 @@ export const realLabelingService = {
   },
 
   async listQuestions(taskId: string): Promise<LabelingQuestion[]> {
-    const claimedTask = claimedTaskCache[taskId] ?? await loadClaimedTask(taskId)
+    const claimedTask = await loadClaimedTask(taskId)
 
     return claimedTask.questions.map(cloneQuestion)
   },

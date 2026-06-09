@@ -972,3 +972,26 @@
 - Ran `npm run build`; build still fails due to existing unrelated TypeScript errors:
   - `src/features/dynamic-form/utils/designerDrag.ts` `never` type property access.
   - `src/pages/owner/templates/OwnerTemplateDesignerPage.tsx` `never` type property access.
+
+## 2026-06-09 - Reviewer AI review queue layout scroll fix
+
+### Implemented
+
+- Updated reviewer AI review queue layout behavior:
+  - Right-side detail panel now scrolls independently with `overflow-y: auto`.
+  - Removed the right detail panel row-height constraint that could compress content and visually cut off cards.
+  - Preserved the fixed-height two-column workbench and left queue internal scrolling.
+  - Mobile layout still expands naturally without nested right-panel scrolling.
+
+### Current Constraints
+
+- The reviewer AI detail content can still be long because AI comments, annotation JSON, and Prompt snapshots render as raw detail blocks.
+- This change only fixes layout scrolling and does not change reviewer APIs, store logic, or displayed fields.
+
+### Verification
+
+- Ran `git diff --check` for `src/pages/reviewer/ReviewerPages.module.css`; only Git line-ending warnings were reported.
+- Ran `nvm list`; current Node version is `22.14.0`.
+- Ran `npm run build`; build still fails due to existing unrelated TypeScript errors:
+  - `src/features/dynamic-form/utils/designerDrag.ts` `never` type property access.
+  - `src/pages/owner/templates/OwnerTemplateDesignerPage.tsx` `never` type property access.

@@ -66,6 +66,43 @@ class MediaPromptContextBuilderTest {
     }
 
     @Test
+    void videoWithMediaUrlBuildsVideoContentPart() {
+        MediaPromptResult result = builder.build(new MediaPromptInput(
+                "{\"media_type\":\"video\",\"media_url\":\"https://cos.example.com/oceans.mp4\",\"video_transcript\":\"waves\"}",
+                "{}",
+                "Review video",
+                new ProviderCapability(true, true, 5, null),
+                true,
+                "auto",
+                5
+        ));
+
+        assertThat(result.promptMode()).isEqualTo(PromptMode.VIDEO_DIRECT);
+        assertThat(result.degraded()).isFalse();
+        assertThat(result.messages().get(0).contentParts())
+                .anySatisfy(part -> assertThat(part).isInstanceOf(LlmMessage.VideoUrlPart.class));
+        assertThat(result.mediaUnderstanding()).containsEntry("usedVideo", true);
+    }
+
+    @Test
+    void videoWithMediaUrlWithoutVisionProviderDegradesToTextOnly() {
+        MediaPromptResult result = builder.build(new MediaPromptInput(
+                "{\"media_type\":\"video\",\"media_url\":\"https://cos.example.com/oceans.mp4\"}",
+                "{}",
+                "Review video",
+                new ProviderCapability(false, false, 0, null),
+                true,
+                "auto",
+                5
+        ));
+
+        assertThat(result.promptMode()).isEqualTo(PromptMode.TEXT_ONLY);
+        assertThat(result.degraded()).isTrue();
+        assertThat(result.limitations()).contains("MULTIMODAL_NOT_SUPPORTED");
+        assertThat(result.messages().get(0).content()).contains("https://cos.example.com/oceans.mp4");
+    }
+
+    @Test
     void providerWithoutMultiImageSupportUsesOneImageOnly() {
         MediaPromptResult result = builder.build(new MediaPromptInput(
                 "{\"media_type\":\"video\",\"key_frame_urls\":[\"https://e.com/1.jpg\",\"https://e.com/2.jpg\"],\"video_transcript\":\"hello\"}",

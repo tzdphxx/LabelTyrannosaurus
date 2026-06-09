@@ -93,6 +93,10 @@ public class LlmTriggerService {
     @Autowired(required = false)
     private MediaContextResolver mediaContextResolver;
     @Autowired(required = false)
+    private MediaPromptContextBuilder mediaPromptContextBuilder;
+    @Autowired(required = false)
+    private VideoKeyFrameService videoKeyFrameService;
+    @Autowired(required = false)
     private AiMetrics aiMetrics;
     @Autowired
     private PromptTemplateEngine promptTemplateEngine;
@@ -351,16 +355,30 @@ public class LlmTriggerService {
                 longValue(run.getComponentId()), parseStringList(run.getTargetFieldsJson()),
                 extractSchemaFields(templateVersion.getSchemaJson()), run.getInputSnapshotJson());
 
+        TriggerPrompt triggerPrompt = buildTriggerPrompt(systemPrompt, run, config, providerId);
         LlmGatewayResponse gatewayResponse;
         try {
             gatewayResponse = llmGateway.review(new LlmGatewayRequest(
                     providerId,
                     modelName,
-                    List.of(
-                            new LlmMessage("system", systemPrompt),
-                            new LlmMessage("user", run.getInputSnapshotJson())
-                    )
+                    triggerPrompt.messages()
             ));
+            if (shouldFallbackVideoDirect(triggerPrompt, gatewayResponse)) {
+                TriggerPrompt keyFramePrompt = buildTriggerFallbackPrompt(systemPrompt, run, config, providerId, false);
+                if (keyFramePrompt != null && keyFramePrompt.promptMode() == PromptMode.VIDEO_KEYFRAMES) {
+                    gatewayResponse = llmGateway.review(new LlmGatewayRequest(providerId, modelName,
+                            keyFramePrompt.messages()));
+                    triggerPrompt = keyFramePrompt;
+                }
+                if (gatewayResponse.status() != LlmGatewayStatus.SUCCESS) {
+                    TriggerPrompt textPrompt = buildTriggerFallbackPrompt(systemPrompt, run, config, providerId, true);
+                    if (textPrompt != null && textPrompt.promptMode() == PromptMode.TEXT_ONLY) {
+                        gatewayResponse = llmGateway.review(new LlmGatewayRequest(providerId, modelName,
+                                textPrompt.messages()));
+                        triggerPrompt = textPrompt;
+                    }
+                }
+            }
         } catch (Exception ex) {
             agentRunService.fail(run.getAgentRunId(), AgentRunStatus.FAILED, safeErrorMessage(ex.getMessage()));
             fillFailure(run, LlmTaskStatus.FAILED.name(), "LLM_EXCEPTION", safeErrorMessage(ex.getMessage()));
@@ -397,6 +415,90 @@ public class LlmTriggerService {
         }
         recordLlmTriggerMetric(run);
         appendAudit(run.getCreatedBy(), task.getId(), null, run);
+    }
+
+    private TriggerPrompt buildTriggerPrompt(String systemPrompt, LlmTriggerRun run,
+                                             AiReviewConfig config, Long providerId) {
+        List<LlmMessage> textMessages = List.of(
+                new LlmMessage("system", systemPrompt),
+                new LlmMessage("user", run.getInputSnapshotJson())
+        );
+        Map<String, Object> input = parseObjectMapOrEmpty(run.getInputSnapshotJson());
+        Object itemSnapshot = input.get("itemSnapshot");
+        if (!(itemSnapshot instanceof Map<?, ?> itemMap)) {
+            return new TriggerPrompt(textMessages, PromptMode.TEXT_ONLY);
+        }
+        return buildTriggerPromptFromItem(systemPrompt, run, config, providerId, input, castObjectMap(itemMap));
+    }
+
+    private TriggerPrompt buildTriggerPromptFromItem(String systemPrompt, LlmTriggerRun run,
+                                                     AiReviewConfig config, Long providerId,
+                                                     Map<String, Object> input, Map<String, Object> item) {
+        List<LlmMessage> textMessages = List.of(
+                new LlmMessage("system", systemPrompt),
+                new LlmMessage("user", run.getInputSnapshotJson())
+        );
+        String mediaType = stringValue(item.get("media_type"), "");
+        if (mediaType == null || mediaType.isBlank() || "text".equalsIgnoreCase(mediaType)) {
+            return new TriggerPrompt(textMessages, PromptMode.TEXT_ONLY);
+        }
+        ProviderCapability capability = llmProviderService.findEnabledById(providerId)
+                .map(llmProviderService::capability)
+                .orElse(ProviderCapability.textOnly());
+        MediaPromptContextBuilder builder = mediaPromptContextBuilder != null
+                ? mediaPromptContextBuilder : new DefaultMediaPromptContextBuilder();
+        MediaPromptResult prompt = builder.build(new MediaPromptInput(
+                toJson(item),
+                toJson(input.getOrDefault("currentAnswerJson", Map.of())),
+                run.getInputSnapshotJson(),
+                capability,
+                config.getMultimodalEnabled() == null || Boolean.TRUE.equals(config.getMultimodalEnabled()),
+                config.getVisionDetail() != null ? config.getVisionDetail() : "auto",
+                config.getMaxImagesPerRequest() != null ? config.getMaxImagesPerRequest() : 5
+        ));
+        List<LlmMessage> messages = new ArrayList<>();
+        messages.add(new LlmMessage("system", systemPrompt));
+        messages.addAll(prompt.messages());
+        return new TriggerPrompt(messages, prompt.promptMode());
+    }
+
+    private TriggerPrompt buildTriggerFallbackPrompt(String systemPrompt, LlmTriggerRun run,
+                                                     AiReviewConfig config, Long providerId, boolean textOnly) {
+        Map<String, Object> input = parseObjectMapOrEmpty(run.getInputSnapshotJson());
+        Object itemSnapshot = input.get("itemSnapshot");
+        if (!(itemSnapshot instanceof Map<?, ?> itemMap)) {
+            return null;
+        }
+        Map<String, Object> item = new LinkedHashMap<>(castObjectMap(itemMap));
+        if (!"video".equalsIgnoreCase(stringValue(item.get("media_type"), ""))) {
+            return null;
+        }
+        String mediaUrl = stringValue(item.get("media_url"), "");
+        if (textOnly) {
+            item.remove("media_url");
+            item.remove("key_frame_urls");
+            addMediaLimitation(item, "VIDEO_MEDIA_FALLBACK_TEXT_ONLY");
+        } else {
+            List<String> keyFrameUrls = stringListValue(item.get("key_frame_urls"));
+            if (keyFrameUrls.isEmpty() && videoKeyFrameService != null) {
+                keyFrameUrls = videoKeyFrameService.generateKeyFrameUrls(mediaUrl, intValue(item.get("video_duration_seconds")));
+            }
+            if (keyFrameUrls.isEmpty()) {
+                return null;
+            }
+            item.put("key_frame_urls", keyFrameUrls);
+            item.remove("media_url");
+            addMediaLimitation(item, "VIDEO_DIRECT_FALLBACK_TO_KEYFRAMES");
+        }
+        return buildTriggerPromptFromItem(systemPrompt, run, config, providerId, input, item);
+    }
+
+    private boolean shouldFallbackVideoDirect(TriggerPrompt triggerPrompt, LlmGatewayResponse response) {
+        return triggerPrompt != null
+                && triggerPrompt.promptMode() == PromptMode.VIDEO_DIRECT
+                && response != null
+                && response.status() != LlmGatewayStatus.SUCCESS
+                && response.status() != LlmGatewayStatus.RATE_LIMITED;
     }
 
     private Task loadTask(Long taskId) {
@@ -794,6 +896,41 @@ public class LlmTriggerService {
         }
     }
 
+    private void addMediaLimitation(Map<String, Object> item, String limitation) {
+        List<String> limitations = new ArrayList<>(stringListValue(item.get("media_context_limitations")));
+        if (!limitations.contains(limitation)) {
+            limitations.add(limitation);
+        }
+        item.put("media_context_limitations", limitations);
+    }
+
+    private List<String> stringListValue(Object value) {
+        if (!(value instanceof Iterable<?> iterable)) {
+            return List.of();
+        }
+        List<String> values = new ArrayList<>();
+        for (Object item : iterable) {
+            if (item != null && !String.valueOf(item).isBlank()) {
+                values.add(String.valueOf(item));
+            }
+        }
+        return values;
+    }
+
+    private Integer intValue(Object value) {
+        if (value instanceof Number number) {
+            return number.intValue();
+        }
+        if (value == null || String.valueOf(value).isBlank()) {
+            return null;
+        }
+        try {
+            return Integer.valueOf(String.valueOf(value));
+        } catch (NumberFormatException ex) {
+            return null;
+        }
+    }
+
     private String toJson(Object value) {
         try {
             return objectMapper.writeValueAsString(value);
@@ -805,5 +942,8 @@ public class LlmTriggerService {
     private record TemplateContext(Long componentId,
                                    List<PromptTemplateEngine.SchemaField> schemaFields,
                                      List<String> targetFields) {
+    }
+
+    private record TriggerPrompt(List<LlmMessage> messages, PromptMode promptMode) {
     }
 }

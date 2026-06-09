@@ -27,12 +27,15 @@ public record LlmMessage(
         return new LlmMessage("user", null, contentParts, null, null, null);
     }
 
-    public sealed interface ContentPart permits TextPart, ImageUrlPart {
+    public sealed interface ContentPart permits TextPart, ImageUrlPart, VideoUrlPart {
     }
 
     public record TextPart(String text) implements ContentPart {
     }
 
     public record ImageUrlPart(String url, String detail) implements ContentPart {
+    }
+
+    public record VideoUrlPart(String url) implements ContentPart {
     }
 }

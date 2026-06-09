@@ -97,7 +97,7 @@ public class DefaultLlmGateway implements LlmGateway {
     }
 
     private LlmProviderRuntimeConfig selectRuntimeModel(LlmProviderRuntimeConfig config, java.util.List<LlmMessage> messages) {
-        if (!containsImagePart(messages)
+        if (!containsMediaPart(messages)
                 || config.capability() == null
                 || config.capability().visionModel() == null
                 || config.capability().visionModel().isBlank()) {
@@ -111,14 +111,15 @@ public class DefaultLlmGateway implements LlmGateway {
                 config.capability());
     }
 
-    private boolean containsImagePart(java.util.List<LlmMessage> messages) {
+    private boolean containsMediaPart(java.util.List<LlmMessage> messages) {
         if (messages == null) {
             return false;
         }
         return messages.stream()
                 .filter(message -> message.contentParts() != null)
                 .flatMap(message -> message.contentParts().stream())
-                .anyMatch(LlmMessage.ImageUrlPart.class::isInstance);
+                .anyMatch(part -> part instanceof LlmMessage.ImageUrlPart
+                        || part instanceof LlmMessage.VideoUrlPart);
     }
 
     /**

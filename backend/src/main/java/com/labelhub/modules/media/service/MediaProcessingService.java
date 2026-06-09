@@ -224,6 +224,9 @@ public class MediaProcessingService {
     private MediaProcessingStatus statusFor(String mediaType, Map<String, Object> item, List<String> limitations) {
         return switch (mediaType) {
             case "video" -> {
+                if (item.get("media_file_id") != null || !text(item.get("media_url")).isBlank()) {
+                    yield limitations.isEmpty() ? MediaProcessingStatus.READY : MediaProcessingStatus.PARTIAL;
+                }
                 if (!hasList(item.get("key_frame_urls")) && !hasList(item.get("key_frame_file_ids"))) {
                     addOnce(limitations, "KEY_FRAME_MISSING");
                 }

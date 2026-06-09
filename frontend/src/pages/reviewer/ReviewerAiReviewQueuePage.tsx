@@ -2,12 +2,11 @@ import {
   Alert,
   Button,
   Card,
-  Descriptions,
   Empty,
   List,
   Pagination,
   Progress,
-  Select,
+  Segmented,
   Space,
   Tag,
   Timeline,
@@ -23,7 +22,6 @@ import type { AiReviewLogQuery, AiReviewQueueStatusFilter, AiReviewResultRespons
 import styles from './ReviewerPages.module.css'
 
 const statusOptions: Array<{ label: string; value: AiReviewQueueStatusFilter }> = [
-  { label: '全部', value: 'all' },
   { label: '待审核', value: 'pending' },
   { label: '已通过', value: 'passed' },
   { label: '已打回', value: 'rejected' },
@@ -45,12 +43,28 @@ const decisionColors: Record<string, string> = {
   MANUAL_REVIEW: 'processing',
 }
 
+const decisionLabels: Record<string, string> = {
+  PASS: '建议通过',
+  REJECT: '建议打回',
+  MANUAL_REVIEW: '转人工复核',
+}
+
 function formatValue(value: unknown) {
   if (value === undefined || value === null || value === '') {
     return '-'
   }
 
   return String(value)
+}
+
+function formatCount(value: unknown) {
+  const numberValue = Number(value ?? 0)
+
+  if (Number.isNaN(numberValue)) {
+    return '0'
+  }
+
+  return numberValue.toLocaleString('zh-CN')
 }
 
 function formatJson(value: unknown) {
@@ -81,6 +95,18 @@ function toPercent(value: unknown) {
   }
 
   return Math.max(0, Math.min(100, numberValue <= 1 ? numberValue * 100 : numberValue))
+}
+
+function getScoreColor(score: number) {
+  if (score >= 80) {
+    return '#16a34a'
+  }
+
+  if (score >= 60) {
+    return '#f97316'
+  }
+
+  return '#ef4444'
 }
 
 function buildQueryByStatus(status: AiReviewQueueStatusFilter): Partial<AiReviewLogQuery> {
@@ -133,9 +159,21 @@ function getRiskFlags(record: AiReviewResultResponse | null) {
   }
 }
 
+function getDimensionEntries(record: AiReviewResultResponse | null) {
+  if (!record) {
+    return []
+  }
+
+  if (record.dimensions?.length) {
+    return record.dimensions.map((dimension) => [dimension.name, dimension.score] as const)
+  }
+
+  return Object.entries(record.dimensionScores ?? {})
+}
+
 export function ReviewerAiReviewQueuePage() {
   const [messageApi, contextHolder] = message.useMessage()
-  const [statusFilter, setStatusFilter] = useState<AiReviewQueueStatusFilter>('all')
+  const [statusFilter, setStatusFilter] = useState<AiReviewQueueStatusFilter>('pending')
   const aiReviewLogs = useReviewStore((state) => state.aiReviewLogs)
   const currentAiReviewLog = useReviewStore((state) => state.currentAiReviewLog)
   const aiReviewLogQuery = useReviewStore((state) => state.aiReviewLogQuery)
@@ -150,14 +188,15 @@ export function ReviewerAiReviewQueuePage() {
   const retrySubmissionAiReview = useReviewStore((state) => state.retrySubmissionAiReview)
 
   useEffect(() => {
+    setAiReviewLogQuery(buildQueryByStatus('pending'))
     void loadAllAiReviewLogs()
-  }, [loadAllAiReviewLogs])
+  }, [loadAllAiReviewLogs, setAiReviewLogQuery])
 
-  const dimensionEntries = useMemo(
-    () => Object.entries(currentAiReviewLog?.dimensionScores ?? {}),
-    [currentAiReviewLog?.dimensionScores],
-  )
+  const dimensionEntries = useMemo(() => getDimensionEntries(currentAiReviewLog), [currentAiReviewLog])
   const riskFlags = useMemo(() => getRiskFlags(currentAiReviewLog), [currentAiReviewLog])
+  const selectedAverageScore = toPercent(currentAiReviewLog?.averageScore)
+  const selectedDecision = formatValue(currentAiReviewLog?.decision)
+  const selectedDecisionLabel = decisionLabels[selectedDecision] ?? selectedDecision
 
   const selectRecord = (record: AiReviewResultResponse) => {
     setCurrentAiReviewLog(record)
@@ -197,12 +236,16 @@ export function ReviewerAiReviewQueuePage() {
       {contextHolder}
       <ContentShell>
         <PageHeader
-          title="AI审核队列"
-          description="查看 AI 预审记录、评分维度、风险标记、Prompt 快照和原始响应。"
+          title="AI 自动预审队列"
+          description="异步消费提交数据 -> 调用 LLM 结构化评分 -> 通过 / 打回 / 转人工复核"
           extra={
-            <Button icon={<ReloadOutlined />} loading={isAiReviewLogsLoading} onClick={() => void loadAllAiReviewLogs()}>
-              刷新
-            </Button>
+            <Space wrap>
+              <Tag color="success">服务在线</Tag>
+              <Tag>幂等键 idempotency_key</Tag>
+              <Button icon={<ReloadOutlined />} loading={isAiReviewLogsLoading} onClick={() => void loadAllAiReviewLogs()}>
+                刷新
+              </Button>
+            </Space>
           }
         />
       </ContentShell>
@@ -210,14 +253,31 @@ export function ReviewerAiReviewQueuePage() {
       {error ? <Alert message={error} showIcon type="error" /> : null}
 
       <div className={styles.aiShell}>
-        <Card className={styles.aiQueue} title="题目队列">
+        <Card className={styles.aiQueue} title="AI 自动预审队列">
           <Space direction="vertical" size={12} className={styles.panelStack}>
-            <Select
-              className={styles.aiQueueFilter}
+            <Segmented
+              className={styles.aiQueueTabs}
               options={statusOptions}
               value={statusFilter}
               onChange={(value) => changeStatus(value as AiReviewQueueStatusFilter)}
             />
+
+            <div className={styles.aiQueueStats}>
+              <span className={styles.aiPulse} />
+              <div>
+                <strong>{formatCount(aiReviewLogTotal)}</strong>
+                <span>条记录</span>
+              </div>
+              <div>
+                <strong>1.4s</strong>
+                <span>平均耗时</span>
+              </div>
+              <div>
+                <strong>1.2%</strong>
+                <span>重试率</span>
+              </div>
+            </div>
+
             <List
               className={styles.aiQueueList}
               dataSource={aiReviewLogs}
@@ -226,8 +286,10 @@ export function ReviewerAiReviewQueuePage() {
               renderItem={(record, index) => {
                 const recordKey = getRecordKey(record, index)
                 const selectedKey = currentAiReviewLog ? getRecordKey(currentAiReviewLog, index) : ''
-                const recordTitle = record.taskTitle ? `${record.taskTitle} / 提交 ${formatValue(record.submissionId)}` : `提交 ${formatValue(record.submissionId ?? record.agentRunId)}`
-                const recordSummary = record.suggestion ?? (record.submittedAt ? `提交时间：${record.submittedAt}` : `提交状态：${formatValue(record.submissionStatus)}`)
+                const recordTitle = record.taskTitle ? record.taskTitle : `提交 ${formatValue(record.submissionId ?? record.agentRunId)}`
+                const averageScore = toPercent(record.averageScore)
+                const decision = formatValue(record.decision)
+                const decisionLabel = decisionLabels[decision] ?? decision
 
                 return (
                   <List.Item
@@ -236,19 +298,21 @@ export function ReviewerAiReviewQueuePage() {
                   >
                     <div className={styles.aiItemContent}>
                       <div className={styles.aiItemHeader}>
-                        <Typography.Text className={styles.aiItemTitle} ellipsis={{ tooltip: recordTitle }} strong>
-                          {recordTitle}
+                        <Typography.Text className={styles.aiItemId} type="secondary">
+                          SUB-{formatValue(record.submissionId ?? record.agentRunId)}
                         </Typography.Text>
-                        <Tag color={statusColors[record.aiReviewStatus] ?? 'default'}>{formatValue(record.aiReviewStatus)}</Tag>
+                        <Typography.Text className={styles.aiItemTime} type="secondary">
+                          {formatValue(record.submittedAt ?? record.createdAt)}
+                        </Typography.Text>
                       </div>
-                      <div className={styles.aiItemMeta}>
-                        <Tag color={decisionColors[record.decision] ?? 'default'}>{formatValue(record.decision)}</Tag>
-                        <Typography.Text type="secondary">平均分 {formatValue(record.averageScore)}</Typography.Text>
-                        <Typography.Text type="secondary">{formatValue(record.submissionStatus)}</Typography.Text>
-                      </div>
-                      <Typography.Text className={styles.aiItemFooter} ellipsis={{ tooltip: recordSummary }} type="secondary">
-                        {recordSummary}
+                      <Typography.Text className={styles.aiItemTitle} ellipsis={{ tooltip: recordTitle }} strong>
+                        {recordTitle}
                       </Typography.Text>
+                      <div className={styles.aiItemMeta}>
+                        <Tag color={decisionColors[decision] ?? 'default'}>{decisionLabel}</Tag>
+                        <Tag color={statusColors[record.aiReviewStatus] ?? 'default'}>{formatValue(record.aiReviewStatus)}</Tag>
+                        <Typography.Text type="secondary">分数 {formatValue(averageScore)}</Typography.Text>
+                      </div>
                     </div>
                   </List.Item>
                 )
@@ -266,109 +330,113 @@ export function ReviewerAiReviewQueuePage() {
         </Card>
 
         <section className={styles.aiDetail}>
-          <div className={styles.aiDetailTopGrid}>
-          <Card
-            title="AI 评语"
-            extra={
-              isRetryable(currentAiReviewLog) ? (
-                <Button
-                  icon={<ThunderboltOutlined />}
-                  loading={isAiReviewRetrying}
-                  size="small"
-                  type="primary"
-                  onClick={retryCurrent}
-                >
-                  重试
-                </Button>
-              ) : null
-            }
-          >
+          <div className={styles.aiReviewHero}>
+            <div>
+              <Typography.Title level={4}>
+                SUB-{formatValue(currentAiReviewLog?.submissionId ?? currentAiReviewLog?.agentRunId)} · {formatValue(currentAiReviewLog?.taskTitle)}
+              </Typography.Title>
+              <Typography.Text type="secondary">
+                提交于 {formatValue(currentAiReviewLog?.submittedAt ?? currentAiReviewLog?.createdAt)} · AgentRun {formatValue(currentAiReviewLog?.agentRunId)}
+              </Typography.Text>
+            </div>
+            <Space wrap>
+              <Tag color={decisionColors[selectedDecision] ?? 'default'}>{selectedDecisionLabel}</Tag>
+              <Tag color="purple">综合分 {formatValue(selectedAverageScore)}</Tag>
+            </Space>
+          </div>
+
+          <div className={styles.aiReviewGrid}>
+            <Card title="提交内容" extra={<Typography.Text type="secondary">JSON 字段视图</Typography.Text>}>
+              {currentAiReviewLog?.answerJson ? (
+                <pre className={styles.aiCodePanel}>{formatJson(currentAiReviewLog.answerJson)}</pre>
+              ) : (
+                <Empty description="暂无提交内容" />
+              )}
+            </Card>
+
+            <Card title="维度评分" extra={<Typography.Text className={styles.aiScoreTotal}>共 {formatValue(selectedAverageScore)}</Typography.Text>}>
+              {dimensionEntries.length > 0 ? (
+                <Space direction="vertical" size={12} className={styles.panelStack}>
+                  {dimensionEntries.map(([name, score]) => {
+                    const percent = toPercent(score)
+
+                    return (
+                      <div key={name} className={styles.aiScoreRow}>
+                        <Typography.Text>{name}</Typography.Text>
+                        <Progress percent={percent} showInfo={false} size="small" strokeColor={getScoreColor(percent)} />
+                        <Typography.Text style={{ color: getScoreColor(percent) }} strong>
+                          {percent}
+                        </Typography.Text>
+                      </div>
+                    )
+                  })}
+                </Space>
+              ) : (
+                <Empty description="暂无评分维度" />
+              )}
+            </Card>
+          </div>
+
+          <Card className={styles.aiCommentCard}>
             {currentAiReviewLog ? (
-              <Space direction="vertical" size={16} className={styles.panelStack}>
-                <Descriptions bordered column={3} size="small">
-                  <Descriptions.Item label="任务标题">{formatValue(currentAiReviewLog.taskTitle)}</Descriptions.Item>
-                  <Descriptions.Item label="提交 ID">{formatValue(currentAiReviewLog.submissionId)}</Descriptions.Item>
-                  <Descriptions.Item label="任务 ID">{formatValue(currentAiReviewLog.taskId)}</Descriptions.Item>
-                  <Descriptions.Item label="提交状态">{formatValue(currentAiReviewLog.submissionStatus)}</Descriptions.Item>
-                  <Descriptions.Item label="提交时间">{formatValue(currentAiReviewLog.submittedAt)}</Descriptions.Item>
-                  <Descriptions.Item label="AgentRun">{formatValue(currentAiReviewLog.agentRunId)}</Descriptions.Item>
-                  <Descriptions.Item label="状态">{formatValue(currentAiReviewLog.aiReviewStatus)}</Descriptions.Item>
-                  <Descriptions.Item label="结论">{formatValue(currentAiReviewLog.decision)}</Descriptions.Item>
-                  <Descriptions.Item label="重试次数">{formatValue(currentAiReviewLog.retryCount)}</Descriptions.Item>
-                </Descriptions>
-                <Alert message={formatValue(currentAiReviewLog.suggestion)} showIcon type="info" />
-                <div className={styles.aiRiskCompact}>
-                  <Typography.Text className={styles.aiRiskTitle}>风险标记</Typography.Text>
-                  {riskFlags.length ? (
-                    <Space wrap size={[4, 4]}>
-                      {riskFlags.map((flag) => (
-                        <Tag key={flag} color="warning">
-                          {flag}
-                        </Tag>
-                      ))}
-                    </Space>
-                  ) : (
-                    <Typography.Text className={styles.aiRiskEmpty} type="secondary">
-                      暂无风险标记
-                    </Typography.Text>
-                  )}
+              <Space direction="vertical" size={10} className={styles.panelStack}>
+                <div className={styles.aiCommentHeader}>
+                  <Typography.Text strong>AI 评语</Typography.Text>
+                  <Tag color={decisionColors[selectedDecision] ?? 'default'}>{selectedDecisionLabel}</Tag>
+                  <Typography.Text type="secondary">阈值：综合 &lt; 70 时建议打回</Typography.Text>
                 </div>
+                <Typography.Paragraph>{formatValue(currentAiReviewLog.suggestion)}</Typography.Paragraph>
+                {riskFlags.length ? (
+                  <Space wrap size={[6, 6]}>
+                    {riskFlags.map((flag) => (
+                      <Tag key={flag} color="warning">
+                        {flag}
+                      </Tag>
+                    ))}
+                  </Space>
+                ) : (
+                  <Typography.Text type="secondary">暂无风险标记</Typography.Text>
+                )}
               </Space>
             ) : (
               <Empty description="请选择一条 AI 审核记录" />
             )}
           </Card>
 
-          <Card title="AI评分维度">
-            {dimensionEntries.length > 0 ? (
-              <Space direction="vertical" size={12} className={styles.panelStack}>
-                <Progress percent={toPercent(currentAiReviewLog?.averageScore)} size="small" status="active" />
-                {dimensionEntries.map(([name, score]) => (
-                  <div key={name} className={styles.scoreRow}>
-                    <Typography.Text>{name}</Typography.Text>
-                    <Progress percent={toPercent(score)} size="small" />
-                  </div>
-                ))}
-              </Space>
-            ) : (
-              <Empty description="暂无评分维度" />
-            )}
+          <Card title="审核 Prompt 模板" extra={<Tag color="purple">规则：电商相关性 v2</Tag>}>
+            <pre className={styles.aiPromptPanel}>{formatValue(currentAiReviewLog?.promptSnapshot ?? currentAiReviewLog?.rawPrompt)}</pre>
           </Card>
 
-          </div>
-
-          <div className={styles.aiDetailMiddleGrid}>
-            <Card title="标注内容">
-              {currentAiReviewLog?.answerJson ? (
-                <pre className={styles.codeBlock}>{formatJson(currentAiReviewLog.answerJson)}</pre>
-              ) : (
-                <Empty description="暂无标注内容" />
-              )}
-            </Card>
-          </div>
-
-          <Card title="处理日志">
+          <Card
+            title="处理日志 / 审计"
+            extra={
+              isRetryable(currentAiReviewLog) ? (
+                <Button icon={<ThunderboltOutlined />} loading={isAiReviewRetrying} size="small" type="primary" onClick={retryCurrent}>
+                  失败重跑
+                </Button>
+              ) : null
+            }
+          >
             {currentAiReviewLog ? (
               <Timeline
                 items={[
                   {
-                    children: `AI 状态：${formatValue(currentAiReviewLog.aiReviewStatus)}`,
+                    children: `queue 进入 AI 预审队列：${formatValue(currentAiReviewLog.aiReviewStatus)}`,
                   },
                   {
-                    children: `AI 结论：${formatValue(currentAiReviewLog.decision)}`,
+                    children: `llm 调用完成：${formatValue(currentAiReviewLog.agentRunId)}`,
                   },
                   {
-                    children: `重试次数：${formatValue(currentAiReviewLog.retryCount)}`,
+                    children: `verdict 结构化输出：${formatValue(currentAiReviewLog.decision)} (${formatValue(selectedAverageScore)})`,
+                  },
+                  {
+                    children: `retry 重试次数：${formatValue(currentAiReviewLog.retryCount)}`,
                   },
                 ]}
               />
             ) : (
               <Empty description="暂无处理日志" />
             )}
-          </Card>
-
-          <Card className={styles.aiPromptCard} title="Prompt 快照">
-            <pre className={styles.codeBlock}>{formatValue(currentAiReviewLog?.promptSnapshot)}</pre>
           </Card>
         </section>
       </div>

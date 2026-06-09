@@ -13,6 +13,24 @@ export type SubmissionReviewStatus =
 export type ReviewRiskLevel = 'low' | 'medium' | 'high'
 export type ManualReviewDecision = 'approved' | 'rejected'
 
+export interface AiReviewTraceStep {
+  name?: string
+  role?: string
+  decision?: string
+  score?: number | string | null
+  confidence?: number | string | null
+  status?: string
+  reason?: string | null
+}
+
+export interface AiReviewTrace {
+  strategy?: string
+  strategyLabel?: string
+  summary?: string
+  steps?: AiReviewTraceStep[]
+  metrics?: Record<string, unknown>
+}
+
 export interface ReviewerSubmissionListItem {
   submissionId: number
   taskId: number
@@ -218,6 +236,7 @@ export interface AiReviewResultResponse {
   promptSnapshot?: string
   rawPrompt?: string
   rawResponse?: string
+  reviewTrace?: AiReviewTrace | null
   retryCount?: number
   createdAt?: string
 }
@@ -300,6 +319,7 @@ export interface ReviewerSubmissionDetail {
     promptMode?: string
     degraded?: boolean
     limitations?: string | null
+    reviewTrace?: AiReviewTrace | null
   }
   agentRunSummary?: {
     agentRunId?: number

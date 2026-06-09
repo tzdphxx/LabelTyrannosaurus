@@ -317,7 +317,7 @@ export function OwnerTasksPage() {
                       <Progress percent={percent} showInfo={false} size="small" />
                     </div>
                     <div className={styles.progressMeta}>
-                      <span>{formatCount(task.progress.completedItems)} / {formatCount(task.progress.totalItems)} 完成</span>
+                      <span>{formatCount(task.progress.distributedItems)} / {formatCount(task.progress.totalItems)} 完成</span>
                       <span>{formatCount(task.progress.pendingReviewItems)} 待审</span>
                     </div>
                   </Space>

@@ -25,7 +25,7 @@ export function getProgressPercent(progress: TaskProgress) {
     return 0
   }
 
-  return Math.round((progress.completedItems / progress.totalItems) * 100)
+  return Math.round((progress.distributedItems / progress.totalItems) * 100)
 }
 
 export function formatCount(value: number) {

@@ -1,4 +1,5 @@
 import type { ImportPreview } from './import'
+import type { LlmProviderResponse } from './llmProvider'
 import type { TemplateSummary } from './template'
 
 export type OwnerTaskStatus = 'draft' | 'published' | 'paused' | 'ended'
@@ -6,7 +7,8 @@ export type OwnerTaskApiStatus = 'DRAFT' | 'PUBLISHED' | 'PAUSED' | 'ENDED'
 
 export type DistributionStrategy = '先到先得' | '配额分发' | '指派'
 export type DistributionStrategyCode = 'FCFS' | 'QUOTA_GRAB' | 'ASSIGNED'
-export type AiReviewStrategy = 'LIGHTWEIGHT'
+export type AiReviewStrategy = 'LIGHTWEIGHT' | 'PARALLEL_VOTE' | 'DEEP_DIMENSION' | 'AGENT_DEBATE'
+export type AiFlowPolicy = 'MANUAL_FIRST' | 'AI_PASS_ONLY' | 'AI_REJECT_ONLY' | 'AI_PASS_AND_REJECT' | 'ALWAYS_MANUAL'
 export type RewardMode = 'APPROVED_ITEM'
 export type RewardCurrency = 'POINT'
 
@@ -27,19 +29,10 @@ export interface AiReviewConfigDraft {
   aiPassThreshold: number
   aiManualReviewThreshold: number
   aiReviewStrategy: AiReviewStrategy
+  aiFlowPolicy: AiFlowPolicy
 }
 
-export interface OwnerModelOptionResponse {
-  id: number
-  providerCode: string
-  providerName: string
-  defaultModel: string
-  supportVision: boolean
-  supportMultiImage: boolean
-  maxImageCount: number
-  visionModel: string
-  structuredOutputMode: string
-}
+export type OwnerModelOptionResponse = LlmProviderResponse
 
 export interface TaskProgress {
   totalItems: number
@@ -216,11 +209,14 @@ export interface TaskDetailResponse {
     scoringDimensions?: string[]
     passThreshold?: number
     manualReviewThreshold?: number
+    reviewStrategy?: AiReviewStrategy
+    flowPolicy?: AiFlowPolicy
   } | null
   reviewLevelCount?: number
   overlapCount?: number
   maxClaimsPerLabeler?: number
   assignedLabelerId?: number | null
+  aiFlowPolicy?: AiFlowPolicy
   aiReviewStrategy?: AiReviewStrategy
   rewardRule?: {
     rewardMode?: RewardMode
@@ -252,7 +248,8 @@ export interface CreateTaskRequest {
   aiScoringDimensions?: string[]
   aiPassThreshold?: number
   aiManualReviewThreshold?: number
-  aiReviewStrategy: AiReviewStrategy
+  aiReviewStrategy?: AiReviewStrategy
+  aiFlowPolicy?: AiFlowPolicy
   reviewLevelCount?: number
   maxClaimsPerLabeler: number
   assignedLabelerId?: number

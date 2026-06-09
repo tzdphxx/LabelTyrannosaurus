@@ -930,3 +930,42 @@
   - `src/components/navigation/RoleBadge.tsx` role key mismatch.
   - `src/features/dynamic-form/utils/designerDrag.ts` `never` type property access.
   - `src/pages/owner/templates/OwnerTemplateDesignerPage.tsx` `never` type property access.
+
+## 2026-06-09 - Labeler item review history API integration
+
+### Implemented
+
+- Added submission item history support for the labeler workbench:
+  - `GET /api/v1/submissions/{submissionId}/item-history` is called through the existing frontend path convention: `/v1/submissions/{submissionId}/item-history`.
+  - The request runs when a labeler selects a question that has a `submissionId`.
+  - Questions without a `submissionId` do not call the API and continue to show the original right-side flow UI.
+- Extended labeler data types:
+  - `LabelingQuestion.submissionId`.
+  - `SubmissionItemHistoryResponse`.
+  - `SubmissionItemHistory`.
+  - `SubmissionReviewRoundHistory`.
+  - `SubmissionAiReviewHistory`.
+- Extended labeler services:
+  - Real service reads `latestSubmissionId` or `submissionId` from claimed items.
+  - Real service writes the returned `submissionId` back to the submitted question after single-question submit.
+  - Mock service exposes an empty `getSubmissionItemHistory` implementation so mock mode remains usable.
+- Extended `labelingStore`:
+  - Added `currentQuestionHistory`.
+  - Added `isQuestionHistoryLoading`.
+  - Added `loadQuestionHistory(submissionId)`.
+  - Clears stale history when switching questions or loading a new workbench.
+- Updated `LabelerWorkbenchPage`:
+  - Reuses the existing right-side "题目状态与流程" card and Timeline.
+  - Appends flattened `histories[].reviewRounds` entries to the Timeline.
+  - Only displays reviewer, review action, and review time for each manual review round.
+
+### Verification
+
+- Ran `nvm list`; current Node version is `22.14.0`.
+- `.nvmrc` does not exist and `package.json` has no `engines.node` constraint.
+- Ran targeted ESLint:
+  - `npx eslint src\types\labeling.ts src\services\labeler\labelingRealService.ts src\services\labeler\labelingService.ts src\stores\labelingStore.ts src\pages\labeler\LabelerWorkbenchPage.tsx`
+  - Result: passed.
+- Ran `npm run build`; build still fails only on existing unrelated TypeScript errors:
+  - `src/features/dynamic-form/utils/designerDrag.ts`
+  - `src/pages/owner/templates/OwnerTemplateDesignerPage.tsx`

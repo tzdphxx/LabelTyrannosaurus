@@ -27,11 +27,26 @@ import { PageHeader } from '../../components/page/PageHeader'
 import { ownerModelService, ownerTemplateService } from '../../services'
 import { useOwnerDraftStore } from '../../stores/ownerDraftStore'
 import { useOwnerTaskStore } from '../../stores/ownerTaskStore'
-import type { DatasetItemResponse, OwnerLabelerOption, OwnerModelOptionResponse } from '../../types/task'
+import type { AiFlowPolicy, AiReviewStrategy, DatasetItemResponse, OwnerLabelerOption, OwnerModelOptionResponse } from '../../types/task'
 import type { TemplateSummary } from '../../types/template'
 import { distributionStrategyLabels, formatCount } from '../../utils/ownerTasks'
 import styles from './OwnerTaskEditorPage.module.css'
 import { AssigneePickerDrawer } from './task-editor/AssigneePickerDrawer'
+
+const aiReviewStrategyOptions: Array<{ label: string, value: AiReviewStrategy }> = [
+  { label: '单路 LLM（默认，兼容存量）', value: 'LIGHTWEIGHT' },
+  { label: '多模型并行投票', value: 'PARALLEL_VOTE' },
+  { label: '维度专项模型 + 维度内投票', value: 'DEEP_DIMENSION' },
+  { label: '多 Agent 辩论', value: 'AGENT_DEBATE' },
+]
+
+const aiFlowPolicyOptions: Array<{ label: string, value: AiFlowPolicy }> = [
+  { label: 'AI 只提建议，结果一律转人工', value: 'MANUAL_FIRST' },
+  { label: 'AI 可直接过审，打回转人工', value: 'AI_PASS_ONLY' },
+  { label: 'AI 可直接打回，通过转人工', value: 'AI_REJECT_ONLY' },
+  { label: 'AI 可直接过审与打回', value: 'AI_PASS_AND_REJECT' },
+  { label: '始终转人工', value: 'ALWAYS_MANUAL' },
+]
 
 type DatasetDraftRow = {
   rowType: 'draft'
@@ -144,27 +159,17 @@ export function OwnerTaskEditorPage() {
   }, [loadFromTask, loadTaskDetail, resetDraft, taskId])
 
   useEffect(() => {
-    setPreviewDatasetPage(1)
-  }, [importPreview?.id])
-
-  useEffect(() => {
     if (!taskId && importPreview && draft.quota !== importPreview.validRows) {
       updateDraft({ quota: Math.max(importPreview.validRows, 1) })
     }
   }, [draft.quota, importPreview, taskId, updateDraft])
-
-  useEffect(() => {
-    if (!draft.assignedLabelerId) {
-      setSelectedAssigneeName('')
-    }
-  }, [draft.assignedLabelerId])
 
   const templateOptions = templates.map((template) => ({
     label: `${template.name} ${template.version}`,
     value: template.currentVersionId,
   }))
   const modelSelectOptions = modelOptions.map((option) => ({
-    label: option.defaultModel,
+    label: `${option.providerName} / ${option.defaultModel}`,
     value: String(option.id),
   }))
   const isReadonlyTask = Boolean(taskId && currentTaskDetail?.task.status !== 'draft')
@@ -317,6 +322,7 @@ export function OwnerTaskEditorPage() {
     draftDatasetExternalId,
     draftDatasetItem,
     isAppendingDatasetItems,
+    submitDatasetItemDraft,
   ])
 
   const formatFileSize = (fileSize: number) => {
@@ -607,9 +613,17 @@ export function OwnerTaskEditorPage() {
               <label className={styles.field}>
                 <span>AI 审核策略</span>
                 <Select
-                  options={[{ label: '轻量审核', value: 'LIGHTWEIGHT' }]}
+                  options={aiReviewStrategyOptions}
                   value={draft.aiReview.aiReviewStrategy}
                   onChange={(aiReviewStrategy) => updateDraft({ aiReview: { aiReviewStrategy } })}
+                />
+              </label>
+              <label className={styles.field}>
+                <span>AI 流转策略</span>
+                <Select
+                  options={aiFlowPolicyOptions}
+                  value={draft.aiReview.aiFlowPolicy}
+                  onChange={(aiFlowPolicy) => updateDraft({ aiReview: { aiFlowPolicy } })}
                 />
               </label>
               <label className={`${styles.field} ${styles.fieldWide}`}>

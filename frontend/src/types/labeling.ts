@@ -89,6 +89,7 @@ export interface LabelingQuestion {
   id: string
   taskId: string
   assignmentId?: number | string | null
+  submissionId?: number | string | null
   templateVersionId?: number | string | null
   datasetItemId?: number | string | null
   title: string
@@ -131,6 +132,43 @@ export interface LabelingReviewSummary {
   comment: string
   reviewedAt: string
   reviewerName: string
+}
+
+export interface SubmissionAiReviewHistory {
+  aiReviewResultId?: number
+  agentRunId?: number | null
+  status?: string
+  decision?: string | null
+  reviewedAt?: string | null
+}
+
+export interface SubmissionReviewRoundHistory {
+  reviewRecordId: number
+  reviewLevel?: number | null
+  reviewerId?: number | null
+  reviewerName?: string | null
+  action?: string | null
+  reason?: string | null
+  reviewComment?: string | null
+  reviewedAt?: string | null
+}
+
+export interface SubmissionItemHistory {
+  submissionId: number
+  assignmentId: number
+  versionNo: number
+  status: string
+  submittedBy: number
+  submittedByName?: string | null
+  submittedAt?: string | null
+  aiReview?: SubmissionAiReviewHistory | null
+  reviewRounds: SubmissionReviewRoundHistory[]
+}
+
+export interface SubmissionItemHistoryResponse {
+  taskId: number
+  datasetItemId: number
+  histories: SubmissionItemHistory[]
 }
 
 export interface LabelingSubmitValidationError {

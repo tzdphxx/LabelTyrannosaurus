@@ -1,4 +1,5 @@
 import {
+  ApiOutlined,
   AuditOutlined,
   CheckSquareOutlined,
   DashboardOutlined,
@@ -15,11 +16,25 @@ import type { NavItem } from '../types/navigation'
 export const roleNavigation: Record<Role, NavItem[]> = {
   ADMIN: [
     {
-      key: 'admin-review-assignment',
-      label: '审核分配',
+      key: 'admin-dashboard',
+      label: '工作台',
       path: '/app/admin',
       role: 'ADMIN',
+      icon: <DashboardOutlined />,
+    },
+    {
+      key: 'admin-review-assignment',
+      label: '审核分配',
+      path: '/app/admin/review-assignment',
+      role: 'ADMIN',
       icon: <SafetyCertificateOutlined />,
+    },
+    {
+      key: 'admin-llm-providers',
+      label: 'LLM Provider',
+      path: '/app/admin/llm-providers',
+      role: 'ADMIN',
+      icon: <ApiOutlined />,
     },
   ],
   OWNER: [

@@ -20,6 +20,7 @@ import type {
   LabelingSubmission,
   LabelingSubmitResult,
   LabelingSubmitValidationResult,
+  SubmissionItemHistoryResponse,
 } from '../../types/labeling'
 import type { DynamicFormSubmitResult } from '../../types/dynamicForm'
 import type { ReviewOutcomeSyncPayload } from '../../types/review'
@@ -395,6 +396,7 @@ export const mockLabelingService = {
     if (questionIndex >= 0) {
       questions[questionIndex] = {
         ...questions[questionIndex],
+        submissionId: reviewedSubmission?.id,
         status: 'submitted',
       }
     }
@@ -418,6 +420,16 @@ export const mockLabelingService = {
     const review = reviews.find((item) => item.taskId === taskId)
 
     return review ? { ...review } : null
+  },
+
+  async getSubmissionItemHistory(submissionId: string): Promise<SubmissionItemHistoryResponse | null> {
+    void submissionId
+
+    return {
+      taskId: 0,
+      datasetItemId: 0,
+      histories: [],
+    }
   },
 
   async getSubmissionStats(): Promise<LabelerSubmissionStats> {

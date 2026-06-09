@@ -43,13 +43,16 @@ export function LabelerWorkbenchPage() {
   const currentQuestion = useLabelingStore((state) => state.currentQuestion)
   const currentDraft = useLabelingStore((state) => state.currentDraft)
   const reviewSummary = useLabelingStore((state) => state.reviewSummary)
+  const currentQuestionHistory = useLabelingStore((state) => state.currentQuestionHistory)
   const submitValidation = useLabelingStore((state) => state.submitValidation)
   const isWorkbenchLoading = useLabelingStore((state) => state.isWorkbenchLoading)
   const isDraftSaving = useLabelingStore((state) => state.isDraftSaving)
   const isSubmitting = useLabelingStore((state) => state.isSubmitting)
+  const isQuestionHistoryLoading = useLabelingStore((state) => state.isQuestionHistoryLoading)
   const error = useLabelingStore((state) => state.error)
   const loadWorkbench = useLabelingStore((state) => state.loadWorkbench)
   const loadDraft = useLabelingStore((state) => state.loadDraft)
+  const loadQuestionHistory = useLabelingStore((state) => state.loadQuestionHistory)
   const saveDraft = useLabelingStore((state) => state.saveDraft)
   const submitQuestionDraft = useLabelingStore((state) => state.submitQuestionDraft)
   const setCurrentQuestion = useLabelingStore((state) => state.setCurrentQuestion)
@@ -94,6 +97,7 @@ export function LabelerWorkbenchPage() {
   const canGoPrevious = currentQuestionIndex > 0
   const canGoNext = currentQuestionIndex >= 0 && currentQuestionIndex < questions.length - 1
   const answerSource = currentDraft ? '当前草稿' : currentQuestion?.previousValues ? '上一轮答案' : '空白答案'
+  const reviewHistoryRounds = currentQuestionHistory?.histories.flatMap((history) => history.reviewRounds) ?? []
   const flowItems = currentQuestion
     ? [
       {
@@ -126,6 +130,17 @@ export function LabelerWorkbenchPage() {
           },
         ]
         : []),
+      ...reviewHistoryRounds.map((round) => ({
+        color: round.action === 'REJECT' ? 'red' : round.action === 'APPROVE' ? 'green' : 'blue',
+        children: (
+          <Space direction="vertical" size={2}>
+            <Typography.Text strong>审核员：{round.reviewerName || round.reviewerId || '-'}</Typography.Text>
+            <Typography.Text type="secondary">
+              动作：{round.action || '-'} · 时间：{round.reviewedAt || '-'}
+            </Typography.Text>
+          </Space>
+        ),
+      })),
     ]
     : []
 
@@ -140,6 +155,14 @@ export function LabelerWorkbenchPage() {
       void loadDraft(taskId, currentQuestion.id, currentUser.id)
     }
   }, [currentQuestion, currentUser, loadDraft, taskId])
+
+  useEffect(() => {
+    const submissionId = currentQuestion?.submissionId
+
+    if (submissionId) {
+      void loadQuestionHistory(String(submissionId))
+    }
+  }, [currentQuestion?.submissionId, loadQuestionHistory])
 
   useEffect(() => {
     if (editingQuestionId === activeQuestionId && hasUnsavedChanges) {
@@ -441,7 +464,7 @@ export function LabelerWorkbenchPage() {
           )}
         </Card>
 
-        <Card className="labeler-workbench__side" loading={isWorkbenchLoading} title="题目状态与流程">
+        <Card className="labeler-workbench__side" loading={isWorkbenchLoading || isQuestionHistoryLoading} title="题目状态与流程">
           <Space direction="vertical" size={16}>
             <Descriptions column={1} size="small">
               <Descriptions.Item label="当前题目">{currentQuestion?.title ?? '-'}</Descriptions.Item>

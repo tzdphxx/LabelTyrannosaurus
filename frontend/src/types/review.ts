@@ -56,12 +56,18 @@ export interface ReviewClaimResponse {
 export interface ReviewerTaskSummary {
   taskId: number
   taskTitle: string
+  taskStatus?: string
+  deadlineAt?: string
   pendingCount: number
   myPendingCount: number
   totalReviewedCount: number
+  claimStatus?: string
+  claimable?: boolean
   claimed: boolean
   claimedByMe: boolean
 }
+
+export type ReviewerReviewTaskClaimScope = 'ALL' | 'MINE' | 'CLAIMED' | 'UNCLAIMED'
 
 export interface ReviewerTaskStatusSummary {
   unclaimedCount: number

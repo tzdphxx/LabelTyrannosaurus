@@ -579,6 +579,33 @@
   margin-bottom: 0;
 }
 
+.taskScopeBar {
+  display: flex;
+  justify-content: flex-start;
+  padding: 12px;
+  border: 1px solid var(--reviewer-border);
+  border-radius: 8px;
+  background: var(--reviewer-panel);
+  box-shadow: var(--reviewer-shadow);
+}
+
+.taskScopeTabs:global(.ant-segmented) {
+  width: min(100%, 560px);
+  padding: 3px;
+  background: #f1f3f5;
+}
+
+.taskScopeTabs :global(.ant-segmented-group) {
+  width: 100%;
+}
+
+.taskScopeTabs :global(.ant-segmented-item) {
+  flex: 1;
+  min-width: 0;
+  border-radius: 7px;
+  font-size: 12px;
+}
+
 .taskBoard {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
@@ -586,10 +613,13 @@
 }
 
 .taskCard {
+  --task-state-color: var(--reviewer-accent);
+  --task-state-border: var(--reviewer-border);
+  --task-state-soft: var(--reviewer-accent-soft);
   position: relative;
   min-height: 260px;
   overflow: hidden;
-  border: 1px solid var(--reviewer-border);
+  border: 1px solid var(--task-state-border);
   border-radius: 12px;
   background: var(--reviewer-panel);
   box-shadow: var(--reviewer-shadow);
@@ -615,9 +645,43 @@
   background: var(--reviewer-panel);
 }
 
+.taskCardMine {
+  --task-state-color: var(--reviewer-success);
+  --task-state-border: #d8eadc;
+  --task-state-soft: #f5fbf6;
+}
+
+.taskCardClaimed {
+  --task-state-color: #615d59;
+  --task-state-border: var(--reviewer-border-strong);
+  --task-state-soft: var(--reviewer-panel-muted);
+}
+
+.taskCardUnclaimed {
+  --task-state-color: var(--reviewer-accent);
+  --task-state-border: #d6e6ff;
+  --task-state-soft: var(--reviewer-accent-soft);
+}
+
+.taskCardLocked {
+  cursor: default;
+}
+
+.taskCardLocked:hover {
+  border-color: var(--reviewer-border);
+  box-shadow: var(--reviewer-shadow);
+  transform: none;
+}
+
+.taskCardLocked .taskCardHeader,
+.taskCardLocked .taskMetricGrid,
+.taskCardLocked :global(.ant-progress) {
+  opacity: 0.72;
+}
+
 .taskCardTopline {
   height: 4px;
-  background: var(--reviewer-accent);
+  background: var(--task-state-color);
 }
 
 .taskCardContent {
@@ -642,7 +706,7 @@
 
 .taskEyebrow {
   display: block;
-  color: var(--reviewer-accent);
+  color: var(--task-state-color);
   font-size: 11px;
   font-weight: 800;
   letter-spacing: 0.08em;
@@ -679,8 +743,8 @@
 }
 
 .taskMetricHot {
-  border-color: #f0d0b8;
-  background: #fff4e8;
+  border-color: var(--task-state-border);
+  background: var(--task-state-soft);
 }
 
 .taskCardActions {
@@ -929,12 +993,16 @@
 }
 
 .manualQueueItem {
+  --manual-item-color: var(--reviewer-accent);
+  --manual-item-border: var(--reviewer-border);
+  --manual-item-soft: var(--reviewer-accent-soft);
+  position: relative;
   display: grid;
   width: 100%;
   min-height: 132px;
   gap: 9px;
   padding: 12px;
-  border: 1px solid var(--reviewer-border);
+  border: 1px solid var(--manual-item-border);
   border-radius: 8px;
   background: #ffffff;
   color: var(--reviewer-text);
@@ -946,8 +1014,37 @@
     transform 0.16s ease;
 }
 
+.manualQueueItem::before {
+  position: absolute;
+  top: 10px;
+  bottom: 10px;
+  left: 0;
+  width: 3px;
+  border-radius: 999px;
+  background: var(--manual-item-color);
+  content: "";
+}
+
+.manualQueueItemPass {
+  --manual-item-color: var(--reviewer-success);
+  --manual-item-border: #d8eadc;
+  --manual-item-soft: #f5fbf6;
+}
+
+.manualQueueItemReject {
+  --manual-item-color: var(--reviewer-warning);
+  --manual-item-border: #efd9c4;
+  --manual-item-soft: #fff8f0;
+}
+
+.manualQueueItemManual {
+  --manual-item-color: var(--reviewer-accent);
+  --manual-item-border: #d6e6ff;
+  --manual-item-soft: var(--reviewer-accent-soft);
+}
+
 .manualQueueItem:hover {
-  border-color: var(--reviewer-border-strong);
+  border-color: var(--manual-item-color);
   box-shadow: var(--reviewer-shadow);
   transform: translateY(-1px);
 }
@@ -957,9 +1054,9 @@
 }
 
 .manualQueueItemActive {
-  border-color: var(--reviewer-accent);
-  background: var(--reviewer-accent-soft);
-  box-shadow: 0 0 0 2px rgba(0, 117, 222, 0.12);
+  border-color: var(--manual-item-color);
+  background: var(--manual-item-soft);
+  box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.045), var(--reviewer-shadow);
 }
 
 .manualQueueItemDisabled {
@@ -994,7 +1091,10 @@
 
 .manualQueueScore {
   padding-top: 8px;
-  border-top: 1px dashed var(--reviewer-border);
+  padding: 8px 10px;
+  border: 1px solid var(--manual-item-border);
+  border-radius: 6px;
+  background: var(--manual-item-soft);
 }
 
 .manualHeroCard:global(.ant-card) {

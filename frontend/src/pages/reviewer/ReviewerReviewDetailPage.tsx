@@ -134,6 +134,20 @@ function getDecisionColor(decision?: string) {
   return aiDecisionColors[formatValue(decision)] ?? 'default'
 }
 
+function getDecisionClassName(decision?: string) {
+  const normalizedDecision = normalizeDecision(decision)
+
+  if (normalizedDecision === 'pass') {
+    return styles.manualQueueItemPass
+  }
+
+  if (normalizedDecision === 'reject') {
+    return styles.manualQueueItemReject
+  }
+
+  return styles.manualQueueItemManual
+}
+
 export function ReviewerReviewDetailPage() {
   const navigate = useNavigate()
   const { taskId } = useParams()
@@ -473,7 +487,7 @@ export function ReviewerReviewDetailPage() {
                 return (
                   <button
                     key={getItemKey(item)}
-                    className={`${styles.manualQueueItem} ${active ? styles.manualQueueItemActive : ''} ${
+                    className={`${styles.manualQueueItem} ${getDecisionClassName(item.aiDecision)} ${active ? styles.manualQueueItemActive : ''} ${
                       disabled ? styles.manualQueueItemDisabled : ''
                     }`}
                     disabled={disabled}

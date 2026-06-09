@@ -1,6 +1,6 @@
-import { Alert, Button, Card, Descriptions, List, Modal, Space, Tag, Typography, message } from 'antd'
+import { Alert, Button, Card, Descriptions, List, Modal, Space, Tag, Timeline, Typography, message } from 'antd'
 import { ArrowLeftOutlined, SaveOutlined, SendOutlined } from '@ant-design/icons'
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router'
 import { ContentShell } from '../../components/page/ContentShell'
 import { PageHeader } from '../../components/page/PageHeader'
@@ -8,31 +8,141 @@ import { StatePlaceholder } from '../../components/states/StatePlaceholder'
 import { DynamicFormRenderer } from '../../features/dynamic-form/components/DynamicFormRenderer'
 import { useAuthStore } from '../../stores/authStore'
 import { useLabelingStore } from '../../stores/labelingStore'
-import { labelerTaskStatusColors, labelerTaskStatusLabels } from '../../utils/labeling'
+import {
+  labelerTaskStatusColors,
+  labelerTaskStatusLabels,
+  labelingQuestionStatusColors,
+  labelingQuestionStatusLabels,
+} from '../../utils/labeling'
+
+function stringifyDraftValues(value: unknown): string {
+  if (!value || typeof value !== 'object') {
+    return JSON.stringify(value ?? null)
+  }
+
+  if (Array.isArray(value)) {
+    return `[${value.map((item) => stringifyDraftValues(item)).join(',')}]`
+  }
+
+  const record = value as Record<string, unknown>
+
+  return `{${Object.keys(record)
+    .sort()
+    .map((key) => `${JSON.stringify(key)}:${stringifyDraftValues(record[key])}`)
+    .join(',')}}`
+}
 
 export function LabelerWorkbenchPage() {
   const { taskId } = useParams()
   const navigate = useNavigate()
   const [messageApi, contextHolder] = message.useMessage()
+  const [modal, modalContextHolder] = Modal.useModal()
   const currentUser = useAuthStore((state) => state.currentUser)
   const currentTask = useLabelingStore((state) => state.currentTask)
   const questions = useLabelingStore((state) => state.questions)
   const currentQuestion = useLabelingStore((state) => state.currentQuestion)
   const currentDraft = useLabelingStore((state) => state.currentDraft)
   const reviewSummary = useLabelingStore((state) => state.reviewSummary)
+  const currentQuestionHistory = useLabelingStore((state) => state.currentQuestionHistory)
   const submitValidation = useLabelingStore((state) => state.submitValidation)
   const isWorkbenchLoading = useLabelingStore((state) => state.isWorkbenchLoading)
   const isDraftSaving = useLabelingStore((state) => state.isDraftSaving)
   const isSubmitting = useLabelingStore((state) => state.isSubmitting)
+  const isQuestionHistoryLoading = useLabelingStore((state) => state.isQuestionHistoryLoading)
   const error = useLabelingStore((state) => state.error)
   const loadWorkbench = useLabelingStore((state) => state.loadWorkbench)
   const loadDraft = useLabelingStore((state) => state.loadDraft)
+  const loadQuestionHistory = useLabelingStore((state) => state.loadQuestionHistory)
   const saveDraft = useLabelingStore((state) => state.saveDraft)
-  const submitTaskDrafts = useLabelingStore((state) => state.submitTaskDrafts)
+  const submitQuestionDraft = useLabelingStore((state) => state.submitQuestionDraft)
   const setCurrentQuestion = useLabelingStore((state) => state.setCurrentQuestion)
-  const [formInitialValues, setFormInitialValues] = useState<Record<string, unknown>>({})
   const [latestValues, setLatestValues] = useState<Record<string, unknown>>({})
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false)
+  const [editingQuestionId, setEditingQuestionId] = useState<string | null>(null)
+  const formInitialValues = useMemo(
+    () => currentDraft?.values ?? currentQuestion?.previousValues ?? {},
+    [currentDraft?.values, currentQuestion?.previousValues],
+  )
+  const llmContext = useMemo(
+    () => currentQuestion
+      ? {
+        taskId,
+        templateVersionId: currentQuestion.templateVersionId,
+        datasetItemId: currentQuestion.datasetItemId,
+        assignmentId: currentQuestion.assignmentId ?? currentQuestion.id,
+        previewMode: false,
+      }
+      : undefined,
+    [currentQuestion, taskId],
+  )
+  const formInitialValuesSignature = useMemo(() => stringifyDraftValues(formInitialValues), [formInitialValues])
+  const activeQuestionId = currentQuestion?.id ?? null
+  const savedValuesSignatureRef = useRef(formInitialValuesSignature)
+  const currentValuesSignatureRef = useRef(formInitialValuesSignature)
+  const savingValuesSignatureRef = useRef<string | null>(null)
+
+  const effectiveValues =
+    hasUnsavedChanges && editingQuestionId === currentQuestion?.id
+      ? latestValues
+      : formInitialValues
+  const currentQuestionIndex = currentQuestion
+    ? questions.findIndex((question) => question.id === currentQuestion.id)
+    : -1
+  const currentQuestionStatus = currentQuestion
+    ? hasUnsavedChanges
+      ? 'in_progress'
+      : currentQuestion.status
+    : 'pending'
+  const isCurrentSchemaEmpty = currentQuestion ? currentQuestion.schema.nodes.length === 0 : false
+  const canGoPrevious = currentQuestionIndex > 0
+  const canGoNext = currentQuestionIndex >= 0 && currentQuestionIndex < questions.length - 1
+  const answerSource = currentDraft ? '当前草稿' : currentQuestion?.previousValues ? '上一轮答案' : '空白答案'
+  const reviewHistoryRounds = currentQuestionHistory?.histories.flatMap((history) => history.reviewRounds) ?? []
+  const flowItems = currentQuestion
+    ? [
+      {
+        color: 'blue',
+        children: `题目状态：${labelingQuestionStatusLabels[currentQuestionStatus]}`,
+      },
+      ...(currentQuestion.previousValues
+        ? [
+          {
+            color: 'red',
+            children: reviewSummary
+              ? `已打回：${reviewSummary.reason}`
+              : '已打回：存在上一轮待修正答案',
+          },
+        ]
+        : []),
+      ...(currentDraft
+        ? [
+          {
+            color: 'gold',
+            children: `草稿保存：${currentDraft.updatedAt}`,
+          },
+        ]
+        : []),
+      ...(currentQuestion.status === 'submitted'
+        ? [
+          {
+            color: 'green',
+            children: '当前题已提交',
+          },
+        ]
+        : []),
+      ...reviewHistoryRounds.map((round) => ({
+        color: round.action === 'REJECT' ? 'red' : round.action === 'APPROVE' ? 'green' : 'blue',
+        children: (
+          <Space direction="vertical" size={2}>
+            <Typography.Text strong>审核员：{round.reviewerName || round.reviewerId || '-'}</Typography.Text>
+            <Typography.Text type="secondary">
+              动作：{round.action || '-'} · 时间：{round.reviewedAt || '-'}
+            </Typography.Text>
+          </Space>
+        ),
+      })),
+    ]
+    : []
 
   useEffect(() => {
     if (taskId) {
@@ -47,32 +157,62 @@ export function LabelerWorkbenchPage() {
   }, [currentQuestion, currentUser, loadDraft, taskId])
 
   useEffect(() => {
-    const values = currentDraft?.values ?? currentQuestion?.previousValues ?? {}
-    setFormInitialValues(values)
-    setLatestValues(values)
-    setHasUnsavedChanges(false)
-  }, [currentDraft?.id, currentQuestion?.id])
+    const submissionId = currentQuestion?.submissionId
+
+    if (submissionId) {
+      void loadQuestionHistory(String(submissionId))
+    }
+  }, [currentQuestion?.submissionId, loadQuestionHistory])
+
+  useEffect(() => {
+    if (editingQuestionId === activeQuestionId && hasUnsavedChanges) {
+      return
+    }
+
+    savedValuesSignatureRef.current = formInitialValuesSignature
+    currentValuesSignatureRef.current = formInitialValuesSignature
+    savingValuesSignatureRef.current = null
+  }, [activeQuestionId, editingQuestionId, formInitialValuesSignature, hasUnsavedChanges])
+
+  const markDraftSaved = useCallback((draftValues: Record<string, unknown>) => {
+    const savedSignature = stringifyDraftValues(draftValues)
+
+    savedValuesSignatureRef.current = savedSignature
+    savingValuesSignatureRef.current = null
+    setHasUnsavedChanges(currentValuesSignatureRef.current !== savedSignature)
+  }, [])
 
   useEffect(() => {
     if (!taskId || !currentQuestion || !currentUser || !hasUnsavedChanges) {
       return
     }
 
+    const valuesSignature = stringifyDraftValues(effectiveValues)
+
+    if (valuesSignature === savedValuesSignatureRef.current || valuesSignature === savingValuesSignatureRef.current) {
+      setHasUnsavedChanges(false)
+
+      return
+    }
+
     const timer = window.setTimeout(() => {
+      savingValuesSignatureRef.current = valuesSignature
       void saveDraft({
         taskId,
         questionId: currentQuestion.id,
         userId: currentUser.id,
-        values: latestValues,
+        values: effectiveValues,
       }).then((draft) => {
         if (draft) {
-          setHasUnsavedChanges(false)
+          markDraftSaved(draft.values)
+        } else {
+          savingValuesSignatureRef.current = null
         }
       })
-    }, 1200)
+    }, 30000)
 
     return () => window.clearTimeout(timer)
-  }, [currentQuestion, currentUser, hasUnsavedChanges, latestValues, saveDraft, taskId])
+  }, [currentQuestion, currentUser, effectiveValues, hasUnsavedChanges, markDraftSaved, saveDraft, taskId])
 
   const handleSaveDraft = async () => {
     if (!taskId || !currentQuestion || !currentUser) {
@@ -80,65 +220,98 @@ export function LabelerWorkbenchPage() {
       return
     }
 
+    const valuesSignature = stringifyDraftValues(effectiveValues)
+
+    if (valuesSignature === savedValuesSignatureRef.current) {
+      setHasUnsavedChanges(false)
+
+      return
+    }
+
+    savingValuesSignatureRef.current = valuesSignature
     const draft = await saveDraft({
       taskId,
       questionId: currentQuestion.id,
       userId: currentUser.id,
-      values: latestValues,
+      values: effectiveValues,
     })
 
     if (draft) {
-      setHasUnsavedChanges(false)
+      markDraftSaved(draft.values)
       messageApi.success('草稿已保存')
     } else {
+      savingValuesSignatureRef.current = null
       messageApi.error('草稿保存失败')
     }
   }
 
   const handleValuesChange = (values: Record<string, unknown>) => {
+    const valuesSignature = stringifyDraftValues(values)
+
+    currentValuesSignatureRef.current = valuesSignature
     setLatestValues(values)
-    setHasUnsavedChanges(true)
+    setEditingQuestionId(currentQuestion?.id ?? null)
+    setHasUnsavedChanges(valuesSignature !== savedValuesSignatureRef.current)
   }
 
-  const submitCurrentTask = async () => {
-    if (!taskId || !currentUser) {
-      messageApi.error('当前任务不可提交')
+  const selectQuestion = (questionId: string) => {
+    setHasUnsavedChanges(false)
+    setEditingQuestionId(null)
+    setCurrentQuestion(questionId)
+  }
+
+  const submitCurrentQuestion = async () => {
+    if (!taskId || !currentQuestion || !currentUser) {
+      messageApi.error('当前题目不可提交')
       return
     }
 
-    if (currentQuestion) {
-      await saveDraft({
+    const valuesSignature = stringifyDraftValues(effectiveValues)
+
+    if (valuesSignature !== savedValuesSignatureRef.current || !currentDraft) {
+      savingValuesSignatureRef.current = valuesSignature
+      const draft = await saveDraft({
         taskId,
         questionId: currentQuestion.id,
         userId: currentUser.id,
-        values: latestValues,
+        values: effectiveValues,
       })
+
+      if (!draft) {
+        savingValuesSignatureRef.current = null
+        messageApi.error('鑽夌淇濆瓨澶辫触锛屾湭鎻愪氦')
+
+        return
+      }
+
+      markDraftSaved(draft.values)
+    } else {
       setHasUnsavedChanges(false)
     }
 
-    const result = await submitTaskDrafts(taskId, currentUser.id)
+    const result = await submitQuestionDraft(taskId, currentQuestion.id, currentUser.id)
 
     if (result.submission) {
-      messageApi.success('任务已提交')
+      messageApi.success('当前题目已提交')
       return
     }
 
     const firstError = result.validation.errors[0]
 
     if (firstError?.questionId) {
-      setCurrentQuestion(firstError.questionId)
+      selectQuestion(firstError.questionId)
     }
 
     messageApi.error(firstError?.message ?? '提交校验失败')
   }
 
-  const confirmSubmitTask = () => {
-    Modal.confirm({
-      title: '提交标注任务',
-      content: '提交后任务将进入待审核状态，确认提交当前任务的全部已保存答案吗？',
+  const confirmSubmitQuestion = () => {
+    modal.confirm({
+      title: '提交当前题目',
+      content: '提交后仅当前题进入已提交状态，其他题目不会被提交。确认提交当前题吗？',
       okText: '提交',
       cancelText: '取消',
-      onOk: () => submitCurrentTask(),
+      onOk: () => submitCurrentQuestion(),
     })
   }
 
@@ -153,6 +326,7 @@ export function LabelerWorkbenchPage() {
   return (
     <main className="labeler-page">
       {contextHolder}
+      {modalContextHolder}
       <ContentShell className="labeler-hero">
         <PageHeader
           title={currentTask?.title ?? '标注工作台'}
@@ -195,13 +369,15 @@ export function LabelerWorkbenchPage() {
             renderItem={(question, index) => (
               <List.Item
                 className={question.id === currentQuestion?.id ? 'labeler-question-item labeler-question-item--active' : 'labeler-question-item'}
-                onClick={() => setCurrentQuestion(question.id)}
+                onClick={() => selectQuestion(question.id)}
               >
                 <Space direction="vertical" size={4}>
                   <Typography.Text strong>
                     {index + 1}. {question.title}
                   </Typography.Text>
-                  <Tag>{question.status === 'draft' ? '已保存草稿' : question.status === 'submitted' ? '已提交' : '未作答'}</Tag>
+                  <Tag color={labelingQuestionStatusColors[question.id === currentQuestion?.id ? currentQuestionStatus : question.status]}>
+                    {labelingQuestionStatusLabels[question.id === currentQuestion?.id ? currentQuestionStatus : question.status]}
+                  </Tag>
                 </Space>
               </List.Item>
             )}
@@ -211,6 +387,14 @@ export function LabelerWorkbenchPage() {
         <Card className="labeler-workbench__form" loading={isWorkbenchLoading} title={currentQuestion?.title ?? '当前题目'}>
           {currentQuestion ? (
             <Space className="labeler-workbench__form-content" direction="vertical" size={16}>
+              {currentQuestion.returnedReason?.trim() ? (
+                <div className="labeler-returned-reason">
+                  <Typography.Text className="labeler-returned-reason__title">打回原因</Typography.Text>
+                  <Typography.Paragraph className="labeler-returned-reason__content">
+                    {currentQuestion.returnedReason}
+                  </Typography.Paragraph>
+                </div>
+              ) : null}
               <Descriptions bordered column={1} size="small" title="题目材料">
                 {Object.entries(currentQuestion.source).map(([label, value]) => (
                   <Descriptions.Item key={label} label={label}>
@@ -218,33 +402,93 @@ export function LabelerWorkbenchPage() {
                   </Descriptions.Item>
                 ))}
               </Descriptions>
-              <DynamicFormRenderer
-                initialValues={formInitialValues}
-                schema={currentQuestion.schema}
-                submitText="校验当前题"
-                onSubmit={(result) => setLatestValues(result.values)}
-                onValuesChange={handleValuesChange}
-              />
+              {isCurrentSchemaEmpty ? (
+                <Alert
+                  message="模板加载失败或暂无可渲染字段"
+                  description="已展示题目材料，请稍后刷新重试。"
+                  showIcon
+                  type="warning"
+                />
+              ) : (
+                <DynamicFormRenderer
+                  initialValues={formInitialValues}
+                  llmContext={llmContext}
+                  schema={currentQuestion.schema}
+                  submitText="校验当前题"
+                  onSubmit={(result) => setLatestValues(result.values)}
+                  onValuesChange={handleValuesChange}
+                />
+              )}
+              <div className="labeler-workbench__actions">
+                <Space className="labeler-workbench__pager">
+                  <Button
+                    disabled={!canGoPrevious}
+                    onClick={() => {
+                      const previous = questions[currentQuestionIndex - 1]
+
+                      if (previous) {
+                        selectQuestion(previous.id)
+                      }
+                    }}
+                  >
+                    上一题
+                  </Button>
+                  <Button
+                    disabled={!canGoNext}
+                    onClick={() => {
+                      const next = questions[currentQuestionIndex + 1]
+
+                      if (next) {
+                        selectQuestion(next.id)
+                      }
+                    }}
+                  >
+                    下一题
+                  </Button>
+                </Space>
+                <Space className="labeler-workbench__submit-actions">
+                  <Button
+                    disabled={isCurrentSchemaEmpty}
+                    icon={<SaveOutlined />}
+                    loading={isDraftSaving}
+                    onClick={() => void handleSaveDraft()}
+                  >
+                    保存草稿
+                  </Button>
+                  <Button
+                    disabled={isCurrentSchemaEmpty}
+                    icon={<SendOutlined />}
+                    loading={isSubmitting}
+                    type="primary"
+                    onClick={confirmSubmitQuestion}
+                  >
+                    提交当前题
+                  </Button>
+                </Space>
+              </div>
             </Space>
           ) : (
             <StatePlaceholder status="empty" message="当前任务暂无题目。" />
           )}
         </Card>
 
-        <Card className="labeler-workbench__side" loading={isWorkbenchLoading} title="保存与信息">
+        <Card className="labeler-workbench__side" loading={isWorkbenchLoading || isQuestionHistoryLoading} title="题目状态与流程">
           <Space direction="vertical" size={16}>
             <Descriptions column={1} size="small">
-              <Descriptions.Item label="任务模板">{currentTask?.templateName ?? '-'}</Descriptions.Item>
-              <Descriptions.Item label="截止时间">{currentTask?.deadline ?? '-'}</Descriptions.Item>
-              <Descriptions.Item label="题目数量">{questions.length}</Descriptions.Item>
-              <Descriptions.Item label="回填来源">
-                {currentDraft ? '当前草稿' : currentQuestion?.previousValues ? '上一轮答案' : '空白答案'}
+              <Descriptions.Item label="当前题目">{currentQuestion?.title ?? '-'}</Descriptions.Item>
+              <Descriptions.Item label="题目状态">
+                <Tag color={labelingQuestionStatusColors[currentQuestionStatus]}>
+                  {labelingQuestionStatusLabels[currentQuestionStatus]}
+                </Tag>
               </Descriptions.Item>
+              <Descriptions.Item label="回填来源">{answerSource}</Descriptions.Item>
               <Descriptions.Item label="保存状态">
                 {isDraftSaving ? '保存中' : hasUnsavedChanges ? '有未保存修改' : '已保存'}
               </Descriptions.Item>
               <Descriptions.Item label="最近保存">{currentDraft?.updatedAt ?? '尚未保存'}</Descriptions.Item>
             </Descriptions>
+
+            <Timeline className="labeler-question-flow" items={flowItems} />
 
             {currentQuestion?.previousValues ? (
               <Card className="labeler-history-card" size="small" title="上一轮答案">
@@ -253,54 +497,6 @@ export function LabelerWorkbenchPage() {
                 </pre>
               </Card>
             ) : null}
-
-            <Button
-              block
-              icon={<SaveOutlined />}
-              loading={isDraftSaving}
-              type="primary"
-              onClick={() => void handleSaveDraft()}
-            >
-              保存当前题草稿
-            </Button>
-
-            <Button
-              block
-              icon={<SendOutlined />}
-              loading={isSubmitting}
-              onClick={confirmSubmitTask}
-            >
-              提交任务
-            </Button>
-
-            <Space className="labeler-workbench__pager">
-              <Button
-                disabled={!currentQuestion || questions.findIndex((question) => question.id === currentQuestion.id) <= 0}
-                onClick={() => {
-                  const currentIndex = questions.findIndex((question) => question.id === currentQuestion?.id)
-                  const previous = questions[currentIndex - 1]
-
-                  if (previous) {
-                    setCurrentQuestion(previous.id)
-                  }
-                }}
-              >
-                上一题
-              </Button>
-              <Button
-                disabled={!currentQuestion || questions.findIndex((question) => question.id === currentQuestion.id) >= questions.length - 1}
-                onClick={() => {
-                  const currentIndex = questions.findIndex((question) => question.id === currentQuestion?.id)
-                  const next = questions[currentIndex + 1]
-
-                  if (next) {
-                    setCurrentQuestion(next.id)
-                  }
-                }}
-              >
-                下一题
-              </Button>
-            </Space>
           </Space>
         </Card>
       </div>

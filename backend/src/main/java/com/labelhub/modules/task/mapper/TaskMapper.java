@@ -2,6 +2,7 @@ package com.labelhub.modules.task.mapper;
 
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import com.labelhub.modules.task.domain.Task;
+import com.labelhub.modules.task.domain.TaskStatus;
 import java.time.LocalDateTime;
 import java.util.List;
 import org.apache.ibatis.annotations.Mapper;
@@ -117,4 +118,25 @@ public interface TaskMapper extends BaseMapper<Task> {
             WHERE id = #{taskId}
             """)
     int decrementClaimedCount(@Param("taskId") Long taskId);
+
+    @Update("""
+            UPDATE tasks
+            SET status = #{afterStatus},
+                quota = #{quota},
+                claimed_count = #{claimedCount},
+                published_at = #{publishedAt},
+                ended_at = #{endedAt},
+                updated_at = NOW()
+            WHERE id = #{taskId}
+              AND owner_id = #{ownerId}
+              AND status = #{beforeStatus}
+            """)
+    int updateStatusIfCurrent(@Param("taskId") Long taskId,
+                              @Param("ownerId") Long ownerId,
+                              @Param("beforeStatus") TaskStatus beforeStatus,
+                              @Param("afterStatus") TaskStatus afterStatus,
+                              @Param("publishedAt") LocalDateTime publishedAt,
+                              @Param("endedAt") LocalDateTime endedAt,
+                              @Param("quota") Integer quota,
+                              @Param("claimedCount") Integer claimedCount);
 }

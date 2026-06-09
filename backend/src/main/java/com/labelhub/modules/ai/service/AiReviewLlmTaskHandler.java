@@ -6,6 +6,7 @@ import com.labelhub.infrastructure.llmtask.LlmTaskType;
 import com.labelhub.modules.ai.domain.AiReviewResult;
 import com.labelhub.modules.ai.domain.AiReviewStatus;
 import com.labelhub.modules.ai.mapper.AiReviewResultMapper;
+import com.labelhub.modules.submission.mapper.SubmissionMapper;
 import java.util.Set;
 import org.springframework.stereotype.Component;
 
@@ -18,11 +19,14 @@ public class AiReviewLlmTaskHandler implements LlmTaskHandler {
 
     private final AiAutoReviewService aiAutoReviewService;
     private final AiReviewResultMapper aiReviewResultMapper;
+    private final SubmissionMapper submissionMapper;
 
     public AiReviewLlmTaskHandler(AiAutoReviewService aiAutoReviewService,
-                                  AiReviewResultMapper aiReviewResultMapper) {
+                                  AiReviewResultMapper aiReviewResultMapper,
+                                  SubmissionMapper submissionMapper) {
         this.aiAutoReviewService = aiAutoReviewService;
         this.aiReviewResultMapper = aiReviewResultMapper;
+        this.submissionMapper = submissionMapper;
     }
 
     @Override
@@ -34,7 +38,7 @@ public class AiReviewLlmTaskHandler implements LlmTaskHandler {
     public boolean isCompleted(LlmTaskQueueMessage message) {
         AiReviewResult result = aiReviewResultMapper.selectBySubmissionId(message.submissionId());
         if (result == null) {
-            return false;
+            return submissionMapper.selectById(message.submissionId()) == null;
         }
         if (FINAL_STATUSES.contains(result.getStatus())) {
             return true;

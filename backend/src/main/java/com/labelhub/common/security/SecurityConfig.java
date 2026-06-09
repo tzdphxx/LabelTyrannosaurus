@@ -2,6 +2,7 @@ package com.labelhub.common.security;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.labelhub.common.api.ApiResponse;
+import com.labelhub.common.security.ratelimit.ApiRateLimitFilter;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -42,6 +43,7 @@ public class SecurityConfig {
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http,
                                                    JwtAuthenticationFilter jwtAuthenticationFilter,
+                                                   ApiRateLimitFilter apiRateLimitFilter,
                                                    ObjectMapper objectMapper,
                                                    Environment environment,
                                                    CorsConfigurationSource corsConfigurationSource) throws Exception {
@@ -68,7 +70,8 @@ public class SecurityConfig {
                             objectMapper.writeValue(response.getWriter(), ApiResponse.fail(403001, "当前账号没有权限执行该操作", request.getHeader("X-Trace-Id")));
                         })
                 )
-                .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
+                .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
+                .addFilterAfter(apiRateLimitFilter, JwtAuthenticationFilter.class);
         return http.build();
     }
 

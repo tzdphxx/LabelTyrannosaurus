@@ -15,6 +15,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class AgentRunService {
 
     private static final int AGENT_RUN_STATE_CONFLICT = 409901;
+    private static final int PROMPT_VERSION_MAX_LENGTH = 64;
 
     private static final Set<AgentRunStatus> FAIL_STATUSES =
             Set.of(AgentRunStatus.FAILED, AgentRunStatus.RATE_LIMITED, AgentRunStatus.MANUAL_REQUIRED);
@@ -48,7 +49,7 @@ public class AgentRunService {
         run.setAssignmentId(assignmentId);
         run.setProviderId(providerId);
         run.setModelName(modelName);
-        run.setPromptVersion(promptVersion);
+        run.setPromptVersion(normalizePromptVersion(promptVersion));
         run.setInputSnapshot(inputSnapshot);
         run.setTraceId(traceId);
         run.setQueuedAt(LocalDateTime.now());
@@ -158,6 +159,17 @@ public class AgentRunService {
             throw new IllegalStateException("AgentRun not found: " + agentRunId);
         }
         return run;
+    }
+
+    private String normalizePromptVersion(String promptVersion) {
+        if (promptVersion == null) {
+            return null;
+        }
+        String trimmed = promptVersion.trim();
+        if (trimmed.length() <= PROMPT_VERSION_MAX_LENGTH) {
+            return trimmed;
+        }
+        return trimmed.substring(0, PROMPT_VERSION_MAX_LENGTH);
     }
 
     private void ensureUpdated(int updated, Long agentRunId) {

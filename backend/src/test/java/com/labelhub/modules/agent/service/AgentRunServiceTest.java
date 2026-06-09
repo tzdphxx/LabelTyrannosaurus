@@ -70,6 +70,21 @@ class AgentRunServiceTest {
     }
 
     @Test
+    void createTrimsAndTruncatesPromptVersionToDatabaseLimit() {
+        when(agentRunMapper.insert(any(AgentRun.class))).thenAnswer(inv -> {
+            AgentRun run = inv.getArgument(0);
+            run.setId(1L);
+            return 1;
+        });
+        String longPromptVersion = "  " + "x".repeat(80) + "  ";
+
+        AgentRun run = service.create("LLM_TRIGGER", null, 1L, "qwen-plus", longPromptVersion, "{}");
+
+        assertThat(run.getPromptVersion()).hasSize(64);
+        assertThat(run.getPromptVersion()).isEqualTo("x".repeat(64));
+    }
+
+    @Test
     void eachCreateProducesNewRun() {
         when(agentRunMapper.insert(any(AgentRun.class))).thenReturn(1);
 

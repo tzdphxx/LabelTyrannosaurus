@@ -306,7 +306,7 @@ public class AiAutoReviewService {
                         successResult.getConfidence(),
                         successResult.getFlowAction(),
                         successResult.getPromptMode(),
-                        successResult.getDegraded(),
+                        Boolean.TRUE.equals(successResult.getDegraded()),
                         successResult.getLimitations());
                 applyFlowAction(submission, successResult, config);
                 recordAiReviewMetric(config, successResult, outcome.responseSnapshot());
@@ -1092,6 +1092,8 @@ public class AiAutoReviewService {
         result.setProviderId(config.getProviderId());
         result.setModelName(config.getModelName());
         result.setPromptSnapshot(promptSnapshot);
+        result.setDegraded(false);
+        result.setLimitations("[]");
         result.setRetryCount(0);
         result.setCreatedAt(LocalDateTime.now());
         result.setUpdatedAt(LocalDateTime.now());

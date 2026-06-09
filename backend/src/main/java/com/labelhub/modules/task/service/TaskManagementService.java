@@ -8,6 +8,9 @@ import com.labelhub.common.security.CurrentUserContext;
 import com.labelhub.common.web.TraceIdProvider;
 import com.labelhub.modules.assignment.mapper.AssignmentMapper;
 import com.labelhub.modules.dataset.mapper.DatasetItemMapper;
+import com.labelhub.modules.reward.domain.RewardRuleEntity;
+import com.labelhub.modules.reward.dto.RewardRuleResponse;
+import com.labelhub.modules.reward.repository.RewardRuleRepositoryMapper;
 import com.labelhub.modules.submission.mapper.SubmissionMapper;
 import com.labelhub.modules.task.domain.ClaimStrategy;
 import com.labelhub.modules.task.domain.Task;
@@ -41,6 +44,7 @@ public class TaskManagementService {
     private final AssignmentMapper assignmentMapper;
     private final DatasetItemMapper datasetItemMapper;
     private final SubmissionMapper submissionMapper;
+    private final RewardRuleRepositoryMapper rewardRuleMapper;
     private final AuditAppender auditAppender;
     private final TraceIdProvider traceIdProvider;
 
@@ -49,6 +53,7 @@ public class TaskManagementService {
                                  AssignmentMapper assignmentMapper,
                                  DatasetItemMapper datasetItemMapper,
                                  SubmissionMapper submissionMapper,
+                                 RewardRuleRepositoryMapper rewardRuleMapper,
                                  AuditAppender auditAppender,
                                  TraceIdProvider traceIdProvider) {
         this.taskMapper = taskMapper;
@@ -56,6 +61,7 @@ public class TaskManagementService {
         this.assignmentMapper = assignmentMapper;
         this.datasetItemMapper = datasetItemMapper;
         this.submissionMapper = submissionMapper;
+        this.rewardRuleMapper = rewardRuleMapper;
         this.auditAppender = auditAppender;
         this.traceIdProvider = traceIdProvider;
     }
@@ -73,8 +79,9 @@ public class TaskManagementService {
         long total = taskMapper.countOwnerTasks(effectiveOwnerId, status, keyword);
         List<Task> tasks = taskMapper
                 .selectOwnerTasksPage(effectiveOwnerId, status, keyword, normalizedSize, offset);
-        Map<Long, List<String>> tagsByTaskId = loadTagsByTaskId(
-                tasks.stream().map(Task::getId).toList());
+        List<Long> taskIds = tasks.stream().map(Task::getId).toList();
+        Map<Long, List<String>> tagsByTaskId = loadTagsByTaskId(taskIds);
+        Map<Long, RewardRuleResponse> rewardRulesByTaskId = loadRewardRulesByTaskId(taskIds);
         List<TaskSummaryResponse> items = tasks.stream()
                 .map(task -> new TaskSummaryResponse(
                         task.getId(), task.getTitle(), task.getStatus(),
@@ -83,7 +90,8 @@ public class TaskManagementService {
                         task.getStrategy(),
                         maxClaimsPerLabeler(task),
                         task.getDeadlineAt(), task.getPublishedAt(),
-                        task.getEndedAt(), task.getCreatedAt(), task.getUpdatedAt()))
+                        task.getEndedAt(), task.getCreatedAt(), task.getUpdatedAt(),
+                        rewardRulesByTaskId.get(task.getId())))
                 .toList();
 
         return new PageResponse<TaskSummaryResponse>(items, normalizedPage, normalizedSize, total);
@@ -183,6 +191,32 @@ public class TaskManagementService {
                 .collect(Collectors.groupingBy(TaskTag::getTaskId,
                         Collectors.mapping(TaskTag::getTagName, Collectors.toList())));
         return new HashMap<>(grouped);
+    }
+
+    private Map<Long, RewardRuleResponse> loadRewardRulesByTaskId(Collection<Long> taskIds) {
+        if (taskIds == null || taskIds.isEmpty()) {
+            return Collections.emptyMap();
+        }
+        return rewardRuleMapper.selectLatestByTaskIds(taskIds).stream()
+                .collect(Collectors.toMap(
+                        RewardRuleEntity::getTaskId,
+                        this::toRewardRuleResponse,
+                        (first, second) -> first));
+    }
+
+    private RewardRuleResponse toRewardRuleResponse(RewardRuleEntity rule) {
+        return new RewardRuleResponse(
+                rule.getId(),
+                rule.getTaskId(),
+                rule.getEffectiveVersion(),
+                rule.getRewardMode(),
+                rule.getUnitReward(),
+                rule.getRewardCurrency(),
+                rule.getRewardVisible(),
+                rule.getEffectiveAt(),
+                rule.getCreatedBy(),
+                rule.getCreatedAt()
+        );
     }
 
     private Integer maxClaimsPerLabeler(Task task) {

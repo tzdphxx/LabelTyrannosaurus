@@ -108,7 +108,8 @@ public class LabelerTaskWorkspaceService {
                 task.getPublishedAt(),
                 task.getEndedAt(),
                 task.getCreatedAt(),
-                task.getUpdatedAt()
+                task.getUpdatedAt(),
+                null
         );
     }
 

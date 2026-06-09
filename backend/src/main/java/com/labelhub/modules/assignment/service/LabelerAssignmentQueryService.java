@@ -129,7 +129,8 @@ public class LabelerAssignmentQueryService {
                 toLocalDateTime(row.get("published_at")),
                 toLocalDateTime(row.get("ended_at")),
                 toLocalDateTime(row.get("created_at")),
-                toLocalDateTime(row.get("updated_at"))
+                toLocalDateTime(row.get("updated_at")),
+                null
         );
     }
 

@@ -33,6 +33,8 @@ import java.util.Set;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 @Service
 public class SubmissionSubmitService {
@@ -130,9 +132,23 @@ public class SubmissionSubmitService {
         }
         AgentRun agentRun = createPendingAiReviewRun(submission, task);
         appendSubmitAudit(assignment, submission, agentRun.getId());
-        aiReviewDispatcher.enqueue(submission.getId());
+        enqueueAiReviewAfterCommit(submission.getId());
         datasetClaimService.increaseSubmittedCount(submission.getDatasetItemId());
         return toResponse(submission, agentRun.getId());
+    }
+
+    private void enqueueAiReviewAfterCommit(Long submissionId) {
+        if (TransactionSynchronizationManager.isSynchronizationActive()
+                && TransactionSynchronizationManager.isActualTransactionActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    aiReviewDispatcher.enqueue(submissionId);
+                }
+            });
+            return;
+        }
+        aiReviewDispatcher.enqueue(submissionId);
     }
 
     private Assignment loadOwnedAssignment(Long assignmentId, Long labelerId) {

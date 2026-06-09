@@ -58,6 +58,18 @@ export const dynamicMaterialRegistry: Record<DynamicFieldType, MaterialDefinitio
       placeholder: '请选择或输入标签',
     },
   },
+  tagSelect: {
+    type: 'tagSelect',
+    title: '标签选择',
+    group: 'choice',
+    description: '支持选择已有标签，也支持输入新的标签值。',
+    acceptsChildren: false,
+    defaultProps: {
+      mode: 'tags',
+      options: choiceOptions,
+      placeholder: '请选择或输入标签',
+    },
+  },
   showItem: {
     type: 'showItem',
     title: '展示项',
@@ -96,18 +108,22 @@ export const dynamicMaterialRegistry: Record<DynamicFieldType, MaterialDefinitio
     description: '用于结构化标注结果或 schema 调试。',
     acceptsChildren: false,
     defaultProps: {
-      placeholder: '{\n  \"key\": \"value\"\n}',
+      placeholder: '{\n  "key": "value"\n}',
     },
   },
   llmPrompt: {
     type: 'llmPrompt',
-    title: 'LLM 交互占位',
+    title: 'LLM 交互',
     group: 'smart',
-    description: '预留 AI 建议、提示词和回复展示区域。',
+    description: '字段级模型调用，输出可作为标注参考或一键填充。',
     acceptsChildren: false,
     defaultProps: {
-      prompt: '请根据当前样本给出辅助建议。',
-      text: 'P1 仅提供交互占位，不调用真实模型。',
+      providerId: '',
+      modelName: 'gpt-4o',
+      promptTemplate: '请根据当前题目材料和已填写答案，为目标字段生成结构化建议。',
+      targetFields: [],
+      prompt: '请根据当前题目材料和已填写答案，为目标字段生成结构化建议。',
+      text: '点击运行后展示模型建议。',
     },
   },
   group: {
@@ -116,7 +132,7 @@ export const dynamicMaterialRegistry: Record<DynamicFieldType, MaterialDefinitio
     group: 'layout',
     description: '把相关字段组织到一个分组内。',
     acceptsChildren: true,
-    allowedChildren: ['input', 'textarea', 'radio', 'checkbox', 'select', 'showItem', 'richText', 'fileUpload', 'jsonEditor', 'llmPrompt'],
+    allowedChildren: ['input', 'textarea', 'radio', 'checkbox', 'select', 'tagSelect', 'showItem', 'richText', 'fileUpload', 'jsonEditor', 'llmPrompt'],
     defaultProps: {},
   },
   tabs: {
@@ -134,7 +150,7 @@ export const dynamicMaterialRegistry: Record<DynamicFieldType, MaterialDefinitio
     group: 'layout',
     description: 'Tab 容器内的单个面板。',
     acceptsChildren: true,
-    allowedChildren: ['input', 'textarea', 'radio', 'checkbox', 'select', 'showItem', 'richText', 'fileUpload', 'jsonEditor', 'llmPrompt'],
+    allowedChildren: ['input', 'textarea', 'radio', 'checkbox', 'select', 'tagSelect', 'showItem', 'richText', 'fileUpload', 'jsonEditor', 'llmPrompt'],
     defaultProps: {},
   },
 }
@@ -154,6 +170,7 @@ export const paletteMaterialTypes: DynamicFieldType[] = [
   'radio',
   'checkbox',
   'select',
+  'tagSelect',
   'showItem',
   'richText',
   'fileUpload',
@@ -186,8 +203,7 @@ export function createSchemaNodeFromMaterial(type: DynamicFieldType): DynamicSch
     return {
       ...baseNode,
       children: [
-        createTabPaneNode('基础信息'),
-        createTabPaneNode('补充信息'),
+        createTabPaneNode('Tab 1'),
       ],
     }
   }

@@ -62,7 +62,7 @@ public class LabelerAssignmentQueryService {
         Map<Long, List<String>> tagsByTask = loadTags(
                 rows.stream().map(r -> toLong(r.get("task_id"))).toList());
         return rows.stream()
-                .map(row -> toClaimedTask(labelerId, row, null, 1, DEFAULT_ITEM_PREVIEW_SIZE, tagsByTask))
+                .map(row -> toClaimedTask(labelerId, row, null, 1, DEFAULT_ITEM_PREVIEW_SIZE, tagsByTask, false))
                 .toList();
     }
 
@@ -75,7 +75,7 @@ public class LabelerAssignmentQueryService {
         if (row == null || row.isEmpty()) {
             throw new BusinessException(CLAIMED_TASK_NOT_FOUND, "已领取任务不存在");
         }
-        return toClaimedTask(labelerId, row, status, page, size, loadTags(List.of(taskId)));
+        return toClaimedTask(labelerId, row, status, page, size, loadTags(List.of(taskId)), true);
     }
 
     private LabelerAssignmentListItem toListItem(Map<String, Object> row) {
@@ -97,7 +97,8 @@ public class LabelerAssignmentQueryService {
                                                      String status,
                                                      int itemPage,
                                                      int itemSize,
-                                                     Map<Long, List<String>> tagsByTask) {
+                                                     Map<Long, List<String>> tagsByTask,
+                                                     boolean includeItems) {
         Long taskId = toLong(row.get("task_id"));
         int normalizedPage = Math.max(1, itemPage);
         int normalizedSize = Math.min(Math.max(1, itemSize), 100);
@@ -107,7 +108,9 @@ public class LabelerAssignmentQueryService {
                 toInt(row.get("claimed_item_count")),
                 toInt(row.get("submitted_count")),
                 toInt(row.get("approved_count")),
-                listClaimedItems(labelerId, taskId, status, normalizedSize, offset)
+                includeItems
+                        ? listClaimedItems(labelerId, taskId, status, normalizedSize, offset)
+                        : List.of()
         );
     }
 
@@ -121,12 +124,19 @@ public class LabelerAssignmentQueryService {
                 toInt(row.get("claimed_count")),
                 toInt(row.get("overlap_count")),
                 toStrategy(row.get("strategy")),
+                maxClaimsPerLabeler(row),
                 toLocalDateTime(row.get("deadline_at")),
                 toLocalDateTime(row.get("published_at")),
                 toLocalDateTime(row.get("ended_at")),
                 toLocalDateTime(row.get("created_at")),
                 toLocalDateTime(row.get("updated_at"))
         );
+    }
+
+    private Integer maxClaimsPerLabeler(Map<String, Object> row) {
+        return toStrategy(row.get("strategy")) == ClaimStrategy.QUOTA_GRAB
+                ? toInt(row.get("max_claims_per_labeler"))
+                : null;
     }
 
     private List<ClaimedItemResponse> listClaimedItems(Long labelerId,
@@ -150,6 +160,8 @@ public class LabelerAssignmentQueryService {
                 (String) row.get("metadata_json"),
                 toInt(row.get("draft_version")),
                 (String) row.get("latest_submission_status"),
+                (String) row.get("returned_reason"),
+                toLocalDateTime(row.get("returned_at")),
                 toLocalDateTime(row.get("updated_at"))
         );
     }

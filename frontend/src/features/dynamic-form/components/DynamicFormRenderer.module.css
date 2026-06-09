@@ -1,0 +1,122 @@
+.renderer {
+  width: 100%;
+}
+
+.actions {
+  margin-top: 12px;
+}
+
+.group:global(.ant-card) {
+  margin-bottom: 12px;
+  border-radius: 8px;
+}
+
+.tabPane {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid #e5ebf0;
+  border-radius: 8px;
+  background: #fbfcfd;
+}
+
+.showItem:global(.ant-alert) {
+  margin-bottom: 12px;
+}
+
+:global(.dynamic-form-radio-group.ant-radio-group) {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+:global(.dynamic-form-radio-group.ant-radio-group .ant-radio-wrapper) {
+  width: fit-content;
+  margin-inline-end: 0;
+  white-space: normal;
+}
+
+.jsonEditor:global(.ant-input) {
+  font-family:
+    "Cascadia Code",
+    Consolas,
+    monospace;
+}
+
+.richTextEditor {
+  overflow: hidden;
+  border: 1px solid #d9d9d9;
+  border-radius: 8px;
+  background: #ffffff;
+  transition:
+    border-color 0.16s ease,
+    box-shadow 0.16s ease;
+}
+
+.richTextEditor:focus-within {
+  border-color: #1677ff;
+  box-shadow: 0 0 0 3px rgba(22, 119, 255, 0.12);
+}
+
+.richTextToolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  align-items: center;
+  padding: 6px;
+  border-bottom: 1px solid #eef1f5;
+  background: #f8fafc;
+}
+
+.richTextToolbar :global(.ant-btn) {
+  min-width: 30px;
+  height: 28px;
+  padding-inline: 8px;
+  border-radius: 6px;
+  font-weight: 700;
+}
+
+.richTextBody {
+  min-height: 160px;
+  max-height: 360px;
+  overflow: auto;
+  padding: 12px;
+  outline: none;
+  color: #172033;
+  line-height: 1.7;
+  word-break: break-word;
+}
+
+.richTextBody:empty::before {
+  color: #9aa4b2;
+  content: attr(data-placeholder);
+  pointer-events: none;
+}
+
+.richTextBody ul,
+.richTextBody ol,
+.richTextReadonly ul,
+.richTextReadonly ol {
+  padding-left: 22px;
+}
+
+.richTextReadonly {
+  min-height: 44px;
+  padding: 10px 12px;
+  border: 1px solid #eef1f5;
+  border-radius: 8px;
+  background: #fbfcfd;
+  color: #172033;
+  line-height: 1.7;
+  word-break: break-word;
+}
+
+.richTextReadonly :global(.rich-text-empty) {
+  color: #9aa4b2;
+}
+
+.llm:global(.ant-card) {
+  margin-bottom: 12px;
+  border-radius: 8px;
+}

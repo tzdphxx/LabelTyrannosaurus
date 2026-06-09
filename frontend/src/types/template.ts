@@ -1,9 +1,11 @@
 import type { DynamicFormSchema } from './dynamicForm'
 
 export type TemplateStatus = 'draft' | 'ready' | 'archived'
+export type OwnerTemplateVersionState = 'DRAFT' | 'PUBLISHED_SNAPSHOT' | 'PUBLISHED' | 'ARCHIVED' | ''
 
 export interface TemplateSummary {
   id: string
+  currentVersionId: string
   name: string
   version: string
   status: TemplateStatus
@@ -16,7 +18,62 @@ export interface TemplateDetail extends TemplateSummary {
   updatedAt: string
 }
 
+export interface TemplateVersionSnapshot {
+  templateId: string
+  versionId: string
+  version: string
+  status: TemplateStatus
+  fieldCount: number
+  description: string
+  schema: DynamicFormSchema
+  createdAt: string
+}
+
 export interface TemplateCreateInput {
   name: string
   description: string
+  schema?: DynamicFormSchema
+}
+
+export interface TemplateForkInput {
+  schema: DynamicFormSchema
+  changeNote: string
+}
+
+export interface OwnerTemplateCreateRequest {
+  name: string
+  schemaJson: unknown
+  changeNote: string
+}
+
+export interface OwnerTemplateForkRequest {
+  baseVersionId?: number
+  schemaJson?: unknown
+  changeNote?: string
+}
+
+export interface OwnerTemplateVersionResponse {
+  versionId: number
+  templateId: number
+  taskId: number | null
+  ownerId: number
+  versionNo: number
+  schemaJson: unknown
+  publishedSnapshot: boolean
+  state: OwnerTemplateVersionState
+  changeNote: string
+  createdBy: number
+  createdAt: string
+}
+
+export interface OwnerTemplateResponse {
+  templateId: number
+  taskId: number | null
+  ownerId: number
+  name: string
+  currentVersionNo: number
+  currentVersion: OwnerTemplateVersionResponse
+  createdBy: number
+  createdAt: string
+  updatedAt: string
 }

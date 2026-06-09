@@ -1,0 +1,214 @@
+.page {
+  --admin-primary: #0075de;
+  --admin-primary-active: #005bab;
+  --admin-canvas: #f6f5f4;
+  --admin-surface: #ffffff;
+  --admin-ink: #000000;
+  --admin-ink-secondary: #31302e;
+  --admin-ink-muted: #615d59;
+  --admin-hairline: #e6e6e6;
+  --admin-shadow: 0 0.175px 1.041px rgba(0, 0, 0, 0.01), 0 0.8px 2.925px rgba(0, 0, 0, 0.02), 0 2.025px 7.847px rgba(0, 0, 0, 0.027), 0 4px 18px rgba(0, 0, 0, 0.04);
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  color: var(--admin-ink);
+  background: var(--admin-canvas);
+}
+
+.hero {
+  padding-block: 22px;
+  border-color: var(--admin-hairline);
+  background: var(--admin-surface);
+  box-shadow: var(--admin-shadow);
+}
+
+.hero :global(.page-header__title.ant-typography) {
+  color: var(--admin-ink);
+  letter-spacing: -0.625px;
+}
+
+.hero :global(.page-header__description.ant-typography) {
+  color: var(--admin-ink-muted);
+}
+
+.summaryGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.summaryCard {
+  overflow: hidden;
+  border: 1px solid var(--admin-hairline);
+  border-top: 3px solid var(--admin-primary);
+  border-radius: 12px;
+  background: var(--admin-surface);
+  box-shadow: var(--admin-shadow);
+}
+
+.summaryCard :global(.ant-statistic-title) {
+  color: var(--admin-ink-muted);
+  font-weight: 700;
+}
+
+.summaryCard :global(.ant-statistic-content) {
+  color: var(--admin-ink);
+  font-weight: 800;
+}
+
+.workspace {
+  display: grid;
+  grid-template-columns: minmax(0, 1.3fr) minmax(360px, 0.7fr);
+  gap: 16px;
+  align-items: start;
+}
+
+.panel {
+  overflow: hidden;
+  border: 1px solid var(--admin-hairline);
+  border-radius: 12px;
+  background: var(--admin-surface);
+  box-shadow: var(--admin-shadow);
+}
+
+.panel :global(.ant-card-head) {
+  border-bottom-color: var(--admin-hairline);
+  background: var(--admin-surface);
+}
+
+.panel :global(.ant-card-head-title) {
+  color: var(--admin-ink);
+  font-weight: 800;
+}
+
+.panel :global(.ant-table) {
+  color: var(--admin-ink-secondary);
+}
+
+.panel :global(.ant-table-thead > tr > th) {
+  border-bottom-color: var(--admin-hairline);
+  background: var(--admin-canvas);
+  color: var(--admin-ink-secondary);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.125px;
+}
+
+.panel :global(.ant-table-tbody > tr > td) {
+  border-bottom-color: var(--admin-hairline);
+}
+
+.panel :global(.ant-table-tbody > tr:hover > td) {
+  background: #faf9f8;
+}
+
+.panel :global(.ant-btn) {
+  border-radius: 8px;
+}
+
+.panel :global(.ant-btn-primary) {
+  border-color: var(--admin-primary);
+  border-radius: 9999px;
+  background: var(--admin-primary);
+}
+
+.panel :global(.ant-btn-primary:hover) {
+  border-color: var(--admin-primary-active);
+  background: var(--admin-primary-active);
+}
+
+.panel :global(.ant-input),
+.panel :global(.ant-input-number),
+.panel :global(.ant-input-affix-wrapper) {
+  border-color: var(--admin-hairline);
+  border-radius: 4px;
+}
+
+.panel :global(.ant-input:focus),
+.panel :global(.ant-input-focused),
+.panel :global(.ant-input-number-focused),
+.panel :global(.ant-input-affix-wrapper-focused) {
+  border-color: var(--admin-primary);
+  box-shadow: 0 0 0 3px rgba(0, 117, 222, 0.14);
+}
+
+.panel :global(.ant-tag) {
+  border-radius: 9999px;
+  font-weight: 600;
+}
+
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+  margin-bottom: 14px;
+}
+
+.search {
+  min-width: 240px;
+  max-width: 340px;
+  flex: 1;
+}
+
+.number {
+  width: 150px;
+}
+
+.metaStack {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.muted {
+  color: var(--admin-ink-muted);
+}
+
+.progressHeader {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.claimedList {
+  margin-top: 10px;
+  padding: 10px;
+  border-radius: 8px;
+  background: var(--admin-canvas);
+}
+
+.claimedItem {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  padding-block: 6px;
+  border-bottom: 1px solid var(--admin-hairline);
+}
+
+.claimedItem:last-child {
+  border-bottom: 0;
+}
+
+@media (max-width: 1120px) {
+  .workspace {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 760px) {
+  .summaryGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .toolbar {
+    align-items: stretch;
+  }
+
+  .search,
+  .number {
+    width: 100%;
+    max-width: none;
+  }
+}

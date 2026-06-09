@@ -9,10 +9,11 @@ interface DesignerCanvasProps {
   scrollRef: RefObject<HTMLDivElement | null>
   selectedNodeId: string | null
   onDelete: (nodeId: string) => void
+  onAddTabPane: (parentId: string) => void
   onSelect: (nodeId: string) => void
 }
 
-export function DesignerCanvas({ schema, scrollRef, selectedNodeId, onDelete, onSelect }: DesignerCanvasProps) {
+export function DesignerCanvas({ schema, scrollRef, selectedNodeId, onDelete, onAddTabPane, onSelect }: DesignerCanvasProps) {
   if (!schema) {
     return <Empty description="模板 schema 暂不可用" />
   }
@@ -26,6 +27,7 @@ export function DesignerCanvas({ schema, scrollRef, selectedNodeId, onDelete, on
             node={node}
             parentId={null}
             selectedNodeId={selectedNodeId}
+            onAddTabPane={onAddTabPane}
             onDelete={onDelete}
             onSelect={onSelect}
           />

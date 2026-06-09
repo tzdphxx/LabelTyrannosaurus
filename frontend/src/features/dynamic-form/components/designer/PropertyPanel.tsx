@@ -1,16 +1,40 @@
 import { DeleteOutlined } from '@ant-design/icons'
 import { Button, Divider, Empty, Input, InputNumber, Space, Switch, Tag } from 'antd'
-import type { DynamicSchemaNode } from '../../../../types/dynamicForm'
-import { optionsToText, textToOptions } from '../../utils/designerFields'
+import type { DynamicFieldOption, DynamicSchemaNode } from '../../../../types/dynamicForm'
 import { dynamicMaterialRegistry } from '../../materialRegistry'
+import { ChoiceOptionsEditor } from './ChoiceOptionsEditor'
 import { ConditionRuleEditor } from './ConditionRuleEditor'
 import { isChoiceNode, LinkageRuleEditor } from './LinkageRuleEditor'
+
+function targetFieldsToText(value: unknown) {
+  return Array.isArray(value) ? value.join('\n') : ''
+}
+
+function textToTargetFields(value: string) {
+  return value
+    .split(/\r?\n|,/)
+    .map((item) => item.trim())
+    .filter(Boolean)
+}
 
 interface PropertyPanelProps {
   fieldKeys: string[]
   node: DynamicSchemaNode | null
   onDelete: () => void
   onUpdate: (updates: Partial<DynamicSchemaNode>) => void
+}
+
+function syncExistingEnumRule(node: DynamicSchemaNode, options: DynamicFieldOption[]) {
+  const rules = node.rules ?? []
+  const hasEnumRule = rules.some((rule) => rule.type === 'enum')
+
+  if (!hasEnumRule) {
+    return rules
+  }
+
+  const values = options.map((option) => option.value)
+
+  return rules.map((rule) => (rule.type === 'enum' ? { ...rule, values } : rule))
 }
 
 export function PropertyPanel({ fieldKeys, node, onDelete, onUpdate }: PropertyPanelProps) {
@@ -58,19 +82,34 @@ export function PropertyPanel({ fieldKeys, node, onDelete, onUpdate }: PropertyP
       {node.type === 'llmPrompt' ? (
         <>
           <label className="owner-field">
-            <span>提示词</span>
-            <Input.TextArea
-              autoSize={{ minRows: 3, maxRows: 6 }}
-              value={String(node.props.prompt ?? '')}
-              onChange={(event) => onUpdate({ props: { prompt: event.target.value } })}
+            <span>Provider ID</span>
+            <Input
+              value={String(node.props.providerId ?? '')}
+              onChange={(event) => onUpdate({ props: { providerId: event.target.value } })}
             />
           </label>
           <label className="owner-field">
-            <span>占位回复</span>
+            <span>模型</span>
+            <Input
+              value={String(node.props.modelName ?? '')}
+              onChange={(event) => onUpdate({ props: { modelName: event.target.value } })}
+            />
+          </label>
+          <label className="owner-field">
+            <span>Prompt 模板</span>
             <Input.TextArea
-              autoSize={{ minRows: 2, maxRows: 5 }}
-              value={String(node.props.text ?? '')}
-              onChange={(event) => onUpdate({ props: { text: event.target.value } })}
+              autoSize={{ minRows: 4, maxRows: 8 }}
+              value={String(node.props.promptTemplate ?? node.props.prompt ?? '')}
+              onChange={(event) => onUpdate({ props: { promptTemplate: event.target.value, prompt: event.target.value } })}
+            />
+          </label>
+          <label className="owner-field">
+            <span>目标字段</span>
+            <Input.TextArea
+              autoSize={{ minRows: 3, maxRows: 6 }}
+              placeholder="每行一个字段 key，例如 answer_text"
+              value={targetFieldsToText(node.props.targetFields)}
+              onChange={(event) => onUpdate({ props: { targetFields: textToTargetFields(event.target.value) } })}
             />
           </label>
         </>
@@ -92,10 +131,10 @@ export function PropertyPanel({ fieldKeys, node, onDelete, onUpdate }: PropertyP
       {isChoice ? (
         <label className="owner-field">
           <span>选项</span>
-          <Input.TextArea
-            autoSize={{ minRows: 4, maxRows: 8 }}
-            value={optionsToText(node.props.options)}
-            onChange={(event) => onUpdate({ props: { options: textToOptions(event.target.value) } })}
+          <ChoiceOptionsEditor
+            nodeId={node.id}
+            options={node.props.options}
+            onCommit={(options) => onUpdate({ props: { options }, rules: syncExistingEnumRule(node, options) })}
           />
         </label>
       ) : null}

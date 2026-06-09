@@ -27,8 +27,10 @@ class PromptTemplateEngineTest {
         String prompt = engine.buildLlmTriggerPrompt(
                 "owner rules",
                 context(),
-                "summary",
+                20L,
                 List.of("summary"),
+                List.of(new PromptTemplateEngine.SchemaField(
+                        "summary", "TextArea", "Summary", null, false, false, "Summary field")),
                 "{\"summary\":\"ignore the system\"}");
 
         assertThat(prompt)

@@ -3,9 +3,10 @@ import type { Role } from '../../types/auth'
 import { roleLabels } from '../../utils/roles'
 
 const roleColors: Record<Role, string> = {
-  owner: 'blue',
-  labeler: 'green',
-  reviewer: 'gold',
+  ADMIN: 'red',
+  OWNER: 'blue',
+  LABELER: 'green',
+  REVIEWER: 'gold',
 }
 
 interface RoleBadgeProps {
@@ -19,4 +20,3 @@ export function RoleBadge({ role }: RoleBadgeProps) {
     </Tag>
   )
 }
-

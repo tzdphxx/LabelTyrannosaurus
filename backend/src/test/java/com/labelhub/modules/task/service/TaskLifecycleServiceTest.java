@@ -19,16 +19,21 @@ import com.labelhub.common.web.TraceIdProvider;
 import com.labelhub.modules.ai.dto.AiReviewConfigResponse;
 import com.labelhub.modules.ai.mapper.AiReviewConfigMapper;
 import com.labelhub.modules.ai.service.LlmProviderService;
+import com.labelhub.modules.auth.domain.UserEntity;
+import com.labelhub.modules.auth.repository.UserMapper;
+import com.labelhub.modules.auth.repository.UserRoleMapper;
 import com.labelhub.modules.dataset.dto.DatasetImportJobResponse;
 import com.labelhub.modules.dataset.dto.DatasetImportRequest;
 import com.labelhub.modules.dataset.service.DatasetImportService;
 import com.labelhub.modules.dataset.mapper.DatasetItemMapper;
 import com.labelhub.modules.assignment.mapper.AssignmentDispatchMapper;
+import com.labelhub.modules.assignment.service.AssignedAutoAssignmentService;
 import com.labelhub.modules.ai.service.AiReviewConfigService;
 import com.labelhub.modules.reward.dto.RewardRuleRequest;
 import com.labelhub.modules.reward.dto.RewardRuleResponse;
 import com.labelhub.modules.reward.repository.RewardRuleRepositoryMapper;
 import com.labelhub.modules.reward.service.RewardRuleService;
+import com.labelhub.modules.task.domain.ClaimStrategy;
 import com.labelhub.modules.template.mapper.TemplateVersionMapper;
 import com.labelhub.modules.task.domain.Task;
 import com.labelhub.modules.task.domain.TaskStatus;
@@ -93,7 +98,16 @@ class TaskLifecycleServiceTest {
     private AssignmentDispatchMapper dispatchMapper;
 
     @Mock
+    private AssignedAutoAssignmentService assignedAutoAssignmentService;
+
+    @Mock
     private LlmProviderService llmProviderService;
+
+    @Mock
+    private UserMapper userMapper;
+
+    @Mock
+    private UserRoleMapper userRoleMapper;
 
     private TaskLifecycleService taskLifecycleService;
 
@@ -109,6 +123,9 @@ class TaskLifecycleServiceTest {
                 aiReviewConfigService,
                 rewardRuleService,
                 dispatchMapper,
+                assignedAutoAssignmentService,
+                userMapper,
+                userRoleMapper,
                 applicationEventPublisher
         );
         Mockito.lenient().when(aiReviewConfigService.save(eq(OWNER_ID), eq(TASK_ID), any()))
@@ -225,6 +242,49 @@ class TaskLifecycleServiceTest {
     }
 
     @Test
+    void createsAssignedTaskWithDefaultLabeler() {
+        when(traceIdProvider.currentTraceId()).thenReturn("trace-1");
+        when(userRoleMapper.selectRoleCodesByUserId(20L)).thenReturn(Set.of(RoleCode.LABELER));
+        when(taskMapper.insert(any(Task.class))).thenAnswer(invocation -> {
+            Task task = invocation.getArgument(0);
+            task.setId(TASK_ID);
+            return 1;
+        });
+
+        TaskStatusResponse response = taskLifecycleService.create(OWNER_ID, createAssignedRequestWithLabeler(20L));
+
+        assertThat(response.taskId()).isEqualTo(TASK_ID);
+        ArgumentCaptor<Task> taskCaptor = ArgumentCaptor.forClass(Task.class);
+        verify(taskMapper).insert(taskCaptor.capture());
+        assertThat(taskCaptor.getValue().getStrategy()).isEqualTo(ClaimStrategy.ASSIGNED);
+        assertThat(taskCaptor.getValue().getAssignedLabelerId()).isEqualTo(20L);
+        assertThat(taskCaptor.getValue().getQuota()).isZero();
+    }
+
+    @Test
+    void rejectsAssignedLabelerWhenStrategyIsFcfs() {
+        assertThatThrownBy(() -> taskLifecycleService.create(OWNER_ID, createRequestWithAssignedLabeler(20L)))
+                .isInstanceOfSatisfying(BusinessException.class,
+                        ex -> assertThat(ex.getCode()).isEqualTo(400104));
+    }
+
+    @Test
+    void rejectsAssignedLabelerWhenStrategyIsQuotaGrab() {
+        assertThatThrownBy(() -> taskLifecycleService.create(OWNER_ID, createQuotaGrabRequestWithAssignedLabeler(20L)))
+                .isInstanceOfSatisfying(BusinessException.class,
+                        ex -> assertThat(ex.getCode()).isEqualTo(400104));
+    }
+
+    @Test
+    void rejectsAssignedTaskWhenDefaultLabelerIsNotLabeler() {
+        when(userRoleMapper.selectRoleCodesByUserId(20L)).thenReturn(Set.of(RoleCode.OWNER));
+
+        assertThatThrownBy(() -> taskLifecycleService.create(OWNER_ID, createAssignedRequestWithLabeler(20L)))
+                .isInstanceOfSatisfying(BusinessException.class,
+                        ex -> assertThat(ex.getCode()).isEqualTo(400104));
+    }
+
+    @Test
     void listsOwnerTasksWithTags() {
         Task task = draftTask();
         task.setClaimedCount(0);
@@ -260,6 +320,35 @@ class TaskLifecycleServiceTest {
     }
 
     @Test
+    void returnsAssignedLabelerDisplayNameInTaskDetail() {
+        Task task = publishableDraftTask();
+        task.setAssignedLabelerId(20L);
+        UserEntity labeler = user(20L, "labeler-a", "标注员A");
+        when(taskMapper.selectById(TASK_ID)).thenReturn(task);
+        when(taskTagMapper.selectList(any(Wrapper.class))).thenReturn(List.of(taskTag("qa")));
+        when(userMapper.selectById(20L)).thenReturn(labeler);
+
+        TaskResponse response = taskLifecycleService.getOwnedTask(OWNER_ID, TASK_ID);
+
+        assertThat(response.assignedLabelerId()).isEqualTo(20L);
+        assertThat(response.assignedLabelerName()).isEqualTo("标注员A");
+    }
+
+    @Test
+    void fallsBackToUsernameWhenAssignedLabelerDisplayNameIsBlank() {
+        Task task = publishableDraftTask();
+        task.setAssignedLabelerId(20L);
+        UserEntity labeler = user(20L, "labeler-a", " ");
+        when(taskMapper.selectById(TASK_ID)).thenReturn(task);
+        when(taskTagMapper.selectList(any(Wrapper.class))).thenReturn(List.of(taskTag("qa")));
+        when(userMapper.selectById(20L)).thenReturn(labeler);
+
+        TaskResponse response = taskLifecycleService.getOwnedTask(OWNER_ID, TASK_ID);
+
+        assertThat(response.assignedLabelerName()).isEqualTo("labeler-a");
+    }
+
+    @Test
     void returnsOwnedTaskDetailWithoutRewardRule() {
         Task task = publishableDraftTask();
         when(taskMapper.selectById(TASK_ID)).thenReturn(task);
@@ -281,6 +370,8 @@ class TaskLifecycleServiceTest {
         TaskResponse response = taskLifecycleService.getOwnedTask(OWNER_ID, TASK_ID);
 
         assertThat(response.aiReview()).isNull();
+        assertThat(response.assignedLabelerName()).isNull();
+        verify(userMapper, never()).selectById(any());
     }
 
 
@@ -358,7 +449,8 @@ class TaskLifecycleServiceTest {
     void transitionsThroughLifecycle() {
         Task task = publishableDraftTask();
         when(taskMapper.selectById(TASK_ID)).thenReturn(task);
-        when(taskMapper.updateById(any(Task.class))).thenReturn(1);
+        when(taskMapper.updateStatusIfCurrent(any(), any(), any(), any(), any(), any(), any(), any()))
+                .thenReturn(1);
         when(publishDependencyChecker.datasetReady(TASK_ID)).thenReturn(true);
         when(publishDependencyChecker.templateVersionExists(100L)).thenReturn(true);
         when(publishDependencyChecker.aiReviewConfigExists(TASK_ID, 200L)).thenReturn(true);
@@ -370,6 +462,113 @@ class TaskLifecycleServiceTest {
         assertThat(taskLifecycleService.end(OWNER_ID, TASK_ID).status()).isEqualTo(TaskStatus.ENDED);
 
         verify(auditAppender, Mockito.times(4)).append(any(AuditCommand.class));
+    }
+
+    @Test
+    void publishDoesNotAuditOrPublishEventWhenStatusUpdateLosesRace() {
+        Task task = publishableDraftTask();
+        when(taskMapper.selectById(TASK_ID)).thenReturn(task);
+        when(taskMapper.updateStatusIfCurrent(any(), any(), any(), any(), any(), any(), any(), any()))
+                .thenReturn(0);
+        when(publishDependencyChecker.datasetReady(TASK_ID)).thenReturn(true);
+        when(publishDependencyChecker.templateVersionExists(100L)).thenReturn(true);
+        when(publishDependencyChecker.aiReviewConfigExists(TASK_ID, 200L)).thenReturn(true);
+        when(publishDependencyChecker.rewardRuleExists(TASK_ID)).thenReturn(true);
+
+        assertThatThrownBy(() -> taskLifecycleService.publish(OWNER_ID, TASK_ID))
+                .isInstanceOf(BusinessException.class);
+
+        verify(auditAppender, never()).append(any(AuditCommand.class));
+        verify(applicationEventPublisher, never()).publishEvent(any());
+    }
+
+    @Test
+    void publishAssignedTaskWithAssignedLabelerAutoClaimsItemsAndAlignsCounts() {
+        Task task = publishableDraftTask();
+        task.setStrategy(ClaimStrategy.ASSIGNED);
+        task.setAssignedLabelerId(20L);
+        task.setQuota(99);
+        task.setClaimedCount(0);
+        when(taskMapper.selectById(TASK_ID)).thenReturn(task);
+        when(taskMapper.updateStatusIfCurrent(any(), any(), any(), any(), any(), any(), any(), any()))
+                .thenReturn(1);
+        when(publishDependencyChecker.datasetReady(TASK_ID)).thenReturn(true);
+        when(publishDependencyChecker.templateVersionExists(100L)).thenReturn(true);
+        when(publishDependencyChecker.aiReviewConfigExists(TASK_ID, 200L)).thenReturn(true);
+        when(publishDependencyChecker.rewardRuleExists(TASK_ID)).thenReturn(true);
+        when(assignedAutoAssignmentService.autoClaimAll(task, 20L)).thenReturn(3);
+
+        TaskStatusResponse response = taskLifecycleService.publish(OWNER_ID, TASK_ID);
+
+        assertThat(response.status()).isEqualTo(TaskStatus.PUBLISHED);
+        assertThat(task.getQuota()).isEqualTo(3);
+        assertThat(task.getClaimedCount()).isEqualTo(3);
+        verify(assignedAutoAssignmentService).autoClaimAll(task, 20L);
+        verify(taskMapper).updateStatusIfCurrent(
+                eq(TASK_ID),
+                eq(OWNER_ID),
+                eq(TaskStatus.DRAFT),
+                eq(TaskStatus.PUBLISHED),
+                any(),
+                any(),
+                eq(3),
+                eq(3));
+    }
+
+    @Test
+    void publishFcfsTaskWithoutAssignedLabelerDoesNotAutoClaim() {
+        Task task = publishableDraftTask();
+        task.setStrategy(ClaimStrategy.FCFS);
+        when(taskMapper.selectById(TASK_ID)).thenReturn(task);
+        when(taskMapper.updateStatusIfCurrent(any(), any(), any(), any(), any(), any(), any(), any()))
+                .thenReturn(1);
+        when(publishDependencyChecker.datasetReady(TASK_ID)).thenReturn(true);
+        when(publishDependencyChecker.templateVersionExists(100L)).thenReturn(true);
+        when(publishDependencyChecker.aiReviewConfigExists(TASK_ID, 200L)).thenReturn(true);
+        when(publishDependencyChecker.rewardRuleExists(TASK_ID)).thenReturn(true);
+
+        TaskStatusResponse response = taskLifecycleService.publish(OWNER_ID, TASK_ID);
+
+        assertThat(response.status()).isEqualTo(TaskStatus.PUBLISHED);
+        verify(assignedAutoAssignmentService, never()).autoClaimAll(any(), any());
+    }
+
+    @Test
+    void rejectsPublishingAssignedTaskWithAssignedLabelerWhenNoItemCanBeClaimed() {
+        Task task = publishableDraftTask();
+        task.setStrategy(ClaimStrategy.ASSIGNED);
+        task.setAssignedLabelerId(20L);
+        when(taskMapper.selectById(TASK_ID)).thenReturn(task);
+        when(publishDependencyChecker.datasetReady(TASK_ID)).thenReturn(true);
+        when(publishDependencyChecker.templateVersionExists(100L)).thenReturn(true);
+        when(publishDependencyChecker.aiReviewConfigExists(TASK_ID, 200L)).thenReturn(true);
+        when(publishDependencyChecker.rewardRuleExists(TASK_ID)).thenReturn(true);
+        when(assignedAutoAssignmentService.autoClaimAll(task, 20L)).thenReturn(0);
+
+        assertThatThrownBy(() -> taskLifecycleService.publish(OWNER_ID, TASK_ID))
+                .isInstanceOfSatisfying(BusinessException.class,
+                        ex -> assertThat(ex.getCode()).isEqualTo(400102));
+
+        verify(taskMapper, never()).updateById(any(Task.class));
+    }
+
+    @Test
+    void rejectsPublishingAssignedTaskWithoutAssignedLabelerWhenNoDispatchExists() {
+        Task task = publishableDraftTask();
+        task.setStrategy(ClaimStrategy.ASSIGNED);
+        when(taskMapper.selectById(TASK_ID)).thenReturn(task);
+        when(publishDependencyChecker.datasetReady(TASK_ID)).thenReturn(true);
+        when(publishDependencyChecker.templateVersionExists(100L)).thenReturn(true);
+        when(publishDependencyChecker.aiReviewConfigExists(TASK_ID, 200L)).thenReturn(true);
+        when(publishDependencyChecker.rewardRuleExists(TASK_ID)).thenReturn(true);
+        when(dispatchMapper.countByTaskId(TASK_ID)).thenReturn(0);
+
+        assertThatThrownBy(() -> taskLifecycleService.publish(OWNER_ID, TASK_ID))
+                .isInstanceOfSatisfying(BusinessException.class,
+                        ex -> assertThat(ex.getCode()).isEqualTo(400102));
+
+        verify(assignedAutoAssignmentService, never()).autoClaimAll(any(), any());
+        verify(taskMapper, never()).updateById(any(Task.class));
     }
 
     @Test
@@ -470,7 +669,74 @@ class TaskLifecycleServiceTest {
                 null, null,
                 1,
                 null,
+                null,
                 null
+        );
+    }
+
+    private CreateTaskRequest createRequestWithAssignedLabeler(Long assignedLabelerId) {
+        return new CreateTaskRequest(
+                "New task",
+                "Description",
+                "Instruction",
+                List.of("qa"),
+                10,
+                LocalDateTime.now().plusDays(1),
+                1,
+                100L,
+                200L,
+                300L, null, "Review prompt", List.of("accuracy"), null, null,
+                null,
+                null,
+                "FCFS", null,
+                1,
+                null,
+                null,
+                assignedLabelerId
+        );
+    }
+
+    private CreateTaskRequest createQuotaGrabRequestWithAssignedLabeler(Long assignedLabelerId) {
+        return new CreateTaskRequest(
+                "Quota grab task",
+                "Description",
+                "Instruction",
+                List.of("qa"),
+                10,
+                LocalDateTime.now().plusDays(1),
+                1,
+                100L,
+                200L,
+                300L, null, "Review prompt", List.of("accuracy"), null, null,
+                null,
+                null,
+                "QUOTA_GRAB", 5,
+                1,
+                null,
+                null,
+                assignedLabelerId
+        );
+    }
+
+    private CreateTaskRequest createAssignedRequestWithLabeler(Long assignedLabelerId) {
+        return new CreateTaskRequest(
+                "Assigned task",
+                "Description",
+                "Instruction",
+                List.of("qa"),
+                null,
+                LocalDateTime.now().plusDays(1),
+                1,
+                100L,
+                200L,
+                300L, null, "Review prompt", List.of("accuracy"), null, null,
+                null,
+                null,
+                "ASSIGNED", null,
+                1,
+                null,
+                null,
+                assignedLabelerId
         );
     }
 
@@ -491,6 +757,7 @@ class TaskLifecycleServiceTest {
                 null, null,
                 1,
                 99L,
+                null,
                 null
         );
     }
@@ -512,7 +779,8 @@ class TaskLifecycleServiceTest {
                 null, null,
                 1,
                 null,
-                rewardRule
+                rewardRule,
+                null
         );
     }
 
@@ -532,6 +800,7 @@ class TaskLifecycleServiceTest {
                 null,
                 null, null,
                 1,
+                null,
                 null,
                 null
         );
@@ -637,6 +906,14 @@ class TaskLifecycleServiceTest {
         taskTag.setTaskId(TASK_ID);
         taskTag.setTagName(tagName);
         return taskTag;
+    }
+
+    private UserEntity user(Long userId, String username, String displayName) {
+        UserEntity user = new UserEntity();
+        user.setId(userId);
+        user.setUsername(username);
+        user.setDisplayName(displayName);
+        return user;
     }
 
     private Task publishableDraftTask() {

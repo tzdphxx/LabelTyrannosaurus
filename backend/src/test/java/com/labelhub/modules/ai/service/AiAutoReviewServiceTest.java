@@ -3,6 +3,7 @@ package com.labelhub.modules.ai.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -28,6 +29,7 @@ import com.labelhub.modules.assignment.mapper.AssignmentMapper;
 import com.labelhub.modules.ai.domain.AiReviewConfig;
 import com.labelhub.modules.ai.domain.AiReviewResult;
 import com.labelhub.modules.ai.domain.AiReviewStatus;
+import com.labelhub.modules.ai.domain.LlmProvider;
 import com.labelhub.modules.ai.dto.AiReviewResultResponse;
 import com.labelhub.modules.ai.mapper.AiReviewConfigMapper;
 import com.labelhub.modules.ai.mapper.AiReviewResultMapper;
@@ -35,6 +37,7 @@ import com.labelhub.modules.dataset.domain.DatasetItem;
 import com.labelhub.modules.dataset.mapper.DatasetItemMapper;
 import com.labelhub.modules.dataset.service.DatasetClaimService;
 import com.labelhub.modules.review.domain.ReviewAction;
+import com.labelhub.modules.review.domain.ReviewFlowStatus;
 import com.labelhub.modules.review.domain.ReviewRecord;
 import com.labelhub.modules.review.mapper.ReviewRecordMapper;
 import com.labelhub.modules.review.port.SubmissionEventPublisher;
@@ -76,6 +79,7 @@ class AiAutoReviewServiceTest {
     @Mock private AiReviewResultMapper aiReviewResultMapper;
     @Mock private AiReviewRateLimiter rateLimiter;
     @Mock private LlmGateway llmGateway;
+    @Mock private LlmProviderService llmProviderService;
     @Mock private AgentRunService agentRunService;
     @Mock private SystemAgentProvider systemAgentProvider;
     @Mock private AuditAppender auditAppender;
@@ -116,6 +120,8 @@ class AiAutoReviewServiceTest {
         ReflectionTestUtils.setField(service, "redisLockService", redisLockService);
         ReflectionTestUtils.setField(service, "reviewOwnershipResolver", reviewOwnershipResolver);
         ReflectionTestUtils.setField(service, "promptTemplateEngine", promptTemplateEngine);
+        ReflectionTestUtils.setField(service, "llmProviderService", llmProviderService);
+        ReflectionTestUtils.setField(service, "videoKeyFrameService", videoKeyFrameService());
         VoteAggregator voteAggregator = new VoteAggregator();
         ReflectionTestUtils.setField(service, "voteAggregator", voteAggregator);
         ReflectionTestUtils.setField(service, "dimensionAggregator", new DimensionAggregator(voteAggregator));
@@ -206,23 +212,52 @@ class AiAutoReviewServiceTest {
         when(agentRunService.create(eq("AI_REVIEW"), eq(SUBMISSION_ID), eq(PROVIDER_ID), eq("qwen-plus"),
                 eq("v2"), any())).thenReturn(agentRun());
         when(llmGateway.review(any(LlmGatewayRequest.class))).thenReturn(successGateway("PASS", 95.0, 0.95));
+        when(submissionMapper.updateStatusIfCurrentIn(eq(SUBMISSION_ID), eq(SubmissionStatus.APPROVED.name()),
+                eq(ReviewFlowStatus.FINAL_APPROVED.name()), eq(true),
+                eq(SubmissionStatus.AI_REVIEWING.name()), eq(SubmissionStatus.PENDING_FINAL.name()))).thenReturn(1);
         when(assignmentMapper.selectById(200L)).thenReturn(assignment());
         when(systemAgentProvider.get()).thenReturn(new SystemActorContext(900L));
 
         AiReviewResultResponse response = service.reviewSubmission(SUBMISSION_ID);
 
         assertThat(response.flowAction()).isEqualTo("AI_DIRECT_APPROVE");
-        ArgumentCaptor<Submission> submissionCaptor = ArgumentCaptor.forClass(Submission.class);
-        verify(submissionMapper).updateById(submissionCaptor.capture());
-        assertThat(submissionCaptor.getValue().getStatus()).isEqualTo(SubmissionStatus.APPROVED);
-        assertThat(submissionCaptor.getValue().getIsGolden()).isTrue();
-        assertThat(submissionCaptor.getValue().getReviewFlowStatus()).isEqualTo("FINAL_APPROVED");
+        verify(submissionMapper).updateStatusIfCurrentIn(SUBMISSION_ID, SubmissionStatus.APPROVED.name(),
+                ReviewFlowStatus.FINAL_APPROVED.name(), true,
+                SubmissionStatus.AI_REVIEWING.name(), SubmissionStatus.PENDING_FINAL.name());
         ArgumentCaptor<Assignment> assignmentCaptor = ArgumentCaptor.forClass(Assignment.class);
         verify(assignmentMapper).updateById(assignmentCaptor.capture());
         assertThat(assignmentCaptor.getValue().getStatus()).isEqualTo(AssignmentStatus.APPROVED);
         assertThat(assignmentCaptor.getValue().getApprovedAt()).isNotNull();
         verify(eventPublisher).publishApproved(SUBMISSION_ID, null);
         verify(datasetClaimService).increaseApprovedCount(DATASET_ITEM_ID);
+    }
+
+    @Test
+    void directApproveDoesNotUpdateAssignmentWhenCasLosesRace() {
+        AiReviewConfig directApproveConfig = config();
+        directApproveConfig.setAiFlowPolicy("AI_PASS_ONLY");
+        directApproveConfig.setAllowAiDirectApprove(true);
+        directApproveConfig.setConfidenceThreshold(new BigDecimal("0.70"));
+        when(aiReviewResultMapper.selectBySubmissionId(SUBMISSION_ID)).thenReturn(null);
+        when(submissionMapper.selectById(SUBMISSION_ID)).thenReturn(submission());
+        when(taskMapper.selectById(TASK_ID)).thenReturn(task());
+        when(datasetItemMapper.selectById(DATASET_ITEM_ID)).thenReturn(datasetItem());
+        when(aiReviewConfigMapper.selectById(CONFIG_ID)).thenReturn(directApproveConfig);
+        when(rateLimiter.acquire(TASK_ID, PROVIDER_ID)).thenReturn(true);
+        when(agentRunService.create(eq("AI_REVIEW"), eq(SUBMISSION_ID), eq(PROVIDER_ID), eq("qwen-plus"),
+                eq("v2"), any())).thenReturn(agentRun());
+        when(llmGateway.review(any(LlmGatewayRequest.class))).thenReturn(successGateway("PASS", 95.0, 0.95));
+        when(submissionMapper.updateStatusIfCurrentIn(eq(SUBMISSION_ID), eq(SubmissionStatus.APPROVED.name()),
+                eq(ReviewFlowStatus.FINAL_APPROVED.name()), eq(true),
+                eq(SubmissionStatus.AI_REVIEWING.name()), eq(SubmissionStatus.PENDING_FINAL.name()))).thenReturn(0);
+        when(systemAgentProvider.get()).thenReturn(new SystemActorContext(900L));
+
+        AiReviewResultResponse response = service.reviewSubmission(SUBMISSION_ID);
+
+        assertThat(response.flowAction()).isEqualTo("AI_DIRECT_APPROVE");
+        verify(assignmentMapper, never()).selectById(anyLong());
+        verify(assignmentMapper, never()).updateById(any(Assignment.class));
+        verify(datasetClaimService, never()).increaseApprovedCount(anyLong());
     }
 
     @Test
@@ -270,16 +305,18 @@ class AiAutoReviewServiceTest {
         when(agentRunService.create(eq("AI_REVIEW"), eq(SUBMISSION_ID), eq(PROVIDER_ID), eq("qwen-plus"),
                 eq("v2"), any())).thenReturn(agentRun());
         when(llmGateway.review(any(LlmGatewayRequest.class))).thenReturn(successGateway("REJECT", 20.0, 0.93));
+        when(submissionMapper.updateStatusIfCurrentIn(eq(SUBMISSION_ID), eq(SubmissionStatus.REJECTED.name()),
+                eq(ReviewFlowStatus.REJECTED.name()), eq(null),
+                eq(SubmissionStatus.AI_REVIEWING.name()), eq(SubmissionStatus.PENDING_FINAL.name()))).thenReturn(1);
         when(assignmentMapper.selectById(200L)).thenReturn(assignment());
         when(systemAgentProvider.get()).thenReturn(new SystemActorContext(900L));
 
         AiReviewResultResponse response = service.reviewSubmission(SUBMISSION_ID);
 
         assertThat(response.flowAction()).isEqualTo("AI_DIRECT_REJECT");
-        ArgumentCaptor<Submission> submissionCaptor = ArgumentCaptor.forClass(Submission.class);
-        verify(submissionMapper).updateById(submissionCaptor.capture());
-        assertThat(submissionCaptor.getValue().getStatus()).isEqualTo(SubmissionStatus.REJECTED);
-        assertThat(submissionCaptor.getValue().getReviewFlowStatus()).isEqualTo("REJECTED");
+        verify(submissionMapper).updateStatusIfCurrentIn(SUBMISSION_ID, SubmissionStatus.REJECTED.name(),
+                ReviewFlowStatus.REJECTED.name(), null,
+                SubmissionStatus.AI_REVIEWING.name(), SubmissionStatus.PENDING_FINAL.name());
         ArgumentCaptor<Assignment> assignmentCaptor = ArgumentCaptor.forClass(Assignment.class);
         verify(assignmentMapper).updateById(assignmentCaptor.capture());
         assertThat(assignmentCaptor.getValue().getStatus()).isEqualTo(AssignmentStatus.RETURNED);
@@ -288,6 +325,36 @@ class AiAutoReviewServiceTest {
         verify(reviewRecordMapper).insert(recordCaptor.capture());
         assertThat(recordCaptor.getValue().getAction()).isEqualTo(ReviewAction.AI_DIRECT_REJECT);
         assertThat(recordCaptor.getValue().getReason()).isEqualTo("Looks good");
+    }
+
+    @Test
+    void directRejectDoesNotUpdateAssignmentWhenCasLosesRace() {
+        AiReviewConfig directRejectConfig = config();
+        directRejectConfig.setAiFlowPolicy("AI_REJECT_ONLY");
+        directRejectConfig.setAllowAiDirectReject(true);
+        directRejectConfig.setRejectThreshold(new BigDecimal("50.00"));
+        directRejectConfig.setConfidenceThreshold(new BigDecimal("0.70"));
+        when(aiReviewResultMapper.selectBySubmissionId(SUBMISSION_ID)).thenReturn(null);
+        when(submissionMapper.selectById(SUBMISSION_ID)).thenReturn(submission());
+        when(taskMapper.selectById(TASK_ID)).thenReturn(task());
+        when(datasetItemMapper.selectById(DATASET_ITEM_ID)).thenReturn(datasetItem());
+        when(aiReviewConfigMapper.selectById(CONFIG_ID)).thenReturn(directRejectConfig);
+        when(rateLimiter.acquire(TASK_ID, PROVIDER_ID)).thenReturn(true);
+        when(agentRunService.create(eq("AI_REVIEW"), eq(SUBMISSION_ID), eq(PROVIDER_ID), eq("qwen-plus"),
+                eq("v2"), any())).thenReturn(agentRun());
+        when(llmGateway.review(any(LlmGatewayRequest.class))).thenReturn(successGateway("REJECT", 20.0, 0.93));
+        when(submissionMapper.updateStatusIfCurrentIn(eq(SUBMISSION_ID), eq(SubmissionStatus.REJECTED.name()),
+                eq(ReviewFlowStatus.REJECTED.name()), eq(null),
+                eq(SubmissionStatus.AI_REVIEWING.name()), eq(SubmissionStatus.PENDING_FINAL.name()))).thenReturn(0);
+        when(systemAgentProvider.get()).thenReturn(new SystemActorContext(900L));
+
+        AiReviewResultResponse response = service.reviewSubmission(SUBMISSION_ID);
+
+        assertThat(response.flowAction()).isEqualTo("AI_DIRECT_REJECT");
+        verify(assignmentMapper, never()).selectById(anyLong());
+        verify(assignmentMapper, never()).updateById(any(Assignment.class));
+        verify(eventPublisher, never()).publishRejected(anyLong(), any(), anyString());
+        verify(reviewRecordMapper, never()).insert(any(ReviewRecord.class));
     }
 
     @Test
@@ -409,6 +476,49 @@ class AiAutoReviewServiceTest {
         assertThat(resultCaptor.getValue().getErrorCode()).isEqualTo("LLM_KEY_DECRYPT_FAILED");
         verify(agentRunService).fail(AGENT_RUN_ID, AgentRunStatus.FAILED, "LLM key decrypt failed");
         verify(retryScheduler, never()).scheduleRetry(anyLong(), any(Duration.class));
+    }
+
+    @Test
+    void videoDirectFailureFallsBackToCosKeyFramesForReview() {
+        DatasetItem item = datasetItem();
+        item.setItemJson("""
+                {
+                  "media_type": "video",
+                  "media_url": "https://bucket-123.cos.ap-guangzhou.myqcloud.com/videos/oceans.mp4",
+                  "media_processing_status": "READY"
+                }
+                """);
+        when(aiReviewResultMapper.selectBySubmissionId(SUBMISSION_ID)).thenReturn(null);
+        when(submissionMapper.selectById(SUBMISSION_ID)).thenReturn(submission());
+        when(taskMapper.selectById(TASK_ID)).thenReturn(task());
+        when(datasetItemMapper.selectById(DATASET_ITEM_ID)).thenReturn(item);
+        when(aiReviewConfigMapper.selectById(CONFIG_ID)).thenReturn(config());
+        when(llmProviderService.findEnabledById(PROVIDER_ID)).thenReturn(Optional.of(new LlmProvider()));
+        when(llmProviderService.capability(any(LlmProvider.class)))
+                .thenReturn(new ProviderCapability(true, true, 5, null));
+        when(rateLimiter.acquire(TASK_ID, PROVIDER_ID)).thenReturn(true);
+        when(agentRunService.create(eq("AI_REVIEW"), eq(SUBMISSION_ID), eq(PROVIDER_ID), eq("qwen-plus"),
+                eq("v2"), any())).thenReturn(agentRun());
+        when(llmGateway.review(any(LlmGatewayRequest.class)))
+                .thenReturn(new LlmGatewayResponse(LlmGatewayStatus.PROVIDER_ERROR, null, null, null,
+                        500L, "UNSUPPORTED_VIDEO", "video_url is not supported"))
+                .thenReturn(successGateway("PASS", 91.0, 0.88));
+        when(systemAgentProvider.get()).thenReturn(new SystemActorContext(900L));
+
+        AiReviewResultResponse response = service.reviewSubmission(SUBMISSION_ID);
+
+        assertThat(response.status()).isEqualTo(AiReviewStatus.SUCCESS);
+        ArgumentCaptor<LlmGatewayRequest> requestCaptor = ArgumentCaptor.forClass(LlmGatewayRequest.class);
+        verify(llmGateway, org.mockito.Mockito.times(2)).review(requestCaptor.capture());
+        assertThat(requestCaptor.getAllValues().get(0).messages())
+                .anySatisfy(message -> assertThat(message.contentParts())
+                        .anySatisfy(part -> assertThat(part).isInstanceOf(LlmMessage.VideoUrlPart.class)));
+        assertThat(requestCaptor.getAllValues().get(1).messages())
+                .anySatisfy(message -> assertThat(message.contentParts())
+                        .anySatisfy(part -> assertThat(part).isInstanceOf(LlmMessage.ImageUrlPart.class)));
+        ArgumentCaptor<AiReviewResult> resultCaptor = ArgumentCaptor.forClass(AiReviewResult.class);
+        verify(aiReviewResultMapper).insert(resultCaptor.capture());
+        assertThat(resultCaptor.getValue().getPromptMode()).isEqualTo("VIDEO_KEYFRAMES");
     }
 
     @Test
@@ -759,5 +869,12 @@ class AiAutoReviewServiceTest {
                 null,
                 null
         );
+    }
+
+    private VideoKeyFrameService videoKeyFrameService() {
+        VideoKeyFrameService service = new VideoKeyFrameService();
+        ReflectionTestUtils.setField(service, "maxFrames", 5);
+        ReflectionTestUtils.setField(service, "intervalSeconds", 5);
+        return service;
     }
 }

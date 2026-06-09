@@ -162,6 +162,7 @@ const riskReviewSchema: DynamicFormSchema = {
 export const mockTemplates: TemplateDetail[] = [
   {
     id: 'tpl-product-quality',
+    currentVersionId: 'tpl-product-quality-v1',
     name: '商品质检标注模板',
     version: 'v1.2',
     status: 'ready',
@@ -172,6 +173,7 @@ export const mockTemplates: TemplateDetail[] = [
   },
   {
     id: 'tpl-support-intent',
+    currentVersionId: 'tpl-support-intent-v1',
     name: '客服意图分类模板',
     version: 'v1.0',
     status: 'ready',
@@ -182,6 +184,7 @@ export const mockTemplates: TemplateDetail[] = [
   },
   {
     id: 'tpl-risk-review',
+    currentVersionId: 'tpl-risk-review-v1',
     name: '内容风险审核模板',
     version: 'v0.9',
     status: 'draft',

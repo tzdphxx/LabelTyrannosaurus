@@ -10,6 +10,7 @@ import com.labelhub.common.security.RoleCode;
 import com.labelhub.modules.ai.domain.AiReviewResult;
 import com.labelhub.modules.ai.domain.AiReviewStatus;
 import com.labelhub.modules.ai.dto.AiReviewResultResponse;
+import com.labelhub.modules.ai.mapper.AiReviewConfigMapper;
 import com.labelhub.modules.ai.mapper.AiReviewResultMapper;
 import com.labelhub.modules.submission.domain.Submission;
 import com.labelhub.modules.submission.mapper.SubmissionMapper;
@@ -24,9 +25,10 @@ class AiReviewResultQueryServiceTest {
     private final AiReviewResultMapper aiReviewResultMapper = org.mockito.Mockito.mock(AiReviewResultMapper.class);
     private final SubmissionMapper submissionMapper = org.mockito.Mockito.mock(SubmissionMapper.class);
     private final TaskMapper taskMapper = org.mockito.Mockito.mock(TaskMapper.class);
+    private final AiReviewConfigMapper aiReviewConfigMapper = org.mockito.Mockito.mock(AiReviewConfigMapper.class);
     private final AiAutoReviewService aiAutoReviewService = org.mockito.Mockito.mock(AiAutoReviewService.class);
     private final AiReviewResultQueryService service = new AiReviewResultQueryService(
-            aiReviewResultMapper, submissionMapper, taskMapper, aiAutoReviewService);
+            aiReviewResultMapper, submissionMapper, taskMapper, aiReviewConfigMapper, aiAutoReviewService);
 
     @Test
     void reviewerCannotReadAiReviewForUnassignedSubmission() {
@@ -48,7 +50,7 @@ class AiReviewResultQueryServiceTest {
                 "90.00", Map.of(), "[]", "ok", null, null, null, null, null, null);
         when(submissionMapper.selectById(10L)).thenReturn(submission);
         when(aiReviewResultMapper.selectBySubmissionId(10L)).thenReturn(result);
-        when(aiAutoReviewService.toResponse(result)).thenReturn(response);
+        when(aiAutoReviewService.toResponse(result, null, null)).thenReturn(response);
 
         assertThat(service.getForSubmission(reviewer(30L), 10L)).isEqualTo(response);
     }

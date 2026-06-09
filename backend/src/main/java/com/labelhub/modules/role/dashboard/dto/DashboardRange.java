@@ -26,12 +26,12 @@ public enum DashboardRange {
         if (value == null || value.isBlank()) {
             return defaultValue;
         }
-        if ("7d".equals(value)) {
+        if ("7".equals(value) || "7d".equalsIgnoreCase(value)) {
             return LAST_7_DAYS;
         }
-        if ("30d".equals(value)) {
+        if ("30".equals(value) || "30d".equalsIgnoreCase(value)) {
             return LAST_30_DAYS;
         }
-        throw new BusinessException(400102, "range 只支持 7d 或 30d");
+        throw new BusinessException(400102, "range 只支持 7天 或 30天");
     }
 }

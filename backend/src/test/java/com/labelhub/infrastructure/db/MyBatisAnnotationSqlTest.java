@@ -14,6 +14,7 @@ class MyBatisAnnotationSqlTest {
 
     private static final Path MAIN_JAVA_DIR = Path.of("src/main/java");
     private static final Pattern SCRIPT_BLOCK = Pattern.compile("<script>[\\s\\S]*?</script>");
+    private static final Pattern RAW_XML_COMPARISON = Pattern.compile("(?<!&)(<=|<>|\\s<\\s)");
 
     @Test
     void myBatisScriptAnnotationsDoNotUseRawXmlComparisonOperators() throws IOException {
@@ -29,7 +30,7 @@ class MyBatisAnnotationSqlTest {
         }
 
         assertThat(offenders)
-                .as("Use != or &lt;&gt; inside MyBatis <script> annotation SQL")
+                .as("Use &lt;, &lt;=, != or &lt;&gt; inside MyBatis <script> annotation SQL")
                 .isEmpty();
     }
 
@@ -38,7 +39,7 @@ class MyBatisAnnotationSqlTest {
             String content = Files.readString(path);
             return SCRIPT_BLOCK.matcher(content)
                     .results()
-                    .anyMatch(match -> match.group().contains("<>"));
+                    .anyMatch(match -> RAW_XML_COMPARISON.matcher(match.group()).find());
         } catch (IOException ex) {
             throw new IllegalStateException("Failed to read " + path, ex);
         }

@@ -29,7 +29,7 @@ export function walkSchemaNodes(nodes: DynamicSchemaNode[], visitor: NodeVisitor
   })
 }
 
-export function findSchemaNode(schema: DynamicFormSchema, nodeId: string) {
+export function findSchemaNode(schema: DynamicFormSchema, nodeId: string): DynamicSchemaNode | null {
   let found: DynamicSchemaNode | null = null
 
   walkSchemaNodes(schema.nodes, (node) => {
@@ -46,22 +46,47 @@ export function updateSchemaNode(
   nodeId: string,
   updater: (node: DynamicSchemaNode) => DynamicSchemaNode,
 ): DynamicFormSchema {
-  function updateList(nodes: DynamicSchemaNode[]): DynamicSchemaNode[] {
-    return nodes.map((node) => {
+  function updateList(nodes: DynamicSchemaNode[]): { nodes: DynamicSchemaNode[]; changed: boolean } {
+    let changed = false
+
+    const nextNodes = nodes.map((node) => {
       if (node.id === nodeId) {
+        changed = true
         return updater(cloneNode(node))
       }
 
+      if (!node.children?.length) {
+        return node
+      }
+
+      const childResult = updateList(node.children)
+
+      if (!childResult.changed) {
+        return node
+      }
+
+      changed = true
       return {
         ...node,
-        children: node.children ? updateList(node.children) : undefined,
+        children: childResult.nodes,
       }
     })
+
+    return {
+      nodes: changed ? nextNodes : nodes,
+      changed,
+    }
+  }
+
+  const result = updateList(schema.nodes)
+
+  if (!result.changed) {
+    return schema
   }
 
   return {
     ...schema,
-    nodes: updateList(schema.nodes),
+    nodes: result.nodes,
   }
 }
 
@@ -180,7 +205,7 @@ export function validateDynamicSchema(schema: DynamicFormSchema) {
       keys.set(node.key, node.id)
     }
 
-    if ((node.type === 'radio' || node.type === 'checkbox' || node.type === 'select') && !node.props.options?.length) {
+    if ((node.type === 'radio' || node.type === 'checkbox' || node.type === 'select' || node.type === 'tagSelect') && !node.props.options?.length) {
       errors.push(`${node.title} 至少需要一个选项`)
     }
 

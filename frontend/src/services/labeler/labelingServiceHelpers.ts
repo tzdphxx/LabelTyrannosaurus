@@ -1,4 +1,5 @@
 import type { DynamicFormSubmitResult, DynamicSchemaNode } from '../../types/dynamicForm'
+import { cloneSchema } from '../../features/dynamic-form/utils/schemaTree'
 import type {
   LabelerTaskListQuery,
   LabelerTaskSummary,
@@ -35,12 +36,10 @@ export function cloneQuestion(question: LabelingQuestion): LabelingQuestion {
     ...question,
     source: { ...question.source },
     previousValues: question.previousValues ? { ...question.previousValues } : undefined,
-    schema: {
-      ...question.schema,
-      nodes: question.schema.nodes.map((node) => ({ ...node })),
-    },
+    schema: cloneSchema(question.schema),
   }
 }
+
 
 export function cloneDraft(draft: LabelingDraft): LabelingDraft {
   return {
@@ -181,6 +180,57 @@ export function validateTaskDrafts(
   }
 }
 
+export function validateQuestionDraft(
+  questions: LabelingQuestion[],
+  drafts: LabelingDraft[],
+  taskId: string,
+  questionId: string,
+  userId: string,
+): LabelingSubmitValidationResult {
+  const question = questions.find((item) => item.taskId === taskId && item.id === questionId)
+
+  if (!question) {
+    return {
+      valid: false,
+      errors: [
+        {
+          questionId,
+          questionTitle: '',
+          message: '题目不存在',
+        },
+      ],
+    }
+  }
+
+  const draft = drafts.find((item) => item.taskId === taskId && item.questionId === questionId && item.userId === userId)
+  const errors: LabelingSubmitValidationError[] = []
+
+  if (!draft) {
+    errors.push({
+      questionId: question.id,
+      questionTitle: question.title,
+      message: '该题尚未保存草稿',
+    })
+  } else {
+    collectRequiredNodes(question.schema.nodes).forEach((node) => {
+      if (isEmptyValue(draft.values[node.key])) {
+        errors.push({
+          questionId: question.id,
+          questionTitle: question.title,
+          fieldKey: node.key,
+          fieldTitle: node.title,
+          message: `${node.title}不能为空`,
+        })
+      }
+    })
+  }
+
+  return {
+    valid: errors.length === 0,
+    errors,
+  }
+}
+
 export function applyAiReviewToSubmission(
   submission: LabelingSubmission,
   reviewResult: AiReviewProcessingResult,
@@ -235,3 +285,10 @@ export function getTaskStatusFromSubmission(submission: LabelingSubmission): Lab
 
   return 'submitted'
 }
+
+
+
+
+
+
+

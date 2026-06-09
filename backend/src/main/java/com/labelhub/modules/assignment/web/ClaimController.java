@@ -4,6 +4,7 @@ import com.labelhub.common.api.ApiResponse;
 import com.labelhub.common.security.CurrentUserContext;
 import com.labelhub.common.security.RoleCode;
 import com.labelhub.modules.assignment.dto.AssignmentClaimResponse;
+import com.labelhub.modules.assignment.dto.AssignmentClaimRequest;
 import com.labelhub.modules.assignment.dto.AssignmentDetailResponse;
 import com.labelhub.modules.assignment.dto.AssignmentDraftResponse;
 import com.labelhub.modules.assignment.dto.AssignmentDraftSaveRequest;
@@ -55,10 +56,12 @@ public class ClaimController {
     @PostMapping("/api/v1/tasks/{taskId}/items/claim")
     @Operation(summary = "领取题目",
             description = "当前标注员在指定任务下领取一个可标注的题目。三种领取策略（FCFS / QUOTA_GRAB / ASSIGNED）均通过此入口。")
-    public ApiResponse<AssignmentClaimResponse> claim(
-            @Parameter(description = "任务 ID") @PathVariable Long taskId) {
+    public ApiResponse<List<AssignmentClaimResponse>> claim(
+            @Parameter(description = "任务 ID") @PathVariable Long taskId,
+            @Valid @RequestBody(required = false) AssignmentClaimRequest request) {
         CurrentUserContext.requireRole(RoleCode.LABELER);
-        return ApiResponse.ok(claimService.claim(taskId, CurrentUserContext.getUserId()));
+        int quantity = request != null ? request.resolvedQuantity() : 1;
+        return ApiResponse.ok(claimService.claim(taskId, CurrentUserContext.getUserId(), quantity));
     }
 
     // ========== 我的领取列表（扁平路径） ==========

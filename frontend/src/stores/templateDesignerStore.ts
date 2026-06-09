@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import { createSchemaNodeFromMaterial } from '../features/dynamic-form/materialRegistry'
+import { createSchemaNodeFromMaterial, createTabPaneNode } from '../features/dynamic-form/materialRegistry'
 import {
   deleteSchemaNode,
   findSchemaNode,
@@ -18,10 +18,15 @@ interface TemplateDesignerStore {
   selectedNodeId: string | null
   isLoading: boolean
   isSaving: boolean
+  isDraftTemplate: boolean
+  isForkMode: boolean
+  forkChangeNote: string
   error: string | null
   hasUnsavedChanges: boolean
-  loadTemplate: (templateId: string) => Promise<void>
+  initializeDraftTemplate: (input: { description: string; name: string }) => void
+  loadTemplate: (templateId: string, options?: { forkMode?: boolean; forkChangeNote?: string; templateVersion?: TemplateDetail }) => Promise<void>
   addNode: (type: DynamicFieldType, parentId?: string | null) => string | null
+  addTabPane: (parentId: string, title?: string) => string | null
   selectNode: (nodeId: string | null) => void
   updateSelectedNode: (updates: Partial<DynamicSchemaNode>) => void
   replaceSchema: (schema: DynamicFormSchema) => void
@@ -37,13 +42,62 @@ export const useTemplateDesignerStore = create<TemplateDesignerStore>((set, get)
   selectedNodeId: null,
   isLoading: false,
   isSaving: false,
+  isDraftTemplate: false,
+  isForkMode: false,
+  forkChangeNote: '',
   error: null,
   hasUnsavedChanges: false,
 
-  loadTemplate: async (templateId) => {
+  initializeDraftTemplate: (input) => {
+    const id = `draft-${Date.now()}`
+    const schema: DynamicFormSchema = {
+      id,
+      version: 'v0.1',
+      title: input.name,
+      nodes: [],
+    }
+
+    set({
+      template: {
+        id,
+        currentVersionId: `${id}-v1`,
+        name: input.name,
+        version: 'v0.1',
+        status: 'draft',
+        fieldCount: 0,
+        description: input.description,
+        schema,
+        updatedAt: new Date().toLocaleString('zh-CN', { hour12: false }),
+      },
+      schema,
+      selectedNodeId: null,
+      isDraftTemplate: true,
+      isForkMode: false,
+      forkChangeNote: '',
+      hasUnsavedChanges: true,
+      error: null,
+    })
+  },
+
+  loadTemplate: async (templateId, options = {}) => {
     set({ isLoading: true, error: null })
 
     try {
+      if (options.templateVersion) {
+        const template = options.templateVersion
+
+        set({
+          template,
+          schema: template.schema,
+          selectedNodeId: template.schema.nodes[0]?.id ?? null,
+          isDraftTemplate: false,
+          isForkMode: false,
+          forkChangeNote: '',
+          hasUnsavedChanges: false,
+        })
+        return
+      }
+
       const template = await ownerTemplateService.getTemplateDetail(templateId)
 
       if (!template) {
@@ -55,7 +109,10 @@ export const useTemplateDesignerStore = create<TemplateDesignerStore>((set, get)
         template,
         schema: template.schema,
         selectedNodeId: template.schema.nodes[0]?.id ?? null,
-        hasUnsavedChanges: false,
+        isDraftTemplate: false,
+        isForkMode: Boolean(options.forkMode),
+        forkChangeNote: options.forkChangeNote ?? '',
+        hasUnsavedChanges: Boolean(options.forkMode),
       })
     } catch {
       set({ error: '模板加载失败' })
@@ -73,6 +130,34 @@ export const useTemplateDesignerStore = create<TemplateDesignerStore>((set, get)
 
     const node = createSchemaNodeFromMaterial(type)
     const nextSchema = insertSchemaNode(schema, node, parentId)
+
+    set({
+      schema: nextSchema,
+      selectedNodeId: node.id,
+      hasUnsavedChanges: true,
+    })
+
+    return node.id
+  },
+
+  addTabPane: (parentId, title = 'Tab') => {
+    const schema = get().schema
+
+    if (!schema) {
+      return null
+    }
+
+    const parent = findSchemaNode(schema, parentId)
+
+    if (!parent || parent.type !== 'tabs') {
+      return null
+    }
+
+    const node = createTabPaneNode(title)
+    const nextSchema = updateSchemaNode(schema, parentId, (currentParent) => ({
+      ...currentParent,
+      children: [...(currentParent.children ?? []), node],
+    }))
 
     set({
       schema: nextSchema,
@@ -155,7 +240,7 @@ export const useTemplateDesignerStore = create<TemplateDesignerStore>((set, get)
   },
 
   saveSchema: async () => {
-    const { schema, template } = get()
+    const { forkChangeNote, isDraftTemplate, isForkMode, schema, template } = get()
 
     if (!schema || !template) {
       return false
@@ -171,16 +256,46 @@ export const useTemplateDesignerStore = create<TemplateDesignerStore>((set, get)
     set({ isSaving: true, error: null })
 
     try {
-      const savedSchema = await ownerTemplateService.saveTemplateSchema(template.id, schema)
+      if (isDraftTemplate) {
+        const createdTemplate = await ownerTemplateService.createTemplate({
+          name: template.name,
+          description: template.description,
+          schema,
+        })
+        const selectedNodeId = get().selectedNodeId
+
+        set({
+          schema: createdTemplate.schema,
+          template: createdTemplate,
+          selectedNodeId:
+            selectedNodeId && findSchemaNode(createdTemplate.schema, selectedNodeId)
+              ? selectedNodeId
+              : createdTemplate.schema.nodes[0]?.id ?? null,
+          isDraftTemplate: false,
+          isForkMode: false,
+          forkChangeNote: '',
+          hasUnsavedChanges: false,
+        })
+
+        return true
+      }
+
+      const savedTemplate = await ownerTemplateService.forkTemplateVersion(template.id, {
+        schema,
+        changeNote: isForkMode ? forkChangeNote || '基于当前版本 Fork' : '更新模板 schema',
+      })
       const selectedNodeId = get().selectedNodeId
 
       set({
-        schema: savedSchema,
-        template: {
-          ...template,
-          schema: savedSchema,
-        },
-        selectedNodeId: selectedNodeId && findSchemaNode(savedSchema, selectedNodeId) ? selectedNodeId : savedSchema.nodes[0]?.id ?? null,
+        schema: savedTemplate.schema,
+        template: savedTemplate,
+        selectedNodeId:
+          selectedNodeId && findSchemaNode(savedTemplate.schema, selectedNodeId)
+            ? selectedNodeId
+            : savedTemplate.schema.nodes[0]?.id ?? null,
+        isDraftTemplate: false,
+        isForkMode: false,
+        forkChangeNote: '',
         hasUnsavedChanges: false,
       })
 

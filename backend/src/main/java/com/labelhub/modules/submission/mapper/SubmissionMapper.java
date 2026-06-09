@@ -103,6 +103,22 @@ public interface SubmissionMapper extends BaseMapper<Submission> {
             """)
     List<Submission> selectByAssignmentId(@Param("assignmentId") Long assignmentId);
 
+    @Select("""
+            <script>
+            SELECT *
+            FROM submissions
+            WHERE task_id = #{taskId}
+              AND dataset_item_id = #{datasetItemId}
+            <if test="labelerId != null">
+              AND labeler_id = #{labelerId}
+            </if>
+            ORDER BY submitted_at ASC, id ASC
+            </script>
+            """)
+    List<Submission> selectItemHistorySubmissions(@Param("taskId") Long taskId,
+                                                  @Param("datasetItemId") Long datasetItemId,
+                                                  @Param("labelerId") Long labelerId);
+
     @Update("""
             UPDATE submissions
             SET status = #{newStatus},
@@ -113,6 +129,26 @@ public interface SubmissionMapper extends BaseMapper<Submission> {
     int casUpdateStatus(@Param("submissionId") Long submissionId,
                         @Param("expectedStatus") String expectedStatus,
                         @Param("newStatus") String newStatus);
+
+    @Update("""
+            <script>
+            UPDATE submissions
+            SET status = #{newStatus},
+                review_flow_status = #{reviewFlowStatus},
+                <if test="isGolden != null">
+                is_golden = #{isGolden},
+                </if>
+                updated_at = CURRENT_TIMESTAMP(3)
+            WHERE id = #{submissionId}
+              AND status IN (#{firstCurrentStatus}, #{secondCurrentStatus})
+            </script>
+            """)
+    int updateStatusIfCurrentIn(@Param("submissionId") Long submissionId,
+                                @Param("newStatus") String newStatus,
+                                @Param("reviewFlowStatus") String reviewFlowStatus,
+                                @Param("isGolden") Boolean isGolden,
+                                @Param("firstCurrentStatus") String firstCurrentStatus,
+                                @Param("secondCurrentStatus") String secondCurrentStatus);
 
     @Update("""
             UPDATE submissions
@@ -160,7 +196,7 @@ public interface SubmissionMapper extends BaseMapper<Submission> {
             <if test="assignmentStatus != null">
             INNER JOIN assignments a ON a.id = s.assignment_id
             </if>
-            WHERE s.status &lt;&gt; 'SUPERSEDED'
+            WHERE s.status != 'SUPERSEDED'
             <if test="!includeAllLabelers"> AND s.labeler_id = #{labelerId}</if>
             <if test="taskId != null"> AND s.task_id = #{taskId}</if>
             <if test="submissionStatus != null"> AND s.status = #{submissionStatus}</if>
@@ -180,7 +216,7 @@ public interface SubmissionMapper extends BaseMapper<Submission> {
             <if test="assignmentStatus != null">
             INNER JOIN assignments a ON a.id = s.assignment_id
             </if>
-            WHERE s.status &lt;&gt; 'SUPERSEDED'
+            WHERE s.status != 'SUPERSEDED'
             <if test="!includeAllLabelers"> AND s.labeler_id = #{labelerId}</if>
             <if test="taskId != null"> AND s.task_id = #{taskId}</if>
             <if test="submissionStatus != null"> AND s.status = #{submissionStatus}</if>

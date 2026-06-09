@@ -148,6 +148,35 @@ class SubmissionSubmitServiceTest {
     }
 
     @Test
+    void validatesAnswerAgainstAssignmentTemplateVersionBeforeSubmit() {
+        Assignment assignment = assignment(AssignmentStatus.DRAFTING, 2);
+        when(assignmentMapper.selectOwnedAssignment(ASSIGNMENT_ID, LABELER_ID)).thenReturn(assignment);
+        when(taskMapper.selectById(TASK_ID)).thenReturn(publishedTask());
+        when(submissionMapper.selectLatestByAssignmentId(ASSIGNMENT_ID)).thenReturn(null);
+        when(submissionMapper.selectLatestActiveByAssignmentId(ASSIGNMENT_ID)).thenReturn(null);
+        when(submissionMapper.insert(any(Submission.class))).thenAnswer(invocation -> {
+            Submission submission = invocation.getArgument(0);
+            submission.setId(SUBMISSION_ID);
+            return 1;
+        });
+        when(assignmentMapper.markSubmittedIfCurrent(ASSIGNMENT_ID, LABELER_ID, 2, AssignmentStatus.SUBMITTED))
+                .thenReturn(1);
+        when(agentRunMapper.insert(any(AgentRun.class))).thenAnswer(invocation -> {
+            AgentRun agentRun = invocation.getArgument(0);
+            agentRun.setId(AGENT_RUN_ID);
+            return 1;
+        });
+
+        submissionSubmitService.submit(
+                ASSIGNMENT_ID,
+                LABELER_ID,
+                new SubmissionSubmitRequest("{\"answer\":\"A\"}", 2)
+        );
+
+        verify(answerSchemaValidator).validateAnswer(TEMPLATE_VERSION_ID, "{\"answer\":\"A\"}");
+    }
+
+    @Test
     void resubmitsReturnedAssignmentWithNextVersionAndSupersedesOldActiveSubmission() {
         Assignment assignment = assignment(AssignmentStatus.RETURNED, 3);
         Submission latest = submission(1, "different-hash", SubmissionStatus.REJECTED);
@@ -180,8 +209,8 @@ class SubmissionSubmitServiceTest {
     }
 
     @Test
-    void duplicateSameAnswerReturnsExistingSubmissionWithoutNewInsertOrAgentRun() {
-        Assignment assignment = assignment(AssignmentStatus.SUBMITTED, 2);
+    void duplicateSameAnswerForSubmittableAssignmentReturnsExistingSubmissionWithoutNewInsertOrAgentRun() {
+        Assignment assignment = assignment(AssignmentStatus.DRAFTING, 2);
         Submission existing = submission(1, sha256("{\"answer\":\"hello\"}"), SubmissionStatus.AI_REVIEWING);
         existing.setId(SUBMISSION_ID);
         when(assignmentMapper.selectOwnedAssignment(ASSIGNMENT_ID, LABELER_ID)).thenReturn(assignment);
@@ -202,6 +231,36 @@ class SubmissionSubmitServiceTest {
         verify(agentRunMapper, never()).insert(any(AgentRun.class));
         verify(auditAppender, never()).append(any(AuditCommand.class));
         verify(aiReviewDispatcher, never()).enqueue(any());
+    }
+
+    @Test
+    void rejectsApprovedAssignmentEvenWhenAnswerDuplicatesLatestActiveSubmission() {
+        Assignment assignment = assignment(AssignmentStatus.APPROVED, 2);
+        when(assignmentMapper.selectOwnedAssignment(ASSIGNMENT_ID, LABELER_ID)).thenReturn(assignment);
+
+        assertThatThrownBy(() -> submissionSubmitService.submit(
+                ASSIGNMENT_ID,
+                LABELER_ID,
+                new SubmissionSubmitRequest("{\n  \"answer\" : \"hello\"\n}", 2)
+        )).isInstanceOfSatisfying(BusinessException.class,
+                ex -> assertThat(ex.getCode()).isEqualTo(400401));
+        verify(submissionMapper, never()).selectLatestActiveByAssignmentId(ASSIGNMENT_ID);
+        verify(submissionMapper, never()).insert(any(Submission.class));
+    }
+
+    @Test
+    void rejectsCancelledAssignmentEvenWhenAnswerDuplicatesLatestActiveSubmission() {
+        Assignment assignment = assignment(AssignmentStatus.CANCELLED, 2);
+        when(assignmentMapper.selectOwnedAssignment(ASSIGNMENT_ID, LABELER_ID)).thenReturn(assignment);
+
+        assertThatThrownBy(() -> submissionSubmitService.submit(
+                ASSIGNMENT_ID,
+                LABELER_ID,
+                new SubmissionSubmitRequest("{\n  \"answer\" : \"hello\"\n}", 2)
+        )).isInstanceOfSatisfying(BusinessException.class,
+                ex -> assertThat(ex.getCode()).isEqualTo(400401));
+        verify(submissionMapper, never()).selectLatestActiveByAssignmentId(ASSIGNMENT_ID);
+        verify(submissionMapper, never()).insert(any(Submission.class));
     }
 
     @Test
@@ -246,8 +305,6 @@ class SubmissionSubmitServiceTest {
     void rejectsNonEditableStatusWhenAnswerIsNotDuplicate() {
         Assignment assignment = assignment(AssignmentStatus.APPROVED, 2);
         when(assignmentMapper.selectOwnedAssignment(ASSIGNMENT_ID, LABELER_ID)).thenReturn(assignment);
-        when(taskMapper.selectById(TASK_ID)).thenReturn(publishedTask());
-        when(submissionMapper.selectLatestActiveByAssignmentId(ASSIGNMENT_ID)).thenReturn(null);
 
         assertThatThrownBy(() -> submissionSubmitService.submit(
                 ASSIGNMENT_ID,

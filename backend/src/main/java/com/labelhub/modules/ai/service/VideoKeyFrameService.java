@@ -2,6 +2,7 @@ package com.labelhub.modules.ai.service;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.net.URI;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -17,7 +18,7 @@ public class VideoKeyFrameService {
     private static final Logger log = LoggerFactory.getLogger(VideoKeyFrameService.class);
 
     /** CI 截帧参数模板：每5秒一帧，JPG格式，宽1280 */
-    private static final String CI_SNAPSHOT = "?ci-process=snapshot&format=jpg&width=1280&time=%d";
+    private static final String CI_SNAPSHOT = "ci-process=snapshot&format=jpg&width=1280&time=%d";
 
     @Value("${labelhub.media.keyframe.max-frames:5}")
     private int maxFrames;
@@ -37,6 +38,10 @@ public class VideoKeyFrameService {
             log.debug("Cannot generate key frames: COS URL is blank");
             return List.of();
         }
+        if (!isTencentCosUrl(cosUrl)) {
+            log.debug("Cannot generate key frames: video URL is not a Tencent COS URL");
+            return List.of();
+        }
         if (durationSeconds == null || durationSeconds <= 0) {
             durationSeconds = 60;
         }
@@ -48,10 +53,26 @@ public class VideoKeyFrameService {
         int effectiveMax = Math.max(1, maxFrames);
 
         for (int t = effectiveInterval; t <= durationSeconds && urls.size() < effectiveMax; t += effectiveInterval) {
-            urls.add(ciUrl + String.format(CI_SNAPSHOT, t));
+            urls.add(ciUrl + separator(ciUrl) + String.format(CI_SNAPSHOT, t));
         }
 
         log.debug("Generated {} key frames for video (duration={}s)", urls.size(), durationSeconds);
         return urls;
+    }
+
+    private boolean isTencentCosUrl(String url) {
+        try {
+            URI uri = URI.create(url);
+            String host = uri.getHost();
+            return host != null
+                    && host.endsWith(".myqcloud.com")
+                    && host.contains(".cos.");
+        } catch (IllegalArgumentException ex) {
+            return false;
+        }
+    }
+
+    private String separator(String url) {
+        return url.contains("?") ? "&" : "?";
     }
 }

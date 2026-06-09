@@ -1,92 +1,122 @@
 import {
-  AuditOutlined,
+  ApiOutlined,
   CheckSquareOutlined,
   DashboardOutlined,
   FileDoneOutlined,
   FormOutlined,
   InboxOutlined,
-  ProfileOutlined,
   ProjectOutlined,
-  ReadOutlined,
+  ProfileOutlined,
+  SafetyCertificateOutlined,
 } from '@ant-design/icons'
 import type { Role } from '../types/auth'
 import type { NavItem } from '../types/navigation'
 
 export const roleNavigation: Record<Role, NavItem[]> = {
-  owner: [
+  ADMIN: [
+    {
+      key: 'admin-dashboard',
+      label: '工作台',
+      path: '/app/admin',
+      role: 'ADMIN',
+      icon: <DashboardOutlined />,
+    },
+    {
+      key: 'admin-review-assignment',
+      label: '审核分配',
+      path: '/app/admin/review-assignment',
+      role: 'ADMIN',
+      icon: <SafetyCertificateOutlined />,
+    },
+    {
+      key: 'admin-llm-providers',
+      label: 'LLM Provider',
+      path: '/app/admin/llm-providers',
+      role: 'ADMIN',
+      icon: <ApiOutlined />,
+    },
+  ],
+  OWNER: [
     {
       key: 'owner-dashboard',
       label: '工作台',
       path: '/app/owner',
-      role: 'owner',
+      role: 'OWNER',
       icon: <DashboardOutlined />,
     },
     {
       key: 'owner-tasks',
       label: '任务管理',
       path: '/app/owner/tasks',
-      role: 'owner',
+      role: 'OWNER',
       icon: <ProjectOutlined />,
     },
     {
       key: 'owner-templates',
       label: '模板管理',
       path: '/app/owner/templates',
-      role: 'owner',
+      role: 'OWNER',
       icon: <FormOutlined />,
     },
-    {
-      key: 'owner-audit',
-      label: '导出与审计',
-      path: '/app/owner/audit',
-      role: 'owner',
-      icon: <AuditOutlined />,
-    },
+    // {
+    //   key: 'owner-audit',
+    //   label: '导出与审计',
+    //   path: '/app/owner/audit',
+    //   role: 'OWNER',
+    //   icon: <AuditOutlined />,
+    // },
   ],
-  labeler: [
+  LABELER: [
     {
       key: 'labeler-dashboard',
       label: '工作台',
       path: '/app/labeler',
-      role: 'labeler',
+      role: 'LABELER',
       icon: <DashboardOutlined />,
     },
     {
       key: 'labeler-market',
       label: '任务广场',
       path: '/app/labeler/market',
-      role: 'labeler',
+      role: 'LABELER',
       icon: <InboxOutlined />,
     },
     {
       key: 'labeler-submissions',
-      label: '我的提交',
+      label: '我的领取',
       path: '/app/labeler/submissions',
-      role: 'labeler',
+      role: 'LABELER',
       icon: <FileDoneOutlined />,
     },
   ],
-  reviewer: [
+  REVIEWER: [
     {
       key: 'reviewer-dashboard',
       label: '工作台',
       path: '/app/reviewer',
-      role: 'reviewer',
+      role: 'REVIEWER',
       icon: <DashboardOutlined />,
+    },
+    {
+      key: 'reviewer-claim',
+      label: '领取待审',
+      path: '/app/reviewer/claim',
+      role: 'REVIEWER',
+      icon: <InboxOutlined />,
     },
     {
       key: 'reviewer-queue',
       label: '审核队列',
       path: '/app/reviewer/queue',
-      role: 'reviewer',
+      role: 'REVIEWER',
       icon: <CheckSquareOutlined />,
     },
     {
-      key: 'reviewer-history',
-      label: '审核历史',
-      path: '/app/reviewer/history',
-      role: 'reviewer',
-      icon: <ReadOutlined />,
+      key: 'reviewer-ai-reviews',
+      label: 'AI审核队列',
+      path: '/app/reviewer/ai-reviews',
+      role: 'REVIEWER',
+      icon: <ProfileOutlined />,
     },
   ],
 }
@@ -101,4 +131,3 @@ export function getActiveNavKey(role: Role, pathname: string) {
 
   return matchedItem?.key ?? items[0]?.key
 }
-

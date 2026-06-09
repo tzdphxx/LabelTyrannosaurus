@@ -19,6 +19,7 @@ import com.labelhub.infrastructure.llm.LlmGateway;
 import com.labelhub.infrastructure.llm.LlmGatewayRequest;
 import com.labelhub.infrastructure.llm.LlmGatewayResponse;
 import com.labelhub.infrastructure.llm.LlmGatewayStatus;
+import com.labelhub.infrastructure.llm.LlmMessage;
 import com.labelhub.infrastructure.llmtask.LlmTaskQueueService;
 import com.labelhub.infrastructure.llmtask.LlmTaskStatus;
 import com.labelhub.modules.agent.domain.AgentRun;
@@ -128,18 +129,21 @@ class LlmTriggerServiceTest {
                 .thenReturn(agentRun());
         org.springframework.test.util.ReflectionTestUtils.setField(service, "promptTemplateEngine",
                 promptTemplateEngine);
+        org.springframework.test.util.ReflectionTestUtils.setField(service, "videoKeyFrameService",
+                videoKeyFrameService());
         org.mockito.Mockito.lenient()
                 .when(promptTemplateEngine.buildLlmTriggerPrompt(
                         org.mockito.ArgumentMatchers.any(),
                         org.mockito.ArgumentMatchers.any(),
                         org.mockito.ArgumentMatchers.any(),
                         org.mockito.ArgumentMatchers.any(),
+                        org.mockito.ArgumentMatchers.any(),
                         org.mockito.ArgumentMatchers.any()))
-                .thenReturn("You are a LabelHub field-level LlmTrigger assistant.");
+                .thenReturn("You are a LabelHub whole-template LlmTrigger assistant.");
     }
 
     @Test
-    void labelerTriggersFromAssignmentAndEnqueuesRunUsingTaskConfigAndComponentContext() {
+    void labelerTriggersFromAssignmentAndEnqueuesRunUsingTaskConfigAndTemplateContext() {
         when(assignmentMapper.selectOwnedAssignment(ASSIGNMENT_ID, LABELER_ID)).thenReturn(assignment());
         when(taskMapper.selectById(TASK_ID)).thenReturn(task());
         when(datasetItemMapper.selectById(DATASET_ITEM_ID)).thenReturn(datasetItem());
@@ -161,17 +165,17 @@ class LlmTriggerServiceTest {
         assertThat(response.agentRunId()).isEqualTo(AGENT_RUN_ID);
         assertThat(response.status()).isEqualTo(LlmTaskStatus.RUNNING.name());
         assertThat(response.targetFields()).containsExactly("summary");
-        assertThat(response.componentId()).isEqualTo("summary");
+        assertThat(response.componentId()).isEqualTo(20L);
 
         ArgumentCaptor<LlmTriggerRun> runCaptor = ArgumentCaptor.forClass(LlmTriggerRun.class);
         verify(llmTriggerRunMapper).insert(runCaptor.capture());
         LlmTriggerRun insertedRun = runCaptor.getValue();
-        assertThat(insertedRun.getComponentId()).isEqualTo("summary");
+        assertThat(insertedRun.getComponentId()).isEqualTo("20");
         assertThat(insertedRun.getProviderId()).isEqualTo(PROVIDER_ID);
         assertThat(insertedRun.getModelName()).isEqualTo("qwen-plus");
         assertThat(insertedRun.getInputSnapshotJson())
                 .contains("\"scoringDimensions\":[\"accuracy\",\"clarity\"]")
-                .contains("\"componentId\":\"summary\"")
+                .contains("\"componentId\":20")
                 .contains("\"userInstruction\":\"Make it concise\"");
 
         verify(agentRunService).start(AGENT_RUN_ID);
@@ -254,7 +258,7 @@ class LlmTriggerServiceTest {
     }
 
     @Test
-    void rejectsUnknownComponentId() {
+    void acceptsComponentIdAsEchoOnly() {
         when(assignmentMapper.selectOwnedAssignment(ASSIGNMENT_ID, LABELER_ID)).thenReturn(assignment());
         when(taskMapper.selectById(TASK_ID)).thenReturn(task());
         when(datasetItemMapper.selectById(DATASET_ITEM_ID)).thenReturn(datasetItem());
@@ -263,11 +267,20 @@ class LlmTriggerServiceTest {
 
         LlmTriggerRunRequest request = new LlmTriggerRunRequest(
                 null, null, null, null, null,
-                "missing", Map.of("summary", "draft"), null);
+                999L, Map.of("summary", "draft"), null);
 
-        assertThatThrownBy(() -> service.runForAssignment(labeler(), ASSIGNMENT_ID, request))
-                .isInstanceOfSatisfying(BusinessException.class,
-                        ex -> assertThat(ex.getCode()).isEqualTo(400501));
+        when(llmProviderService.findEnabledById(PROVIDER_ID)).thenReturn(Optional.of(provider()));
+        when(agentRunService.create(eq("LLM_TRIGGER"), isNull(), eq(PROVIDER_ID), eq("qwen-plus"),
+                any(), any(), eq(ASSIGNMENT_ID), any())).thenReturn(agentRun());
+        doAnswer(invocation -> {
+            LlmTriggerRun run = invocation.getArgument(0);
+            run.setId(TRIGGER_RUN_ID);
+            return 1;
+        }).when(llmTriggerRunMapper).insert(any(LlmTriggerRun.class));
+
+        LlmTriggerRunResponse response = service.runForAssignment(labeler(), ASSIGNMENT_ID, request);
+
+        assertThat(response.componentId()).isEqualTo(999L);
     }
 
     @Test
@@ -282,6 +295,7 @@ class LlmTriggerServiceTest {
         LlmTriggerRun run = triggerRun();
         when(llmTriggerRunMapper.selectById(TRIGGER_RUN_ID)).thenReturn(run);
         when(taskMapper.selectById(TASK_ID)).thenReturn(task());
+        when(templateVersionMapper.selectById(20L)).thenReturn(templateVersion());
         when(aiReviewConfigMapper.selectById(AI_REVIEW_CONFIG_ID)).thenReturn(aiReviewConfig());
         when(rateLimiter.acquire(TASK_ID, OWNER_ID, PROVIDER_ID)).thenReturn(true);
         when(llmGateway.review(any(LlmGatewayRequest.class))).thenReturn(new LlmGatewayResponse(
@@ -294,10 +308,11 @@ class LlmTriggerServiceTest {
     }
 
     @Test
-    void workerNormalizesStructuredPatchAndDropsNonTargetFields() {
+    void workerNormalizesStructuredPatchAndDropsNonSchemaFields() {
         LlmTriggerRun run = triggerRun();
         when(llmTriggerRunMapper.selectById(TRIGGER_RUN_ID)).thenReturn(run);
         when(taskMapper.selectById(TASK_ID)).thenReturn(task());
+        when(templateVersionMapper.selectById(20L)).thenReturn(templateVersion());
         when(aiReviewConfigMapper.selectById(AI_REVIEW_CONFIG_ID)).thenReturn(aiReviewConfig());
         when(rateLimiter.acquire(TASK_ID, OWNER_ID, PROVIDER_ID)).thenReturn(true);
         when(llmGateway.review(any(LlmGatewayRequest.class))).thenReturn(new LlmGatewayResponse(
@@ -320,10 +335,95 @@ class LlmTriggerServiceTest {
 
         assertThat(run.getStatus()).isEqualTo(LlmTaskStatus.SUCCESS.name());
         assertThat(run.getResultJson())
-                .contains("\"componentId\":\"summary\"")
+                .contains("\"componentId\":20")
                 .contains("\"summary\":\"AI summary\"")
                 .doesNotContain("should be dropped")
-                .contains("Dropped non-target patch field: other");
+                .contains("Dropped non-schema patch field: other");
+    }
+
+    @Test
+    void workerSendsImageItemAsMultimodalContentParts() {
+        LlmTriggerRun run = triggerRun();
+        run.setInputSnapshotJson("""
+                {
+                    "itemSnapshot": {
+                      "media_type": "image",
+                      "media_url": "https://www.w3schools.com/w3css/img_lights.jpg",
+                      "media_processing_status": "READY"
+                    },
+                  "currentAnswerJson": {"summary": "draft"}
+                }
+                """);
+        when(llmTriggerRunMapper.selectById(TRIGGER_RUN_ID)).thenReturn(run);
+        when(taskMapper.selectById(TASK_ID)).thenReturn(task());
+        when(templateVersionMapper.selectById(20L)).thenReturn(templateVersion());
+        when(aiReviewConfigMapper.selectById(AI_REVIEW_CONFIG_ID)).thenReturn(aiReviewConfig());
+        when(llmProviderService.findEnabledById(PROVIDER_ID)).thenReturn(Optional.of(provider()));
+        when(llmProviderService.capability(any(LlmProvider.class)))
+                .thenReturn(new ProviderCapability(true, true, 5, null));
+        when(rateLimiter.acquire(TASK_ID, OWNER_ID, PROVIDER_ID)).thenReturn(true);
+        when(llmGateway.review(any(LlmGatewayRequest.class))).thenReturn(new LlmGatewayResponse(
+                LlmGatewayStatus.SUCCESS,
+                "{\"ok\":true}",
+                "summary text",
+                Map.of("patch", Map.of("summary", "AI summary")),
+                1200L,
+                null,
+                null));
+
+        service.executeQueuedTrigger(TRIGGER_RUN_ID);
+
+        ArgumentCaptor<LlmGatewayRequest> requestCaptor = ArgumentCaptor.forClass(LlmGatewayRequest.class);
+        verify(llmGateway).review(requestCaptor.capture());
+        assertThat(requestCaptor.getValue().messages())
+                .anySatisfy(message -> assertThat(message.contentParts())
+                        .anySatisfy(part -> assertThat(part).isInstanceOf(LlmMessage.ImageUrlPart.class)));
+    }
+
+    @Test
+    void workerFallsBackFromVideoDirectToCosKeyFrames() {
+        LlmTriggerRun run = triggerRun();
+        run.setInputSnapshotJson("""
+                {
+                    "itemSnapshot": {
+                      "media_type": "video",
+                      "media_url": "https://bucket-123.cos.ap-guangzhou.myqcloud.com/videos/oceans.mp4",
+                      "media_processing_status": "READY"
+                    },
+                  "currentAnswerJson": {"summary": "draft"}
+                }
+                """);
+        when(llmTriggerRunMapper.selectById(TRIGGER_RUN_ID)).thenReturn(run);
+        when(taskMapper.selectById(TASK_ID)).thenReturn(task());
+        when(templateVersionMapper.selectById(20L)).thenReturn(templateVersion());
+        when(aiReviewConfigMapper.selectById(AI_REVIEW_CONFIG_ID)).thenReturn(aiReviewConfig());
+        when(llmProviderService.findEnabledById(PROVIDER_ID)).thenReturn(Optional.of(provider()));
+        when(llmProviderService.capability(any(LlmProvider.class)))
+                .thenReturn(new ProviderCapability(true, true, 5, null));
+        when(rateLimiter.acquire(TASK_ID, OWNER_ID, PROVIDER_ID)).thenReturn(true);
+        when(llmGateway.review(any(LlmGatewayRequest.class)))
+                .thenReturn(new LlmGatewayResponse(LlmGatewayStatus.PROVIDER_ERROR, null, null, null,
+                        500L, "UNSUPPORTED_VIDEO", "video_url is not supported"))
+                .thenReturn(new LlmGatewayResponse(
+                        LlmGatewayStatus.SUCCESS,
+                        "{\"ok\":true}",
+                        "summary text",
+                        Map.of("patch", Map.of("summary", "AI summary")),
+                        1200L,
+                        null,
+                        null));
+
+        service.executeQueuedTrigger(TRIGGER_RUN_ID);
+
+        assertThat(run.getStatus()).isEqualTo(LlmTaskStatus.SUCCESS.name());
+        ArgumentCaptor<LlmGatewayRequest> requestCaptor = ArgumentCaptor.forClass(LlmGatewayRequest.class);
+        verify(llmGateway, org.mockito.Mockito.times(2)).review(requestCaptor.capture());
+        assertThat(requestCaptor.getAllValues().get(0).messages())
+                .anySatisfy(message -> assertThat(message.contentParts())
+                        .anySatisfy(part -> assertThat(part).isInstanceOf(LlmMessage.VideoUrlPart.class)));
+        assertThat(requestCaptor.getAllValues().get(1).messages())
+                .anySatisfy(message -> assertThat(message.contentParts())
+                        .anySatisfy(part -> assertThat(part).isInstanceOf(LlmMessage.ImageUrlPart.class)));
     }
 
     @Test
@@ -358,13 +458,13 @@ class LlmTriggerServiceTest {
     private LlmTriggerRunRequest componentRequest() {
         return new LlmTriggerRunRequest(
                 null, null, null, null, null,
-                "summary", Map.of("summary", "draft"), "Make it concise");
+                20L, Map.of("summary", "draft"), "Make it concise");
     }
 
     private LlmTriggerRunRequest requestWithItem() {
         return new LlmTriggerRunRequest(
                 null, null, null, null,
-                DATASET_ITEM_ID, "summary", Map.of("summary", "draft"), null);
+                DATASET_ITEM_ID, 20L, Map.of("summary", "draft"), null);
     }
 
     private Task task() {
@@ -396,6 +496,9 @@ class LlmTriggerServiceTest {
         LlmProvider provider = new LlmProvider();
         provider.setId(PROVIDER_ID);
         provider.setEnabled(true);
+        provider.setSupportVision(true);
+        provider.setSupportMultiImage(true);
+        provider.setMaxImageCount(5);
         return provider;
     }
 
@@ -409,12 +512,16 @@ class LlmTriggerServiceTest {
         config.setPassThreshold(new BigDecimal("80.00"));
         config.setManualReviewThreshold(new BigDecimal("60.00"));
         config.setPromptVersion("v1");
+        config.setMultimodalEnabled(true);
+        config.setVisionDetail("auto");
+        config.setMaxImagesPerRequest(5);
         return config;
     }
 
     private TemplateVersion templateVersion() {
         TemplateVersion version = new TemplateVersion();
         version.setId(20L);
+        version.setTemplateId(20L);
         version.setTaskId(TASK_ID);
         version.setSchemaJson("""
                 {
@@ -437,6 +544,13 @@ class LlmTriggerServiceTest {
         return run;
     }
 
+    private VideoKeyFrameService videoKeyFrameService() {
+        VideoKeyFrameService service = new VideoKeyFrameService();
+        org.springframework.test.util.ReflectionTestUtils.setField(service, "maxFrames", 5);
+        org.springframework.test.util.ReflectionTestUtils.setField(service, "intervalSeconds", 5);
+        return service;
+    }
+
     private LlmTriggerRun triggerRun() {
         LlmTriggerRun run = new LlmTriggerRun();
         run.setId(TRIGGER_RUN_ID);
@@ -448,7 +562,7 @@ class LlmTriggerServiceTest {
         run.setModelName("qwen-plus");
         run.setAgentRunId(AGENT_RUN_ID);
         run.setStatus(LlmTaskStatus.RUNNING.name());
-        run.setComponentId("summary");
+        run.setComponentId("20");
         run.setTargetFieldsJson("[\"summary\"]");
         run.setInputSnapshotJson("{\"promptTemplate\":\"Suggest a concise summary.\"}");
         run.setCreatedBy(OWNER_ID);

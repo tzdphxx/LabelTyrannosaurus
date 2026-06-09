@@ -6,8 +6,10 @@ import com.labelhub.common.security.CurrentUserContext;
 import com.labelhub.common.security.RoleCode;
 import com.labelhub.modules.submission.dto.AnswerDiffResponse;
 import com.labelhub.modules.submission.dto.MultiVersionCompareResponse;
+import com.labelhub.modules.submission.dto.SubmissionItemHistoryResponse;
 import com.labelhub.modules.submission.dto.VersionHistoryItem;
 import com.labelhub.modules.submission.service.AnswerDiffService;
+import com.labelhub.modules.submission.service.SubmissionItemHistoryService;
 import com.labelhub.modules.submission.service.SubmissionVersionService;
 import com.labelhub.modules.submission.domain.Submission;
 import com.labelhub.modules.submission.mapper.SubmissionMapper;
@@ -30,13 +32,16 @@ public class SubmissionTraceController {
 
     private final AnswerDiffService answerDiffService;
     private final SubmissionVersionService versionService;
+    private final SubmissionItemHistoryService itemHistoryService;
     private final SubmissionMapper submissionMapper;
 
     public SubmissionTraceController(AnswerDiffService answerDiffService,
                                      SubmissionVersionService versionService,
+                                     SubmissionItemHistoryService itemHistoryService,
                                      SubmissionMapper submissionMapper) {
         this.answerDiffService = answerDiffService;
         this.versionService = versionService;
+        this.itemHistoryService = itemHistoryService;
         this.submissionMapper = submissionMapper;
     }
 
@@ -59,6 +64,14 @@ public class SubmissionTraceController {
             return ApiResponse.ok(List.of());
         }
         return ApiResponse.ok(versionService.getVersionHistory(submission.getAssignmentId()));
+    }
+
+    @GetMapping("/{submissionId}/item-history")
+    @Operation(summary = "题目提交审核历史",
+            description = "从指定提交定位题目，按当前角色返回该题目的提交、AI 审核和多轮人工审核历史。Labeler 只能看到自己的提交历史。")
+    public ApiResponse<SubmissionItemHistoryResponse> itemHistory(
+            @Parameter(description = "提交 ID") @PathVariable Long submissionId) {
+        return ApiResponse.ok(itemHistoryService.getItemHistory(submissionId));
     }
 
     @GetMapping("/compare")

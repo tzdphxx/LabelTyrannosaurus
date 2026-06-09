@@ -13,18 +13,20 @@ import {
   message,
 } from 'antd'
 import { PlusOutlined, ReloadOutlined } from '@ant-design/icons'
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router'
 import { ContentShell } from '../../components/page/ContentShell'
 import { PageHeader } from '../../components/page/PageHeader'
+import { ownerTaskService } from '../../services'
 import { useOwnerTaskStore } from '../../stores/ownerTaskStore'
-import type { OwnerTask, OwnerTaskStatus } from '../../types/task'
+import type { OwnerTask, OwnerTaskStatus, TaskExportFormat } from '../../types/task'
 import {
   formatCount,
   getProgressPercent,
   ownerTaskStatusColors,
   ownerTaskStatusLabels,
 } from '../../utils/ownerTasks'
+import styles from './OwnerPages.module.css'
 
 const statusOptions = [
   { label: '全部状态', value: 'all' },
@@ -34,17 +36,51 @@ const statusOptions = [
   { label: '已结束', value: 'ended' },
 ]
 
+const exportFormatOptions: Array<{ label: string; value: TaskExportFormat }> = [
+  { label: 'JSONL', value: 'JSONL' },
+  { label: 'JSON', value: 'JSON' },
+  { label: 'CSV', value: 'CSV' },
+  { label: 'XLSX', value: 'XLSX' },
+]
+
+const statusPillClasses: Record<OwnerTaskStatus, string> = {
+  draft: styles.statusPillDraft,
+  published: styles.statusPillPublished,
+  paused: styles.statusPillPaused,
+  ended: styles.statusPillEnded,
+}
+
+function formatReward(task: OwnerTask) {
+  const reward = task.rewardRule
+
+  if (!reward.unitPrice) {
+    return '-'
+  }
+
+  // return `${reward.unitPrice} ${reward.rewardCurrency}`
+  return `${reward.unitPrice}`
+
+}
+
 export function OwnerTasksPage() {
   const navigate = useNavigate()
   const [messageApi, contextHolder] = message.useMessage()
+  const [modalApi, modalContextHolder] = Modal.useModal()
+  const [exportFormat, setExportFormat] = useState<TaskExportFormat>('JSONL')
+  const [exportTarget, setExportTarget] = useState<OwnerTask | null>(null)
+  const [exportingTaskId, setExportingTaskId] = useState<string | null>(null)
   const tasks = useOwnerTaskStore((state) => state.tasks)
   const filters = useOwnerTaskStore((state) => state.filters)
+  const total = useOwnerTaskStore((state) => state.total)
   const error = useOwnerTaskStore((state) => state.error)
   const isListLoading = useOwnerTaskStore((state) => state.isListLoading)
   const isStatusSubmitting = useOwnerTaskStore((state) => state.isStatusSubmitting)
+  const isDeleting = useOwnerTaskStore((state) => state.isDeleting)
   const setFilters = useOwnerTaskStore((state) => state.setFilters)
   const loadTasks = useOwnerTaskStore((state) => state.loadTasks)
+  const publishTask = useOwnerTaskStore((state) => state.publishTask)
   const updateTaskStatus = useOwnerTaskStore((state) => state.updateTaskStatus)
+  const deleteTask = useOwnerTaskStore((state) => state.deleteTask)
 
   useEffect(() => {
     void loadTasks()
@@ -55,8 +91,80 @@ export function OwnerTasksPage() {
     void loadTasks()
   }
 
+  const openExportTask = (task: OwnerTask) => {
+    setExportFormat('JSONL')
+    setExportTarget(task)
+  }
+
+  const closeExportTask = () => {
+    if (exportingTaskId) {
+      return
+    }
+
+    setExportTarget(null)
+  }
+
+  const confirmExportTask = async () => {
+    if (!exportTarget) {
+      return
+    }
+
+    setExportingTaskId(exportTarget.id)
+
+    try {
+      const progress = await ownerTaskService.getTaskProgress(exportTarget.id)
+
+      if (!progress || progress.completedItems <= 0) {
+        messageApi.warning('该任务暂无提交，不能导出')
+        return
+      }
+
+      const result = await ownerTaskService.exportTaskDirect(exportTarget.id, exportFormat)
+
+      if (!result.downloadUrl) {
+        messageApi.error('导出文件下载链接为空')
+        return
+      }
+
+      const link = document.createElement('a')
+      link.href = result.downloadUrl
+      link.target = '_blank'
+      link.rel = 'noopener noreferrer'
+      link.download = result.filename
+      document.body.appendChild(link)
+      link.click()
+      link.remove()
+
+      messageApi.success(`导出文件已生成，共 ${formatCount(result.exportedCount)} 条`)
+      setExportTarget(null)
+    } catch {
+      messageApi.error('任务导出失败')
+    } finally {
+      setExportingTaskId(null)
+    }
+  }
+
+  const confirmDeleteTask = (task: OwnerTask) => {
+    modalApi.confirm({
+      title: '删除草稿任务',
+      content: `确认要删除「${task.title}」吗？删除后不可恢复。`,
+      okText: '删除',
+      okButtonProps: { danger: true },
+      cancelText: '取消',
+      onOk: async () => {
+        const deleted = await deleteTask(task.id)
+
+        if (deleted) {
+          messageApi.success('草稿任务已删除')
+        } else {
+          messageApi.error('删除失败')
+        }
+      },
+    })
+  }
+
   const confirmStatusChange = (task: OwnerTask, status: OwnerTaskStatus, label: string) => {
-    Modal.confirm({
+    modalApi.confirm({
       title: `${label}任务`,
       content: `确认要${label}「${task.title}」吗？`,
       okText: '确认',
@@ -73,13 +181,32 @@ export function OwnerTasksPage() {
     })
   }
 
+  const confirmPublishTask = (task: OwnerTask) => {
+    modalApi.confirm({
+      title: '发布任务',
+      content: `确认要发布「${task.title}」吗？`,
+      okText: '发布',
+      cancelText: '取消',
+      onOk: async () => {
+        const publishedTask = await publishTask(task.id)
+
+        if (publishedTask) {
+          messageApi.success('任务已发布')
+        } else {
+          messageApi.error('发布失败')
+        }
+      },
+    })
+  }
+
   return (
-    <main className="owner-page">
+    <main className={styles.page}>
       {contextHolder}
-      <ContentShell>
+      {modalContextHolder}
+      <ContentShell className={styles.hero}>
         <PageHeader
           title="任务管理"
-          description="查看 Owner 负责的任务、进度和当前状态。P0 支持搜索、状态筛选、编辑入口和基础状态操作。"
+          description="查看 Owner 负责的任务、进度和当前状态。支持搜索、状态筛选、编辑入口和状态操作。"
           extra={
             <>
               <Button icon={<ReloadOutlined />} loading={isListLoading} onClick={() => void loadTasks()}>
@@ -95,18 +222,43 @@ export function OwnerTasksPage() {
 
       {error ? <Alert message={error} showIcon type="error" /> : null}
 
-      <Card className="owner-table-card">
-        <div className="owner-toolbar">
+      <Modal
+        destroyOnHidden
+        confirmLoading={Boolean(exportingTaskId)}
+        okText="开始导出"
+        open={Boolean(exportTarget)}
+        title="导出任务数据"
+        onCancel={closeExportTask}
+        onOk={() => void confirmExportTask()}
+      >
+        <Space direction="vertical" size={12} style={{ width: '100%' }}>
+          <Typography.Text type="secondary">
+            {exportTarget ? `任务：${exportTarget.title}` : '请选择需要导出的任务'}
+          </Typography.Text>
+          <Select
+            options={exportFormatOptions}
+            style={{ width: '100%' }}
+            value={exportFormat}
+            onChange={(value) => setExportFormat(value as TaskExportFormat)}
+          />
+          <Typography.Text type="secondary">
+            导出前会检查该任务是否已有提交；后端仅导出审核通过的提交。
+          </Typography.Text>
+        </Space>
+      </Modal>
+
+      <Card className={styles.tableCard}>
+        <div className={styles.toolbar}>
           <Input.Search
             allowClear
-            className="owner-toolbar__search"
+            className={styles.toolbarSearch}
             placeholder="搜索任务标题、描述或标签"
             value={filters.keyword}
             onChange={(event) => reloadWithFilter({ keyword: event.target.value })}
             onSearch={(keyword) => reloadWithFilter({ keyword })}
           />
           <Select
-            className="owner-toolbar__select"
+            className={styles.toolbarSelect}
             options={statusOptions}
             value={filters.status}
             onChange={(status) => reloadWithFilter({ status })}
@@ -114,6 +266,7 @@ export function OwnerTasksPage() {
         </div>
 
         <Table<OwnerTask>
+          className={styles.dataTable}
           columns={[
             {
               title: '任务',
@@ -134,31 +287,48 @@ export function OwnerTasksPage() {
               title: '状态',
               dataIndex: 'status',
               width: 110,
-              render: (status: OwnerTaskStatus) => <Tag color={ownerTaskStatusColors[status]}>{ownerTaskStatusLabels[status]}</Tag>,
+              render: (status: OwnerTaskStatus) => (
+                <Tag className={`${styles.statusPill} ${statusPillClasses[status]}`} color={ownerTaskStatusColors[status]}>
+                  {ownerTaskStatusLabels[status]}
+                </Tag>
+              ),
             },
+
             {
-              title: '模板',
-              dataIndex: 'templateName',
-              width: 180,
+              title: '奖励',
+              width: 120,
+              render: (_, task) => (
+                <span className={styles.rewardBadge}>
+                  <strong>{formatReward(task)}</strong>
+                  <span>单题</span>
+                </span>
+              ),
             },
             {
               title: '当前进度',
               width: 230,
-              render: (_, task) => (
-                <Space className="owner-table-progress" direction="vertical" size={4}>
-                  <Progress percent={getProgressPercent(task.progress)} size="small" />
-                  <Typography.Text type="secondary">
-                    {formatCount(task.progress.completedItems)} / {formatCount(task.progress.totalItems)} 完成，待审{' '}
-                    {formatCount(task.progress.pendingReviewItems)}
-                  </Typography.Text>
-                </Space>
-              ),
+              render: (_, task) => {
+                const percent = getProgressPercent(task.progress)
+
+                return (
+                  <Space className={styles.tableProgress} direction="vertical" size={6}>
+                    <div className={styles.progressLine}>
+                      <span className={styles.progressPercent}>{percent}%</span>
+                      <Progress percent={percent} showInfo={false} size="small" />
+                    </div>
+                    <div className={styles.progressMeta}>
+                      <span>{formatCount(task.progress.completedItems)} / {formatCount(task.progress.totalItems)} 完成</span>
+                      <span>{formatCount(task.progress.pendingReviewItems)} 待审</span>
+                    </div>
+                  </Space>
+                )
+              },
             },
             {
               title: '数据量',
               dataIndex: 'dataCount',
               width: 100,
-              render: (value: number) => formatCount(value),
+              render: (value: number) => <span className={styles.countBadge}>{formatCount(value)}</span>,
             },
             {
               title: '截止时间',
@@ -167,15 +337,29 @@ export function OwnerTasksPage() {
             },
             {
               title: '操作',
-              width: 220,
+              width: 300,
               render: (_, task) => (
                 <Space wrap>
                   <Button size="small" type="link" onClick={() => navigate(`/app/owner/tasks/${task.id}/edit`)}>
                     编辑
                   </Button>
+                  <Button
+                    disabled={task.status === 'draft'}
+                    loading={exportingTaskId === task.id}
+                    size="small"
+                    type="link"
+                    onClick={() => openExportTask(task)}
+                  >
+                    导出
+                  </Button>
                   {task.status === 'draft' ? (
-                    <Button size="small" type="link" onClick={() => navigate(`/app/owner/tasks/${task.id}/edit`)}>
+                    <Button loading={isStatusSubmitting} size="small" type="link" onClick={() => confirmPublishTask(task)}>
                       发布
+                    </Button>
+                  ) : null}
+                  {task.status === 'draft' ? (
+                    <Button danger loading={isDeleting} size="small" type="link" onClick={() => confirmDeleteTask(task)}>
+                      删除
                     </Button>
                   ) : null}
                   {task.status === 'published' ? (
@@ -215,7 +399,13 @@ export function OwnerTasksPage() {
           ]}
           dataSource={tasks}
           loading={isListLoading}
-          pagination={false}
+          pagination={{
+            current: filters.page,
+            pageSize: filters.pageSize,
+            showSizeChanger: true,
+            total,
+            onChange: (page, pageSize) => reloadWithFilter({ page, pageSize }),
+          }}
           rowKey="id"
         />
       </Card>

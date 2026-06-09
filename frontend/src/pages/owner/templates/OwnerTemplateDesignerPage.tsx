@@ -2,7 +2,7 @@ import { DndContext, DragOverlay, type DragEndEvent, type DragStartEvent, Pointe
 import { SaveOutlined } from '@ant-design/icons'
 import { Alert, Button, Card, Modal, Space, Tabs, Tag, message } from 'antd'
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { useNavigate, useParams } from 'react-router'
+import { useLocation, useNavigate, useParams } from 'react-router'
 import { ContentShell } from '../../../components/page/ContentShell'
 import { PageHeader } from '../../../components/page/PageHeader'
 import {
@@ -20,11 +20,15 @@ import { scrollNodeIntoCanvasView } from '../../../features/dynamic-form/utils/d
 import { findSchemaNode, getSchemaNodeKeys } from '../../../features/dynamic-form/utils/schemaTree'
 import { useTemplateDesignerStore } from '../../../stores/templateDesignerStore'
 import type { DynamicFormSubmitResult } from '../../../types/dynamicForm'
+import type { TemplateDetail } from '../../../types/template'
+import styles from './OwnerTemplateDesignerPage.module.css'
 
 export function OwnerTemplateDesignerPage() {
   const navigate = useNavigate()
+  const location = useLocation()
   const { templateId } = useParams()
   const [messageApi, contextHolder] = message.useMessage()
+  const [modalApi, modalContextHolder] = Modal.useModal()
   const [previewResult, setPreviewResult] = useState<DynamicFormSubmitResult | null>(null)
   const [activeDrag, setActiveDrag] = useState<ActiveDragState | null>(null)
   const canvasScrollRef = useRef<HTMLDivElement | null>(null)
@@ -34,10 +38,14 @@ export function OwnerTemplateDesignerPage() {
   const selectedNodeId = useTemplateDesignerStore((state) => state.selectedNodeId)
   const isLoading = useTemplateDesignerStore((state) => state.isLoading)
   const isSaving = useTemplateDesignerStore((state) => state.isSaving)
+  const isDraftTemplate = useTemplateDesignerStore((state) => state.isDraftTemplate)
+  const isForkMode = useTemplateDesignerStore((state) => state.isForkMode)
   const hasUnsavedChanges = useTemplateDesignerStore((state) => state.hasUnsavedChanges)
   const error = useTemplateDesignerStore((state) => state.error)
+  const initializeDraftTemplate = useTemplateDesignerStore((state) => state.initializeDraftTemplate)
   const loadTemplate = useTemplateDesignerStore((state) => state.loadTemplate)
   const addNode = useTemplateDesignerStore((state) => state.addNode)
+  const addTabPane = useTemplateDesignerStore((state) => state.addTabPane)
   const selectNode = useTemplateDesignerStore((state) => state.selectNode)
   const updateSelectedNode = useTemplateDesignerStore((state) => state.updateSelectedNode)
   const replaceSchema = useTemplateDesignerStore((state) => state.replaceSchema)
@@ -47,10 +55,27 @@ export function OwnerTemplateDesignerPage() {
   const saveSchema = useTemplateDesignerStore((state) => state.saveSchema)
 
   useEffect(() => {
-    if (templateId) {
-      void loadTemplate(templateId)
+    if (templateId === 'draft') {
+      const draftTemplate = (location.state as { draftTemplate?: { description: string; name: string } } | null)?.draftTemplate
+
+      initializeDraftTemplate(draftTemplate ?? { description: '', name: '未命名模板' })
+
+      return
     }
-  }, [loadTemplate, templateId])
+
+    if (templateId) {
+      const state = location.state as
+        | { forkTemplate?: { changeNote: string }; templateVersion?: TemplateDetail }
+        | null
+      const forkTemplate = state?.forkTemplate
+
+      void loadTemplate(templateId, {
+        forkMode: Boolean(forkTemplate),
+        forkChangeNote: forkTemplate?.changeNote,
+        templateVersion: state?.templateVersion,
+      })
+    }
+  }, [initializeDraftTemplate, loadTemplate, location.state, templateId])
 
   const selectedNode = useMemo(() => {
     if (!schema || !selectedNodeId) {
@@ -72,14 +97,22 @@ export function OwnerTemplateDesignerPage() {
     const saved = await saveSchema()
 
     if (saved) {
-      messageApi.success('模板 schema 已保存')
+      const latestTemplate = useTemplateDesignerStore.getState().template
+
+      if (templateId === 'draft' && latestTemplate?.id) {
+        messageApi.success('模板已创建')
+        navigate(`/app/owner/templates/${latestTemplate.id}/designer`, { replace: true })
+        return
+      }
+
+      messageApi.success(isForkMode ? 'Fork 版本已保存' : '模板 schema 已保存')
     } else {
       messageApi.error('模板 schema 保存失败')
     }
   }
 
   function confirmDeleteNode(nodeId: string) {
-    Modal.confirm({
+    modalApi.confirm({
       title: '删除字段',
       content: '删除后该字段及其子字段会从当前 schema 中移除。',
       okText: '删除',
@@ -150,18 +183,20 @@ export function OwnerTemplateDesignerPage() {
   }
 
   return (
-    <main className="owner-page">
+    <main className={styles.page}>
       {contextHolder}
-      <ContentShell>
+      {modalContextHolder}
+      <ContentShell className={styles.headerShell}>
         <PageHeader
           title={template?.name ?? '模板 Designer'}
-          description="使用 dnd-kit 搭建模板 schema，并通过 Formily Renderer 实时预览运行态表单。"
+          description={isForkMode ? `正在基于当前模板 Fork 新版本：${template?.description ?? ''}` : template?.description}
           extra={
             <>
+              {isForkMode ? <Tag color="processing">Fork 新版本</Tag> : null}
               {hasUnsavedChanges ? <Tag color="warning">有未保存变更</Tag> : <Tag color="success">已同步</Tag>}
               <Button onClick={() => navigate('/app/owner/templates')}>返回模板列表</Button>
               <Button icon={<SaveOutlined />} loading={isSaving} onClick={() => void saveCurrentSchema()} type="primary">
-                保存 schema
+                {isDraftTemplate ? '创建模板' : isForkMode ? '保存 Fork 版本' : '保存 schema'}
               </Button>
             </>
           }
@@ -177,22 +212,23 @@ export function OwnerTemplateDesignerPage() {
         onDragStart={handleDragStart}
         sensors={sensors}
       >
-        <div className="designer-shell">
-          <Card className="designer-panel designer-panel--materials" loading={isLoading} title="物料">
+        <div className={styles.shell}>
+          <Card className={[styles.panel, styles.materialsPanel].join(' ')} loading={isLoading} title="物料">
             <MaterialPalette />
           </Card>
 
-          <Card className="designer-panel designer-panel--canvas" loading={isLoading} title="画布">
+          <Card className={styles.panel} loading={isLoading} title="画布">
             <DesignerCanvas
               schema={schema}
               scrollRef={canvasScrollRef}
               selectedNodeId={selectedNodeId}
+              onAddTabPane={addTabPane}
               onDelete={confirmDeleteNode}
               onSelect={selectNode}
             />
           </Card>
 
-          <Card className="designer-panel designer-panel--inspector" loading={isLoading} title="属性与预览">
+          <Card className={[styles.panel, styles.inspectorPanel].join(' ')} loading={isLoading} title="属性与预览">
             <Tabs
               items={[
                 {
@@ -211,10 +247,10 @@ export function OwnerTemplateDesignerPage() {
                   key: 'preview',
                   label: '预览',
                   children: schema ? (
-                    <Space className="designer-preview" direction="vertical" size={14}>
+                    <Space className={styles.preview} direction="vertical" size={14}>
                       <DynamicFormRenderer schema={schema} onSubmit={setPreviewResult} />
                       {previewResult ? (
-                        <pre className="designer-preview__result">{JSON.stringify(previewResult, null, 2)}</pre>
+                        <pre className={styles.previewResult}>{JSON.stringify(previewResult, null, 2)}</pre>
                       ) : null}
                     </Space>
                   ) : null,

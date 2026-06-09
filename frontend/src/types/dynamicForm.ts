@@ -79,6 +79,10 @@ export interface DynamicSchemaNode {
     accept?: string
     maxCount?: number
     prompt?: string
+    providerId?: number | string
+    modelName?: string
+    promptTemplate?: string
+    targetFields?: string[]
     options?: DynamicFieldOption[]
     mode?: 'multiple' | 'tags'
   } & Record<string, unknown>

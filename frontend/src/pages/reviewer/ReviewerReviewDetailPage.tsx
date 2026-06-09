@@ -2,158 +2,349 @@ import {
   Alert,
   Button,
   Card,
-  Descriptions,
+  Checkbox,
+  Empty,
   Input,
-  List,
   Modal,
-  Radio,
+  Progress,
+  Segmented,
   Space,
+  Statistic,
   Tag,
   Timeline,
+  Tooltip,
   Typography,
   message,
 } from 'antd'
-import { ArrowLeftOutlined, ReloadOutlined } from '@ant-design/icons'
+import {
+  ArrowLeftOutlined,
+  CheckCircleOutlined,
+  CloseCircleOutlined,
+  EditOutlined,
+  ExportOutlined,
+  ReloadOutlined,
+  UserSwitchOutlined,
+} from '@ant-design/icons'
 import { useEffect, useMemo, useState } from 'react'
-import { useNavigate, useParams } from 'react-router'
+import { useNavigate, useParams, useSearchParams } from 'react-router'
 import { ContentShell } from '../../components/page/ContentShell'
 import { PageHeader } from '../../components/page/PageHeader'
 import { StatePlaceholder } from '../../components/states/StatePlaceholder'
-import { DynamicFormRenderer } from '../../features/dynamic-form/components/DynamicFormRenderer'
 import { useReviewStore } from '../../stores/reviewStore'
-import type { AiReviewDecision, ManualReviewDecision, ReviewRiskLevel } from '../../types/review'
+import type { ReviewerTaskItemRow, SubmissionVersion } from '../../types/review'
+import styles from './ReviewerPages.module.css'
 
-type ReviewActionMode = ManualReviewDecision | 'revision'
+type QueueFilter = 'all' | 'pass' | 'reject' | 'manual'
 
-const riskLevelLabels: Record<ReviewRiskLevel, string> = {
-  low: '低风险',
-  medium: '中风险',
-  high: '高风险',
+const aiDecisionLabels: Record<string, string> = {
+  PASS: 'AI 建议通过',
+  REJECT: 'AI 建议打回',
+  MANUAL_REVIEW: '转人工',
+  pass: 'AI 建议通过',
+  reject: 'AI 建议打回',
+  manual_review: '转人工',
 }
 
-const riskLevelColors: Record<ReviewRiskLevel, string> = {
-  low: 'success',
-  medium: 'warning',
-  high: 'error',
-}
-
-const actionLabels: Record<ReviewActionMode, string> = {
-  approved: '人工通过',
-  rejected: '人工打回',
-  revision: '修订建议',
-}
-
-const aiDecisionLabels: Record<AiReviewDecision, string> = {
-  pass: 'AI 通过',
-  manual_review: 'AI 转人工',
-  reject: 'AI 打回',
-}
-
-const aiDecisionColors: Record<AiReviewDecision, string> = {
+const aiDecisionColors: Record<string, string> = {
+  PASS: 'success',
+  REJECT: 'error',
+  MANUAL_REVIEW: 'processing',
   pass: 'success',
-  manual_review: 'processing',
   reject: 'error',
+  manual_review: 'processing',
+}
+
+const reviewReasonPresets = ['事实不一致', '格式不合规', '缺少关键信息', '需补充证据']
+
+function formatValue(value: unknown) {
+  if (value === null || value === undefined || value === '') {
+    return '-'
+  }
+
+  return String(value)
+}
+
+function formatJson(value: unknown) {
+  if (!value) {
+    return '-'
+  }
+
+  if (typeof value === 'string') {
+    try {
+      return JSON.stringify(JSON.parse(value), null, 2)
+    } catch {
+      return value
+    }
+  }
+
+  return JSON.stringify(value, null, 2)
+}
+
+function getItemTitle(item: ReviewerTaskItemRow) {
+  return item.externalId?.trim() || `题目 ${item.datasetItemId}`
+}
+
+function canOpenItem(item: ReviewerTaskItemRow) {
+  return Boolean(item.canOpenSubmissionDetail && item.latestSubmissionId)
+}
+
+function canReviewItem(item: ReviewerTaskItemRow) {
+  return Boolean(item.canReview && item.latestSubmissionId)
+}
+
+function getReviewId(item: ReviewerTaskItemRow) {
+  return item.latestSubmissionId ? String(item.latestSubmissionId) : ''
+}
+
+function getItemKey(item: ReviewerTaskItemRow) {
+  return `${item.datasetItemId}-${item.latestSubmissionId ?? item.assignmentId ?? 'item'}`
+}
+
+function normalizeDecision(decision?: string) {
+  const value = decision?.toLowerCase()
+
+  if (value === 'pass') return 'pass'
+  if (value === 'reject') return 'reject'
+  if (value === 'manual_review') return 'manual'
+
+  return 'manual'
+}
+
+function getDecisionLabel(decision?: string) {
+  return aiDecisionLabels[formatValue(decision)] ?? formatValue(decision)
+}
+
+function getDecisionColor(decision?: string) {
+  return aiDecisionColors[formatValue(decision)] ?? 'default'
 }
 
 export function ReviewerReviewDetailPage() {
   const navigate = useNavigate()
-  const { reviewId } = useParams()
+  const { taskId } = useParams()
+  const [searchParams, setSearchParams] = useSearchParams()
   const [messageApi, contextHolder] = message.useMessage()
-  const [actionMode, setActionMode] = useState<ReviewActionMode>('approved')
-  const [reason, setReason] = useState('')
-  const [comment, setComment] = useState('')
-  const queue = useReviewStore((state) => state.queue)
+  const [modalApi, modalContextHolder] = Modal.useModal()
+  const [queueFilter, setQueueFilter] = useState<QueueFilter>('all')
+  const [reviewComment, setReviewComment] = useState('')
+  const [rejectOpen, setRejectOpen] = useState(false)
+  const [rejectReason, setRejectReason] = useState('')
+  const taskItemsPage = useReviewStore((state) => state.taskItemsPage)
   const currentDetail = useReviewStore((state) => state.currentDetail)
+  const submissionVersions = useReviewStore((state) => state.submissionVersions)
+  const selectedReviewIds = useReviewStore((state) => state.selectedReviewIds)
+  const todayReviewedCount = useReviewStore((state) => state.todayReviewedCount)
   const error = useReviewStore((state) => state.error)
+  const isTaskItemsLoading = useReviewStore((state) => state.isTaskItemsLoading)
   const isDetailLoading = useReviewStore((state) => state.isDetailLoading)
+  const isVersionsLoading = useReviewStore((state) => state.isVersionsLoading)
   const isActionSubmitting = useReviewStore((state) => state.isActionSubmitting)
+  const isBatchSubmitting = useReviewStore((state) => state.isBatchSubmitting)
+  const loadReviewerTaskItems = useReviewStore((state) => state.loadReviewerTaskItems)
   const loadDetail = useReviewStore((state) => state.loadDetail)
+  const setSelectedReviewIds = useReviewStore((state) => state.setSelectedReviewIds)
   const submitManualReviewAction = useReviewStore((state) => state.submitManualReviewAction)
+  const submitBatchManualReviewAction = useReviewStore((state) => state.submitBatchManualReviewAction)
+
+  const selectedSubmissionId = searchParams.get('submissionId')
+  const taskItems = taskItemsPage?.page.items ?? []
+  const reviewableItems = useMemo(() => taskItems.filter(canReviewItem), [taskItems])
+  const reviewableIds = useMemo(() => reviewableItems.map(getReviewId).filter(Boolean), [reviewableItems])
 
   useEffect(() => {
-    if (reviewId) {
-      void loadDetail(reviewId)
+    if (taskId) {
+      void loadReviewerTaskItems(taskId, { page: 1, size: 100 })
     }
-  }, [loadDetail, reviewId])
+  }, [loadReviewerTaskItems, taskId])
 
-  const isManualCompleted = useMemo(
-    () => currentDetail?.manualReviewStatus === 'approved' || currentDetail?.manualReviewStatus === 'rejected',
-    [currentDetail?.manualReviewStatus],
-  )
-  const nextPendingReview = useMemo(
-    () =>
-      queue.find(
-        (item) =>
-          item.id !== currentDetail?.id &&
-          item.aiDecision === 'manual_review' &&
-          (item.manualReviewStatus === 'pending' || item.manualReviewStatus === 'in_progress'),
-      ),
-    [currentDetail?.id, queue],
-  )
+  useEffect(() => {
+    const nextSelectedReviewIds = selectedReviewIds.filter((reviewId) => reviewableIds.includes(reviewId))
 
-  const submitAction = () => {
-    if (!reviewId || !currentDetail) {
+    if (nextSelectedReviewIds.length !== selectedReviewIds.length) {
+      setSelectedReviewIds(nextSelectedReviewIds)
+    }
+  }, [reviewableIds, selectedReviewIds, setSelectedReviewIds])
+
+  const selectedItem = useMemo(() => {
+    if (selectedSubmissionId) {
+      const matched = taskItems.find((item) => String(item.latestSubmissionId) === selectedSubmissionId)
+
+      if (matched) {
+        return matched
+      }
+    }
+
+    return taskItems.find(canOpenItem) ?? taskItems[0] ?? null
+  }, [selectedSubmissionId, taskItems])
+
+  useEffect(() => {
+    if (!taskId || !selectedItem || !canOpenItem(selectedItem) || !selectedItem.latestSubmissionId) {
       return
     }
 
-    if ((actionMode === 'rejected' || actionMode === 'revision') && !reason.trim() && !comment.trim()) {
-      messageApi.error(`${actionLabels[actionMode]}必须填写原因或建议`)
+    const nextSubmissionId = String(selectedItem.latestSubmissionId)
+
+    if (selectedSubmissionId !== nextSubmissionId) {
+      setSearchParams({ submissionId: nextSubmissionId }, { replace: true })
       return
     }
 
-    Modal.confirm({
-      title: actionLabels[actionMode],
-      content: `确认对「${currentDetail.taskTitle}」提交${actionLabels[actionMode]}结论吗？`,
-      okText: '确认',
+    void loadDetail(nextSubmissionId)
+  }, [loadDetail, selectedItem, selectedSubmissionId, setSearchParams, taskId])
+
+  const displayedDetail =
+    currentDetail && selectedSubmissionId && String(currentDetail.submissionId) === selectedSubmissionId ? currentDetail : null
+  const rawSubmission = displayedDetail?.rawSubmission
+  const aiResult = rawSubmission?.aiReviewResult
+  const aiDecision = aiResult?.decision ?? rawSubmission?.aiDecision ?? selectedItem?.aiDecision ?? displayedDetail?.aiDecision
+  const summary = taskItemsPage?.statusSummary
+  const isActionDisabled =
+    !displayedDetail ||
+    !selectedItem?.canReview ||
+    rawSubmission?.submissionStatus === 'APPROVED' ||
+    rawSubmission?.submissionStatus === 'REJECTED'
+  const passCount = taskItems.filter((item) => normalizeDecision(item.aiDecision) === 'pass').length
+  const rejectCount = taskItems.filter((item) => normalizeDecision(item.aiDecision) === 'reject').length
+  const manualCount = taskItems.filter((item) => normalizeDecision(item.aiDecision) === 'manual').length
+  const approvedCount = summary?.approvedCount ?? 0
+  const returnedCount = summary?.returnedCount ?? 0
+  const passRate = approvedCount + returnedCount > 0 ? Math.round((approvedCount / (approvedCount + returnedCount)) * 100) : 0
+  const filteredItems = taskItems.filter((item) => queueFilter === 'all' || normalizeDecision(item.aiDecision) === queueFilter)
+  const currentVersion = submissionVersions[0] ?? null
+  const previousVersion = submissionVersions.find((version) => version.versionNo !== rawSubmission?.versionNo) ?? null
+
+  const openItem = (item: ReviewerTaskItemRow) => {
+    if (!canOpenItem(item) || !item.latestSubmissionId) {
+      return
+    }
+
+    setSearchParams({ submissionId: String(item.latestSubmissionId) })
+  }
+
+  const reloadDetail = async () => {
+    if (!taskId) {
+      return
+    }
+
+    await loadReviewerTaskItems(taskId, { page: 1, size: 100 })
+
+    if (selectedSubmissionId) {
+      void loadDetail(selectedSubmissionId)
+    }
+  }
+
+  const toggleSelect = (reviewId: string, checked: boolean) => {
+    setSelectedReviewIds(checked ? [...selectedReviewIds, reviewId] : selectedReviewIds.filter((item) => item !== reviewId))
+  }
+
+  const submitApprove = () => {
+    if (!selectedSubmissionId) {
+      return
+    }
+
+    modalApi.confirm({
+      title: '确认通过该提交',
+      content: `提交 ${selectedSubmissionId} 将进入通过状态。`,
+      okText: '通过·入库',
       cancelText: '取消',
       onOk: async () => {
-        const decision: ManualReviewDecision = actionMode === 'approved' ? 'approved' : 'rejected'
-        const updatedDetail = await submitManualReviewAction(reviewId, {
-          reviewerId: 'user-reviewer',
-          reviewerName: '审核员王敏',
-          decision,
-          reason: actionMode === 'revision' ? '修订建议' : reason.trim() || undefined,
-          comment: actionMode === 'revision' ? reason.trim() || comment.trim() || undefined : comment.trim() || undefined,
+        const updatedDetail = await submitManualReviewAction(selectedSubmissionId, {
+          reviewerId: 'current-reviewer',
+          reviewerName: '当前审核员',
+          decision: 'approved',
+          comment: reviewComment.trim() || undefined,
         })
 
         if (updatedDetail) {
-          messageApi.success('人工复核结论已提交')
-          setReason('')
-          setComment('')
+          messageApi.success('审核通过已提交')
+          setReviewComment('')
+          void reloadDetail()
         } else {
-          messageApi.error('人工复核结论提交失败')
+          messageApi.error('审核通过提交失败')
         }
       },
     })
   }
 
-  if (!reviewId) {
-    return <StatePlaceholder status="empty" message="缺少人工复核记录 ID。" />
+  const submitReject = async () => {
+    if (!selectedSubmissionId) {
+      return
+    }
+
+    const reason = rejectReason.trim() || reviewComment.trim()
+    const updatedDetail = await submitManualReviewAction(selectedSubmissionId, {
+      reviewerId: 'current-reviewer',
+      reviewerName: '当前审核员',
+      decision: 'rejected',
+      reason,
+      comment: reviewComment.trim() || undefined,
+    })
+
+    if (updatedDetail) {
+      messageApi.success('审核打回已提交')
+      setRejectOpen(false)
+      setRejectReason('')
+      setReviewComment('')
+      void reloadDetail()
+    } else {
+      messageApi.error('审核打回提交失败')
+    }
   }
 
-  if (!currentDetail && isDetailLoading) {
-    return <StatePlaceholder status="loading" message="正在加载审核详情。" />
+  const submitBatchAction = (decision: 'approved' | 'rejected') => {
+    if (selectedReviewIds.length === 0) {
+      messageApi.warning('请先选择需要处理的提交')
+      return
+    }
+
+    modalApi.confirm({
+      title: decision === 'approved' ? '批量通过' : '批量打回',
+      content: `确认处理已选 ${selectedReviewIds.length} 条提交？`,
+      okText: decision === 'approved' ? '批量通过' : '批量打回',
+      cancelText: '取消',
+      onOk: async () => {
+        const result = await submitBatchManualReviewAction(selectedReviewIds, {
+          reviewerId: 'current-reviewer',
+          reviewerName: '当前审核员',
+          decision,
+          reason: decision === 'rejected' ? '批量打回' : undefined,
+          comment: reviewComment.trim() || undefined,
+        })
+
+        if (result) {
+          messageApi.success(`成功 ${result.success.length} 条，失败 ${result.failed.length} 条`)
+          void reloadDetail()
+        } else {
+          messageApi.error('批量审核提交失败')
+        }
+      },
+    })
   }
 
-  if (!currentDetail && !isDetailLoading) {
-    return <StatePlaceholder status="empty" message="未找到对应的人工复核记录。" />
+  if (!taskId) {
+    return <StatePlaceholder status="empty" message="缺少任务 ID。" />
   }
 
   return (
-    <main className="reviewer-page">
+    <main className={styles.page}>
       {contextHolder}
+      {modalContextHolder}
       <ContentShell>
         <PageHeader
-          title={currentDetail?.taskTitle ?? '人工复核详情'}
-          description="查看提交快照、AI 审核结论和审计时间线，并对 AI 人工复核项给出最终人工结论。"
+          title="人工审核"
+          description={`审核与质检 / 人工审核 / ${taskItemsPage?.taskTitle?.trim() || `任务 ${taskId}`}`}
           extra={
             <>
               <Button icon={<ArrowLeftOutlined />} onClick={() => navigate('/app/reviewer/queue')}>
                 返回队列
               </Button>
-              <Button icon={<ReloadOutlined />} loading={isDetailLoading} onClick={() => void loadDetail(reviewId)}>
+              <Button icon={<ReloadOutlined />} loading={isTaskItemsLoading || isDetailLoading || isVersionsLoading} onClick={reloadDetail}>
                 刷新
               </Button>
+              <Tooltip title="当前未发现审计日志导出接口">
+                <Button disabled icon={<ExportOutlined />}>
+                  导出审计日志
+                </Button>
+              </Tooltip>
             </>
           }
         />
@@ -161,135 +352,288 @@ export function ReviewerReviewDetailPage() {
 
       {error ? <Alert message={error} showIcon type="error" /> : null}
 
-      {currentDetail ? (
-        <div className="reviewer-detail-grid">
-          <Card title="AI 审核结果">
-            <Space direction="vertical" size={12}>
-              <Space wrap>
-                <Tag color={aiDecisionColors[currentDetail.aiDecision]}>{aiDecisionLabels[currentDetail.aiDecision]}</Tag>
-                <Tag color={riskLevelColors[currentDetail.aiRiskLevel]}>{riskLevelLabels[currentDetail.aiRiskLevel]}</Tag>
-                {currentDetail.aiReview.status === 'failed' ? <Tag color="error">AI 异常降级</Tag> : null}
-              </Space>
-              <Typography.Paragraph>{currentDetail.aiReview.summary}</Typography.Paragraph>
-              {currentDetail.aiReview.manualReviewReason ? (
-                <Alert message={currentDetail.aiReview.manualReviewReason} showIcon type="warning" />
-              ) : null}
-              {currentDetail.aiReview.errorMessage ? (
-                <Alert message={currentDetail.aiReview.errorMessage} showIcon type="error" />
-              ) : null}
-              <List
-                dataSource={currentDetail.aiReview.reasons}
-                header="命中原因"
-                renderItem={(item) => <List.Item>{item}</List.Item>}
-                size="small"
-              />
-            </Space>
-          </Card>
-
-          <Card title="人工复核操作">
-            {currentDetail.aiDecision !== 'manual_review' ? (
-              <Alert message="该提交已由 AI 自动处理，仅支持只读回看。" showIcon />
-            ) : isManualCompleted ? (
-              <Alert message={`该提交已${currentDetail.manualReviewStatus === 'approved' ? '人工通过' : '人工打回'}`} showIcon />
-            ) : (
-              <Space direction="vertical" size={12} className="reviewer-action-panel">
-                <Radio.Group
-                  optionType="button"
-                  options={[
-                    { label: '人工通过', value: 'approved' },
-                    { label: '人工打回', value: 'rejected' },
-                    { label: '修订建议', value: 'revision' },
-                  ]}
-                  value={actionMode}
-                  onChange={(event) => setActionMode(event.target.value)}
-                />
-                <Input.TextArea
-                  rows={3}
-                  placeholder={actionMode === 'approved' ? '可选填写审核意见' : '填写打回原因或修订建议'}
-                  value={actionMode === 'approved' ? comment : reason}
-                  onChange={(event) => (actionMode === 'approved' ? setComment(event.target.value) : setReason(event.target.value))}
-                />
-                {actionMode !== 'approved' ? (
-                  <Input.TextArea rows={3} placeholder="补充说明，可选" value={comment} onChange={(event) => setComment(event.target.value)} />
-                ) : null}
-                <Button loading={isActionSubmitting} type="primary" onClick={submitAction}>
-                  提交{actionLabels[actionMode]}
-                </Button>
-              </Space>
-            )}
-            {isManualCompleted && nextPendingReview ? (
-              <Button className="reviewer-next-button" type="link" onClick={() => navigate(`/app/reviewer/tasks/${nextPendingReview.id}`)}>
-                处理下一条待复核
-              </Button>
-            ) : null}
-          </Card>
-
-          <Card title="提交快照">
-            <Descriptions bordered column={1} size="small">
-              <Descriptions.Item label="提交 ID">{currentDetail.submissionId}</Descriptions.Item>
-              <Descriptions.Item label="标注员">{currentDetail.labelerName}</Descriptions.Item>
-              <Descriptions.Item label="提交时间">{currentDetail.submittedAt}</Descriptions.Item>
-              <Descriptions.Item label="当前状态">{currentDetail.submissionReviewStatus}</Descriptions.Item>
-            </Descriptions>
-            <Space direction="vertical" size={16} className="reviewer-answer-list">
-              {currentDetail.answers.map((answer) => (
-                <Card key={answer.questionId} size="small" title={answer.questionTitle}>
-                  <Typography.Paragraph type="secondary">{answer.questionDescription}</Typography.Paragraph>
-                  <Descriptions bordered column={1} size="small">
-                    {Object.entries(answer.sourceSnapshot).map(([label, value]) => (
-                      <Descriptions.Item key={label} label={label}>
-                        {value}
-                      </Descriptions.Item>
-                    ))}
-                  </Descriptions>
-                  <div className="reviewer-readonly-form">
-                    <DynamicFormRenderer
-                      readOnly
-                      initialValues={answer.answer.values}
-                      schema={answer.schemaSnapshot}
-                    />
-                  </div>
-                </Card>
-              ))}
-            </Space>
-          </Card>
-
-          <Card title="审核记录">
-            <List
-              dataSource={currentDetail.manualReviewRecords}
-              locale={{ emptyText: '暂无人工审核记录' }}
-              renderItem={(record) => (
-                <List.Item>
-                  <Space direction="vertical" size={4}>
-                    <Typography.Text strong>{record.decision === 'approved' ? '人工通过' : '人工打回'}</Typography.Text>
-                    <Typography.Text type="secondary">
-                      {record.reviewerName} / {record.reviewedAt}
-                    </Typography.Text>
-                    {record.reason ? <Typography.Text>{record.reason}</Typography.Text> : null}
-                    {record.comment ? <Typography.Text type="secondary">{record.comment}</Typography.Text> : null}
-                  </Space>
-                </List.Item>
-              )}
+      <div className={styles.manualReviewWorkbench}>
+        <aside className={styles.manualQueuePanel}>
+          <div className={styles.manualQueueHeader}>
+            <Typography.Text strong>审核队列</Typography.Text>
+            <Tag>{taskItems.length} 条</Tag>
+          </div>
+          <Segmented
+            className={styles.manualQueueTabs}
+            value={queueFilter}
+            options={[
+              { label: `全部 ${taskItems.length}`, value: 'all' },
+              { label: `建议通过 ${passCount}`, value: 'pass' },
+              { label: `建议打回 ${rejectCount}`, value: 'reject' },
+              { label: `转人工 ${manualCount}`, value: 'manual' },
+            ]}
+            onChange={(value) => setQueueFilter(value as QueueFilter)}
+          />
+          <div className={styles.batchToolbar}>
+            <Checkbox
+              checked={reviewableIds.length > 0 && selectedReviewIds.length === reviewableIds.length}
+              indeterminate={selectedReviewIds.length > 0 && selectedReviewIds.length < reviewableIds.length}
+              onChange={(event) => setSelectedReviewIds(event.target.checked ? reviewableIds : [])}
+            />
+            <Typography.Text type="secondary">已选 {selectedReviewIds.length} 条</Typography.Text>
+            <Button
               size="small"
-            />
+              loading={isBatchSubmitting}
+              disabled={selectedReviewIds.length === 0}
+              onClick={() => submitBatchAction('approved')}
+            >
+              批量通过
+            </Button>
+            <Button
+              danger
+              size="small"
+              loading={isBatchSubmitting}
+              disabled={selectedReviewIds.length === 0}
+              onClick={() => submitBatchAction('rejected')}
+            >
+              批量打回
+            </Button>
+            <Tooltip title="当前 reviewer 接口未提供指派能力">
+              <Button disabled size="small" icon={<UserSwitchOutlined />}>
+                指派给
+              </Button>
+            </Tooltip>
+          </div>
+
+          <div className={styles.manualQueueList}>
+            {filteredItems.length > 0 ? (
+              filteredItems.map((item) => {
+                const active = selectedItem ? getItemKey(selectedItem) === getItemKey(item) : false
+                const disabled = !canOpenItem(item)
+                const reviewId = getReviewId(item)
+
+                return (
+                  <button
+                    key={getItemKey(item)}
+                    className={`${styles.manualQueueItem} ${active ? styles.manualQueueItemActive : ''} ${
+                      disabled ? styles.manualQueueItemDisabled : ''
+                    }`}
+                    disabled={disabled}
+                    type="button"
+                    onClick={() => openItem(item)}
+                  >
+                    <span className={styles.manualQueueItemTop}>
+                      <Checkbox
+                        checked={selectedReviewIds.includes(reviewId)}
+                        disabled={!canReviewItem(item)}
+                        onClick={(event) => event.stopPropagation()}
+                        onChange={(event) => toggleSelect(reviewId, event.target.checked)}
+                      />
+                      <span className={styles.manualQueueId}>#{formatValue(item.latestSubmissionId)}</span>
+                      <Tag color={getDecisionColor(item.aiDecision)}>{getDecisionLabel(item.aiDecision)}</Tag>
+                    </span>
+                    <span className={styles.manualQueueTitle}>{getItemTitle(item)}</span>
+                    <span className={styles.manualQueueMeta}>
+                      {formatValue(item.labelerName ?? item.labelerId)} / v{formatValue(item.versionNo)} / {formatValue(item.submittedAt)}
+                    </span>
+                    <span className={styles.manualQueueScore}>
+                      <span>AI 分数 {formatValue(item.averageScore)}</span>
+                      <span>{formatValue(item.reviewTaskStatus)}</span>
+                    </span>
+                  </button>
+                )
+              })
+            ) : (
+              <Empty description={isTaskItemsLoading ? '正在加载审核队列...' : '当前筛选下暂无提交'} />
+            )}
+          </div>
+        </aside>
+
+        <section className={styles.manualDetailPanel}>
+          <Card className={styles.manualHeroCard}>
+            {displayedDetail ? (
+              <div className={styles.manualDetailHero}>
+                <div>
+                  <Typography.Text className={styles.taskEyebrow}>SUBMISSION #{displayedDetail.submissionId}</Typography.Text>
+                  <Typography.Title level={3}>{selectedItem ? getItemTitle(selectedItem) : `题目 ${rawSubmission?.datasetItemId}`}</Typography.Title>
+                  <Space wrap>
+                    <Tag>任务 {formatValue(rawSubmission?.taskId ?? displayedDetail.taskId)}</Tag>
+                    <Tag>题目 {formatValue(rawSubmission?.datasetItemId ?? selectedItem?.datasetItemId)}</Tag>
+                    <Tag>版本 v{formatValue(rawSubmission?.versionNo ?? selectedItem?.versionNo)}</Tag>
+                    <Tag>{formatValue(rawSubmission?.submissionStatus ?? selectedItem?.submissionStatus)}</Tag>
+                  </Space>
+                </div>
+                <div className={styles.manualHeroMeta}>
+                  <span>标注员</span>
+                  <strong>{formatValue(selectedItem?.labelerName ?? rawSubmission?.labelerId)}</strong>
+                  <span>{formatValue(rawSubmission?.createdAt ?? selectedItem?.submittedAt)}</span>
+                </div>
+              </div>
+            ) : (
+              <Empty description={isDetailLoading ? '正在加载提交详情...' : '请选择可查看的提交'} />
+            )}
           </Card>
 
-          <Card title="审计时间线">
-            <Timeline
-              items={currentDetail.auditTimeline.map((event) => ({
-                children: (
-                  <Space direction="vertical" size={2}>
-                    <Typography.Text strong>{event.description}</Typography.Text>
-                    <Typography.Text type="secondary">
-                      {event.actorName} / {event.occurredAt}
-                    </Typography.Text>
+          <div className={styles.submissionCompareGrid}>
+            <Card title="上一次提交">
+              {previousVersion ? (
+                <Space direction="vertical" size={10} className={styles.panelStack}>
+                  <Tag>v{previousVersion.versionNo}</Tag>
+                  <Typography.Text type="secondary">
+                    {formatValue(previousVersion.status)} / {formatValue(previousVersion.submittedAt ?? previousVersion.createdAt)}
+                  </Typography.Text>
+                  <pre className={styles.manualCodeBlock}>{formatJson(previousVersion)}</pre>
+                </Space>
+              ) : (
+                <Empty description="暂无上一版提交" />
+              )}
+            </Card>
+            <Card title="当前提交">
+              {displayedDetail ? (
+                <Space direction="vertical" size={10} className={styles.panelStack}>
+                  <Tag color="processing">v{formatValue(rawSubmission?.versionNo ?? currentVersion?.versionNo)}</Tag>
+                  <Typography.Text type="secondary">
+                    {formatValue(rawSubmission?.submissionStatus)} / {formatValue(rawSubmission?.updatedAt ?? rawSubmission?.createdAt)}
+                  </Typography.Text>
+                  <pre className={styles.manualCodeBlock}>{formatJson(rawSubmission?.answerJson ?? displayedDetail.answers)}</pre>
+                </Space>
+              ) : (
+                <Empty description="暂无当前提交" />
+              )}
+            </Card>
+          </div>
+
+          <Card className={styles.manualAiCard} title="AI 预审结果">
+            {displayedDetail ? (
+              <div className={styles.manualAiGrid}>
+                <div>
+                  <Space wrap>
+                    <Tag color={getDecisionColor(aiDecision)}>{getDecisionLabel(aiDecision)}</Tag>
+                    <Tag>{formatValue(aiResult?.status ?? rawSubmission?.aiReviewStatus ?? selectedItem?.aiReviewStatus)}</Tag>
+                    <Tag>模型运行 {formatValue(rawSubmission?.agentRunSummary?.agentRunId)}</Tag>
                   </Space>
-                ),
-              }))}
-            />
+                  <Typography.Paragraph>{formatValue(aiResult?.suggestion ?? selectedItem?.suggestion)}</Typography.Paragraph>
+                </div>
+                <div className={styles.manualScoreBox}>
+                  <span>AI 平均分</span>
+                  <strong>{formatValue(aiResult?.averageScore ?? selectedItem?.averageScore)}</strong>
+                  <Progress percent={Number(aiResult?.averageScore ?? selectedItem?.averageScore ?? 0)} showInfo={false} />
+                </div>
+                <div className={styles.manualRiskBox}>
+                  <Typography.Text strong>风险标记</Typography.Text>
+                  <Typography.Text type="secondary">{formatValue(aiResult?.riskFlags ?? selectedItem?.riskFlags)}</Typography.Text>
+                </div>
+              </div>
+            ) : (
+              <Empty description="暂无 AI 预审详情" />
+            )}
           </Card>
-        </div>
-      ) : null}
+
+          <Card title="人工审核意见">
+            <Space direction="vertical" size={14} className={styles.actionPanel}>
+              <Input.TextArea
+                rows={4}
+                placeholder="填写审核意见，打回时将作为原因补充"
+                value={reviewComment}
+                onChange={(event) => setReviewComment(event.target.value)}
+              />
+              <Space wrap>
+                {reviewReasonPresets.map((reason) => (
+                  <Tag.CheckableTag
+                    key={reason}
+                    checked={rejectReason === reason}
+                    onChange={(checked) => setRejectReason(checked ? reason : '')}
+                  >
+                    {reason}
+                  </Tag.CheckableTag>
+                ))}
+              </Space>
+              <div className={styles.manualActionGrid}>
+                <Button
+                  danger
+                  className={styles.manualActionButton}
+                  disabled={isActionDisabled}
+                  icon={<CloseCircleOutlined />}
+                  loading={isActionSubmitting}
+                  onClick={() => setRejectOpen(true)}
+                >
+                  打回
+                </Button>
+                <Tooltip title="可用 approve payload 支持 revisedAnswerJson，但当前页面尚未提供答案编辑器">
+                  <Button className={styles.manualActionButton} disabled icon={<EditOutlined />}>
+                    直接修订
+                  </Button>
+                </Tooltip>
+                <Button
+                  className={styles.manualActionButton}
+                  disabled={isActionDisabled}
+                  icon={<CheckCircleOutlined />}
+                  loading={isActionSubmitting}
+                  type="primary"
+                  onClick={submitApprove}
+                >
+                  通过·入库
+                </Button>
+              </div>
+              {isActionDisabled && displayedDetail ? <Alert message="该题目当前不可审核或已完成终审。" showIcon /> : null}
+            </Space>
+          </Card>
+        </section>
+
+        <aside className={styles.manualInspectorPanel}>
+          <Card title="今日质检">
+            <div className={styles.manualStatGrid}>
+              <Statistic title="今日已审" value={todayReviewedCount} />
+              <Statistic title="通过率" value={passRate} suffix="%" />
+              <Statistic title="待审" value={summary?.submittedCount ?? reviewableItems.length} />
+              <Statistic title="SLA" value="-" />
+            </div>
+          </Card>
+          <Card title="审计时间线">
+            {displayedDetail ? (
+              <Timeline
+                items={[
+                  ...(rawSubmission?.reviewRecords ?? []).map((record) => ({
+                    children: (
+                      <Space direction="vertical" size={2}>
+                        <Typography.Text strong>{formatValue(record.action)}</Typography.Text>
+                        <Typography.Text type="secondary">{formatValue(record.createdAt)}</Typography.Text>
+                        <Typography.Text type="secondary">{formatValue(record.reason ?? record.reviewComment)}</Typography.Text>
+                      </Space>
+                    ),
+                  })),
+                  ...submissionVersions.map((version: SubmissionVersion) => ({
+                    children: (
+                      <Space direction="vertical" size={2}>
+                        <Typography.Text strong>
+                          提交版本 v{version.versionNo} / {formatValue(version.latestReviewAction)}
+                        </Typography.Text>
+                        <Typography.Text type="secondary">{formatValue(version.submittedAt ?? version.createdAt)}</Typography.Text>
+                      </Space>
+                    ),
+                  })),
+                ]}
+              />
+            ) : (
+              <Empty description="暂无审计日志" />
+            )}
+          </Card>
+        </aside>
+      </div>
+
+      <Modal
+        confirmLoading={isActionSubmitting}
+        okText="确认打回"
+        open={rejectOpen}
+        title="打回提交"
+        onCancel={() => setRejectOpen(false)}
+        onOk={() => void submitReject()}
+      >
+        <Space direction="vertical" size={12} className={styles.actionPanel}>
+          <Typography.Text type="secondary">打回后，标注员可重新修改并提交。</Typography.Text>
+          <Input.TextArea
+            rows={4}
+            placeholder="请输入打回原因"
+            value={rejectReason}
+            onChange={(event) => setRejectReason(event.target.value)}
+          />
+        </Space>
+      </Modal>
     </main>
   )
 }

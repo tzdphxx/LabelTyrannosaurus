@@ -299,6 +299,48 @@
   margin: 0;
 }
 
+:global(.designer-field-preview__rich-text) {
+  overflow: hidden;
+  border: 1px solid var(--owner-hairline);
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+:global(.designer-field-preview__rich-toolbar) {
+  display: flex;
+  gap: 4px;
+  padding: 6px;
+  border-bottom: 1px solid var(--owner-hairline);
+  background: #f8fafc;
+}
+
+:global(.designer-field-preview__rich-toolbar span) {
+  display: inline-flex;
+  min-width: 26px;
+  height: 24px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  background: #ffffff;
+  color: var(--owner-ink);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+:global(.designer-field-preview__rich-body) {
+  display: flex;
+  min-height: 96px;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  color: var(--owner-ink);
+  line-height: 1.6;
+}
+
+:global(.designer-field-preview__rich-body span) {
+  color: var(--owner-ink-muted);
+}
+
 :global(.designer-field-preview__group.ant-card),
 :global(.designer-field-preview__llm.ant-card) {
   border-radius: 8px;

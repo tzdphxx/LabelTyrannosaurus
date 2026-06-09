@@ -98,13 +98,13 @@ export function OwnerTemplatesPage() {
       items.map((item) =>
         item.id === template.id
           ? {
-              ...item,
-              currentVersionId: version.versionId,
-              version: version.version,
-              status: version.status,
-              fieldCount: version.fieldCount,
-              description: version.description,
-            }
+            ...item,
+            currentVersionId: version.versionId,
+            version: version.version,
+            status: version.status,
+            fieldCount: version.fieldCount,
+            description: version.description,
+          }
           : item,
       ),
     )
@@ -131,8 +131,8 @@ export function OwnerTemplatesPage() {
     navigate(`/app/owner/templates/${template.id}/designer`, {
       state: selectedVersion
         ? {
-            templateVersion: toVersionTemplateDetail(template, selectedVersion),
-          }
+          templateVersion: toVersionTemplateDetail(template, selectedVersion),
+        }
         : undefined,
     })
   }

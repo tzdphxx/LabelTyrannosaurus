@@ -29,7 +29,7 @@ export function walkSchemaNodes(nodes: DynamicSchemaNode[], visitor: NodeVisitor
   })
 }
 
-export function findSchemaNode(schema: DynamicFormSchema, nodeId: string) {
+export function findSchemaNode(schema: DynamicFormSchema, nodeId: string): DynamicSchemaNode | null {
   let found: DynamicSchemaNode | null = null
 
   walkSchemaNodes(schema.nodes, (node) => {
@@ -205,7 +205,7 @@ export function validateDynamicSchema(schema: DynamicFormSchema) {
       keys.set(node.key, node.id)
     }
 
-    if ((node.type === 'radio' || node.type === 'checkbox' || node.type === 'select') && !node.props.options?.length) {
+    if ((node.type === 'radio' || node.type === 'checkbox' || node.type === 'select' || node.type === 'tagSelect') && !node.props.options?.length) {
       errors.push(`${node.title} 至少需要一个选项`)
     }
 

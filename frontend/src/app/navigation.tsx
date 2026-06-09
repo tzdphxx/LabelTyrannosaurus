@@ -1,6 +1,5 @@
 import {
   ApiOutlined,
-  AuditOutlined,
   CheckSquareOutlined,
   DashboardOutlined,
   FileDoneOutlined,

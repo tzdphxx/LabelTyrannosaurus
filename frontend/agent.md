@@ -75,3 +75,11 @@ LabelHub 是一个面向数据标注全生命周期的前端工作台，必须�
 - 先做闭环，再做优化。
 - 先保留业务语义，再调整实现细节。
 
+## 10. Ant Design v5 Modal 问题处理流程
+
+- 遇到弹窗无法打开时，先检查受控弹窗是否使用 `open`，不要继续使用旧版 `visible`。
+- 遇到 `Modal.confirm`、`Modal.info` 等静态方法在业务页面中异常时，优先改为 `const [modalApi, modalContextHolder] = Modal.useModal()`。
+- 调用确认框时使用 `modalApi.confirm(...)`，不要继续直接调用静态 `Modal.confirm(...)`。
+- 必须在页面组件树中渲染 `{modalContextHolder}`，位置应与页面级 `message` 的 `contextHolder` 同级，不能放进另一个 Modal 内部。
+- 迁移时保持原有 `onOk` 业务逻辑不变，只替换弹窗创建方式，并补充 `rg "Modal\\.confirm|visible=|destroyOnClose"` 检查。
+

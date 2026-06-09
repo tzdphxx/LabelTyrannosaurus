@@ -1,0 +1,50 @@
+.renderer {
+  width: 100%;
+}
+
+.actions {
+  margin-top: 12px;
+}
+
+.group:global(.ant-card) {
+  margin-bottom: 12px;
+  border-radius: 8px;
+}
+
+.tabPane {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid #e5ebf0;
+  border-radius: 8px;
+  background: #fbfcfd;
+}
+
+.showItem:global(.ant-alert) {
+  margin-bottom: 12px;
+}
+
+:global(.dynamic-form-radio-group.ant-radio-group) {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+:global(.dynamic-form-radio-group.ant-radio-group .ant-radio-wrapper) {
+  width: fit-content;
+  margin-inline-end: 0;
+  white-space: normal;
+}
+
+.jsonEditor:global(.ant-input) {
+  font-family:
+    "Cascadia Code",
+    Consolas,
+    monospace;
+}
+
+.llm:global(.ant-card) {
+  margin-bottom: 12px;
+  border-radius: 8px;
+}

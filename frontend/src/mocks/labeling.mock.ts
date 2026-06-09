@@ -132,7 +132,7 @@ export const mockLabelingQuestions: LabelingQuestion[] = [
       quality_result: 'failed',
       quality_reason: '',
     },
-    status: 'pending',
+    status: 'rejected',
   },
   {
     id: 'question-revision-002',
@@ -150,7 +150,7 @@ export const mockLabelingQuestions: LabelingQuestion[] = [
       quality_result: 'failed',
       quality_reason: '',
     },
-    status: 'pending',
+    status: 'rejected',
   },
 ]
 

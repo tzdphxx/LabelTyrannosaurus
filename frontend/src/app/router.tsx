@@ -1,6 +1,10 @@
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router'
 import { StatePlaceholder } from '../components/states/StatePlaceholder'
+import { AdminDashboardPage } from '../pages/admin/AdminDashboardPage'
+import { AdminLlmProviderPage } from '../pages/admin/AdminLlmProviderPage'
+import { AdminReviewAssignmentPage } from '../pages/admin/AdminReviewAssignmentPage'
 import { LoginPage } from '../pages/auth/LoginPage'
+import { LabelerDashboardPage } from '../pages/labeler/LabelerDashboardPage'
 import { LabelerMarketPage } from '../pages/labeler/LabelerMarketPage'
 import { LabelerSubmissionsPage } from '../pages/labeler/LabelerSubmissionsPage'
 import { LabelerWorkbenchPage } from '../pages/labeler/LabelerWorkbenchPage'
@@ -9,10 +13,11 @@ import { OwnerTaskEditorPage } from '../pages/owner/OwnerTaskEditorPage'
 import { OwnerTasksPage } from '../pages/owner/OwnerTasksPage'
 import { OwnerTemplateDesignerPage } from '../pages/owner/templates/OwnerTemplateDesignerPage'
 import { OwnerTemplatesPage } from '../pages/owner/templates/OwnerTemplatesPage'
+import { ReviewerDashboardPage } from '../pages/reviewer/ReviewerDashboardPage'
 import { ReviewerQueuePage } from '../pages/reviewer/ReviewerQueuePage'
-import { ReviewerHistoryPage } from '../pages/reviewer/ReviewerHistoryPage'
+import { ReviewerClaimPage } from '../pages/reviewer/ReviewerClaimPage'
+import { ReviewerAiReviewQueuePage } from '../pages/reviewer/ReviewerAiReviewQueuePage'
 import { ReviewerReviewDetailPage } from '../pages/reviewer/ReviewerReviewDetailPage'
-import { RoleHomePage } from '../pages/roles/RoleHomePage'
 import { useAuthStore } from '../stores/authStore'
 import { AppLayout } from './layout/AppLayout'
 import { PublicOnlyRoute } from './guards/PublicOnlyRoute'
@@ -47,6 +52,15 @@ export function AppRouter() {
           path="/app"
         >
           <Route index element={<EntryRedirect />} />
+          <Route path="admin">
+            <Route index element={<AdminDashboardPage />} />
+            <Route element={<AdminReviewAssignmentPage />} path="review-assignment" />
+            <Route element={<AdminLlmProviderPage />} path="llm-providers" />
+            <Route
+              element={<StatePlaceholder status="empty" message="该入口已预留，后续阶段接入业务页面。" />}
+              path="*"
+            />
+          </Route>
           <Route path="owner">
             <Route index element={<OwnerDashboardPage />} />
             <Route element={<OwnerTasksPage />} path="tasks" />
@@ -60,7 +74,7 @@ export function AppRouter() {
             />
           </Route>
           <Route path="labeler">
-            <Route index element={<RoleHomePage role="labeler" />} />
+            <Route index element={<LabelerDashboardPage />} />
             <Route element={<LabelerMarketPage />} path="market" />
             <Route element={<LabelerWorkbenchPage />} path="workbench/:taskId" />
             <Route element={<LabelerSubmissionsPage />} path="submissions" />
@@ -70,10 +84,11 @@ export function AppRouter() {
             />
           </Route>
           <Route path="reviewer">
-            <Route index element={<RoleHomePage role="reviewer" />} />
+            <Route index element={<ReviewerDashboardPage />} />
+            <Route element={<ReviewerClaimPage />} path="claim" />
             <Route element={<ReviewerQueuePage />} path="queue" />
-            <Route element={<ReviewerHistoryPage />} path="history" />
-            <Route element={<ReviewerReviewDetailPage />} path="tasks/:reviewId" />
+            <Route element={<ReviewerAiReviewQueuePage />} path="ai-reviews" />
+            <Route element={<ReviewerReviewDetailPage />} path="tasks/:taskId" />
             <Route
               element={<StatePlaceholder status="empty" message="该入口已预留，后续阶段接入业务页面。" />}
               path="*"

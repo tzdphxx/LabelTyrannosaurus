@@ -189,12 +189,39 @@ averageScore
 dimensionScores
 riskFlags
 suggestion
+reviewTrace
 promptSnapshot
 rawResponse
 errorCode
 errorMessage
 createdAt
 updatedAt
+```
+
+`reviewTrace` structure:
+```json
+{
+  "strategy": "PARALLEL_VOTE",
+  "strategyLabel": "Parallel model vote",
+  "summary": "3 model branches reviewed in parallel; 2 branch(es) supported the final decision; consensus threshold was met.",
+  "steps": [
+    {
+      "name": "qwen-plus",
+      "role": "voter",
+      "decision": "PASS",
+      "score": "90",
+      "confidence": "0.9",
+      "status": "SUCCESS",
+      "reason": "The submitted answer matches the task requirements."
+    }
+  ],
+  "metrics": {
+    "voteCount": 3,
+    "topVotes": 2,
+    "hasConsensus": true,
+    "minAgreement": 2
+  }
+}
 ```
 
 Status rules:

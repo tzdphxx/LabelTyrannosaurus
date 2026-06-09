@@ -1786,6 +1786,7 @@ Authorization: Bearer <accessToken>
 | dimensionScores | Map | 各维度评分 |
 | riskFlags | List&lt;String&gt; | 风险标记列表 |
 | suggestion | String | AI 建议 |
+| reviewTrace | Object | AI 审核策略执行轨迹，包含策略类型、摘要、步骤和聚合指标 |
 | agentRunId | Long | 关联的 Agent 运行 ID |
 | promptSnapshot | String | Prompt 快照 |
 | rawResponse | String | LLM 原始响应 |
@@ -3340,6 +3341,7 @@ GET /api/v1/submissions/{submissionId}/ai-review
 | dimensionScores | 各维度评分 |
 | riskFlags | 风险标记 |
 | suggestion | 给 Reviewer 的审核建议 |
+| reviewTrace | AI 审核策略执行轨迹 |
 | confidence | 置信度 |
 | flowAction | 建议流转动作 |
 | promptMode | Prompt 模式 |

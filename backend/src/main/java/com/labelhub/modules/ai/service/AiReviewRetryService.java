@@ -57,6 +57,7 @@ public class AiReviewRetryService implements AiReviewRetryCallback {
     private final TraceIdProvider traceIdProvider;
     private final AiReviewRetryScheduler retryScheduler;
     private final AiFlowDecisionService flowDecisionService;
+    private final ReviewTraceBuilder reviewTraceBuilder;
 
     public AiReviewRetryService(AiReviewResultMapper aiReviewResultMapper,
                                 AiReviewConfigMapper aiReviewConfigMapper,
@@ -70,7 +71,8 @@ public class AiReviewRetryService implements AiReviewRetryCallback {
                                 AuditAppender auditAppender,
                                 TraceIdProvider traceIdProvider,
                                 AiReviewRetryScheduler retryScheduler,
-                                AiFlowDecisionService flowDecisionService) {
+                                AiFlowDecisionService flowDecisionService,
+                                ReviewTraceBuilder reviewTraceBuilder) {
         this.aiReviewResultMapper = aiReviewResultMapper;
         this.aiReviewConfigMapper = aiReviewConfigMapper;
         this.submissionMapper = submissionMapper;
@@ -84,6 +86,7 @@ public class AiReviewRetryService implements AiReviewRetryCallback {
         this.traceIdProvider = traceIdProvider;
         this.retryScheduler = retryScheduler;
         this.flowDecisionService = flowDecisionService;
+        this.reviewTraceBuilder = reviewTraceBuilder;
     }
 
     public boolean scheduleRetryIfAllowed(AiReviewResult result, AiReviewConfig config,
@@ -189,6 +192,7 @@ public class AiReviewRetryService implements AiReviewRetryCallback {
                 toJsonSafe(structured.getOrDefault("riskFlags", List.of())),
                 structured.get("suggestion") != null ? String.valueOf(structured.get("suggestion")) : null,
                 response.rawResponse(),
+                toJsonSafe(reviewTraceBuilder.direct(config.getModelName(), decision, avgScore, confidence)),
                 confidence,
                 flowAction,
                 null,

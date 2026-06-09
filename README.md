@@ -58,9 +58,9 @@ mvn spring-boot:run
 | `DB_USERNAME` / `DB_PASSWORD` | MySQL 账号 |
 | `REDIS_HOST` / `REDIS_PORT` / `REDIS_PASSWORD` | Redis 连接 |
 | `JWT_SECRET` | JWT 签名密钥 |
-| `COS_SECRET_ID` / `COS_SECRET_KEY` / `COS_REGION` / `COS_BUCKET` | Tencent COS |
-| `LABELHUB_LLM_KEY_ENCRYPTION_SECRET` | LLM API Key 加密密钥 |
-| `AI_DASHSCOPE_API_KEY` | DashScope 默认配置 |
+| `COS_SECRET_ID` / `COS_SECRET_KEY` / `COS_REGION` / `COS_BUCKET` | Tencent COS；`COS_BUCKET` 默认留空 |
+| `LABELHUB_LLM_KEY_ENCRYPTION_SECRET` | LLM API Key 加密密钥，默认 `labeltyrannosaurustzdphxxwsjyeqian` |
+| `AI_DASHSCOPE_API_KEY` / `AI_DASHSCOPE_BASE_URL` / `AI_DASHSCOPE_CHAT_MODEL` | DashScope 默认 Provider 配置，默认留空；三项都填写后启动时写入数据库 |
 
 ## 前端启动
 

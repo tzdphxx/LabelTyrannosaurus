@@ -40,6 +40,8 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 @ExtendWith(MockitoExtension.class)
 class SubmissionSubmitServiceTest {
@@ -145,6 +147,46 @@ class SubmissionSubmitServiceTest {
         verify(auditAppender).append(auditCaptor.capture());
         assertThat(auditCaptor.getValue().traceId()).isEqualTo("trace-submit");
         verify(aiReviewDispatcher).enqueue(SUBMISSION_ID);
+    }
+
+    @Test
+    void enqueuesAiReviewOnlyAfterTransactionCommitWhenTransactionIsActive() {
+        TransactionSynchronizationManager.initSynchronization();
+        TransactionSynchronizationManager.setActualTransactionActive(true);
+        try {
+            Assignment assignment = assignment(AssignmentStatus.DRAFTING, 2);
+            when(assignmentMapper.selectOwnedAssignment(ASSIGNMENT_ID, LABELER_ID)).thenReturn(assignment);
+            when(taskMapper.selectById(TASK_ID)).thenReturn(publishedTask());
+            when(submissionMapper.selectLatestByAssignmentId(ASSIGNMENT_ID)).thenReturn(null);
+            when(submissionMapper.selectLatestActiveByAssignmentId(ASSIGNMENT_ID)).thenReturn(null);
+            when(submissionMapper.insert(any(Submission.class))).thenAnswer(invocation -> {
+                Submission submission = invocation.getArgument(0);
+                submission.setId(SUBMISSION_ID);
+                return 1;
+            });
+            when(assignmentMapper.markSubmittedIfCurrent(ASSIGNMENT_ID, LABELER_ID, 2, AssignmentStatus.SUBMITTED))
+                    .thenReturn(1);
+            when(agentRunMapper.insert(any(AgentRun.class))).thenAnswer(invocation -> {
+                AgentRun agentRun = invocation.getArgument(0);
+                agentRun.setId(AGENT_RUN_ID);
+                return 1;
+            });
+
+            submissionSubmitService.submit(
+                    ASSIGNMENT_ID,
+                    LABELER_ID,
+                    new SubmissionSubmitRequest(ANSWER_JSON, 2)
+            );
+
+            verify(aiReviewDispatcher, never()).enqueue(SUBMISSION_ID);
+            for (TransactionSynchronization synchronization : TransactionSynchronizationManager.getSynchronizations()) {
+                synchronization.afterCommit();
+            }
+            verify(aiReviewDispatcher).enqueue(SUBMISSION_ID);
+        } finally {
+            TransactionSynchronizationManager.clearSynchronization();
+            TransactionSynchronizationManager.setActualTransactionActive(false);
+        }
     }
 
     @Test

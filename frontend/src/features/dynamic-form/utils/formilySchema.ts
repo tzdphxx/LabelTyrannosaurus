@@ -102,6 +102,25 @@ function toValidator(rule: DynamicValidationRule, node: DynamicSchemaNode) {
     }
   }
 
+  if (node.type === 'checkbox') {
+    const message = rule.message ?? `${node.title}不在允许范围内`
+
+    return {
+      validator(value: unknown) {
+        if (value === undefined || value === null || value === '' || (Array.isArray(value) && value.length === 0)) {
+          return ''
+        }
+
+        if (!Array.isArray(value)) {
+          return message
+        }
+
+        return value.every((item) => rule.values.includes(item as string | number | boolean)) ? '' : message
+      },
+      message,
+    }
+  }
+
   return {
     enum: rule.values,
     message: rule.message ?? `${node.title}不在允许范围内`,

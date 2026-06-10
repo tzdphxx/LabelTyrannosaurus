@@ -1,6 +1,7 @@
 package com.labelhub.modules.task.dto;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
+import com.labelhub.modules.reward.dto.RewardRuleResponse;
 import com.labelhub.modules.task.domain.ClaimStrategy;
 import com.labelhub.modules.task.domain.TaskStatus;
 import io.swagger.v3.oas.annotations.media.Schema;
@@ -38,5 +39,7 @@ public record TaskSummaryResponse(
         @Schema(description = "创建时间")
         LocalDateTime createdAt,
         @Schema(description = "更新时间")
-        LocalDateTime updatedAt
+        LocalDateTime updatedAt,
+        @Schema(description = "Reward rule")
+        RewardRuleResponse rewardRule
 ) {}

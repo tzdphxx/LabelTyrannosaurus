@@ -1,4 +1,6 @@
-.page {
+.page,
+.providerDrawer,
+.testModal {
   --admin-primary: #0075de;
   --admin-primary-active: #005bab;
   --admin-canvas: #f6f5f4;
@@ -8,6 +10,9 @@
   --admin-ink-muted: #615d59;
   --admin-hairline: #e6e6e6;
   --admin-shadow: 0 0.175px 1.041px rgba(0, 0, 0, 0.01), 0 0.8px 2.925px rgba(0, 0, 0, 0.02), 0 2.025px 7.847px rgba(0, 0, 0, 0.027), 0 4px 18px rgba(0, 0, 0, 0.04);
+}
+
+.page {
   display: flex;
   flex-direction: column;
   gap: 18px;
@@ -123,6 +128,7 @@
   border-color: var(--admin-primary);
   border-radius: 9999px;
   background: var(--admin-primary);
+  color: #ffffff;
 }
 
 .panel :global(.ant-btn-primary:hover),
@@ -130,6 +136,7 @@
 .testModal :global(.ant-btn-primary:hover) {
   border-color: var(--admin-primary-active);
   background: var(--admin-primary-active);
+  color: #ffffff;
 }
 
 .providerDrawer :global(.ant-input),

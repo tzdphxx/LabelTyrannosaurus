@@ -3,12 +3,6 @@ spring:
     name: ${APP_NAME:labelhub}
   profiles:
     active: ${SPRING_PROFILES_ACTIVE:local}
-  ai:
-    dashscope:
-      api-key: ${AI_DASHSCOPE_API_KEY:replace-me}
-      chat:
-        options:
-          model: ${AI_DASHSCOPE_CHAT_MODEL:qwen-plus}
   datasource:
     url: jdbc:mysql://${DB_HOST:127.0.0.1}:${DB_PORT:3306}/${DB_NAME:labelhub}?useSSL=false&serverTimezone=Asia/Shanghai&characterEncoding=utf8&allowPublicKeyRetrieval=true
     username: ${DB_USERNAME:labelhub}
@@ -49,9 +43,29 @@ labelhub:
       refresh-token-ttl-days: ${JWT_REFRESH_TOKEN_TTL_DAYS:14}
   ai:
     provider: dashscope
-    chat-model: ${AI_DASHSCOPE_CHAT_MODEL:qwen-plus}
+    chat-model: ${AI_DASHSCOPE_CHAT_MODEL:}
+    review:
+      executor:
+        core-pool-size: ${LABELHUB_AI_REVIEW_EXECUTOR_CORE_POOL_SIZE:4}
+        max-pool-size: ${LABELHUB_AI_REVIEW_EXECUTOR_MAX_POOL_SIZE:8}
+        queue-capacity: ${LABELHUB_AI_REVIEW_EXECUTOR_QUEUE_CAPACITY:200}
+        keep-alive-seconds: ${LABELHUB_AI_REVIEW_EXECUTOR_KEEP_ALIVE_SECONDS:60}
+        await-termination-seconds: ${LABELHUB_AI_REVIEW_EXECUTOR_AWAIT_TERMINATION_SECONDS:60}
   llm:
-    key-encryption-secret: ${LABELHUB_LLM_KEY_ENCRYPTION_SECRET:}
+    key-encryption-secret: ${LABELHUB_LLM_KEY_ENCRYPTION_SECRET:labeltyrannosaurustzdphxxwsjyeqian}
+    trigger:
+      executor:
+        core-pool-size: ${LABELHUB_LLM_TRIGGER_EXECUTOR_CORE_POOL_SIZE:4}
+        max-pool-size: ${LABELHUB_LLM_TRIGGER_EXECUTOR_MAX_POOL_SIZE:8}
+        queue-capacity: ${LABELHUB_LLM_TRIGGER_EXECUTOR_QUEUE_CAPACITY:200}
+        keep-alive-seconds: ${LABELHUB_LLM_TRIGGER_EXECUTOR_KEEP_ALIVE_SECONDS:60}
+        await-termination-seconds: ${LABELHUB_LLM_TRIGGER_EXECUTOR_AWAIT_TERMINATION_SECONDS:60}
+    default-provider:
+      provider-code: ${AI_DASHSCOPE_PROVIDER_CODE:dashscope-default}
+      provider-name: ${AI_DASHSCOPE_PROVIDER_NAME:DashScope Default}
+      base-url: ${AI_DASHSCOPE_BASE_URL:}
+      api-key: ${AI_DASHSCOPE_API_KEY:}
+      default-model: ${AI_DASHSCOPE_CHAT_MODEL:}
     gateway:
       timeout-ms: ${LABELHUB_LLM_GATEWAY_TIMEOUT_MS:30000}
   cos:

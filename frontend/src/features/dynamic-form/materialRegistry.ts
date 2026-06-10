@@ -113,7 +113,7 @@ export const dynamicMaterialRegistry: Record<DynamicFieldType, MaterialDefinitio
   },
   llmPrompt: {
     type: 'llmPrompt',
-    title: 'LLM 交互',
+    title: 'AI清洗建议',
     group: 'smart',
     description: '字段级模型调用，输出可作为标注参考或一键填充。',
     acceptsChildren: false,

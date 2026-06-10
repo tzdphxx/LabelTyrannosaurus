@@ -1,5 +1,5 @@
 import { Alert, Button, Card, Descriptions, List, Modal, Space, Tag, Timeline, Typography, message } from 'antd'
-import { ArrowLeftOutlined, SaveOutlined, SendOutlined } from '@ant-design/icons'
+import { ArrowLeftOutlined, KeyOutlined, SaveOutlined, SendOutlined } from '@ant-design/icons'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router'
 import { ContentShell } from '../../components/page/ContentShell'
@@ -88,12 +88,16 @@ export function LabelerWorkbenchPage() {
   const currentQuestionIndex = currentQuestion
     ? questions.findIndex((question) => question.id === currentQuestion.id)
     : -1
-  const currentQuestionStatus = currentQuestion
-    ? hasUnsavedChanges
-      ? 'in_progress'
-      : currentQuestion.status
-    : 'pending'
   const isCurrentSchemaEmpty = currentQuestion ? currentQuestion.schema.nodes.length === 0 : false
+  const isCurrentQuestionSubmitted = currentQuestion?.status === 'submitted'
+  const canEditCurrentQuestion = Boolean(currentQuestion) && !isCurrentSchemaEmpty && !isCurrentQuestionSubmitted
+  const currentQuestionStatus = currentQuestion
+    ? isCurrentQuestionSubmitted
+      ? 'submitted'
+      : hasUnsavedChanges
+        ? 'in_progress'
+        : currentQuestion.status
+    : 'pending'
   const canGoPrevious = currentQuestionIndex > 0
   const canGoNext = currentQuestionIndex >= 0 && currentQuestionIndex < questions.length - 1
   const answerSource = currentDraft ? '当前草稿' : currentQuestion?.previousValues ? '上一轮答案' : '空白答案'
@@ -183,7 +187,7 @@ export function LabelerWorkbenchPage() {
   }, [])
 
   useEffect(() => {
-    if (!taskId || !currentQuestion || !currentUser || !hasUnsavedChanges) {
+    if (!taskId || !currentQuestion || !currentUser || !hasUnsavedChanges || !canEditCurrentQuestion) {
       return
     }
 
@@ -212,10 +216,21 @@ export function LabelerWorkbenchPage() {
     }, 30000)
 
     return () => window.clearTimeout(timer)
-  }, [currentQuestion, currentUser, effectiveValues, hasUnsavedChanges, markDraftSaved, saveDraft, taskId])
+  }, [canEditCurrentQuestion, currentQuestion, currentUser, effectiveValues, hasUnsavedChanges, markDraftSaved, saveDraft, taskId])
 
   const handleSaveDraft = async () => {
     if (!taskId || !currentQuestion || !currentUser) {
+      messageApi.error('当前题目不可保存')
+      return
+    }
+
+    if (isCurrentQuestionSubmitted) {
+      setHasUnsavedChanges(false)
+      messageApi.warning('当前题目已提交，不能继续保存草稿')
+      return
+    }
+
+    if (!canEditCurrentQuestion) {
       messageApi.error('当前题目不可保存')
       return
     }
@@ -260,8 +275,39 @@ export function LabelerWorkbenchPage() {
     setCurrentQuestion(questionId)
   }
 
+  const goPreviousQuestion = () => {
+    const previous = questions[currentQuestionIndex - 1]
+
+    if (previous) {
+      selectQuestion(previous.id)
+    }
+  }
+
+  const goNextQuestion = () => {
+    const next = questions[currentQuestionIndex + 1]
+
+    if (next) {
+      selectQuestion(next.id)
+    }
+  }
+
+  const skipQuestion = () => {
+    goNextQuestion()
+  }
+
   const submitCurrentQuestion = async () => {
     if (!taskId || !currentQuestion || !currentUser) {
+      messageApi.error('当前题目不可提交')
+      return
+    }
+
+    if (isCurrentQuestionSubmitted) {
+      setHasUnsavedChanges(false)
+      messageApi.warning('当前题目已提交，不能重复提交')
+      return
+    }
+
+    if (!canEditCurrentQuestion) {
       messageApi.error('当前题目不可提交')
       return
     }
@@ -306,6 +352,17 @@ export function LabelerWorkbenchPage() {
   }
 
   const confirmSubmitQuestion = () => {
+    if (isCurrentQuestionSubmitted) {
+      setHasUnsavedChanges(false)
+      messageApi.warning('当前题目已提交，不能重复提交')
+      return
+    }
+
+    if (!canEditCurrentQuestion) {
+      messageApi.error('当前题目不可提交')
+      return
+    }
+
     modal.confirm({
       title: '提交当前题目',
       content: '提交后仅当前题进入已提交状态，其他题目不会被提交。确认提交当前题吗？',
@@ -314,6 +371,61 @@ export function LabelerWorkbenchPage() {
       onOk: () => submitCurrentQuestion(),
     })
   }
+
+  useEffect(() => {
+    function handleShortcut(event: KeyboardEvent) {
+      if (event.defaultPrevented || event.isComposing || isWorkbenchLoading) {
+        return
+      }
+
+      const key = event.key.toLowerCase()
+      const isSaveShortcut = (event.ctrlKey || event.metaKey) && key === 's'
+      const isSubmitShortcut = (event.ctrlKey || event.metaKey) && key === 'enter'
+      const isPreviousShortcut = event.altKey && key === 'arrowup'
+      const isNextShortcut = event.altKey && key === 'arrowdown'
+      const isSkipShortcut = event.altKey && key === 'n'
+
+      if (isPreviousShortcut) {
+        event.preventDefault()
+        goPreviousQuestion()
+        return
+      }
+
+      if (isNextShortcut) {
+        event.preventDefault()
+        goNextQuestion()
+        return
+      }
+
+      if (isSkipShortcut) {
+        event.preventDefault()
+        skipQuestion()
+        return
+      }
+
+      if (isSaveShortcut) {
+        event.preventDefault()
+
+        if (canEditCurrentQuestion && !isDraftSaving) {
+          void handleSaveDraft()
+        }
+
+        return
+      }
+
+      if (isSubmitShortcut) {
+        event.preventDefault()
+
+        if (canEditCurrentQuestion && !isSubmitting) {
+          confirmSubmitQuestion()
+        }
+      }
+    }
+
+    window.addEventListener('keydown', handleShortcut)
+
+    return () => window.removeEventListener('keydown', handleShortcut)
+  })
 
   if (!taskId) {
     return <StatePlaceholder status="empty" message="缺少任务 ID，无法打开标注工作台。" />
@@ -413,6 +525,7 @@ export function LabelerWorkbenchPage() {
                 <DynamicFormRenderer
                   initialValues={formInitialValues}
                   llmContext={llmContext}
+                  readOnly={isCurrentQuestionSubmitted}
                   schema={currentQuestion.schema}
                   submitText="校验当前题"
                   onSubmit={(result) => setLatestValues(result.values)}
@@ -423,32 +536,20 @@ export function LabelerWorkbenchPage() {
                 <Space className="labeler-workbench__pager">
                   <Button
                     disabled={!canGoPrevious}
-                    onClick={() => {
-                      const previous = questions[currentQuestionIndex - 1]
-
-                      if (previous) {
-                        selectQuestion(previous.id)
-                      }
-                    }}
+                    onClick={goPreviousQuestion}
                   >
                     上一题
                   </Button>
                   <Button
                     disabled={!canGoNext}
-                    onClick={() => {
-                      const next = questions[currentQuestionIndex + 1]
-
-                      if (next) {
-                        selectQuestion(next.id)
-                      }
-                    }}
+                    onClick={goNextQuestion}
                   >
                     下一题
                   </Button>
                 </Space>
                 <Space className="labeler-workbench__submit-actions">
                   <Button
-                    disabled={isCurrentSchemaEmpty}
+                    disabled={!canEditCurrentQuestion}
                     icon={<SaveOutlined />}
                     loading={isDraftSaving}
                     onClick={() => void handleSaveDraft()}
@@ -456,7 +557,7 @@ export function LabelerWorkbenchPage() {
                     保存草稿
                   </Button>
                   <Button
-                    disabled={isCurrentSchemaEmpty}
+                    disabled={!canEditCurrentQuestion}
                     icon={<SendOutlined />}
                     loading={isSubmitting}
                     type="primary"
@@ -474,6 +575,35 @@ export function LabelerWorkbenchPage() {
 
         <Card className="labeler-workbench__side" loading={isWorkbenchLoading || isQuestionHistoryLoading} title="题目状态与流程">
           <Space direction="vertical" size={16}>
+            <Card className="labeler-shortcut-card" size="small" title={<Space size={6}><KeyOutlined />快捷键</Space>}>
+              <div className="labeler-shortcut-list">
+                <div className={canGoPrevious ? 'labeler-shortcut-item' : 'labeler-shortcut-item labeler-shortcut-item--disabled'}>
+                  <span>上一题</span>
+                  <kbd>Alt</kbd>
+                  <kbd>↑</kbd>
+                </div>
+                <div className={canGoNext ? 'labeler-shortcut-item' : 'labeler-shortcut-item labeler-shortcut-item--disabled'}>
+                  <span>下一题</span>
+                  <kbd>Alt</kbd>
+                  <kbd>↓</kbd>
+                </div>
+                <div className={canGoNext ? 'labeler-shortcut-item' : 'labeler-shortcut-item labeler-shortcut-item--disabled'}>
+                  <span>跳题</span>
+                  <kbd>Alt</kbd>
+                  <kbd>N</kbd>
+                </div>
+                <div className={canEditCurrentQuestion ? 'labeler-shortcut-item' : 'labeler-shortcut-item labeler-shortcut-item--disabled'}>
+                  <span>保存草稿</span>
+                  <kbd>Ctrl</kbd>
+                  <kbd>S</kbd>
+                </div>
+                <div className={canEditCurrentQuestion ? 'labeler-shortcut-item' : 'labeler-shortcut-item labeler-shortcut-item--disabled'}>
+                  <span>提交</span>
+                  <kbd>Ctrl</kbd>
+                  <kbd>Enter</kbd>
+                </div>
+              </div>
+            </Card>
             <Descriptions column={1} size="small">
               <Descriptions.Item label="当前题目">{currentQuestion?.title ?? '-'}</Descriptions.Item>
               <Descriptions.Item label="题目状态">

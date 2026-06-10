@@ -52,6 +52,12 @@ datasets/
 docs/development-plan/
 backend/sql/
 
+# Local deployment files
+backend/Dockerfile
+backend/.dockerignore
+docker-compose.yml
+deploy/
+
 # OS / editor metadata
 .DS_Store
 **/.DS_Store
@@ -101,3 +107,4 @@ frontend-label/
 frontend-performance/
 nul
 *.ps1
+.omo/

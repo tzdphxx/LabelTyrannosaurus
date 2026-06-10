@@ -24,6 +24,7 @@ import com.labelhub.modules.ai.domain.AiReviewStatus;
 import com.labelhub.modules.ai.domain.AiFlowAction;
 import com.labelhub.modules.ai.domain.ReviewStrategy;
 import com.labelhub.modules.ai.dto.AiReviewResultResponse;
+import com.labelhub.modules.ai.dto.ReviewTraceResponse;
 import com.labelhub.modules.ai.mapper.AiReviewConfigMapper;
 import com.labelhub.modules.ai.mapper.AiReviewResultMapper;
 import com.labelhub.modules.assignment.domain.AssignmentStatus;
@@ -67,6 +68,8 @@ public class AiAutoReviewService {
     private static final TypeReference<List<String>> STRING_LIST = new TypeReference<>() {
     };
     private static final TypeReference<Map<String, Object>> OBJECT_MAP = new TypeReference<>() {
+    };
+    private static final TypeReference<ReviewTraceResponse> REVIEW_TRACE = new TypeReference<>() {
     };
 
     private final SubmissionMapper submissionMapper;
@@ -116,6 +119,8 @@ public class AiAutoReviewService {
     private DimensionAggregator dimensionAggregator;
     @Autowired
     private PromptTemplateEngine promptTemplateEngine;
+    @Autowired
+    private ReviewTraceBuilder reviewTraceBuilder;
 
     @Autowired
     public AiAutoReviewService(SubmissionMapper submissionMapper,
@@ -238,6 +243,7 @@ public class AiAutoReviewService {
             } else {
                 result = handleFailure(prepared.submission(), prepared.config(),
                         prepared.agentRun(), prepared.prompt().promptSnapshot(), finalOutcome, 0);
+                closeFailedAgentRunIfActive(prepared.agentRun().getId(), result);
             }
             if (result.getStatus() == AiReviewStatus.SUCCESS && flowDecisionService != null) {
                 AiFlowAction flowAction = flowDecisionService.decide(result, prepared.config());
@@ -297,10 +303,11 @@ public class AiAutoReviewService {
                         successResult.getRiskFlags(),
                         successResult.getSuggestion(),
                         successResult.getRawResponse(),
+                        successResult.getReviewTrace(),
                         successResult.getConfidence(),
                         successResult.getFlowAction(),
                         successResult.getPromptMode(),
-                        successResult.getDegraded(),
+                        Boolean.TRUE.equals(successResult.getDegraded()),
                         successResult.getLimitations());
                 applyFlowAction(submission, successResult, config);
                 recordAiReviewMetric(config, successResult, outcome.responseSnapshot());
@@ -477,6 +484,9 @@ public class AiAutoReviewService {
             Map<String, Object> enriched = new LinkedHashMap<>(aggregated.resultJson());
             AiReviewResult result = successResultFromAggregated(submission, config, agentRun.getId(),
                     prompt, enriched);
+            result.setReviewTrace(toReviewTraceJson(reviewTraceBuilder.parallelVote(
+                    voteTraceSteps(voteModels, branchOutcomes),
+                    voteTraceMetrics(results.size(), aggregated.topVotes(), aggregated.hasConsensus(), minAgreement))));
             return AttemptOutcome.success(result, enriched);
         } catch (BusinessException ex) {
             agentRunService.fail(agentRun.getId(), AgentRunStatus.MANUAL_REQUIRED, ex.getMessage());
@@ -501,6 +511,7 @@ public class AiAutoReviewService {
             return executeParallelVote(submission, config, agentRun, prompt, systemPrompt);
         }
         Map<String, List<Map<String, Object>>> dimResults = new LinkedHashMap<>();
+        List<ReviewTraceResponse.ReviewTraceStep> traceSteps = new ArrayList<>();
 
         // 所有维度并行调用
         List<java.util.concurrent.CompletableFuture<DimensionBranchOutcome>> futures = new ArrayList<>();
@@ -540,8 +551,18 @@ public class AiAutoReviewService {
                 })
                 .peek(outcome -> {
                     if (outcome.dimension() != null && outcome.branchOutcome().success()) {
-                        dimResults.get(outcome.dimension())
-                                .add(new LinkedHashMap<>(outcome.branchOutcome().structuredJson()));
+                        Map<String, Object> structuredJson =
+                                new LinkedHashMap<>(outcome.branchOutcome().structuredJson());
+                        dimResults.get(outcome.dimension()).add(structuredJson);
+                        traceSteps.add(ReviewTraceBuilder.step(
+                                outcome.dimension(),
+                                "dimension_reviewer",
+                                stringValue(structuredJson.get("decision"), null),
+                                stringValue(structuredJson.get("averageScore"), null),
+                                stringValue(structuredJson.get("confidence"), null),
+                                "SUCCESS",
+                                stringValue(structuredJson.get("suggestion"), "")
+                        ));
                     }
                 })
                 .map(DimensionBranchOutcome::branchOutcome)
@@ -564,6 +585,8 @@ public class AiAutoReviewService {
         try {
             AiReviewResult result = successResultFromAggregated(submission, config, agentRun.getId(),
                     prompt, aggregated);
+            result.setReviewTrace(toReviewTraceJson(reviewTraceBuilder.deepDimension(traceSteps,
+                    dimensionTraceMetrics(dimResults.size(), minAgreement, passT, manualT))));
             return AttemptOutcome.success(result, aggregated);
         } catch (BusinessException ex) {
             agentRunService.fail(agentRun.getId(), AgentRunStatus.MANUAL_REQUIRED, ex.getMessage());
@@ -632,6 +655,27 @@ public class AiAutoReviewService {
             aiReviewResultMapper.insert(result);
             moveSubmissionToPendingFinal(submission);
             recordAiReviewMetric(config, result, null);
+        });
+    }
+
+    public void failRetryReview(Long submissionId, String errorCode, String errorMessage) {
+        transactionTemplate.executeWithoutResult(status -> {
+            AiReviewResult existing = aiReviewResultMapper.selectBySubmissionId(submissionId);
+            if (existing == null) {
+                return;
+            }
+            Submission submission = loadSubmission(submissionId);
+            Task task = taskMapper.selectById(submission.getTaskId());
+            AiReviewConfig config = task != null && task.getAiReviewConfigId() != null
+                    ? aiReviewConfigMapper.selectById(task.getAiReviewConfigId()) : null;
+            existing.setStatus(AiReviewStatus.FAILED);
+            existing.setErrorCode(errorCode);
+            existing.setErrorMessage(safeFailureMessage(errorMessage));
+            existing.setNextRetryAt(null);
+            existing.setUpdatedAt(LocalDateTime.now());
+            aiReviewResultMapper.updateById(existing);
+            moveSubmissionToPendingFinal(submission);
+            recordAiReviewMetric(config, existing, null);
         });
     }
 
@@ -723,7 +767,7 @@ public class AiAutoReviewService {
                                                         Map<String, Object> aggregated) {
         AiReviewResult result = baseResult(submission, config, agentRunId, prompt.promptSnapshot());
         result.setStatus(AiReviewStatus.SUCCESS);
-        result.setDecision(stringValue(aggregated.get("decision"), "UNCERTAIN"));
+        result.setDecision(AiReviewDecisions.normalizeForStorage(aggregated.get("decision")));
         result.setAverageScore(aggregated.get("averageScore") instanceof Number n
                 ? BigDecimal.valueOf(n.doubleValue()) : null);
         result.setDimensionScores(toJson(aggregated.get("dimensionScores")));
@@ -841,12 +885,24 @@ public class AiAutoReviewService {
         if (supervisorResult.success()) {
             AiReviewResult result = baseResult(submission, config, agentRun.getId(), promptSnapshot);
             result.setStatus(AiReviewStatus.SUCCESS);
-            result.setDecision(supervisorResult.decision());
+            result.setDecision(AiReviewDecisions.normalizeForStorage(supervisorResult.decision()));
             result.setAverageScore(supervisorResult.averageScore());
             result.setDimensionScores(toJson(supervisorResult.dimensionScores() != null ? supervisorResult.dimensionScores() : Map.of()));
             result.setRiskFlags(toJson(supervisorResult.riskFlags() != null ? supervisorResult.riskFlags() : List.of()));
             result.setSuggestion(supervisorResult.suggestion());
             result.setRawResponse(supervisorResult.rawConversation());
+            result.setReviewTrace(toReviewTraceJson(reviewTraceBuilder.supervisor(
+                    resolveReviewStrategy(config).name(),
+                    List.of(ReviewTraceBuilder.step(
+                            config.getModelName(),
+                            "supervisor",
+                            result.getDecision(),
+                            result.getAverageScore() == null ? null : result.getAverageScore().toPlainString(),
+                            null,
+                            "SUCCESS",
+                            result.getSuggestion()
+                    )),
+                    supervisorTraceMetrics(maxIterations, enabledTools.size(), config.getAgentMode()))));
             Map<String, Object> snapshot = new LinkedHashMap<>();
             snapshot.put("mode", "SUPERVISOR");
             snapshot.put("result", supervisorResult);
@@ -863,7 +919,7 @@ public class AiAutoReviewService {
                 + "You have access to tools to help you review the submission. "
                 + "Use the tools to gather information, then make a final decision. "
                 + "When you have enough information, respond with a JSON object containing: "
-                + "decision (PASS/REJECT/UNCERTAIN), averageScore, dimensionScores, riskFlags, suggestion. "
+                + "decision (PASS/REJECT/MANUAL_REVIEW), averageScore, dimensionScores, riskFlags, suggestion. "
                 + "Scoring dimensions: " + config.getScoringDimensionsJson() + ". "
                 + "Pass threshold: " + config.getPassThreshold() + ". "
                 + "Manual review threshold: " + config.getManualReviewThreshold() + ".";
@@ -943,6 +999,18 @@ public class AiAutoReviewService {
                 outcome.rawResponse(), outcome.errorCode(), outcome.errorMessage());
     }
 
+    private void closeFailedAgentRunIfActive(Long agentRunId, AiReviewResult result) {
+        AgentRunStatus status = switch (result.getStatus()) {
+            case FAILED -> AgentRunStatus.FAILED;
+            case RATE_LIMITED -> AgentRunStatus.RATE_LIMITED;
+            case MANUAL_REQUIRED -> AgentRunStatus.MANUAL_REQUIRED;
+            default -> null;
+        };
+        if (status != null) {
+            agentRunService.failIfActive(agentRunId, status, safeFailureMessage(result.getErrorMessage()));
+        }
+    }
+
     private boolean isTerminalFailure(String errorCode) {
         return "LLM_KEY_SECRET_NOT_CONFIGURED".equals(errorCode)
                 || "LLM_KEY_DECRYPT_FAILED".equals(errorCode)
@@ -1010,7 +1078,7 @@ public class AiAutoReviewService {
         }
         AiReviewResult result = baseResult(submission, config, agentRunId, prompt.promptSnapshot());
         result.setStatus(AiReviewStatus.SUCCESS);
-        result.setDecision(String.valueOf(structuredJson.get("decision")));
+        result.setDecision(AiReviewDecisions.normalizeForStorage(structuredJson.get("decision")));
         result.setAverageScore(asBigDecimal(structuredJson.get("averageScore")));
         BigDecimal confidence = asConfidence(structuredJson.get("confidence"));
         if (prompt.degraded() && confidence != null) {
@@ -1024,6 +1092,12 @@ public class AiAutoReviewService {
         result.setSuggestion(asNullableText(structuredJson.get("suggestion")));
         applyPromptMetadata(result, prompt, structuredJson.get("limitations"));
         result.setRawResponse(response.rawResponse());
+        result.setReviewTrace(toReviewTraceJson(reviewTraceBuilder.direct(
+                config.getModelName(),
+                result.getDecision(),
+                result.getAverageScore(),
+                result.getConfidence()
+        )));
         return result;
     }
 
@@ -1052,6 +1126,8 @@ public class AiAutoReviewService {
         result.setProviderId(config.getProviderId());
         result.setModelName(config.getModelName());
         result.setPromptSnapshot(promptSnapshot);
+        result.setDegraded(false);
+        result.setLimitations("[]");
         result.setRetryCount(0);
         result.setCreatedAt(LocalDateTime.now());
         result.setUpdatedAt(LocalDateTime.now());
@@ -1391,7 +1467,8 @@ public class AiAutoReviewService {
                 result.getCreatedAt(),
                 result.getUpdatedAt(),
                 rawPrompt,
-                answerJson
+                answerJson,
+                safeParseReviewTrace(result.getReviewTrace())
         );
     }
 
@@ -1465,6 +1542,69 @@ public class AiAutoReviewService {
         } catch (JsonProcessingException ex) {
             return List.of();
         }
+    }
+
+    private ReviewTraceResponse safeParseReviewTrace(String json) {
+        if (json == null || json.isBlank()) {
+            return null;
+        }
+        try {
+            return objectMapper.readValue(json, REVIEW_TRACE);
+        } catch (JsonProcessingException ex) {
+            return null;
+        }
+    }
+
+    private String toReviewTraceJson(ReviewTraceResponse trace) {
+        return trace == null ? null : toJson(trace);
+    }
+
+    private List<ReviewTraceResponse.ReviewTraceStep> voteTraceSteps(List<VoteModel> voteModels,
+                                                                      List<LlmBranchOutcome> branchOutcomes) {
+        List<ReviewTraceResponse.ReviewTraceStep> steps = new ArrayList<>();
+        for (int i = 0; i < branchOutcomes.size(); i++) {
+            LlmBranchOutcome branch = branchOutcomes.get(i);
+            VoteModel model = i < voteModels.size() ? voteModels.get(i) : new VoteModel(null, "unknown");
+            Map<String, Object> json = branch.structuredJson();
+            steps.add(ReviewTraceBuilder.step(
+                    model.modelName(),
+                    "voter",
+                    json == null ? null : stringValue(json.get("decision"), null),
+                    json == null ? null : stringValue(json.get("averageScore"), null),
+                    json == null ? null : stringValue(json.get("confidence"), null),
+                    branch.success() ? "SUCCESS" : "FAILED",
+                    branch.success() && json != null ? stringValue(json.get("suggestion"), "") : branch.errorMessage()
+            ));
+        }
+        return steps;
+    }
+
+    private Map<String, Object> voteTraceMetrics(int voteCount, int topVotes,
+                                                  boolean hasConsensus, int minAgreement) {
+        Map<String, Object> metrics = new LinkedHashMap<>();
+        metrics.put("voteCount", voteCount);
+        metrics.put("topVotes", topVotes);
+        metrics.put("hasConsensus", hasConsensus);
+        metrics.put("minAgreement", minAgreement);
+        return metrics;
+    }
+
+    private Map<String, Object> dimensionTraceMetrics(int dimensionCount, int minAgreement,
+                                                       double passThreshold, double manualReviewThreshold) {
+        Map<String, Object> metrics = new LinkedHashMap<>();
+        metrics.put("dimensionCount", dimensionCount);
+        metrics.put("minAgreement", minAgreement);
+        metrics.put("passThreshold", passThreshold);
+        metrics.put("manualReviewThreshold", manualReviewThreshold);
+        return metrics;
+    }
+
+    private Map<String, Object> supervisorTraceMetrics(int maxIterations, int toolCount, String agentMode) {
+        Map<String, Object> metrics = new LinkedHashMap<>();
+        metrics.put("maxIterations", maxIterations);
+        metrics.put("toolCount", toolCount);
+        metrics.put("agentMode", agentMode);
+        return metrics;
     }
 
     private String toJson(Object value) {

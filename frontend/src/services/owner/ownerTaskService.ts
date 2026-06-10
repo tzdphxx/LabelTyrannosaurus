@@ -672,7 +672,7 @@ export const ownerTaskService = {
         params.externalId = query.externalId.trim()
       }
 
-      return request.get<DatasetItemPageResponse>(`/v1/tasks/${taskId}/dataset/items`, { params })
+      return request.get<DatasetItemPageResponse>(`/v1/tasks/${taskId}/items`, { params })
     }
 
     return getMockDatasetItems(taskId, query)
@@ -681,7 +681,7 @@ export const ownerTaskService = {
   async batchAppendDatasetItems(taskId: string, items: DatasetItemAppendInput[]): Promise<DatasetItemAppendResult[]> {
     if (isRealServiceMode()) {
       return request.post<DatasetItemAppendResult[], DatasetItemBatchAppendRequest>(
-        `/v1/tasks/${taskId}/dataset/items/batch-append-json`,
+        `/v1/tasks/${taskId}/items/batch-append-json`,
         { items },
       )
     }

@@ -15,6 +15,8 @@ import com.labelhub.common.web.TraceIdProvider;
 import com.labelhub.modules.agent.domain.AgentRun;
 import com.labelhub.modules.agent.domain.AgentRunStatus;
 import com.labelhub.modules.agent.mapper.AgentRunMapper;
+import com.labelhub.modules.ai.domain.AiReviewResult;
+import com.labelhub.modules.ai.mapper.AiReviewResultMapper;
 import com.labelhub.modules.ai.service.AiReviewDispatcher;
 import com.labelhub.modules.assignment.domain.Assignment;
 import com.labelhub.modules.assignment.domain.AssignmentStatus;
@@ -40,6 +42,8 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 @ExtendWith(MockitoExtension.class)
 class SubmissionSubmitServiceTest {
@@ -66,6 +70,9 @@ class SubmissionSubmitServiceTest {
     private AgentRunMapper agentRunMapper;
 
     @Mock
+    private AiReviewResultMapper aiReviewResultMapper;
+
+    @Mock
     private AnswerSchemaValidator answerSchemaValidator;
 
     @Mock
@@ -89,6 +96,7 @@ class SubmissionSubmitServiceTest {
                 submissionMapper,
                 taskMapper,
                 agentRunMapper,
+                aiReviewResultMapper,
                 answerSchemaValidator,
                 auditAppender,
                 aiReviewDispatcher,
@@ -145,6 +153,46 @@ class SubmissionSubmitServiceTest {
         verify(auditAppender).append(auditCaptor.capture());
         assertThat(auditCaptor.getValue().traceId()).isEqualTo("trace-submit");
         verify(aiReviewDispatcher).enqueue(SUBMISSION_ID);
+    }
+
+    @Test
+    void enqueuesAiReviewOnlyAfterTransactionCommitWhenTransactionIsActive() {
+        TransactionSynchronizationManager.initSynchronization();
+        TransactionSynchronizationManager.setActualTransactionActive(true);
+        try {
+            Assignment assignment = assignment(AssignmentStatus.DRAFTING, 2);
+            when(assignmentMapper.selectOwnedAssignment(ASSIGNMENT_ID, LABELER_ID)).thenReturn(assignment);
+            when(taskMapper.selectById(TASK_ID)).thenReturn(publishedTask());
+            when(submissionMapper.selectLatestByAssignmentId(ASSIGNMENT_ID)).thenReturn(null);
+            when(submissionMapper.selectLatestActiveByAssignmentId(ASSIGNMENT_ID)).thenReturn(null);
+            when(submissionMapper.insert(any(Submission.class))).thenAnswer(invocation -> {
+                Submission submission = invocation.getArgument(0);
+                submission.setId(SUBMISSION_ID);
+                return 1;
+            });
+            when(assignmentMapper.markSubmittedIfCurrent(ASSIGNMENT_ID, LABELER_ID, 2, AssignmentStatus.SUBMITTED))
+                    .thenReturn(1);
+            when(agentRunMapper.insert(any(AgentRun.class))).thenAnswer(invocation -> {
+                AgentRun agentRun = invocation.getArgument(0);
+                agentRun.setId(AGENT_RUN_ID);
+                return 1;
+            });
+
+            submissionSubmitService.submit(
+                    ASSIGNMENT_ID,
+                    LABELER_ID,
+                    new SubmissionSubmitRequest(ANSWER_JSON, 2)
+            );
+
+            verify(aiReviewDispatcher, never()).enqueue(SUBMISSION_ID);
+            for (TransactionSynchronization synchronization : TransactionSynchronizationManager.getSynchronizations()) {
+                synchronization.afterCommit();
+            }
+            verify(aiReviewDispatcher).enqueue(SUBMISSION_ID);
+        } finally {
+            TransactionSynchronizationManager.clearSynchronization();
+            TransactionSynchronizationManager.setActualTransactionActive(false);
+        }
     }
 
     @Test
@@ -209,13 +257,14 @@ class SubmissionSubmitServiceTest {
     }
 
     @Test
-    void duplicateSameAnswerForSubmittableAssignmentReturnsExistingSubmissionWithoutNewInsertOrAgentRun() {
+    void duplicateSameAnswerForStaleAiReviewingSubmissionEnqueuesMissingAiReview() {
         Assignment assignment = assignment(AssignmentStatus.DRAFTING, 2);
         Submission existing = submission(1, sha256("{\"answer\":\"hello\"}"), SubmissionStatus.AI_REVIEWING);
         existing.setId(SUBMISSION_ID);
         when(assignmentMapper.selectOwnedAssignment(ASSIGNMENT_ID, LABELER_ID)).thenReturn(assignment);
         when(taskMapper.selectById(TASK_ID)).thenReturn(publishedTask());
         when(submissionMapper.selectLatestActiveByAssignmentId(ASSIGNMENT_ID)).thenReturn(existing);
+        when(aiReviewResultMapper.selectBySubmissionId(SUBMISSION_ID)).thenReturn(null);
 
         SubmissionSubmitResponse response = submissionSubmitService.submit(
                 ASSIGNMENT_ID,
@@ -227,6 +276,29 @@ class SubmissionSubmitServiceTest {
         assertThat(response.versionNo()).isEqualTo(1);
         assertThat(response.status()).isEqualTo(SubmissionStatus.AI_REVIEWING);
         assertThat(response.agentRunId()).isNull();
+        verify(submissionMapper, never()).insert(any(Submission.class));
+        verify(agentRunMapper, never()).insert(any(AgentRun.class));
+        verify(auditAppender, never()).append(any(AuditCommand.class));
+        verify(aiReviewDispatcher).enqueue(SUBMISSION_ID);
+    }
+
+    @Test
+    void duplicateSameAnswerWithExistingAiReviewResultDoesNotEnqueueAgain() {
+        Assignment assignment = assignment(AssignmentStatus.DRAFTING, 2);
+        Submission existing = submission(1, sha256("{\"answer\":\"hello\"}"), SubmissionStatus.AI_REVIEWING);
+        existing.setId(SUBMISSION_ID);
+        when(assignmentMapper.selectOwnedAssignment(ASSIGNMENT_ID, LABELER_ID)).thenReturn(assignment);
+        when(taskMapper.selectById(TASK_ID)).thenReturn(publishedTask());
+        when(submissionMapper.selectLatestActiveByAssignmentId(ASSIGNMENT_ID)).thenReturn(existing);
+        when(aiReviewResultMapper.selectBySubmissionId(SUBMISSION_ID)).thenReturn(new AiReviewResult());
+
+        SubmissionSubmitResponse response = submissionSubmitService.submit(
+                ASSIGNMENT_ID,
+                LABELER_ID,
+                new SubmissionSubmitRequest("{\n  \"answer\" : \"hello\"\n}", 2)
+        );
+
+        assertThat(response.submissionId()).isEqualTo(SUBMISSION_ID);
         verify(submissionMapper, never()).insert(any(Submission.class));
         verify(agentRunMapper, never()).insert(any(AgentRun.class));
         verify(auditAppender, never()).append(any(AuditCommand.class));

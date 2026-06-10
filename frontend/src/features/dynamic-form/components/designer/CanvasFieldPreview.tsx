@@ -1,4 +1,5 @@
 import { Alert, Card, Checkbox, Input, Radio, Select, Space, Tabs, Typography, Upload } from 'antd'
+import { memo } from 'react'
 import type { ReactNode } from 'react'
 import type { DynamicFieldOption, DynamicSchemaNode } from '../../../../types/dynamicForm'
 
@@ -20,7 +21,7 @@ function FieldFrame({ children, title }: { children: ReactNode; title: string })
   )
 }
 
-export function CanvasFieldPreview({ children, node }: CanvasFieldPreviewProps) {
+function CanvasFieldPreviewComponent({ children, node }: CanvasFieldPreviewProps) {
   const options = normalizeOptions(node.props.options)
 
   switch (node.type) {
@@ -140,3 +141,5 @@ export function CanvasFieldPreview({ children, node }: CanvasFieldPreviewProps) 
       return null
   }
 }
+
+export const CanvasFieldPreview = memo(CanvasFieldPreviewComponent)

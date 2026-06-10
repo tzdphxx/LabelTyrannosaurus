@@ -9,13 +9,9 @@ import static org.mockito.Mockito.when;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.labelhub.common.web.RequestTraceIdProvider;
 import com.labelhub.common.web.TraceIdProvider;
-import com.labelhub.infrastructure.llmtask.LlmTaskQueueMessage;
-import com.labelhub.infrastructure.llmtask.LlmTaskQueueService;
 import com.labelhub.modules.agent.domain.AgentRun;
 import com.labelhub.modules.agent.domain.AgentRunStatus;
 import com.labelhub.modules.agent.mapper.AgentRunMapper;
-import com.labelhub.modules.submission.domain.Submission;
-import com.labelhub.modules.submission.mapper.SubmissionMapper;
 import jakarta.servlet.http.HttpServletRequest;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -27,20 +23,14 @@ import org.springframework.beans.factory.ObjectProvider;
 @ExtendWith(MockitoExtension.class)
 class AsyncAiReviewDispatcherTest {
 
-    @Mock private LlmTaskQueueService queueService;
-    @Mock private SubmissionMapper submissionMapper;
     @Mock private AgentRunMapper agentRunMapper;
     @Mock private TraceIdProvider traceIdProvider;
+    @Mock private AiReviewAsyncExecutor asyncExecutor;
 
     @Test
     void enqueueOnlyReusesPendingAiReviewRun() {
         AsyncAiReviewDispatcher dispatcher = new AsyncAiReviewDispatcher(
-                queueService, submissionMapper, agentRunMapper, traceIdProvider);
-        Submission submission = new Submission();
-        submission.setId(100L);
-        submission.setTaskId(10L);
-        submission.setAssignmentId(20L);
-        when(submissionMapper.selectById(100L)).thenReturn(submission);
+                agentRunMapper, traceIdProvider, asyncExecutor);
         when(traceIdProvider.currentTraceId()).thenReturn("trace-1");
 
         dispatcher.enqueue(100L);
@@ -52,41 +42,37 @@ class AsyncAiReviewDispatcherTest {
                 ArgumentCaptor.forClass(LambdaQueryWrapper.class);
         verify(agentRunMapper).selectOne(wrapperCaptor.capture());
 
-        ArgumentCaptor<LlmTaskQueueMessage> messageCaptor = ArgumentCaptor.forClass(LlmTaskQueueMessage.class);
-        verify(queueService).enqueue(messageCaptor.capture());
-        assertThat(messageCaptor.getValue().agentRunId()).isNull();
+        verify(asyncExecutor).submit(100L, null, "trace-1");
     }
 
     @Test
     void enqueueCarriesPendingRunIdWhenFound() {
         AsyncAiReviewDispatcher dispatcher = new AsyncAiReviewDispatcher(
-                queueService, submissionMapper, agentRunMapper, traceIdProvider);
+                agentRunMapper, traceIdProvider, asyncExecutor);
         AgentRun pendingRun = new AgentRun();
         pendingRun.setId(300L);
         pendingRun.setStatus(AgentRunStatus.PENDING);
         when(agentRunMapper.selectOne(any())).thenReturn(pendingRun);
+        when(traceIdProvider.currentTraceId()).thenReturn("trace-2");
 
         dispatcher.enqueue(100L);
 
-        ArgumentCaptor<LlmTaskQueueMessage> messageCaptor = ArgumentCaptor.forClass(LlmTaskQueueMessage.class);
-        verify(queueService).enqueue(messageCaptor.capture());
-        assertThat(messageCaptor.getValue().agentRunId()).isEqualTo(300L);
+        verify(asyncExecutor).submit(100L, 300L, "trace-2");
     }
 
     @Test
     void enqueueDoesNotCarryNonPendingRunIdWhenMapperReturnsStaleRun() {
         AsyncAiReviewDispatcher dispatcher = new AsyncAiReviewDispatcher(
-                queueService, submissionMapper, agentRunMapper, traceIdProvider);
+                agentRunMapper, traceIdProvider, asyncExecutor);
         AgentRun failedRun = new AgentRun();
         failedRun.setId(301L);
         failedRun.setStatus(AgentRunStatus.FAILED);
         when(agentRunMapper.selectOne(any())).thenReturn(failedRun);
+        when(traceIdProvider.currentTraceId()).thenReturn("trace-3");
 
         dispatcher.enqueue(100L);
 
-        ArgumentCaptor<LlmTaskQueueMessage> messageCaptor = ArgumentCaptor.forClass(LlmTaskQueueMessage.class);
-        verify(queueService).enqueue(messageCaptor.capture());
-        assertThat(messageCaptor.getValue().agentRunId()).isNull();
+        verify(asyncExecutor).submit(100L, null, "trace-3");
     }
 
     @Test
@@ -96,13 +82,14 @@ class AsyncAiReviewDispatcherTest {
                 .thenThrow(new IllegalStateException("No thread-bound request found"));
         RequestTraceIdProvider requestTraceIdProvider = new RequestTraceIdProvider(providerFor(request));
         AsyncAiReviewDispatcher dispatcher = new AsyncAiReviewDispatcher(
-                queueService, submissionMapper, agentRunMapper, requestTraceIdProvider);
+                agentRunMapper, requestTraceIdProvider, asyncExecutor);
 
         dispatcher.enqueue(100L);
 
-        ArgumentCaptor<LlmTaskQueueMessage> messageCaptor = ArgumentCaptor.forClass(LlmTaskQueueMessage.class);
-        verify(queueService).enqueue(messageCaptor.capture());
-        assertThat(messageCaptor.getValue().traceId()).isNotBlank();
+        ArgumentCaptor<String> traceCaptor = ArgumentCaptor.forClass(String.class);
+        verify(asyncExecutor).submit(org.mockito.ArgumentMatchers.eq(100L),
+                org.mockito.ArgumentMatchers.isNull(), traceCaptor.capture());
+        assertThat(traceCaptor.getValue()).isNotBlank();
     }
 
     private static ObjectProvider<HttpServletRequest> providerFor(HttpServletRequest request) {

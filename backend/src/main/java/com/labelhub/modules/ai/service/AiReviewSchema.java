@@ -23,7 +23,10 @@ public final class AiReviewSchema {
         return Map.of(
                 "type", "object",
                 "properties", Map.of(
-                        "decision", Map.of("type", "string", "enum", List.of("PASS", "REJECT", "UNCERTAIN")),
+                        "decision", Map.of("type", "string", "enum", List.of(
+                                AiReviewDecisions.PASS,
+                                AiReviewDecisions.REJECT,
+                                AiReviewDecisions.MANUAL_REVIEW)),
                         "averageScore", Map.of("type", "number"),
                         "confidence", Map.of("type", "number"),
                         "dimensionScores", Map.of("type", "object", "additionalProperties", true),

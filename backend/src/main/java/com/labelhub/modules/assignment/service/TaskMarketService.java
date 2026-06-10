@@ -103,7 +103,8 @@ public class TaskMarketService {
                 task.getPublishedAt(),
                 task.getEndedAt(),
                 task.getCreatedAt(),
-                task.getUpdatedAt()
+                task.getUpdatedAt(),
+                null
         );
     }
 

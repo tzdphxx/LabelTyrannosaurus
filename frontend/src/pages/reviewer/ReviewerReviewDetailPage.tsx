@@ -32,6 +32,7 @@ import { PageHeader } from '../../components/page/PageHeader'
 import { StatePlaceholder } from '../../components/states/StatePlaceholder'
 import { useReviewStore } from '../../stores/reviewStore'
 import type { ReviewerTaskItemRow, SubmissionVersion } from '../../types/review'
+import { formatAiReviewStatusLabel, isManualAiReviewValue, isManualRequiredStatus } from '../../services/review/reviewMappers'
 import styles from './ReviewerPages.module.css'
 
 type QueueFilter = 'all' | 'pass' | 'reject' | 'manual'
@@ -40,18 +41,32 @@ const aiDecisionLabels: Record<string, string> = {
   PASS: 'AI 建议通过',
   REJECT: 'AI 建议打回',
   MANUAL_REVIEW: '转人工',
+  MANUAL_REQUIRED: '人工复核',
   pass: 'AI 建议通过',
   reject: 'AI 建议打回',
   manual_review: '转人工',
+  manual_required: '人工复核',
 }
 
 const aiDecisionColors: Record<string, string> = {
   PASS: 'success',
   REJECT: 'error',
   MANUAL_REVIEW: 'processing',
+  MANUAL_REQUIRED: 'error',
   pass: 'success',
   reject: 'error',
   manual_review: 'processing',
+  manual_required: 'error',
+}
+
+const aiStatusColors: Record<string, string> = {
+  PENDING: 'default',
+  RUNNING: 'processing',
+  SUCCESS: 'success',
+  COMPLETED: 'success',
+  FAILED: 'error',
+  MANUAL_REQUIRED: 'error',
+  MANUAL_REVIEW: 'processing',
 }
 
 const reviewReasonPresets = ['事实不一致', '格式不合规', '缺少关键信息', '需补充证据']
@@ -67,6 +82,22 @@ function formatValue(value: unknown) {
 function formatJson(value: unknown) {
   if (!value) {
     return '-'
+  }
+
+  if (typeof value === 'string') {
+    try {
+      return JSON.stringify(JSON.parse(value), null, 2)
+    } catch {
+      return value
+    }
+  }
+
+  return JSON.stringify(value, null, 2)
+}
+
+function toEditableJson(value: unknown) {
+  if (!value) {
+    return '{}'
   }
 
   if (typeof value === 'string') {
@@ -105,17 +136,43 @@ function normalizeDecision(decision?: string) {
 
   if (value === 'pass') return 'pass'
   if (value === 'reject') return 'reject'
-  if (value === 'manual_review') return 'manual'
+  if (value === 'manual_review' || value === 'manual_required') return 'manual'
 
   return 'manual'
 }
 
 function getDecisionLabel(decision?: string) {
+  if (isManualAiReviewValue(decision)) {
+    return formatAiReviewStatusLabel(decision)
+  }
+
   return aiDecisionLabels[formatValue(decision)] ?? formatValue(decision)
 }
 
 function getDecisionColor(decision?: string) {
+  if (isManualRequiredStatus(decision)) {
+    return 'error'
+  }
+
   return aiDecisionColors[formatValue(decision)] ?? 'default'
+}
+
+function getStatusColor(status?: string | null) {
+  return aiStatusColors[formatValue(status)] ?? 'default'
+}
+
+function getDecisionClassName(decision?: string) {
+  const normalizedDecision = normalizeDecision(decision)
+
+  if (normalizedDecision === 'pass') {
+    return styles.manualQueueItemPass
+  }
+
+  if (normalizedDecision === 'reject') {
+    return styles.manualQueueItemReject
+  }
+
+  return styles.manualQueueItemManual
 }
 
 export function ReviewerReviewDetailPage() {
@@ -128,6 +185,9 @@ export function ReviewerReviewDetailPage() {
   const [reviewComment, setReviewComment] = useState('')
   const [rejectOpen, setRejectOpen] = useState(false)
   const [rejectReason, setRejectReason] = useState('')
+  const [revisionOpen, setRevisionOpen] = useState(false)
+  const [revisedAnswerText, setRevisedAnswerText] = useState('')
+  const [revisionError, setRevisionError] = useState('')
   const taskItemsPage = useReviewStore((state) => state.taskItemsPage)
   const currentDetail = useReviewStore((state) => state.currentDetail)
   const submissionVersions = useReviewStore((state) => state.submissionVersions)
@@ -147,12 +207,13 @@ export function ReviewerReviewDetailPage() {
 
   const selectedSubmissionId = searchParams.get('submissionId')
   const taskItems = taskItemsPage?.page.items ?? []
-  const reviewableItems = useMemo(() => taskItems.filter(canReviewItem), [taskItems])
+  const submittedItems = useMemo(() => taskItems.filter(canOpenItem), [taskItems])
+  const reviewableItems = useMemo(() => submittedItems.filter(canReviewItem), [submittedItems])
   const reviewableIds = useMemo(() => reviewableItems.map(getReviewId).filter(Boolean), [reviewableItems])
 
   useEffect(() => {
     if (taskId) {
-      void loadReviewerTaskItems(taskId, { page: 1, size: 100 })
+      void loadReviewerTaskItems(taskId, { page: 1, size: 100, submittedOnly: true })
     }
   }, [loadReviewerTaskItems, taskId])
 
@@ -166,15 +227,15 @@ export function ReviewerReviewDetailPage() {
 
   const selectedItem = useMemo(() => {
     if (selectedSubmissionId) {
-      const matched = taskItems.find((item) => String(item.latestSubmissionId) === selectedSubmissionId)
+      const matched = submittedItems.find((item) => String(item.latestSubmissionId) === selectedSubmissionId)
 
       if (matched) {
         return matched
       }
     }
 
-    return taskItems.find(canOpenItem) ?? taskItems[0] ?? null
-  }, [selectedSubmissionId, taskItems])
+    return submittedItems[0] ?? null
+  }, [selectedSubmissionId, submittedItems])
 
   useEffect(() => {
     if (!taskId || !selectedItem || !canOpenItem(selectedItem) || !selectedItem.latestSubmissionId) {
@@ -202,13 +263,13 @@ export function ReviewerReviewDetailPage() {
     !selectedItem?.canReview ||
     rawSubmission?.submissionStatus === 'APPROVED' ||
     rawSubmission?.submissionStatus === 'REJECTED'
-  const passCount = taskItems.filter((item) => normalizeDecision(item.aiDecision) === 'pass').length
-  const rejectCount = taskItems.filter((item) => normalizeDecision(item.aiDecision) === 'reject').length
-  const manualCount = taskItems.filter((item) => normalizeDecision(item.aiDecision) === 'manual').length
+  const passCount = submittedItems.filter((item) => normalizeDecision(item.aiDecision) === 'pass').length
+  const rejectCount = submittedItems.filter((item) => normalizeDecision(item.aiDecision) === 'reject').length
+  const manualCount = submittedItems.filter((item) => normalizeDecision(item.aiDecision) === 'manual').length
   const approvedCount = summary?.approvedCount ?? 0
   const returnedCount = summary?.returnedCount ?? 0
   const passRate = approvedCount + returnedCount > 0 ? Math.round((approvedCount / (approvedCount + returnedCount)) * 100) : 0
-  const filteredItems = taskItems.filter((item) => queueFilter === 'all' || normalizeDecision(item.aiDecision) === queueFilter)
+  const filteredItems = submittedItems.filter((item) => queueFilter === 'all' || normalizeDecision(item.aiDecision) === queueFilter)
   const currentVersion = submissionVersions[0] ?? null
   const previousVersion = submissionVersions.find((version) => version.versionNo !== rawSubmission?.versionNo) ?? null
 
@@ -225,7 +286,7 @@ export function ReviewerReviewDetailPage() {
       return
     }
 
-    await loadReviewerTaskItems(taskId, { page: 1, size: 100 })
+    await loadReviewerTaskItems(taskId, { page: 1, size: 100, submittedOnly: true })
 
     if (selectedSubmissionId) {
       void loadDetail(selectedSubmissionId)
@@ -234,6 +295,50 @@ export function ReviewerReviewDetailPage() {
 
   const toggleSelect = (reviewId: string, checked: boolean) => {
     setSelectedReviewIds(checked ? [...selectedReviewIds, reviewId] : selectedReviewIds.filter((item) => item !== reviewId))
+  }
+
+  const openRevisionModal = () => {
+    if (!displayedDetail) {
+      return
+    }
+
+    setRevisionError('')
+    setRevisedAnswerText(toEditableJson(rawSubmission?.answerJson ?? displayedDetail.answers ?? {}))
+    setRevisionOpen(true)
+  }
+
+  const submitRevisionApprove = async () => {
+    if (!selectedSubmissionId) {
+      return
+    }
+
+    let parsedAnswer: unknown
+
+    try {
+      parsedAnswer = JSON.parse(revisedAnswerText)
+    } catch {
+      setRevisionError('答案 JSON 格式不正确，请修正后再提交。')
+      return
+    }
+
+    const updatedDetail = await submitManualReviewAction(selectedSubmissionId, {
+      reviewerId: 'current-reviewer',
+      reviewerName: '当前审核员',
+      decision: 'approved',
+      comment: reviewComment.trim() || undefined,
+      revisedAnswerJson: JSON.stringify(parsedAnswer),
+    })
+
+    if (updatedDetail) {
+      messageApi.success('修订答案已通过并提交')
+      setRevisionOpen(false)
+      setRevisedAnswerText('')
+      setRevisionError('')
+      setReviewComment('')
+      void reloadDetail()
+    } else {
+      messageApi.error('修订提交失败')
+    }
   }
 
   const submitApprove = () => {
@@ -356,13 +461,13 @@ export function ReviewerReviewDetailPage() {
         <aside className={styles.manualQueuePanel}>
           <div className={styles.manualQueueHeader}>
             <Typography.Text strong>审核队列</Typography.Text>
-            <Tag>{taskItems.length} 条</Tag>
+            <Tag>{submittedItems.length} 条</Tag>
           </div>
           <Segmented
             className={styles.manualQueueTabs}
             value={queueFilter}
             options={[
-              { label: `全部 ${taskItems.length}`, value: 'all' },
+              { label: `全部 ${submittedItems.length}`, value: 'all' },
               { label: `建议通过 ${passCount}`, value: 'pass' },
               { label: `建议打回 ${rejectCount}`, value: 'reject' },
               { label: `转人工 ${manualCount}`, value: 'manual' },
@@ -410,7 +515,7 @@ export function ReviewerReviewDetailPage() {
                 return (
                   <button
                     key={getItemKey(item)}
-                    className={`${styles.manualQueueItem} ${active ? styles.manualQueueItemActive : ''} ${
+                    className={`${styles.manualQueueItem} ${getDecisionClassName(item.aiDecision)} ${active ? styles.manualQueueItemActive : ''} ${
                       disabled ? styles.manualQueueItemDisabled : ''
                     }`}
                     disabled={disabled}
@@ -504,7 +609,9 @@ export function ReviewerReviewDetailPage() {
                 <div>
                   <Space wrap>
                     <Tag color={getDecisionColor(aiDecision)}>{getDecisionLabel(aiDecision)}</Tag>
-                    <Tag>{formatValue(aiResult?.status ?? rawSubmission?.aiReviewStatus ?? selectedItem?.aiReviewStatus)}</Tag>
+                    <Tag color={getStatusColor(aiResult?.status ?? rawSubmission?.aiReviewStatus ?? selectedItem?.aiReviewStatus)}>
+                      {formatAiReviewStatusLabel(aiResult?.status ?? rawSubmission?.aiReviewStatus ?? selectedItem?.aiReviewStatus)}
+                    </Tag>
                     <Tag>模型运行 {formatValue(rawSubmission?.agentRunSummary?.agentRunId)}</Tag>
                   </Space>
                   <Typography.Paragraph>{formatValue(aiResult?.suggestion ?? selectedItem?.suggestion)}</Typography.Paragraph>
@@ -554,8 +661,14 @@ export function ReviewerReviewDetailPage() {
                 >
                   打回
                 </Button>
-                <Tooltip title="可用 approve payload 支持 revisedAnswerJson，但当前页面尚未提供答案编辑器">
-                  <Button className={styles.manualActionButton} disabled icon={<EditOutlined />}>
+                <Tooltip title="修订答案后将直接通过并入库">
+                  <Button
+                    className={styles.manualActionButton}
+                    disabled={isActionDisabled}
+                    icon={<EditOutlined />}
+                    loading={isActionSubmitting}
+                    onClick={openRevisionModal}
+                  >
                     直接修订
                   </Button>
                 </Tooltip>
@@ -615,6 +728,34 @@ export function ReviewerReviewDetailPage() {
           </Card>
         </aside>
       </div>
+
+      <Modal
+        confirmLoading={isActionSubmitting}
+        okText="修订并通过"
+        open={revisionOpen}
+        title="直接修订并通过"
+        width={720}
+        onCancel={() => {
+          setRevisionOpen(false)
+          setRevisionError('')
+        }}
+        onOk={() => void submitRevisionApprove()}
+      >
+        <Space direction="vertical" size={12} className={styles.actionPanel}>
+          <Typography.Text type="secondary">
+            修订后的答案会通过 approve 接口提交到 revisedAnswerJson 字段，并直接进入通过状态。
+          </Typography.Text>
+          {revisionError ? <Alert message={revisionError} showIcon type="error" /> : null}
+          <Input.TextArea
+            rows={16}
+            value={revisedAnswerText}
+            onChange={(event) => {
+              setRevisedAnswerText(event.target.value)
+              setRevisionError('')
+            }}
+          />
+        </Space>
+      </Modal>
 
       <Modal
         confirmLoading={isActionSubmitting}

@@ -12,8 +12,7 @@ Owner: BE-A
 3. AI Prompt 测试：OWNER 在任务发布前用样例输入测试审核 prompt，不产生 submission 或 ai_review_results。
 4. AI 自动审核：Labeler 提交后异步调用 LLM，生成评分、结论、风险标记和建议，供 Reviewer 参考。
 5. AI 审核查询与重试：OWNER/REVIEWER 查询审核结果；REVIEWER 可手动重试失败或需要重新评估的 AI 审核。
-6. 预标注：LABELER 对 assignment 触发整题预标注，查询 latest/detail，获得建议答案、字段建议、置信度和风险标记。
-7. 字段级 LlmTrigger：LABELER 作答时触发字段级 AI 辅助；OWNER 在任务设计时测试 trigger prompt。
+6. 标注端 AI 辅助：LABELER 对 assignment 或组件触发 AI 辅助，查询 latest/detail 或 trigger run，获得建议答案、置信度和风险标记；OWNER 在任务设计时测试 trigger prompt。
 8. AI 运行日志：OWNER/REVIEWER 按任务分页查询 AI 审核日志和 LlmTrigger 调用日志。
 9. AgentRun 链路追踪：通过 agentRunId 查看一次 AI 调用的输入快照、输出快照、状态、traceId 和耗时。
 10. AI 性能/可用性埋点：通过 Actuator 查看 labelhub.ai.requests 和 labelhub.ai.latency。
@@ -23,7 +22,7 @@ AI 结果边界：
 
 ```Plaintext
 AI 审核只提供 Reviewer 辅助建议，不会直接把 submission 改为 APPROVED。
-预标注和 LlmTrigger 输出只作为建议，前端必须等待用户确认后再写入 answerJson。
+标注端 AI 辅助输出只作为建议，前端必须等待用户确认后再写入 answerJson。
 Provider API key 和敏感 header 不会通过接口返回。
 ```
 
@@ -35,8 +34,7 @@ The current backend AI surface covers five use cases:
 1. LLM provider management: owners configure OpenAI-compatible providers, test connectivity, enable or disable providers, and list usable providers.
 2. AI review configuration: owners configure the prompt, scoring dimensions, thresholds, output schema, and run prompt tests before publishing a task.
 3. AI auto review: labeler submission can enqueue an AI review. The result is persisted as reviewer guidance and never directly approves a submission.
-4. Pre-annotation: labelers can trigger an async whole-assignment suggestion, then poll latest/detail results before manually accepting any content.
-5. LlmTrigger assistance: labelers or owners can run field-level AI assistance from template trigger components and query run logs.
+4. Labeling AI assistance: labelers can trigger async AI assistance from assignments or template trigger components, then query latest/detail results or run logs before manually accepting any content.
 ```
 
 Observability is exposed through `AgentRun` detail and Actuator metrics:
@@ -191,12 +189,39 @@ averageScore
 dimensionScores
 riskFlags
 suggestion
+reviewTrace
 promptSnapshot
 rawResponse
 errorCode
 errorMessage
 createdAt
 updatedAt
+```
+
+`reviewTrace` structure:
+```json
+{
+  "strategy": "PARALLEL_VOTE",
+  "strategyLabel": "Parallel model vote",
+  "summary": "3 model branches reviewed in parallel; 2 branch(es) supported the final decision; consensus threshold was met.",
+  "steps": [
+    {
+      "name": "qwen-plus",
+      "role": "voter",
+      "decision": "PASS",
+      "score": "90",
+      "confidence": "0.9",
+      "status": "SUCCESS",
+      "reason": "The submitted answer matches the task requirements."
+    }
+  ],
+  "metrics": {
+    "voteCount": 3,
+    "topVotes": 2,
+    "hasConsensus": true,
+    "minAgreement": 2
+  }
+}
 ```
 
 Status rules:

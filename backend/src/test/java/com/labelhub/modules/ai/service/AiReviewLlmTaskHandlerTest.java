@@ -10,6 +10,7 @@ import com.labelhub.infrastructure.llmtask.LlmTaskType;
 import com.labelhub.modules.ai.domain.AiReviewResult;
 import com.labelhub.modules.ai.domain.AiReviewStatus;
 import com.labelhub.modules.ai.mapper.AiReviewResultMapper;
+import com.labelhub.modules.submission.mapper.SubmissionMapper;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import org.junit.jupiter.api.Test;
@@ -22,10 +23,12 @@ class AiReviewLlmTaskHandlerTest {
 
     @Mock private AiAutoReviewService aiAutoReviewService;
     @Mock private AiReviewResultMapper aiReviewResultMapper;
+    @Mock private SubmissionMapper submissionMapper;
 
     @Test
     void completedWhenResultIsTerminal() {
-        AiReviewLlmTaskHandler handler = new AiReviewLlmTaskHandler(aiAutoReviewService, aiReviewResultMapper);
+        AiReviewLlmTaskHandler handler = new AiReviewLlmTaskHandler(
+                aiAutoReviewService, aiReviewResultMapper, submissionMapper);
         when(aiReviewResultMapper.selectBySubmissionId(100L)).thenReturn(result(AiReviewStatus.SUCCESS));
 
         assertThat(handler.isCompleted(message())).isTrue();
@@ -33,7 +36,8 @@ class AiReviewLlmTaskHandlerTest {
 
     @Test
     void completedWhenFailedOrRateLimitedResultHasNoNextRetry() {
-        AiReviewLlmTaskHandler handler = new AiReviewLlmTaskHandler(aiAutoReviewService, aiReviewResultMapper);
+        AiReviewLlmTaskHandler handler = new AiReviewLlmTaskHandler(
+                aiAutoReviewService, aiReviewResultMapper, submissionMapper);
         when(aiReviewResultMapper.selectBySubmissionId(100L))
                 .thenReturn(result(AiReviewStatus.FAILED))
                 .thenReturn(result(AiReviewStatus.RATE_LIMITED));
@@ -44,7 +48,8 @@ class AiReviewLlmTaskHandlerTest {
 
     @Test
     void notCompletedWhenFailedOrRateLimitedResultCanBeRetried() {
-        AiReviewLlmTaskHandler handler = new AiReviewLlmTaskHandler(aiAutoReviewService, aiReviewResultMapper);
+        AiReviewLlmTaskHandler handler = new AiReviewLlmTaskHandler(
+                aiAutoReviewService, aiReviewResultMapper, submissionMapper);
         when(aiReviewResultMapper.selectBySubmissionId(100L))
                 .thenReturn(retryableResult(AiReviewStatus.FAILED))
                 .thenReturn(retryableResult(AiReviewStatus.RATE_LIMITED));
@@ -55,7 +60,8 @@ class AiReviewLlmTaskHandlerTest {
 
     @Test
     void handleExecutesQueuedReviewWhenResultIsMissing() {
-        AiReviewLlmTaskHandler handler = new AiReviewLlmTaskHandler(aiAutoReviewService, aiReviewResultMapper);
+        AiReviewLlmTaskHandler handler = new AiReviewLlmTaskHandler(
+                aiAutoReviewService, aiReviewResultMapper, submissionMapper);
         when(aiReviewResultMapper.selectBySubmissionId(100L)).thenReturn(null);
 
         handler.handle(message());
@@ -66,13 +72,24 @@ class AiReviewLlmTaskHandlerTest {
 
     @Test
     void handleRetriesWhenResultIsRetryableFailure() {
-        AiReviewLlmTaskHandler handler = new AiReviewLlmTaskHandler(aiAutoReviewService, aiReviewResultMapper);
+        AiReviewLlmTaskHandler handler = new AiReviewLlmTaskHandler(
+                aiAutoReviewService, aiReviewResultMapper, submissionMapper);
         when(aiReviewResultMapper.selectBySubmissionId(100L)).thenReturn(result(AiReviewStatus.FAILED));
 
         handler.handle(message());
 
         verify(aiAutoReviewService).retryReview(100L);
         verify(aiAutoReviewService, never()).executeQueuedReview(100L, 300L);
+    }
+
+    @Test
+    void completedWhenResultAndSubmissionAreMissing() {
+        AiReviewLlmTaskHandler handler = new AiReviewLlmTaskHandler(
+                aiAutoReviewService, aiReviewResultMapper, submissionMapper);
+        when(aiReviewResultMapper.selectBySubmissionId(100L)).thenReturn(null);
+        when(submissionMapper.selectById(100L)).thenReturn(null);
+
+        assertThat(handler.isCompleted(message())).isTrue();
     }
 
     private AiReviewResult result(AiReviewStatus status) {

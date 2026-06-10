@@ -18,10 +18,17 @@ import { useEffect, useMemo, useState } from 'react'
 import { ContentShell } from '../../components/page/ContentShell'
 import { PageHeader } from '../../components/page/PageHeader'
 import { useReviewStore } from '../../stores/reviewStore'
+import {
+  formatAiReviewStatusLabel,
+  isManualAiReviewValue,
+  isManualRequiredStatus,
+  isManualReviewDecision,
+} from '../../services/review/reviewMappers'
 import type {
   AiReviewLogQuery,
   AiReviewQueueStatusFilter,
   AiReviewResultResponse,
+  AiReviewTraceStep,
   SubmissionItemHistoryResponse,
   SubmissionItemReviewRoundHistory,
 } from '../../types/review'
@@ -41,7 +48,8 @@ const statusColors: Record<string, string> = {
   SUCCESS: 'success',
   COMPLETED: 'success',
   FAILED: 'error',
-  MANUAL_REQUIRED: 'warning',
+  MANUAL_REQUIRED: 'error',
+  MANUAL_REVIEW: 'processing',
 }
 
 const decisionColors: Record<string, string> = {
@@ -49,6 +57,7 @@ const decisionColors: Record<string, string> = {
   REJECT: 'error',
   RETURN: 'error',
   MANUAL_REVIEW: 'processing',
+  MANUAL_REQUIRED: 'error',
 }
 
 const decisionLabels: Record<string, string> = {
@@ -75,16 +84,6 @@ function formatValue(value: unknown) {
   }
 
   return String(value)
-}
-
-function formatCount(value: unknown) {
-  const numberValue = Number(value ?? 0)
-
-  if (Number.isNaN(numberValue)) {
-    return '0'
-  }
-
-  return numberValue.toLocaleString('zh-CN')
 }
 
 function formatJson(value: unknown) {
@@ -194,7 +193,7 @@ function getDimensionEntries(record: AiReviewResultResponse | null) {
 function getAuditResultLabel(value: unknown) {
   const text = formatValue(value)
 
-  return auditActionLabels[text] ?? decisionLabels[text] ?? text
+  return isManualAiReviewValue(text) ? formatAiReviewStatusLabel(text) : auditActionLabels[text] ?? decisionLabels[text] ?? text
 }
 
 function getAuditResultColor(value: unknown) {
@@ -208,11 +207,45 @@ function getAuditResultColor(value: unknown) {
     return 'error'
   }
 
-  if (text === 'MANUAL_REVIEW' || text === 'MARK_MANUAL_REQUIRED') {
+  if (isManualRequiredStatus(text)) {
+    return 'error'
+  }
+
+  if (isManualReviewDecision(text) || text === 'MARK_MANUAL_REQUIRED') {
     return 'processing'
   }
 
   return 'default'
+}
+
+function formatMetricValue(value: unknown) {
+  if (value === undefined || value === null || value === '') {
+    return '-'
+  }
+
+  if (typeof value === 'object') {
+    return formatJson(value)
+  }
+
+  return String(value)
+}
+
+function getTraceStepColor(step: AiReviewTraceStep) {
+  const status = step.status?.toUpperCase()
+
+  if (status === 'SUCCESS' || status === 'COMPLETED') {
+    return 'green'
+  }
+
+  if (status === 'FAILED') {
+    return 'red'
+  }
+
+  if (status === 'RUNNING' || status === 'PENDING') {
+    return 'blue'
+  }
+
+  return 'gray'
 }
 
 function getReviewerLabel(round: SubmissionItemReviewRoundHistory) {
@@ -228,14 +261,14 @@ function getHistoryAuditItems(history: SubmissionItemHistoryResponse | null) {
     const versionLabel = `v${formatValue(item.versionNo)} / SUB-${formatValue(item.submissionId)}`
     const aiItem = item.aiReview
       ? [
-          {
-            key: `${item.submissionId}-ai`,
-            versionLabel,
-            result: item.aiReview.decision ?? item.aiReview.status,
-            reviewer: 'AI 自动预审',
-            reviewedAt: item.aiReview.reviewedAt,
-          },
-        ]
+        {
+          key: `${item.submissionId}-ai`,
+          versionLabel,
+          result: item.aiReview.decision ?? item.aiReview.status,
+          reviewer: 'AI 自动预审',
+          reviewedAt: item.aiReview.reviewedAt,
+        },
+      ]
       : []
     const reviewItems = (item.reviewRounds ?? []).map((round) => ({
       key: `${item.submissionId}-${round.reviewRecordId}`,
@@ -279,19 +312,35 @@ export function ReviewerAiReviewQueuePage() {
     }
   }, [currentAiReviewLog?.submissionId, loadSubmissionItemHistory])
 
+  const selectedLogBelongsToCurrentList = useMemo(() => {
+    if (!currentAiReviewLog?.submissionId) {
+      return false
+    }
+
+    return aiReviewLogs.some((record) => String(record.submissionId) === String(currentAiReviewLog.submissionId))
+  }, [aiReviewLogs, currentAiReviewLog?.submissionId])
+
+  useEffect(() => {
+    if (currentAiReviewLog?.submissionId && selectedLogBelongsToCurrentList) {
+      void loadSubmissionAiReview(String(currentAiReviewLog.submissionId))
+    }
+  }, [currentAiReviewLog?.submissionId, loadSubmissionAiReview, selectedLogBelongsToCurrentList])
+
   const dimensionEntries = useMemo(() => getDimensionEntries(currentAiReviewLog), [currentAiReviewLog])
   const riskFlags = useMemo(() => getRiskFlags(currentAiReviewLog), [currentAiReviewLog])
   const historyAuditItems = useMemo(() => getHistoryAuditItems(currentSubmissionItemHistory), [currentSubmissionItemHistory])
   const selectedAverageScore = toPercent(currentAiReviewLog?.averageScore)
   const selectedDecision = formatValue(currentAiReviewLog?.decision)
-  const selectedDecisionLabel = decisionLabels[selectedDecision] ?? selectedDecision
+  const selectedDecisionLabel = isManualAiReviewValue(selectedDecision)
+    ? formatAiReviewStatusLabel(selectedDecision)
+    : decisionLabels[selectedDecision] ?? selectedDecision
+  const reviewTrace = currentAiReviewLog?.reviewTrace ?? null
+  const reviewTraceSteps = reviewTrace?.steps ?? []
+  const reviewTraceMetrics = Object.entries(reviewTrace?.metrics ?? {}).filter(([, value]) => value !== undefined && value !== null && value !== '')
+  const reviewTraceTitle = reviewTrace?.strategyLabel ?? reviewTrace?.strategy ?? 'AI 审核策略'
 
   const selectRecord = (record: AiReviewResultResponse) => {
     setCurrentAiReviewLog(record)
-
-    if (record.submissionId) {
-      void loadSubmissionAiReview(String(record.submissionId))
-    }
   }
 
   const changeStatus = (value: AiReviewQueueStatusFilter) => {
@@ -350,7 +399,7 @@ export function ReviewerAiReviewQueuePage() {
               onChange={(value) => changeStatus(value as AiReviewQueueStatusFilter)}
             />
 
-            <div className={styles.aiQueueStats}>
+            {/* <div className={styles.aiQueueStats}>
               <span className={styles.aiPulse} />
               <div>
                 <strong>{formatCount(aiReviewLogTotal)}</strong>
@@ -364,7 +413,7 @@ export function ReviewerAiReviewQueuePage() {
                 <strong>1.2%</strong>
                 <span>重试率</span>
               </div>
-            </div>
+            </div> */}
 
             <List
               className={styles.aiQueueList}
@@ -377,7 +426,7 @@ export function ReviewerAiReviewQueuePage() {
                 const recordTitle = record.taskTitle ? record.taskTitle : `提交 ${formatValue(record.submissionId ?? record.agentRunId)}`
                 const averageScore = toPercent(record.averageScore)
                 const decision = formatValue(record.decision)
-                const decisionLabel = decisionLabels[decision] ?? decision
+                const decisionLabel = isManualAiReviewValue(decision) ? formatAiReviewStatusLabel(decision) : decisionLabels[decision] ?? decision
 
                 return (
                   <List.Item
@@ -398,7 +447,7 @@ export function ReviewerAiReviewQueuePage() {
                       </Typography.Text>
                       <div className={styles.aiItemMeta}>
                         <Tag color={decisionColors[decision] ?? 'default'}>{decisionLabel}</Tag>
-                        <Tag color={statusColors[record.aiReviewStatus] ?? 'default'}>{formatValue(record.aiReviewStatus)}</Tag>
+                        <Tag color={statusColors[record.aiReviewStatus] ?? 'default'}>{formatAiReviewStatusLabel(record.aiReviewStatus)}</Tag>
                         <Typography.Text type="secondary">分数 {formatValue(averageScore)}</Typography.Text>
                       </div>
                     </div>
@@ -474,7 +523,7 @@ export function ReviewerAiReviewQueuePage() {
                   <Tag color={decisionColors[selectedDecision] ?? 'default'}>{selectedDecisionLabel}</Tag>
                   <Typography.Text type="secondary">阈值：综合 &lt; 70 时建议打回</Typography.Text>
                 </div>
-                <Typography.Paragraph>{formatValue(currentAiReviewLog.suggestion)}</Typography.Paragraph>
+                <Typography.Paragraph className={styles.aiReadableText}>{formatValue(currentAiReviewLog.suggestion)}</Typography.Paragraph>
                 {riskFlags.length ? (
                   <Space wrap size={[6, 6]}>
                     {riskFlags.map((flag) => (
@@ -489,6 +538,55 @@ export function ReviewerAiReviewQueuePage() {
               </Space>
             ) : (
               <Empty description="请选择一条 AI 审核记录" />
+            )}
+          </Card>
+
+          <Card
+            title="AI 审核策略"
+            extra={reviewTrace ? <Tag color="processing">{formatValue(reviewTraceTitle)}</Tag> : null}
+          >
+            {reviewTrace ? (
+              <Space direction="vertical" size={12} className={styles.panelStack}>
+                <Typography.Paragraph className={styles.aiReadableText}>{formatValue(reviewTrace.summary)}</Typography.Paragraph>
+                {reviewTraceMetrics.length > 0 ? (
+                  <Space wrap size={[6, 6]}>
+                    {reviewTraceMetrics.map(([key, value]) => (
+                      <Tag key={key}>
+                        {key}: {formatMetricValue(value)}
+                      </Tag>
+                    ))}
+                  </Space>
+                ) : (
+                  <Typography.Text type="secondary">暂无策略指标</Typography.Text>
+                )}
+                {reviewTraceSteps.length > 0 ? (
+                  <Timeline
+                    items={reviewTraceSteps.map((step, index) => ({
+                      color: getTraceStepColor(step),
+                      children: (
+                        <Space direction="vertical" size={4}>
+                          <Space wrap size={[6, 6]}>
+                            <Typography.Text strong>{formatValue(step.name || `步骤 ${index + 1}`)}</Typography.Text>
+                            <Tag>{formatValue(step.role)}</Tag>
+                            <Tag color={decisionColors[formatValue(step.decision)] ?? 'default'}>
+                              {formatAiReviewStatusLabel(formatValue(step.decision))}
+                            </Tag>
+                            <Tag color={statusColors[formatValue(step.status)] ?? 'default'}>{formatAiReviewStatusLabel(formatValue(step.status))}</Tag>
+                          </Space>
+                          <Typography.Text type="secondary">
+                            分数 {formatValue(step.score)} · 置信度 {formatValue(step.confidence)}
+                          </Typography.Text>
+                          <Typography.Text className={styles.aiReadableText}>{formatValue(step.reason)}</Typography.Text>
+                        </Space>
+                      ),
+                    }))}
+                  />
+                ) : (
+                  <Empty description="暂无策略步骤" />
+                )}
+              </Space>
+            ) : (
+              <Empty description="暂无策略过程" />
             )}
           </Card>
 
@@ -517,7 +615,7 @@ export function ReviewerAiReviewQueuePage() {
                         <Tag color={getAuditResultColor(item.result)}>{getAuditResultLabel(item.result)}</Tag>
                         <Typography.Text type="secondary">{item.versionLabel}</Typography.Text>
                       </Space>
-                      <Typography.Text>{item.reviewer}</Typography.Text>
+                      <Typography.Text className={styles.aiReadableText}>{item.reviewer}</Typography.Text>
                       <Typography.Text type="secondary">{formatValue(item.reviewedAt)}</Typography.Text>
                     </Space>
                   ),

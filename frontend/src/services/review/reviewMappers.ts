@@ -21,6 +21,35 @@ const AI_DECISION_LABELS: Record<string, string> = {
   PASS: 'AI 已建议通过',
   REJECT: 'AI 已建议打回',
   MANUAL_REVIEW: '转人工',
+  MANUAL_REQUIRED: '人工复核',
+}
+
+export function isManualRequiredStatus(value?: string | null) {
+  const normalizedValue = value?.toUpperCase()
+
+  return normalizedValue === 'MANUAL_REQUIRED'
+}
+
+export function isManualReviewDecision(value?: string | null) {
+  const normalizedValue = value?.toUpperCase()
+
+  return normalizedValue === 'MANUAL_REVIEW'
+}
+
+export function isManualAiReviewValue(value?: string | null) {
+  return isManualRequiredStatus(value) || isManualReviewDecision(value)
+}
+
+export function formatAiReviewStatusLabel(value?: string | null) {
+  if (isManualRequiredStatus(value)) {
+    return '人工复核'
+  }
+
+  if (isManualReviewDecision(value)) {
+    return '转人工'
+  }
+
+  return value ?? '-'
 }
 
 export function normalizeAiDecision(decision?: string): ReviewQueueItem['aiDecision'] {
@@ -234,6 +263,13 @@ export function mapReviewerAiReviewStatusToResult(item: ReviewerAiReviewStatusIt
 
 export function normalizeAiReviewResultResponse(item: AiReviewResultResponse): AiReviewResultResponse {
   const dimensionScores = item.dimensionScores ?? Object.fromEntries((item.dimensions ?? []).map((dimension) => [dimension.name, dimension.score]))
+  const reviewTrace = item.reviewTrace
+    ? {
+        ...item.reviewTrace,
+        steps: item.reviewTrace.steps ?? [],
+        metrics: item.reviewTrace.metrics ?? {},
+      }
+    : item.reviewTrace ?? null
 
   return {
     ...item,
@@ -242,12 +278,17 @@ export function normalizeAiReviewResultResponse(item: AiReviewResultResponse): A
     dimensionScores,
     riskFlags: Array.isArray(item.riskFlags) ? item.riskFlags : parseRiskFlags(item.riskFlags),
     promptSnapshot: item.promptSnapshot ?? item.rawPrompt,
+    reviewTrace,
   }
 }
 
 export function matchesAiReviewLogQuery(item: AiReviewResultResponse, query: AiReviewLogQuery) {
   const matchesStatus = !query.status || item.aiReviewStatus === query.status
-  const matchesDecision = !query.decision || item.decision === query.decision
+  const matchesDecision = !query.decision || (
+    query.decision === 'MANUAL_REVIEW'
+      ? item.decision === query.decision || isManualAiReviewValue(item.aiReviewStatus)
+      : item.decision === query.decision
+  )
 
   return matchesStatus && matchesDecision
 }

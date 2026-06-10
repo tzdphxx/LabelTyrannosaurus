@@ -55,6 +55,8 @@ function mapMockAssignmentStatus(task: LabelerTaskSummary): LabelerAssignmentSta
       return 'CLAIMED'
     case 'in_progress':
       return 'DRAFTING'
+    case 'paused':
+      return 'PAUSED'
     case 'submitted':
       return 'SUBMITTED'
     case 'rejected':
@@ -62,7 +64,7 @@ function mapMockAssignmentStatus(task: LabelerTaskSummary): LabelerAssignmentSta
     case 'approved':
       return 'APPROVED'
     case 'ended':
-      return 'CANCELLED'
+      return 'ENDED'
     case 'available':
     default:
       return null

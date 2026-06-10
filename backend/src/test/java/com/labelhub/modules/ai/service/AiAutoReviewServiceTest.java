@@ -125,6 +125,7 @@ class AiAutoReviewServiceTest {
         VoteAggregator voteAggregator = new VoteAggregator();
         ReflectionTestUtils.setField(service, "voteAggregator", voteAggregator);
         ReflectionTestUtils.setField(service, "dimensionAggregator", new DimensionAggregator(voteAggregator));
+        ReflectionTestUtils.setField(service, "reviewTraceBuilder", new ReviewTraceBuilder());
         org.mockito.Mockito.lenient()
                 .when(promptTemplateEngine.buildReviewPrompt(
                         org.mockito.ArgumentMatchers.any(),
@@ -188,6 +189,7 @@ class AiAutoReviewServiceTest {
         assertThat(resultCaptor.getValue().getPromptMode()).isEqualTo("TEXT_ONLY");
         assertThat(resultCaptor.getValue().getDegraded()).isFalse();
         assertThat(resultCaptor.getValue().getRawResponse()).isEqualTo("{\"decision\":\"PASS\"}");
+        assertThat(resultCaptor.getValue().getReviewTrace()).contains("\"strategy\":\"LIGHTWEIGHT\"");
         ArgumentCaptor<Submission> submissionCaptor = ArgumentCaptor.forClass(Submission.class);
         verify(submissionMapper).updateById(submissionCaptor.capture());
         assertThat(submissionCaptor.getValue().getStatus()).isEqualTo(SubmissionStatus.PENDING_FINAL);
@@ -710,7 +712,7 @@ class AiAutoReviewServiceTest {
         verify(agentRunService).complete(eq(AGENT_RUN_ID), any());
         verify(aiReviewResultMapper).updateForSuccess(eq(SUBMISSION_ID), eq("SUCCESS"),
                 eq(AGENT_RUN_ID), eq("PASS"), any(), any(), any(), any(), any(),
-                any(), any(), any(), any(), any());
+                any(), any(), any(), eq("TEXT_ONLY"), eq(false), eq("[]"));
         verify(auditAppender).append(any(AuditCommand.class));
     }
 
@@ -721,12 +723,18 @@ class AiAutoReviewServiceTest {
         existing.setEffectiveRunId(AGENT_RUN_ID);
         existing.setStatus(AiReviewStatus.SUCCESS);
         existing.setDecision("PASS");
+        existing.setReviewTrace("""
+                {"strategy":"PARALLEL_VOTE","strategyLabel":"Parallel model vote","summary":"3 branches","steps":[],"metrics":{"voteCount":3}}
+                """);
         when(aiReviewResultMapper.selectBySubmissionId(SUBMISSION_ID)).thenReturn(existing);
 
         AiReviewResultResponse response = service.reviewSubmission(SUBMISSION_ID);
 
         assertThat(response.status()).isEqualTo(AiReviewStatus.SUCCESS);
         assertThat(response.agentRunId()).isEqualTo(AGENT_RUN_ID);
+        assertThat(response.reviewTrace()).isNotNull();
+        assertThat(response.reviewTrace().strategy()).isEqualTo("PARALLEL_VOTE");
+        assertThat(response.reviewTrace().metrics()).containsEntry("voteCount", 3);
         verify(llmGateway, never()).review(any());
         verify(aiReviewResultMapper, never()).insert(any(AiReviewResult.class));
     }

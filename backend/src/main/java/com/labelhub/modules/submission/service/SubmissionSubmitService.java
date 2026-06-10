@@ -11,6 +11,7 @@ import com.labelhub.common.web.TraceIdProvider;
 import com.labelhub.modules.agent.domain.AgentRun;
 import com.labelhub.modules.agent.domain.AgentRunStatus;
 import com.labelhub.modules.agent.mapper.AgentRunMapper;
+import com.labelhub.modules.ai.mapper.AiReviewResultMapper;
 import com.labelhub.modules.ai.service.AiReviewDispatcher;
 import com.labelhub.modules.assignment.domain.Assignment;
 import com.labelhub.modules.assignment.domain.AssignmentStatus;
@@ -33,6 +34,8 @@ import java.util.Set;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 @Service
 public class SubmissionSubmitService {
@@ -55,6 +58,7 @@ public class SubmissionSubmitService {
     private final SubmissionMapper submissionMapper;
     private final TaskMapper taskMapper;
     private final AgentRunMapper agentRunMapper;
+    private final AiReviewResultMapper aiReviewResultMapper;
     private final AnswerSchemaValidator answerSchemaValidator;
     private final AuditAppender auditAppender;
     private final AiReviewDispatcher aiReviewDispatcher;
@@ -67,12 +71,13 @@ public class SubmissionSubmitService {
                                    SubmissionMapper submissionMapper,
                                    TaskMapper taskMapper,
                                    AgentRunMapper agentRunMapper,
+                                   AiReviewResultMapper aiReviewResultMapper,
                                    AnswerSchemaValidator answerSchemaValidator,
                                    AuditAppender auditAppender,
                                    AiReviewDispatcher aiReviewDispatcher,
                                    DatasetClaimService datasetClaimService,
                                    TraceIdProvider traceIdProvider) {
-        this(assignmentMapper, submissionMapper, taskMapper, agentRunMapper, answerSchemaValidator, auditAppender,
+        this(assignmentMapper, submissionMapper, taskMapper, agentRunMapper, aiReviewResultMapper, answerSchemaValidator, auditAppender,
                 aiReviewDispatcher, datasetClaimService, new ObjectMapper(), traceIdProvider);
     }
 
@@ -80,6 +85,7 @@ public class SubmissionSubmitService {
                             SubmissionMapper submissionMapper,
                             TaskMapper taskMapper,
                             AgentRunMapper agentRunMapper,
+                            AiReviewResultMapper aiReviewResultMapper,
                             AnswerSchemaValidator answerSchemaValidator,
                             AuditAppender auditAppender,
                             AiReviewDispatcher aiReviewDispatcher,
@@ -90,6 +96,7 @@ public class SubmissionSubmitService {
         this.submissionMapper = submissionMapper;
         this.taskMapper = taskMapper;
         this.agentRunMapper = agentRunMapper;
+        this.aiReviewResultMapper = aiReviewResultMapper;
         this.answerSchemaValidator = answerSchemaValidator;
         this.auditAppender = auditAppender;
         this.aiReviewDispatcher = aiReviewDispatcher;
@@ -111,6 +118,7 @@ public class SubmissionSubmitService {
         String answerHash = sha256(canonicalAnswerJson);
         Submission latestActive = submissionMapper.selectLatestActiveByAssignmentId(assignmentId);
         if (latestActive != null && Objects.equals(latestActive.getAnswerHash(), answerHash)) {
+            enqueueMissingAiReviewIfNeeded(latestActive);
             return toResponse(latestActive, null);
         }
         Submission latest = submissionMapper.selectLatestByAssignmentId(assignmentId);
@@ -130,9 +138,30 @@ public class SubmissionSubmitService {
         }
         AgentRun agentRun = createPendingAiReviewRun(submission, task);
         appendSubmitAudit(assignment, submission, agentRun.getId());
-        aiReviewDispatcher.enqueue(submission.getId());
+        enqueueAiReviewAfterCommit(submission.getId());
         datasetClaimService.increaseSubmittedCount(submission.getDatasetItemId());
         return toResponse(submission, agentRun.getId());
+    }
+
+    private void enqueueAiReviewAfterCommit(Long submissionId) {
+        if (TransactionSynchronizationManager.isSynchronizationActive()
+                && TransactionSynchronizationManager.isActualTransactionActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    aiReviewDispatcher.enqueue(submissionId);
+                }
+            });
+            return;
+        }
+        aiReviewDispatcher.enqueue(submissionId);
+    }
+
+    private void enqueueMissingAiReviewIfNeeded(Submission submission) {
+        if (submission.getStatus() == SubmissionStatus.AI_REVIEWING
+                && aiReviewResultMapper.selectBySubmissionId(submission.getId()) == null) {
+            enqueueAiReviewAfterCommit(submission.getId());
+        }
     }
 
     private Assignment loadOwnedAssignment(Long assignmentId, Long labelerId) {

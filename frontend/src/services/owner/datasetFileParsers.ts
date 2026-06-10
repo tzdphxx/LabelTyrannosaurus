@@ -1,4 +1,3 @@
-import { read, utils } from 'xlsx'
 import type { DatasetSampleRow, ImportIssue, ImportPreview } from '../../types/import'
 
 type DatasetFileType = ImportPreview['fileType']
@@ -152,6 +151,7 @@ export async function parseJsonlDatasetFile(file: File): Promise<ImportPreview> 
 
 export async function parseExcelDatasetFile(file: File): Promise<ImportPreview> {
   try {
+    const { read, utils } = await import('xlsx')
     const workbook = read(await file.arrayBuffer())
     const sheetName = workbook.SheetNames[0]
 

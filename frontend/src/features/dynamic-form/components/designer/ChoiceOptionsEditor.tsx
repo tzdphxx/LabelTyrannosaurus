@@ -3,7 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { DynamicFieldOption } from '../../../../types/dynamicForm'
 import { getDuplicateOptionValues, optionsToText, textToOptions } from '../../utils/designerFields'
 
-const COMMIT_DELAY_MS = 300
+const COMMIT_DELAY_MS = 120
 
 interface ChoiceOptionsEditorProps {
   nodeId: string

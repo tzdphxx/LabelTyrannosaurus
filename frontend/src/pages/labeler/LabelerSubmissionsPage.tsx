@@ -5,11 +5,15 @@ import { useNavigate } from 'react-router'
 import { ContentShell } from '../../components/page/ContentShell'
 import { PageHeader } from '../../components/page/PageHeader'
 import { useLabelingStore } from '../../stores/labelingStore'
-import type { LabelerAssignmentQueryStatus, LabelerAssignmentSummary } from '../../types/labeling'
+import type { LabelerAssignmentSummary } from '../../types/labeling'
+
+type AssignmentStatusFilter = Extract<LabelerAssignmentSummary['status'], 'CLAIMED' | 'PAUSED' | 'ENDED'>
 
 const statusLabels: Record<LabelerAssignmentSummary['status'], string> = {
   CLAIMED: '已领取',
   DRAFTING: '草稿中',
+  PAUSED: '已暂停',
+  ENDED: '已结束',
   SUBMITTED: '已提交',
   AI_RETURNED: 'AI 退回',
   RETURNED: '待修改',
@@ -20,6 +24,8 @@ const statusLabels: Record<LabelerAssignmentSummary['status'], string> = {
 const statusColors: Record<LabelerAssignmentSummary['status'], string> = {
   CLAIMED: 'warning',
   DRAFTING: 'processing',
+  PAUSED: 'default',
+  ENDED: 'default',
   SUBMITTED: 'geekblue',
   AI_RETURNED: 'error',
   RETURNED: 'error',
@@ -27,19 +33,18 @@ const statusColors: Record<LabelerAssignmentSummary['status'], string> = {
   CANCELLED: 'default',
 }
 
-const statusOptions: Array<{ label: string; value: LabelerAssignmentQueryStatus }> = [
-  { label: '全部状态', value: 'all' },
+const statusOptions: Array<{ label: string; value: AssignmentStatusFilter }> = [
   { label: '已领取', value: 'CLAIMED' },
-  { label: '草稿中', value: 'DRAFTING' },
-  { label: '已提交', value: 'SUBMITTED' },
-  { label: 'AI 退回', value: 'AI_RETURNED' },
-  { label: '待修改', value: 'RETURNED' },
-  { label: '已通过', value: 'APPROVED' },
-  { label: '已取消', value: 'CANCELLED' },
+  { label: '已暂停', value: 'PAUSED' },
+  { label: '已结束', value: 'ENDED' },
 ]
 
 function canOpenWorkbench(status: LabelerAssignmentSummary['status']) {
-  return status !== 'CANCELLED'
+  return status !== 'CANCELLED' && status !== 'PAUSED' && status !== 'ENDED'
+}
+
+function canViewAssignment(status: LabelerAssignmentSummary['status']) {
+  return status !== 'PAUSED'
 }
 
 export function LabelerSubmissionsPage() {
@@ -50,27 +55,29 @@ export function LabelerSubmissionsPage() {
   const isAssignmentsLoading = useLabelingStore((state) => state.isAssignmentsLoading)
   const loadAssignments = useLabelingStore((state) => state.loadAssignments)
   const [keyword, setKeyword] = useState('')
-  const [status, setStatus] = useState<LabelerAssignmentQueryStatus>('all')
+  const [status, setStatus] = useState<AssignmentStatusFilter | undefined>()
   const [previewAssignment, setPreviewAssignment] = useState<LabelerAssignmentSummary | null>(null)
 
   useEffect(() => {
-    void loadAssignments({ status, page: 1, size: 100 })
-  }, [loadAssignments, status])
+    void loadAssignments({ page: 1, size: 100 })
+  }, [loadAssignments])
 
   const filteredAssignments = useMemo(() => {
     const normalizedKeyword = keyword.trim().toLowerCase()
 
     return assignments.filter((assignment) => {
       if (normalizedKeyword.length === 0) {
-        return true
+        return !status || assignment.status === status
       }
 
-      return (
+      const matchesKeyword = (
         assignment.taskTitle.toLowerCase().includes(normalizedKeyword) ||
         assignment.taskId.includes(normalizedKeyword)
       )
+
+      return matchesKeyword && (!status || assignment.status === status)
     })
-  }, [assignments, keyword])
+  }, [assignments, keyword, status])
 
   return (
     <main className="labeler-page">
@@ -79,7 +86,7 @@ export function LabelerSubmissionsPage() {
           title="我的领取"
           description="查看当前账号已领取的任务，继续未完成草稿或处理被退回的题目。"
           extra={
-            <Button icon={<ReloadOutlined />} loading={isAssignmentsLoading} onClick={() => void loadAssignments({ status, page: 1, size: 100 })}>
+            <Button icon={<ReloadOutlined />} loading={isAssignmentsLoading} onClick={() => void loadAssignments({ page: 1, size: 100 })}>
               刷新
             </Button>
           }
@@ -117,8 +124,10 @@ export function LabelerSubmissionsPage() {
             onSearch={setKeyword}
           />
           <Select
+            allowClear
             className="labeler-toolbar__select"
             options={statusOptions}
+            placeholder="状态筛选"
             value={status}
             onChange={setStatus}
           />
@@ -150,11 +159,6 @@ export function LabelerSubmissionsPage() {
               render: (_, assignment) => `${assignment.mySubmittedCount ?? 0} / ${assignment.myApprovedCount ?? 0}`,
             },
             {
-              title: '最近领取',
-              dataIndex: 'claimedAt',
-              width: 150,
-            },
-            {
               title: '更新时间',
               dataIndex: 'updatedAt',
               width: 150,
@@ -164,7 +168,12 @@ export function LabelerSubmissionsPage() {
               width: 190,
               render: (_, assignment) => (
                 <Space wrap>
-                  <Button icon={<EyeOutlined />} size="small" onClick={() => setPreviewAssignment(assignment)}>
+                  <Button
+                    disabled={!canViewAssignment(assignment.status)}
+                    icon={<EyeOutlined />}
+                    size="small"
+                    onClick={() => setPreviewAssignment(assignment)}
+                  >
                     查看
                   </Button>
                   <Button

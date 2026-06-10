@@ -13,3 +13,16 @@ if (!window.requestAnimationFrame) {
 if (!window.cancelAnimationFrame) {
   window.cancelAnimationFrame = (handle) => window.clearTimeout(handle)
 }
+
+if (!window.matchMedia) {
+  window.matchMedia = () => ({
+    matches: false,
+    media: '',
+    onchange: null,
+    addListener: () => undefined,
+    removeListener: () => undefined,
+    addEventListener: () => undefined,
+    removeEventListener: () => undefined,
+    dispatchEvent: () => false,
+  })
+}

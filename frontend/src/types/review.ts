@@ -125,6 +125,7 @@ export interface ReviewerTaskItemQuery {
   itemStatus?: string
   submissionStatus?: string
   aiDecision?: string
+  submittedOnly?: boolean
   keyword?: string
   page: number
   size: number

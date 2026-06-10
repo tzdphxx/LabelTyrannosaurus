@@ -55,6 +55,7 @@ public interface ReviewerTaskItemMapper {
                            WHEN a.status = 'CLAIMED' THEN 'CLAIMED'
                            ELSE 'UNCLAIMED'
                        END AS item_status,
+                       s.id AS latest_submission_id,
                        s.status AS submission_status,
                        ar.decision AS ai_decision
                 FROM dataset_items di
@@ -82,6 +83,7 @@ public interface ReviewerTaskItemMapper {
             <if test="itemStatus != null"> AND base.item_status = #{itemStatus}</if>
             <if test="submissionStatus != null"> AND base.submission_status = #{submissionStatus}</if>
             <if test="aiDecision != null"> AND base.ai_decision = #{aiDecision}</if>
+            <if test="submittedOnly"> AND base.latest_submission_id IS NOT NULL</if>
             <if test="keyword != null">
               AND (
                 base.external_id LIKE CONCAT('%', #{keyword}, '%')
@@ -95,7 +97,8 @@ public interface ReviewerTaskItemMapper {
                         @Param("itemStatus") String itemStatus,
                         @Param("submissionStatus") String submissionStatus,
                         @Param("aiDecision") String aiDecision,
-                        @Param("keyword") String keyword);
+                        @Param("keyword") String keyword,
+                        @Param("submittedOnly") boolean submittedOnly);
 
     @Select("""
             <script>
@@ -195,6 +198,7 @@ public interface ReviewerTaskItemMapper {
             <if test="itemStatus != null"> AND base.item_status = #{itemStatus}</if>
             <if test="submissionStatus != null"> AND base.submission_status = #{submissionStatus}</if>
             <if test="aiDecision != null"> AND base.ai_decision = #{aiDecision}</if>
+            <if test="submittedOnly"> AND base.latest_submission_id IS NOT NULL</if>
             <if test="keyword != null">
               AND (
                 base.external_id LIKE CONCAT('%', #{keyword}, '%')
@@ -213,6 +217,7 @@ public interface ReviewerTaskItemMapper {
             @Param("submissionStatus") String submissionStatus,
             @Param("aiDecision") String aiDecision,
             @Param("keyword") String keyword,
+            @Param("submittedOnly") boolean submittedOnly,
             @Param("offset") int offset,
             @Param("limit") int limit);
 

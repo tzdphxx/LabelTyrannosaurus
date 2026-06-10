@@ -60,6 +60,7 @@ public class ReviewerWorkspaceController {
             @RequestParam(required = false) String submissionStatus,
             @RequestParam(required = false) String aiDecision,
             @RequestParam(required = false) String keyword,
+            @RequestParam(defaultValue = "false") boolean submittedOnly,
             @RequestParam(defaultValue = "1") int page,
             @RequestParam(defaultValue = "20") int size) {
         CurrentUserContext.requireRole(RoleCode.REVIEWER);
@@ -67,7 +68,7 @@ public class ReviewerWorkspaceController {
         int safePage = Math.max(1, page);
         int safeSize = Math.max(1, Math.min(size, 100));
         return ApiResponse.ok(taskItemQueryService.queryTaskItems(
-                taskId, reviewerId, itemStatus, submissionStatus, aiDecision, keyword, safePage, safeSize));
+                taskId, reviewerId, itemStatus, submissionStatus, aiDecision, keyword, submittedOnly, safePage, safeSize));
     }
 
     @GetMapping("/dashboard")

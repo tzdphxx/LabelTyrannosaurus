@@ -243,6 +243,7 @@ public class AiAutoReviewService {
             } else {
                 result = handleFailure(prepared.submission(), prepared.config(),
                         prepared.agentRun(), prepared.prompt().promptSnapshot(), finalOutcome, 0);
+                closeFailedAgentRunIfActive(prepared.agentRun().getId(), result);
             }
             if (result.getStatus() == AiReviewStatus.SUCCESS && flowDecisionService != null) {
                 AiFlowAction flowAction = flowDecisionService.decide(result, prepared.config());
@@ -657,6 +658,27 @@ public class AiAutoReviewService {
         });
     }
 
+    public void failRetryReview(Long submissionId, String errorCode, String errorMessage) {
+        transactionTemplate.executeWithoutResult(status -> {
+            AiReviewResult existing = aiReviewResultMapper.selectBySubmissionId(submissionId);
+            if (existing == null) {
+                return;
+            }
+            Submission submission = loadSubmission(submissionId);
+            Task task = taskMapper.selectById(submission.getTaskId());
+            AiReviewConfig config = task != null && task.getAiReviewConfigId() != null
+                    ? aiReviewConfigMapper.selectById(task.getAiReviewConfigId()) : null;
+            existing.setStatus(AiReviewStatus.FAILED);
+            existing.setErrorCode(errorCode);
+            existing.setErrorMessage(safeFailureMessage(errorMessage));
+            existing.setNextRetryAt(null);
+            existing.setUpdatedAt(LocalDateTime.now());
+            aiReviewResultMapper.updateById(existing);
+            moveSubmissionToPendingFinal(submission);
+            recordAiReviewMetric(config, existing, null);
+        });
+    }
+
     private LlmBranchOutcome firstFailure(List<LlmBranchOutcome> outcomes) {
         return outcomes.stream()
                 .filter(outcome -> !outcome.success())
@@ -975,6 +997,18 @@ public class AiAutoReviewService {
 
         return manualRequired(submission, config, agentRun.getId(), promptSnapshot,
                 outcome.rawResponse(), outcome.errorCode(), outcome.errorMessage());
+    }
+
+    private void closeFailedAgentRunIfActive(Long agentRunId, AiReviewResult result) {
+        AgentRunStatus status = switch (result.getStatus()) {
+            case FAILED -> AgentRunStatus.FAILED;
+            case RATE_LIMITED -> AgentRunStatus.RATE_LIMITED;
+            case MANUAL_REQUIRED -> AgentRunStatus.MANUAL_REQUIRED;
+            default -> null;
+        };
+        if (status != null) {
+            agentRunService.failIfActive(agentRunId, status, safeFailureMessage(result.getErrorMessage()));
+        }
     }
 
     private boolean isTerminalFailure(String errorCode) {

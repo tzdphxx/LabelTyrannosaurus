@@ -14,6 +14,11 @@ import org.springframework.stereotype.Component;
 public class LlmTaskWorker {
 
     private static final Logger log = LoggerFactory.getLogger(LlmTaskWorker.class);
+    private static final List<LlmTaskType> POLL_ORDER = List.of(
+            // LlmTaskType.AI_REVIEW,
+            // LlmTaskType.LLM_TRIGGER,
+            LlmTaskType.PRE_ANNOTATION
+    );
 
     private final LlmTaskQueueService queueService;
     private final LlmTaskQueueProperties properties;
@@ -37,20 +42,28 @@ public class LlmTaskWorker {
 
     @Scheduled(fixedDelayString = "${labelhub.redis.llm-task-queue.poll-delay-ms:1000}")
     public void poll() {
-        for (LlmTaskType taskType : LlmTaskType.values()) {
-            processRecords(taskType, queueService.read(taskType, consumerName,
-                    properties.defaultBatchSize(), properties.readWait()));
+        for (LlmTaskType taskType : POLL_ORDER) {
+            try {
+                processRecords(taskType, queueService.read(taskType, consumerName,
+                        properties.defaultBatchSize(), properties.readWait()));
+            } catch (Exception ex) {
+                log.warn("LLM task polling failed: type={}", taskType, ex);
+            }
         }
     }
 
     @Scheduled(fixedDelayString = "${labelhub.redis.llm-task-queue.claim-delay-ms:30000}")
     public void claimStale() {
-        for (LlmTaskType taskType : LlmTaskType.values()) {
-            String startId = claimStartIds.get(taskType);
-            LlmTaskClaimResult result = queueService.claimStale(taskType, consumerName,
-                    properties.pendingMinIdle(), startId, properties.defaultBatchSize());
-            claimStartIds.put(taskType, result.nextStartMessageId());
-            processRecords(taskType, result.records());
+        for (LlmTaskType taskType : POLL_ORDER) {
+            try {
+                String startId = claimStartIds.get(taskType);
+                LlmTaskClaimResult result = queueService.claimStale(taskType, consumerName,
+                        properties.pendingMinIdle(), startId, properties.defaultBatchSize());
+                claimStartIds.put(taskType, result.nextStartMessageId());
+                processRecords(taskType, result.records());
+            } catch (Exception ex) {
+                log.warn("LLM task stale claim failed: type={}", taskType, ex);
+            }
         }
     }
 

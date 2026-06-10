@@ -208,6 +208,14 @@ export const useLabelingStore = create<LabelingStore>((set, get) => ({
     }
   },
   saveDraft: async (payload) => {
+    const targetQuestion = get().questions.find((question) => question.id === payload.questionId)
+
+    if (targetQuestion?.status === 'submitted') {
+      set({ error: '当前题目已提交，不能继续保存草稿', isDraftSaving: false })
+
+      return null
+    }
+
     set({ isDraftSaving: true, error: null })
 
     try {
@@ -219,7 +227,7 @@ export const useLabelingStore = create<LabelingStore>((set, get) => ({
           question.id === currentDraft.questionId
             ? {
               ...question,
-              status: 'draft',
+              status: question.status === 'submitted' ? 'submitted' : 'draft',
             }
             : question,
         ),
@@ -227,7 +235,7 @@ export const useLabelingStore = create<LabelingStore>((set, get) => ({
           state.currentQuestion?.id === currentDraft.questionId
             ? {
               ...state.currentQuestion,
-              status: 'draft',
+              status: state.currentQuestion.status === 'submitted' ? 'submitted' : 'draft',
             }
             : state.currentQuestion,
       }))
@@ -258,6 +266,28 @@ export const useLabelingStore = create<LabelingStore>((set, get) => ({
     }
   },
   submitQuestionDraft: async (taskId, questionId, userId) => {
+    const targetQuestion = get().questions.find((question) => question.id === questionId)
+
+    if (targetQuestion?.status === 'submitted') {
+      const result: LabelingSubmitResult = {
+        submission: null,
+        validation: {
+          valid: false,
+          errors: [
+            {
+              questionId,
+              questionTitle: targetQuestion.title,
+              message: '当前题目已提交，不能重复提交',
+            },
+          ],
+        },
+      }
+
+      set({ error: null, submitValidation: result.validation, isSubmitting: false })
+
+      return result
+    }
+
     set({ isSubmitting: true, error: null, submitValidation: null })
 
     try {

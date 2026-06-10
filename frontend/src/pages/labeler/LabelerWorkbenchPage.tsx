@@ -88,12 +88,16 @@ export function LabelerWorkbenchPage() {
   const currentQuestionIndex = currentQuestion
     ? questions.findIndex((question) => question.id === currentQuestion.id)
     : -1
-  const currentQuestionStatus = currentQuestion
-    ? hasUnsavedChanges
-      ? 'in_progress'
-      : currentQuestion.status
-    : 'pending'
   const isCurrentSchemaEmpty = currentQuestion ? currentQuestion.schema.nodes.length === 0 : false
+  const isCurrentQuestionSubmitted = currentQuestion?.status === 'submitted'
+  const canEditCurrentQuestion = Boolean(currentQuestion) && !isCurrentSchemaEmpty && !isCurrentQuestionSubmitted
+  const currentQuestionStatus = currentQuestion
+    ? isCurrentQuestionSubmitted
+      ? 'submitted'
+      : hasUnsavedChanges
+        ? 'in_progress'
+        : currentQuestion.status
+    : 'pending'
   const canGoPrevious = currentQuestionIndex > 0
   const canGoNext = currentQuestionIndex >= 0 && currentQuestionIndex < questions.length - 1
   const answerSource = currentDraft ? '当前草稿' : currentQuestion?.previousValues ? '上一轮答案' : '空白答案'
@@ -183,7 +187,7 @@ export function LabelerWorkbenchPage() {
   }, [])
 
   useEffect(() => {
-    if (!taskId || !currentQuestion || !currentUser || !hasUnsavedChanges) {
+    if (!taskId || !currentQuestion || !currentUser || !hasUnsavedChanges || !canEditCurrentQuestion) {
       return
     }
 
@@ -212,10 +216,21 @@ export function LabelerWorkbenchPage() {
     }, 30000)
 
     return () => window.clearTimeout(timer)
-  }, [currentQuestion, currentUser, effectiveValues, hasUnsavedChanges, markDraftSaved, saveDraft, taskId])
+  }, [canEditCurrentQuestion, currentQuestion, currentUser, effectiveValues, hasUnsavedChanges, markDraftSaved, saveDraft, taskId])
 
   const handleSaveDraft = async () => {
     if (!taskId || !currentQuestion || !currentUser) {
+      messageApi.error('当前题目不可保存')
+      return
+    }
+
+    if (isCurrentQuestionSubmitted) {
+      setHasUnsavedChanges(false)
+      messageApi.warning('当前题目已提交，不能继续保存草稿')
+      return
+    }
+
+    if (!canEditCurrentQuestion) {
       messageApi.error('当前题目不可保存')
       return
     }
@@ -286,6 +301,17 @@ export function LabelerWorkbenchPage() {
       return
     }
 
+    if (isCurrentQuestionSubmitted) {
+      setHasUnsavedChanges(false)
+      messageApi.warning('当前题目已提交，不能重复提交')
+      return
+    }
+
+    if (!canEditCurrentQuestion) {
+      messageApi.error('当前题目不可提交')
+      return
+    }
+
     const valuesSignature = stringifyDraftValues(effectiveValues)
 
     if (valuesSignature !== savedValuesSignatureRef.current || !currentDraft) {
@@ -326,6 +352,17 @@ export function LabelerWorkbenchPage() {
   }
 
   const confirmSubmitQuestion = () => {
+    if (isCurrentQuestionSubmitted) {
+      setHasUnsavedChanges(false)
+      messageApi.warning('当前题目已提交，不能重复提交')
+      return
+    }
+
+    if (!canEditCurrentQuestion) {
+      messageApi.error('当前题目不可提交')
+      return
+    }
+
     modal.confirm({
       title: '提交当前题目',
       content: '提交后仅当前题进入已提交状态，其他题目不会被提交。确认提交当前题吗？',
@@ -369,7 +406,7 @@ export function LabelerWorkbenchPage() {
       if (isSaveShortcut) {
         event.preventDefault()
 
-        if (!isCurrentSchemaEmpty && !isDraftSaving) {
+        if (canEditCurrentQuestion && !isDraftSaving) {
           void handleSaveDraft()
         }
 
@@ -379,7 +416,7 @@ export function LabelerWorkbenchPage() {
       if (isSubmitShortcut) {
         event.preventDefault()
 
-        if (!isCurrentSchemaEmpty && !isSubmitting) {
+        if (canEditCurrentQuestion && !isSubmitting) {
           confirmSubmitQuestion()
         }
       }
@@ -488,6 +525,7 @@ export function LabelerWorkbenchPage() {
                 <DynamicFormRenderer
                   initialValues={formInitialValues}
                   llmContext={llmContext}
+                  readOnly={isCurrentQuestionSubmitted}
                   schema={currentQuestion.schema}
                   submitText="校验当前题"
                   onSubmit={(result) => setLatestValues(result.values)}
@@ -511,7 +549,7 @@ export function LabelerWorkbenchPage() {
                 </Space>
                 <Space className="labeler-workbench__submit-actions">
                   <Button
-                    disabled={isCurrentSchemaEmpty}
+                    disabled={!canEditCurrentQuestion}
                     icon={<SaveOutlined />}
                     loading={isDraftSaving}
                     onClick={() => void handleSaveDraft()}
@@ -519,7 +557,7 @@ export function LabelerWorkbenchPage() {
                     保存草稿
                   </Button>
                   <Button
-                    disabled={isCurrentSchemaEmpty}
+                    disabled={!canEditCurrentQuestion}
                     icon={<SendOutlined />}
                     loading={isSubmitting}
                     type="primary"
@@ -554,12 +592,12 @@ export function LabelerWorkbenchPage() {
                   <kbd>Alt</kbd>
                   <kbd>N</kbd>
                 </div>
-                <div className={isCurrentSchemaEmpty ? 'labeler-shortcut-item labeler-shortcut-item--disabled' : 'labeler-shortcut-item'}>
+                <div className={canEditCurrentQuestion ? 'labeler-shortcut-item' : 'labeler-shortcut-item labeler-shortcut-item--disabled'}>
                   <span>保存草稿</span>
                   <kbd>Ctrl</kbd>
                   <kbd>S</kbd>
                 </div>
-                <div className={isCurrentSchemaEmpty ? 'labeler-shortcut-item labeler-shortcut-item--disabled' : 'labeler-shortcut-item'}>
+                <div className={canEditCurrentQuestion ? 'labeler-shortcut-item' : 'labeler-shortcut-item labeler-shortcut-item--disabled'}>
                   <span>提交</span>
                   <kbd>Ctrl</kbd>
                   <kbd>Enter</kbd>

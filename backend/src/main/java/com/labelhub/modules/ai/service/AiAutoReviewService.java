@@ -745,7 +745,7 @@ public class AiAutoReviewService {
                                                         Map<String, Object> aggregated) {
         AiReviewResult result = baseResult(submission, config, agentRunId, prompt.promptSnapshot());
         result.setStatus(AiReviewStatus.SUCCESS);
-        result.setDecision(stringValue(aggregated.get("decision"), "UNCERTAIN"));
+        result.setDecision(AiReviewDecisions.normalizeForStorage(aggregated.get("decision")));
         result.setAverageScore(aggregated.get("averageScore") instanceof Number n
                 ? BigDecimal.valueOf(n.doubleValue()) : null);
         result.setDimensionScores(toJson(aggregated.get("dimensionScores")));
@@ -863,7 +863,7 @@ public class AiAutoReviewService {
         if (supervisorResult.success()) {
             AiReviewResult result = baseResult(submission, config, agentRun.getId(), promptSnapshot);
             result.setStatus(AiReviewStatus.SUCCESS);
-            result.setDecision(supervisorResult.decision());
+            result.setDecision(AiReviewDecisions.normalizeForStorage(supervisorResult.decision()));
             result.setAverageScore(supervisorResult.averageScore());
             result.setDimensionScores(toJson(supervisorResult.dimensionScores() != null ? supervisorResult.dimensionScores() : Map.of()));
             result.setRiskFlags(toJson(supervisorResult.riskFlags() != null ? supervisorResult.riskFlags() : List.of()));
@@ -897,7 +897,7 @@ public class AiAutoReviewService {
                 + "You have access to tools to help you review the submission. "
                 + "Use the tools to gather information, then make a final decision. "
                 + "When you have enough information, respond with a JSON object containing: "
-                + "decision (PASS/REJECT/UNCERTAIN), averageScore, dimensionScores, riskFlags, suggestion. "
+                + "decision (PASS/REJECT/MANUAL_REVIEW), averageScore, dimensionScores, riskFlags, suggestion. "
                 + "Scoring dimensions: " + config.getScoringDimensionsJson() + ". "
                 + "Pass threshold: " + config.getPassThreshold() + ". "
                 + "Manual review threshold: " + config.getManualReviewThreshold() + ".";
@@ -1044,7 +1044,7 @@ public class AiAutoReviewService {
         }
         AiReviewResult result = baseResult(submission, config, agentRunId, prompt.promptSnapshot());
         result.setStatus(AiReviewStatus.SUCCESS);
-        result.setDecision(String.valueOf(structuredJson.get("decision")));
+        result.setDecision(AiReviewDecisions.normalizeForStorage(structuredJson.get("decision")));
         result.setAverageScore(asBigDecimal(structuredJson.get("averageScore")));
         BigDecimal confidence = asConfidence(structuredJson.get("confidence"));
         if (prompt.degraded() && confidence != null) {

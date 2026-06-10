@@ -171,7 +171,7 @@ public class AiReviewRetryService implements AiReviewRetryCallback {
                 ? BigDecimal.valueOf(n.doubleValue()) : null;
         BigDecimal confidence = structured.get("confidence") instanceof Number n
                 ? BigDecimal.valueOf(n.doubleValue()) : null;
-        String decision = String.valueOf(structured.get("decision"));
+        String decision = AiReviewDecisions.normalizeForStorage(structured.get("decision"));
 
         AiReviewResult tempResult = new AiReviewResult();
         tempResult.setDecision(decision);

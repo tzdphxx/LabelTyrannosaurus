@@ -1,6 +1,7 @@
 package com.labelhub.modules.review.mapper;
 
 import com.labelhub.modules.review.dto.ReviewerAiReviewStatusItem;
+import com.labelhub.modules.review.dto.ReviewerReviewTaskListItem;
 import com.labelhub.modules.review.dto.ReviewerSubmissionListItem;
 import java.util.List;
 import org.apache.ibatis.annotations.Mapper;
@@ -110,6 +111,82 @@ public interface ReviewerSubmissionListMapper {
             """)
     List<com.labelhub.modules.review.dto.ReviewerTaskSummary> selectTaskSummariesForReviewer(
             @Param("reviewerId") Long reviewerId);
+
+    @Select("""
+            <script>
+            SELECT *
+            FROM (
+                SELECT t.id AS taskId,
+                       t.title AS taskTitle,
+                       t.status AS taskStatus,
+                       t.deadline_at AS deadlineAt,
+                       COALESCE(p.pending_count, 0) AS pendingCount,
+                       COALESCE(mp.my_pending_count, 0) AS myPendingCount,
+                       COALESCE(rv.total_reviewed_count, 0) AS totalReviewedCount,
+                       CASE
+                         WHEN COALESCE(mine.mine_claim_count, 0) > 0 THEN 'MINE'
+                         WHEN COALESCE(c.claimed_count, 0) &lt; COALESCE(t.review_level_count, 1) THEN 'UNCLAIMED'
+                         ELSE 'CLAIMED'
+                       END AS claimStatus,
+                       CASE
+                         WHEN COALESCE(mine.mine_claim_count, 0) = 0
+                              AND COALESCE(c.claimed_count, 0) &lt; COALESCE(t.review_level_count, 1)
+                         THEN TRUE ELSE FALSE
+                       END AS claimable,
+                       CASE WHEN COALESCE(mine.mine_claim_count, 0) > 0 THEN TRUE ELSE FALSE END AS claimedByMe,
+                       CASE WHEN COALESCE(c.claimed_count, 0) > 0 THEN TRUE ELSE FALSE END AS claimed
+                FROM tasks t
+                LEFT JOIN (
+                    SELECT task_id, COUNT(1) AS claimed_count
+                    FROM review_task_claims
+                    GROUP BY task_id
+                ) c ON c.task_id = t.id
+                LEFT JOIN (
+                    SELECT task_id, COUNT(1) AS mine_claim_count
+                    FROM review_task_claims
+                    WHERE reviewer_id = #{reviewerId}
+                    GROUP BY task_id
+                ) mine ON mine.task_id = t.id
+                LEFT JOIN (
+                    SELECT task_id, COUNT(1) AS pending_count
+                    FROM submissions
+                    WHERE status = 'PENDING_FINAL'
+                    GROUP BY task_id
+                ) p ON p.task_id = t.id
+                LEFT JOIN (
+                    SELECT task_id, COUNT(1) AS my_pending_count
+                    FROM submissions
+                    WHERE status = 'PENDING_FINAL'
+                      AND assigned_reviewer_id = #{reviewerId}
+                    GROUP BY task_id
+                ) mp ON mp.task_id = t.id
+                LEFT JOIN (
+                    SELECT s.task_id, COUNT(1) AS total_reviewed_count
+                    FROM review_records rr
+                    JOIN submissions s ON s.id = rr.submission_id
+                    WHERE rr.reviewer_id = #{reviewerId}
+                      AND rr.action IN ('APPROVE', 'REJECT')
+                    GROUP BY s.task_id
+                ) rv ON rv.task_id = t.id
+                WHERE t.status = 'PUBLISHED'
+            ) x
+            WHERE 1 = 1
+            <if test="claimScope != null and claimScope != 'ALL'.toString()">
+              AND x.claimStatus = #{claimScope}
+            </if>
+            ORDER BY
+              CASE x.claimStatus
+                WHEN 'MINE' THEN 0
+                WHEN 'UNCLAIMED' THEN 1
+                ELSE 2
+              END,
+              x.pendingCount DESC,
+              x.taskId DESC
+            </script>
+            """)
+    List<ReviewerReviewTaskListItem> selectReviewTasksForReviewer(
+            @Param("reviewerId") Long reviewerId,
+            @Param("claimScope") String claimScope);
 
     @Select("""
             SELECT s.id AS submissionId, s.task_id AS taskId,

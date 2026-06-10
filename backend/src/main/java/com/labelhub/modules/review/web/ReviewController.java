@@ -11,6 +11,7 @@ import com.labelhub.modules.review.dto.BatchRejectRequest;
 import com.labelhub.modules.review.dto.BatchReviewResponse;
 import com.labelhub.modules.review.dto.RejectRequest;
 import com.labelhub.modules.review.dto.ReviewActionResponse;
+import com.labelhub.modules.review.dto.ReviewerReviewTaskListItem;
 import com.labelhub.modules.review.dto.ReviewerSubmissionDetailResponse;
 import com.labelhub.modules.review.dto.ReviewerSubmissionListItem;
 import com.labelhub.modules.review.dto.SubmissionReviewItem;
@@ -32,7 +33,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
-@RequestMapping("/api/v1/reviewer/submissions")
+@RequestMapping("/api/v1/reviewer")
 @Tag(name = "审核", description = "提交审核和批量审核")
 public class ReviewController {
 
@@ -51,7 +52,18 @@ public class ReviewController {
         this.reviewerListMapper = reviewerListMapper;
     }
 
-    @GetMapping
+    @GetMapping("/review-tasks")
+    @Operation(summary = "审核任务广场", description = "查询当前审核员可见的已发布任务，不暴露审核级别。")
+    public ApiResponse<List<ReviewerReviewTaskListItem>> reviewTasks(
+            @Parameter(description = "领取范围：ALL / MINE / CLAIMED / UNCLAIMED")
+            @RequestParam(defaultValue = "ALL") String claimScope) {
+        CurrentUserContext.requireRole(RoleCode.REVIEWER);
+        Long reviewerId = CurrentUserContext.getUserId();
+        return ApiResponse.ok(reviewerListMapper.selectReviewTasksForReviewer(
+                reviewerId, normalizeClaimScope(claimScope)));
+    }
+
+    @GetMapping("/submissions")
     @Operation(summary = "待审提交列表", description = "查询审核员可处理的提交列表，支持按任务、提交状态、AI 结论、冲突状态、审核级别筛选。"
             + " scope=CLAIMED 查询已领取的提交，scope=AVAILABLE 查询可领取的提交（任务广场），不传则查询全部。")
     public ApiResponse<PageResponse<ReviewerSubmissionListItem>> list(
@@ -78,7 +90,7 @@ public class ReviewController {
         return ApiResponse.ok(new PageResponse<>(items, safePage, safeSize, total));
     }
 
-    @GetMapping("/{submissionId}")
+    @GetMapping("/submissions/{submissionId}")
     @Operation(summary = "提交审核详情", description = """
             查询指定提交的审核详情，包含标注答案、AI 评分、审核历史、冲突信息等。
             Reviewer 只能读取已分配给自己的提交；未分配时返回 403601。""")
@@ -88,7 +100,7 @@ public class ReviewController {
         return ApiResponse.ok(reviewerQueryService.getDetail(submissionId));
     }
 
-    @PostMapping("/{submissionId}/approve")
+    @PostMapping("/submissions/{submissionId}/approve")
     @Operation(summary = "通过提交", description = "审核通过指定提交。")
     public ApiResponse<ReviewActionResponse> approve(@PathVariable Long submissionId,
                                                       @Valid @RequestBody ApproveRequest request) {
@@ -97,7 +109,7 @@ public class ReviewController {
                 submissionId, CurrentUserContext.getUserId(), request));
     }
 
-    @PostMapping("/{submissionId}/reject")
+    @PostMapping("/submissions/{submissionId}/reject")
     @Operation(summary = "驳回提交", description = "审核驳回指定提交。")
     public ApiResponse<ReviewActionResponse> reject(@PathVariable Long submissionId,
                                                      @Valid @RequestBody RejectRequest request) {
@@ -106,7 +118,7 @@ public class ReviewController {
                 submissionId, CurrentUserContext.getUserId(), request));
     }
 
-    @PostMapping("/batch/approve")
+    @PostMapping("/submissions/batch/approve")
     @Operation(summary = "批量通过", description = "批量审核通过提交。")
     public ApiResponse<BatchReviewResponse> batchApprove(@Valid @RequestBody BatchApproveRequest request) {
         CurrentUserContext.requireRole(RoleCode.REVIEWER);
@@ -114,13 +126,13 @@ public class ReviewController {
                 CurrentUserContext.getUserId(), request));
     }
 
-    @PostMapping("/batch-approve")
+    @PostMapping("/submissions/batch-approve")
     @Operation(summary = "批量通过", description = "兼容契约路径，批量审核通过提交。")
     public ApiResponse<BatchReviewResponse> batchApproveAlias(@Valid @RequestBody BatchApproveRequest request) {
         return batchApprove(request);
     }
 
-    @PostMapping("/batch/reject")
+    @PostMapping("/submissions/batch/reject")
     @Operation(summary = "批量驳回", description = "批量审核驳回提交。")
     public ApiResponse<BatchReviewResponse> batchReject(@Valid @RequestBody BatchRejectRequest request) {
         CurrentUserContext.requireRole(RoleCode.REVIEWER);
@@ -128,13 +140,13 @@ public class ReviewController {
                 CurrentUserContext.getUserId(), request));
     }
 
-    @PostMapping("/batch-reject")
+    @PostMapping("/submissions/batch-reject")
     @Operation(summary = "批量驳回", description = "兼容契约路径，批量审核驳回提交。")
     public ApiResponse<BatchReviewResponse> batchRejectAlias(@Valid @RequestBody BatchRejectRequest request) {
         return batchReject(request);
     }
 
-    @PostMapping("/batch/mark-manual")
+    @PostMapping("/submissions/batch/mark-manual")
     @Operation(summary = "批量转人工", description = "将提交批量标记为需要人工处理。")
     public ApiResponse<BatchReviewResponse> batchMarkManual(@Valid @RequestBody BatchMarkManualRequest request) {
         CurrentUserContext.requireRole(RoleCode.REVIEWER);
@@ -142,9 +154,20 @@ public class ReviewController {
                 CurrentUserContext.getUserId(), request));
     }
 
-    @PostMapping("/batch-mark-manual")
+    @PostMapping("/submissions/batch-mark-manual")
     @Operation(summary = "批量转人工", description = "兼容契约路径，将提交批量标记为需要人工处理。")
     public ApiResponse<BatchReviewResponse> batchMarkManualAlias(@Valid @RequestBody BatchMarkManualRequest request) {
         return batchMarkManual(request);
+    }
+
+    private String normalizeClaimScope(String claimScope) {
+        if (claimScope == null || claimScope.isBlank()) {
+            return "ALL";
+        }
+        String normalized = claimScope.trim().toUpperCase();
+        return switch (normalized) {
+            case "ALL", "MINE", "CLAIMED", "UNCLAIMED" -> normalized;
+            default -> "ALL";
+        };
     }
 }

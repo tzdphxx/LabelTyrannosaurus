@@ -20,6 +20,7 @@ import com.labelhub.modules.review.dto.RejectRequest;
 import com.labelhub.modules.review.dto.ReviewActionResponse;
 import com.labelhub.modules.review.dto.ReviewerSubmissionDetailResponse;
 import com.labelhub.modules.review.dto.ReviewerSubmissionListItem;
+import com.labelhub.modules.review.dto.ReviewerReviewTaskListItem;
 import com.labelhub.modules.review.dto.SubmissionReviewItem;
 import com.labelhub.modules.review.mapper.ReviewerSubmissionListMapper;
 import com.labelhub.modules.review.service.BatchReviewService;
@@ -34,6 +35,8 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RequestMapping;
 
 @ExtendWith(MockitoExtension.class)
 class ReviewControllerTest {
@@ -71,6 +74,38 @@ class ReviewControllerTest {
 
         assertThat(response.data().items()).containsExactly(item);
         assertThat(response.data().total()).isEqualTo(1L);
+    }
+
+    @Test
+    void reviewTasksDelegatesToMapperWithCurrentReviewerAndScope() {
+        CurrentUserContext.set(new CurrentUser(1L, "reviewer", "test@labelhub.dev", Set.of(RoleCode.REVIEWER), 1));
+        ReviewerReviewTaskListItem item = new ReviewerReviewTaskListItem(
+                10L, "Risk review", "PUBLISHED", null,
+                3, 1, 0,
+                "UNCLAIMED", true, false, false);
+        when(reviewerListMapper.selectReviewTasksForReviewer(1L, "UNCLAIMED"))
+                .thenReturn(List.of(item));
+
+        ApiResponse<List<ReviewerReviewTaskListItem>> response = controller.reviewTasks("UNCLAIMED");
+
+        assertThat(response.data()).containsExactly(item);
+    }
+
+    @Test
+    void routeMappingsKeepSubmissionPathsAndExposeReviewTaskMarketplace() throws NoSuchMethodException {
+        RequestMapping classMapping = ReviewController.class.getAnnotation(RequestMapping.class);
+        assertThat(classMapping.value()).containsExactly("/api/v1/reviewer");
+
+        GetMapping reviewTasksMapping = ReviewController.class
+                .getMethod("reviewTasks", String.class)
+                .getAnnotation(GetMapping.class);
+        assertThat(reviewTasksMapping.value()).containsExactly("/review-tasks");
+
+        GetMapping submissionsMapping = ReviewController.class
+                .getMethod("list", Long.class, String.class, String.class, String.class,
+                        String.class, Integer.class, String.class, int.class, int.class)
+                .getAnnotation(GetMapping.class);
+        assertThat(submissionsMapping.value()).containsExactly("/submissions");
     }
 
     @Test
@@ -149,6 +184,15 @@ class ReviewControllerTest {
         CurrentUserContext.set(new CurrentUser(2L, "labeler", "test@labelhub.dev", Set.of(RoleCode.LABELER), 1));
 
         assertThatThrownBy(() -> controller.list(null, null, null, null, null, null, null, 1, 20))
+                .isInstanceOfSatisfying(BusinessException.class,
+                        ex -> assertThat(ex.getCode()).isEqualTo(403001));
+    }
+
+    @Test
+    void labelerCannotListReviewTasks() {
+        CurrentUserContext.set(new CurrentUser(2L, "labeler", "test@labelhub.dev", Set.of(RoleCode.LABELER), 1));
+
+        assertThatThrownBy(() -> controller.reviewTasks("ALL"))
                 .isInstanceOfSatisfying(BusinessException.class,
                         ex -> assertThat(ex.getCode()).isEqualTo(403001));
     }

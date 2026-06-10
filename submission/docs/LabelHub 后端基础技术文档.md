@@ -1,6 +1,6 @@
 # LabelHub 后端基础技术文档
 
-> 本文档基于当前仓库后端代码、`backend/pom.xml`、`backend/src/main/resources/application*.yml`、Flyway 迁移脚本以及 `docs/mysql-schema.sql` 编写。本文只描述后端基础技术设计，不展开完整 API 路径、请求参数、响应字段和错误码；详细接口应单独维护在 API 文档或 Postman Collection 中。
+> 本文档基于当前仓库后端代码、`backend/pom.xml`、`backend/src/main/resources/application*.yml`、Flyway 迁移脚本以及 `docker/mysql/01-schema.sql` 编写。本文只描述后端基础技术设计，不展开完整 API 路径、请求参数、响应字段和错误码；详细接口应单独维护在 API 文档或 Postman Collection 中。
 
 ## 1. 项目概述
 
@@ -641,7 +641,7 @@ flowchart TD
 
 ## 14. 数据库设计
 
-数据库结构以 Flyway 迁移和 `docs/mysql-schema.sql` 为依据。以下列出后端主链路表和关键字段，不覆盖所有统计扩展字段。
+数据库结构以 Flyway 迁移和 `docker/mysql/01-schema.sql` 为依据。以下列出后端主链路表和关键字段，不覆盖所有统计扩展字段。
 
 ### 表名：users
 
@@ -1249,7 +1249,7 @@ Spring Security 未认证和无权限也返回统一 JSON 格式，分别为 `40
 数据库初始化：
 
 - Spring Boot 启动时 Flyway 默认开启，迁移脚本位于 `backend/src/main/resources/db/migration`。
-- `docs/mysql-schema.sql` 可作为当前聚合表结构参考。
+- `docker/mysql/01-schema.sql` 可作为当前聚合表结构参考。
 
 本地启动：
 

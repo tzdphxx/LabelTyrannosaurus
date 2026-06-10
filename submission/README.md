@@ -9,6 +9,7 @@ LabelHub 是一个 AI 数据标注平台，覆盖「任务创建 -> 动态模板
 | 文档 | 说明 |
 | --- | --- |
 | [基础技术文档](<docs/LabelHub 流程及架构图文档.md>) | 完整流程流转图、项目架构图、关键技术点 |
+| [前端详细技术文档](<docs/LabelHub 前端基础技术文档.md>) | 前端工程架构、技术栈、路由认证、动态表单、服务层、状态管理和测试说明 |
 | [后端详细技术文档](<docs/LabelHub 后端基础技术文档.md>) | 后端模块、数据模型、事务、安全和测试说明 |
 | [AI Coding 过程记录](docs/ai-coding/01-方法论与协作模式.md) | AI 协作方法、后端关键设计、取舍修正和编码约束 |
 | [Demo 截图](#demo-截图) | 主流程演示截图 |
@@ -55,18 +56,18 @@ git checkout tzdphxx
 
 Compose 启动后端时会读取 `backend/.env.docker`。仓库已提供默认本地配置，默认连接 Compose 内部的 `mysql` 和 `redis` 服务。
 
-如果需要演示 AI 调用能力，请在启动前按实际账号修改：
+如果需要演示真实 AI 调用能力，请在启动前按实际账号修改：
 
 ```text
 backend/.env.docker
 ```
 
-> 重要：当前后端引入了 Spring AI Alibaba DashScope 自动配置，启动时会创建 `dashScopeAgent` Bean。
-> 因此 `AI_DASHSCOPE_API_KEY` 是后端启动必填项。无论使用 Docker Compose 还是 IDEA 本地启动，
-> 都必须在启动前配置有效的 DashScope API Key，否则后端会在启动阶段报错：
-> `DashScope API key must be set`。
+> 说明：当前后端不再使用 Spring AI 自动配置，基础登录、任务、模板、标注、审核流程不需要填写
+> `AI_DASHSCOPE_API_KEY`。`AI_DASHSCOPE_*` 只用于启动时自动写入一个默认 LLM Provider；
+> 三项任意为空时，后端会跳过默认 Provider 初始化，但服务仍可正常启动。
 >
-> IDEA 本地启动时，请在 Run/Debug Configuration 的 Environment variables 中至少配置：
+> 如果需要演示真实 AI 审核、AI 辅助标注或 Provider 连通性测试，请在 Run/Debug Configuration
+> 或 `backend/.env.docker` 中配置：
 >
 > ```text
 > AI_DASHSCOPE_API_KEY=你的 DashScope API Key
@@ -74,23 +75,24 @@ backend/.env.docker
 > AI_DASHSCOPE_BASE_URL=https://dashscope.aliyuncs.com/compatible-mode/v1
 > ```
 >
-> Docker Compose 启动时，请把同样的变量写入 `backend/.env.docker`。不要把真实 API Key
-> 写入 `application.yml` 或提交到 Git。
+> 不要把真实 API Key 写入 `application.yml` 或提交到 Git。
 
 重点变量：
 
 | 变量 | 说明 |
 | --- | --- |
-| `AI_DASHSCOPE_API_KEY` | DashScope API Key，后端启动必填；为空时 Spring AI Alibaba 自动配置会导致启动失败 |
-| `AI_DASHSCOPE_BASE_URL` | OpenAI-compatible Base URL，例如 `https://dashscope.aliyuncs.com/compatible-mode/v1`；建议与 API Key 一起配置 |
-| `AI_DASHSCOPE_CHAT_MODEL` | DashScope 模型名，例如 `qwen-plus`；建议与 API Key 一起配置 |
+| `AI_DASHSCOPE_API_KEY` | DashScope API Key；可选。与 Base URL、模型名都填写后，后端启动时会初始化默认 LLM Provider |
+| `AI_DASHSCOPE_BASE_URL` | OpenAI-compatible Base URL；可选，例如 `https://dashscope.aliyuncs.com/compatible-mode/v1` |
+| `AI_DASHSCOPE_CHAT_MODEL` | DashScope 模型名；可选，例如 `qwen-plus` |
+| `LABELHUB_DEMO_ACCOUNTS_ENABLED` | 是否启动时初始化演示账号；Docker 默认 `true` |
+| `LABELHUB_DEMO_ACCOUNTS_PASSWORD` | 演示账号默认密码；Docker 默认 `Password123` |
 | `LABELHUB_LLM_KEY_ENCRYPTION_SECRET` | LLM API Key 加密密钥，默认已配置；系统保存过 AI Provider 后不要随意修改，否则旧配置中的 API Key 将无法解密 |
 | `COS_SECRET_ID` / `COS_SECRET_KEY` | 对象存储密钥，文件上传下载演示需要配置 |
 | `COS_BUCKET` / `COS_REGION` | 对象存储 Bucket 与地域；`COS_BUCKET` 默认留空 |
 
-如果只验证登录、任务、模板、标注、审核等基础流程，也仍然需要先配置 `AI_DASHSCOPE_API_KEY`，
-因为 Spring AI Alibaba 的 DashScope 自动配置会在应用启动阶段校验该值。需要使用 AI 辅助标注能力时，
-请启动后登录 Admin 页面，确认 AI Provider 已新增并启用，再在任务 AI 配置中选择该 Provider。
+如果只验证登录、任务、模板、标注、审核等基础流程，不需要配置 `AI_DASHSCOPE_API_KEY`。
+需要使用真实 AI 辅助标注或 AI 审核能力时，请启动后登录 Admin 页面，确认 AI Provider 已新增并启用，
+再在任务 AI 配置中选择该 Provider。
 
 ### 4. 启动完整服务
 
@@ -127,7 +129,19 @@ http://localhost:3000
 http://localhost:8080/actuator/health
 ```
 
-前端 Docker 镜像使用 `/api` 作为接口前缀，并由 Nginx 将 `/api/` 反向代理到 Compose 网络中的 `backend:8080`。登录页支持注册 Owner / Labeler 账号；Reviewer 账号可通过 Admin 相关能力创建或使用演示数据流程准备。
+前端 Docker 镜像使用 `/api` 作为接口前缀，并由 Nginx 将 `/api/` 反向代理到 Compose 网络中的 `backend:8080`。
+
+Docker 环境默认会在后端启动时初始化以下演示账号：
+
+| 用户名 | 密码 | 角色 | 入口 |
+| --- | --- | --- | --- |
+| `admin` | `Password123` | Admin | `/admin` |
+| `owner` | `Password123` | Owner | `/owner` |
+| `labeler` | `Password123` | Labeler | `/labeler` |
+| `reviewer` | `Password123` | Reviewer | `/reviewer` |
+
+登录页仍支持注册 Owner / Labeler 账号；Reviewer 账号也可以由 Admin 创建。AI 审核使用的系统主体是
+`system_ai_agent`，该账号由后端自动维护，`loginEnabled=false`，不可登录。
 
 ### 6. 停止和重置
 
@@ -148,7 +162,7 @@ docker compose up --build -d
 
 - 端口冲突：如果 `3000` 或 `8080` 被占用，请先停止本机占用端口的服务，或修改 `compose.yml` 中的端口映射。
 - 后端启动失败：优先查看 `docker compose logs backend`，确认 MySQL、Redis 是否健康，以及 `backend/.env.docker` 中的变量是否正确。
-- AI 或文件能力不可用：检查 `AI_DASHSCOPE_API_KEY`、`AI_DASHSCOPE_BASE_URL`、`AI_DASHSCOPE_CHAT_MODEL` 和 COS 相关变量是否已按实际环境填写；其中 `AI_DASHSCOPE_API_KEY` 是后端启动必填项。
+- AI 或文件能力不可用：检查 `AI_DASHSCOPE_API_KEY`、`AI_DASHSCOPE_BASE_URL`、`AI_DASHSCOPE_CHAT_MODEL` 和 COS 相关变量是否已按实际环境填写；AI 相关变量不是启动必填项，但真实 AI 调用需要有效 Provider。
 - 已保存的 AI Provider 无法调用：确认 `LABELHUB_LLM_KEY_ENCRYPTION_SECRET` 是否被修改过。该密钥用于加密数据库中的 LLM API Key，修改后旧密文无法解密，需要恢复原密钥或重新录入 AI Provider。
 
 ## Demo 截图
@@ -239,21 +253,15 @@ docker compose up --build -d
 
 说明：Admin 侧提供 LLM Provider 列表、新增、编辑、启停和连通性测试，支持配置模型、Base URL、API Key、限流、视觉能力、多图能力、结构化输出和自定义 Header。
 
-### 15. 审计日志与提交追溯
+### 15. 打回后重提
 
-![审计日志与提交追溯](docs/demo-screenshots/15-audit-trace.png)
-
-说明：系统记录提交版本、AI 运行、人工审核和导出相关审计信息。
-
-### 16. 打回后重提
-
-![打回后重提](docs/demo-screenshots/16-return-resubmit.png)
+![打回后重提](docs/demo-screenshots/15-return-resubmit.png)
 
 说明：Reviewer 打回后，Labeler 根据原因修改并重新提交，历史版本保留。
 
-### 17. 多角色看板
+### 16. 多角色看板
 
-![多角色看板](docs/demo-screenshots/17-admin-dashboards.png)
+![多角色看板](docs/demo-screenshots/16-admin-dashboards.png)
 
 说明：Admin查看不同业务页面和导航。
 

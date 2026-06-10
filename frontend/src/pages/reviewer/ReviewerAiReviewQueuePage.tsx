@@ -312,6 +312,20 @@ export function ReviewerAiReviewQueuePage() {
     }
   }, [currentAiReviewLog?.submissionId, loadSubmissionItemHistory])
 
+  const selectedLogBelongsToCurrentList = useMemo(() => {
+    if (!currentAiReviewLog?.submissionId) {
+      return false
+    }
+
+    return aiReviewLogs.some((record) => String(record.submissionId) === String(currentAiReviewLog.submissionId))
+  }, [aiReviewLogs, currentAiReviewLog?.submissionId])
+
+  useEffect(() => {
+    if (currentAiReviewLog?.submissionId && selectedLogBelongsToCurrentList) {
+      void loadSubmissionAiReview(String(currentAiReviewLog.submissionId))
+    }
+  }, [currentAiReviewLog?.submissionId, loadSubmissionAiReview, selectedLogBelongsToCurrentList])
+
   const dimensionEntries = useMemo(() => getDimensionEntries(currentAiReviewLog), [currentAiReviewLog])
   const riskFlags = useMemo(() => getRiskFlags(currentAiReviewLog), [currentAiReviewLog])
   const historyAuditItems = useMemo(() => getHistoryAuditItems(currentSubmissionItemHistory), [currentSubmissionItemHistory])
@@ -327,10 +341,6 @@ export function ReviewerAiReviewQueuePage() {
 
   const selectRecord = (record: AiReviewResultResponse) => {
     setCurrentAiReviewLog(record)
-
-    if (record.submissionId) {
-      void loadSubmissionAiReview(String(record.submissionId))
-    }
   }
 
   const changeStatus = (value: AiReviewQueueStatusFilter) => {

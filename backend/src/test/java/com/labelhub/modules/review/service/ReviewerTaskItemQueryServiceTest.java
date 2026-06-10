@@ -47,9 +47,9 @@ class ReviewerTaskItemQueryServiceTest {
                 true, true);
         when(taskMapper.selectById(100L)).thenReturn(task);
         when(reviewerTaskItemMapper.countTaskReviewerAccess(100L, 7L)).thenReturn(1);
-        when(reviewerTaskItemMapper.countTaskItems(100L, "SUBMITTED", null, null, "risk"))
+        when(reviewerTaskItemMapper.countTaskItems(100L, "SUBMITTED", null, null, "risk", true))
                 .thenReturn(1L);
-        when(reviewerTaskItemMapper.selectTaskItems(100L, 7L, "SUBMITTED", null, null, "risk", 20, 20))
+        when(reviewerTaskItemMapper.selectTaskItems(100L, 7L, "SUBMITTED", null, null, "risk", true, 20, 20))
                 .thenReturn(List.of(row));
         when(reviewerTaskItemMapper.selectStatusCounts(100L)).thenReturn(List.of(
                 new ReviewerTaskStatusCount("UNCLAIMED", 2L),
@@ -57,7 +57,7 @@ class ReviewerTaskItemQueryServiceTest {
                 new ReviewerTaskStatusCount("APPROVED", 3L)
         ));
 
-        var response = service.queryTaskItems(100L, 7L, " SUBMITTED ", " ", null, " risk ", 2, 20);
+        var response = service.queryTaskItems(100L, 7L, " SUBMITTED ", " ", null, " risk ", true, 2, 20);
 
         assertThat(response.taskId()).isEqualTo(100L);
         assertThat(response.taskTitle()).isEqualTo("客服风险复核");
@@ -80,7 +80,7 @@ class ReviewerTaskItemQueryServiceTest {
         when(taskMapper.selectById(100L)).thenReturn(task);
 
         assertThatThrownBy(() -> service.queryTaskItems(
-                100L, 7L, null, null, null, null, 1, 20))
+                100L, 7L, null, null, null, null, false, 1, 20))
                 .isInstanceOfSatisfying(BusinessException.class,
                         ex -> assertThat(ex.getCode()).isEqualTo(403001));
     }
@@ -90,7 +90,7 @@ class ReviewerTaskItemQueryServiceTest {
         when(taskMapper.selectById(404L)).thenReturn(null);
 
         assertThatThrownBy(() -> service.queryTaskItems(
-                404L, 7L, null, null, null, null, 1, 20))
+                404L, 7L, null, null, null, null, false, 1, 20))
                 .isInstanceOfSatisfying(BusinessException.class,
                         ex -> assertThat(ex.getCode()).isEqualTo(404001));
     }

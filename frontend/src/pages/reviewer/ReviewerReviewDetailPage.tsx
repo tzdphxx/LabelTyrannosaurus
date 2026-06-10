@@ -32,6 +32,7 @@ import { PageHeader } from '../../components/page/PageHeader'
 import { StatePlaceholder } from '../../components/states/StatePlaceholder'
 import { useReviewStore } from '../../stores/reviewStore'
 import type { ReviewerTaskItemRow, SubmissionVersion } from '../../types/review'
+import { formatAiReviewStatusLabel, isManualAiReviewValue, isManualRequiredStatus } from '../../services/review/reviewMappers'
 import styles from './ReviewerPages.module.css'
 
 type QueueFilter = 'all' | 'pass' | 'reject' | 'manual'
@@ -40,18 +41,32 @@ const aiDecisionLabels: Record<string, string> = {
   PASS: 'AI 建议通过',
   REJECT: 'AI 建议打回',
   MANUAL_REVIEW: '转人工',
+  MANUAL_REQUIRED: '人工复核',
   pass: 'AI 建议通过',
   reject: 'AI 建议打回',
   manual_review: '转人工',
+  manual_required: '人工复核',
 }
 
 const aiDecisionColors: Record<string, string> = {
   PASS: 'success',
   REJECT: 'error',
   MANUAL_REVIEW: 'processing',
+  MANUAL_REQUIRED: 'error',
   pass: 'success',
   reject: 'error',
   manual_review: 'processing',
+  manual_required: 'error',
+}
+
+const aiStatusColors: Record<string, string> = {
+  PENDING: 'default',
+  RUNNING: 'processing',
+  SUCCESS: 'success',
+  COMPLETED: 'success',
+  FAILED: 'error',
+  MANUAL_REQUIRED: 'error',
+  MANUAL_REVIEW: 'processing',
 }
 
 const reviewReasonPresets = ['事实不一致', '格式不合规', '缺少关键信息', '需补充证据']
@@ -121,17 +136,29 @@ function normalizeDecision(decision?: string) {
 
   if (value === 'pass') return 'pass'
   if (value === 'reject') return 'reject'
-  if (value === 'manual_review') return 'manual'
+  if (value === 'manual_review' || value === 'manual_required') return 'manual'
 
   return 'manual'
 }
 
 function getDecisionLabel(decision?: string) {
+  if (isManualAiReviewValue(decision)) {
+    return formatAiReviewStatusLabel(decision)
+  }
+
   return aiDecisionLabels[formatValue(decision)] ?? formatValue(decision)
 }
 
 function getDecisionColor(decision?: string) {
+  if (isManualRequiredStatus(decision)) {
+    return 'error'
+  }
+
   return aiDecisionColors[formatValue(decision)] ?? 'default'
+}
+
+function getStatusColor(status?: string | null) {
+  return aiStatusColors[formatValue(status)] ?? 'default'
 }
 
 function getDecisionClassName(decision?: string) {
@@ -180,12 +207,13 @@ export function ReviewerReviewDetailPage() {
 
   const selectedSubmissionId = searchParams.get('submissionId')
   const taskItems = taskItemsPage?.page.items ?? []
-  const reviewableItems = useMemo(() => taskItems.filter(canReviewItem), [taskItems])
+  const submittedItems = useMemo(() => taskItems.filter(canOpenItem), [taskItems])
+  const reviewableItems = useMemo(() => submittedItems.filter(canReviewItem), [submittedItems])
   const reviewableIds = useMemo(() => reviewableItems.map(getReviewId).filter(Boolean), [reviewableItems])
 
   useEffect(() => {
     if (taskId) {
-      void loadReviewerTaskItems(taskId, { page: 1, size: 100 })
+      void loadReviewerTaskItems(taskId, { page: 1, size: 100, submittedOnly: true })
     }
   }, [loadReviewerTaskItems, taskId])
 
@@ -199,15 +227,15 @@ export function ReviewerReviewDetailPage() {
 
   const selectedItem = useMemo(() => {
     if (selectedSubmissionId) {
-      const matched = taskItems.find((item) => String(item.latestSubmissionId) === selectedSubmissionId)
+      const matched = submittedItems.find((item) => String(item.latestSubmissionId) === selectedSubmissionId)
 
       if (matched) {
         return matched
       }
     }
 
-    return taskItems.find(canOpenItem) ?? taskItems[0] ?? null
-  }, [selectedSubmissionId, taskItems])
+    return submittedItems[0] ?? null
+  }, [selectedSubmissionId, submittedItems])
 
   useEffect(() => {
     if (!taskId || !selectedItem || !canOpenItem(selectedItem) || !selectedItem.latestSubmissionId) {
@@ -235,13 +263,13 @@ export function ReviewerReviewDetailPage() {
     !selectedItem?.canReview ||
     rawSubmission?.submissionStatus === 'APPROVED' ||
     rawSubmission?.submissionStatus === 'REJECTED'
-  const passCount = taskItems.filter((item) => normalizeDecision(item.aiDecision) === 'pass').length
-  const rejectCount = taskItems.filter((item) => normalizeDecision(item.aiDecision) === 'reject').length
-  const manualCount = taskItems.filter((item) => normalizeDecision(item.aiDecision) === 'manual').length
+  const passCount = submittedItems.filter((item) => normalizeDecision(item.aiDecision) === 'pass').length
+  const rejectCount = submittedItems.filter((item) => normalizeDecision(item.aiDecision) === 'reject').length
+  const manualCount = submittedItems.filter((item) => normalizeDecision(item.aiDecision) === 'manual').length
   const approvedCount = summary?.approvedCount ?? 0
   const returnedCount = summary?.returnedCount ?? 0
   const passRate = approvedCount + returnedCount > 0 ? Math.round((approvedCount / (approvedCount + returnedCount)) * 100) : 0
-  const filteredItems = taskItems.filter((item) => queueFilter === 'all' || normalizeDecision(item.aiDecision) === queueFilter)
+  const filteredItems = submittedItems.filter((item) => queueFilter === 'all' || normalizeDecision(item.aiDecision) === queueFilter)
   const currentVersion = submissionVersions[0] ?? null
   const previousVersion = submissionVersions.find((version) => version.versionNo !== rawSubmission?.versionNo) ?? null
 
@@ -258,7 +286,7 @@ export function ReviewerReviewDetailPage() {
       return
     }
 
-    await loadReviewerTaskItems(taskId, { page: 1, size: 100 })
+    await loadReviewerTaskItems(taskId, { page: 1, size: 100, submittedOnly: true })
 
     if (selectedSubmissionId) {
       void loadDetail(selectedSubmissionId)
@@ -433,13 +461,13 @@ export function ReviewerReviewDetailPage() {
         <aside className={styles.manualQueuePanel}>
           <div className={styles.manualQueueHeader}>
             <Typography.Text strong>审核队列</Typography.Text>
-            <Tag>{taskItems.length} 条</Tag>
+            <Tag>{submittedItems.length} 条</Tag>
           </div>
           <Segmented
             className={styles.manualQueueTabs}
             value={queueFilter}
             options={[
-              { label: `全部 ${taskItems.length}`, value: 'all' },
+              { label: `全部 ${submittedItems.length}`, value: 'all' },
               { label: `建议通过 ${passCount}`, value: 'pass' },
               { label: `建议打回 ${rejectCount}`, value: 'reject' },
               { label: `转人工 ${manualCount}`, value: 'manual' },
@@ -581,7 +609,9 @@ export function ReviewerReviewDetailPage() {
                 <div>
                   <Space wrap>
                     <Tag color={getDecisionColor(aiDecision)}>{getDecisionLabel(aiDecision)}</Tag>
-                    <Tag>{formatValue(aiResult?.status ?? rawSubmission?.aiReviewStatus ?? selectedItem?.aiReviewStatus)}</Tag>
+                    <Tag color={getStatusColor(aiResult?.status ?? rawSubmission?.aiReviewStatus ?? selectedItem?.aiReviewStatus)}>
+                      {formatAiReviewStatusLabel(aiResult?.status ?? rawSubmission?.aiReviewStatus ?? selectedItem?.aiReviewStatus)}
+                    </Tag>
                     <Tag>模型运行 {formatValue(rawSubmission?.agentRunSummary?.agentRunId)}</Tag>
                   </Space>
                   <Typography.Paragraph>{formatValue(aiResult?.suggestion ?? selectedItem?.suggestion)}</Typography.Paragraph>

@@ -18,6 +18,12 @@ import { useEffect, useMemo, useState } from 'react'
 import { ContentShell } from '../../components/page/ContentShell'
 import { PageHeader } from '../../components/page/PageHeader'
 import { useReviewStore } from '../../stores/reviewStore'
+import {
+  formatAiReviewStatusLabel,
+  isManualAiReviewValue,
+  isManualRequiredStatus,
+  isManualReviewDecision,
+} from '../../services/review/reviewMappers'
 import type {
   AiReviewLogQuery,
   AiReviewQueueStatusFilter,
@@ -42,7 +48,8 @@ const statusColors: Record<string, string> = {
   SUCCESS: 'success',
   COMPLETED: 'success',
   FAILED: 'error',
-  MANUAL_REQUIRED: 'warning',
+  MANUAL_REQUIRED: 'error',
+  MANUAL_REVIEW: 'processing',
 }
 
 const decisionColors: Record<string, string> = {
@@ -50,6 +57,7 @@ const decisionColors: Record<string, string> = {
   REJECT: 'error',
   RETURN: 'error',
   MANUAL_REVIEW: 'processing',
+  MANUAL_REQUIRED: 'error',
 }
 
 const decisionLabels: Record<string, string> = {
@@ -185,7 +193,7 @@ function getDimensionEntries(record: AiReviewResultResponse | null) {
 function getAuditResultLabel(value: unknown) {
   const text = formatValue(value)
 
-  return auditActionLabels[text] ?? decisionLabels[text] ?? text
+  return isManualAiReviewValue(text) ? formatAiReviewStatusLabel(text) : auditActionLabels[text] ?? decisionLabels[text] ?? text
 }
 
 function getAuditResultColor(value: unknown) {
@@ -199,7 +207,11 @@ function getAuditResultColor(value: unknown) {
     return 'error'
   }
 
-  if (text === 'MANUAL_REVIEW' || text === 'MARK_MANUAL_REQUIRED') {
+  if (isManualRequiredStatus(text)) {
+    return 'error'
+  }
+
+  if (isManualReviewDecision(text) || text === 'MARK_MANUAL_REQUIRED') {
     return 'processing'
   }
 
@@ -305,7 +317,9 @@ export function ReviewerAiReviewQueuePage() {
   const historyAuditItems = useMemo(() => getHistoryAuditItems(currentSubmissionItemHistory), [currentSubmissionItemHistory])
   const selectedAverageScore = toPercent(currentAiReviewLog?.averageScore)
   const selectedDecision = formatValue(currentAiReviewLog?.decision)
-  const selectedDecisionLabel = decisionLabels[selectedDecision] ?? selectedDecision
+  const selectedDecisionLabel = isManualAiReviewValue(selectedDecision)
+    ? formatAiReviewStatusLabel(selectedDecision)
+    : decisionLabels[selectedDecision] ?? selectedDecision
   const reviewTrace = currentAiReviewLog?.reviewTrace ?? null
   const reviewTraceSteps = reviewTrace?.steps ?? []
   const reviewTraceMetrics = Object.entries(reviewTrace?.metrics ?? {}).filter(([, value]) => value !== undefined && value !== null && value !== '')
@@ -402,7 +416,7 @@ export function ReviewerAiReviewQueuePage() {
                 const recordTitle = record.taskTitle ? record.taskTitle : `提交 ${formatValue(record.submissionId ?? record.agentRunId)}`
                 const averageScore = toPercent(record.averageScore)
                 const decision = formatValue(record.decision)
-                const decisionLabel = decisionLabels[decision] ?? decision
+                const decisionLabel = isManualAiReviewValue(decision) ? formatAiReviewStatusLabel(decision) : decisionLabels[decision] ?? decision
 
                 return (
                   <List.Item
@@ -423,7 +437,7 @@ export function ReviewerAiReviewQueuePage() {
                       </Typography.Text>
                       <div className={styles.aiItemMeta}>
                         <Tag color={decisionColors[decision] ?? 'default'}>{decisionLabel}</Tag>
-                        <Tag color={statusColors[record.aiReviewStatus] ?? 'default'}>{formatValue(record.aiReviewStatus)}</Tag>
+                        <Tag color={statusColors[record.aiReviewStatus] ?? 'default'}>{formatAiReviewStatusLabel(record.aiReviewStatus)}</Tag>
                         <Typography.Text type="secondary">分数 {formatValue(averageScore)}</Typography.Text>
                       </div>
                     </div>
@@ -544,8 +558,10 @@ export function ReviewerAiReviewQueuePage() {
                           <Space wrap size={[6, 6]}>
                             <Typography.Text strong>{formatValue(step.name || `步骤 ${index + 1}`)}</Typography.Text>
                             <Tag>{formatValue(step.role)}</Tag>
-                            <Tag color={decisionColors[formatValue(step.decision)] ?? 'default'}>{formatValue(step.decision)}</Tag>
-                            <Tag color={statusColors[formatValue(step.status)] ?? 'default'}>{formatValue(step.status)}</Tag>
+                            <Tag color={decisionColors[formatValue(step.decision)] ?? 'default'}>
+                              {formatAiReviewStatusLabel(formatValue(step.decision))}
+                            </Tag>
+                            <Tag color={statusColors[formatValue(step.status)] ?? 'default'}>{formatAiReviewStatusLabel(formatValue(step.status))}</Tag>
                           </Space>
                           <Typography.Text type="secondary">
                             分数 {formatValue(step.score)} · 置信度 {formatValue(step.confidence)}

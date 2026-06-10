@@ -33,6 +33,7 @@ public class ReviewerTaskItemQueryService {
                                                        String submissionStatus,
                                                        String aiDecision,
                                                        String keyword,
+                                                       boolean submittedOnly,
                                                        int page,
                                                        int size) {
         Task task = taskMapper.selectById(taskId);
@@ -51,10 +52,10 @@ public class ReviewerTaskItemQueryService {
 
         long total = reviewerTaskItemMapper.countTaskItems(
                 taskId, normalizedItemStatus, normalizedSubmissionStatus,
-                normalizedAiDecision, normalizedKeyword);
+                normalizedAiDecision, normalizedKeyword, submittedOnly);
         List<ReviewerTaskItemRow> rows = reviewerTaskItemMapper.selectTaskItems(
                 taskId, reviewerId, normalizedItemStatus, normalizedSubmissionStatus,
-                normalizedAiDecision, normalizedKeyword, offset, size);
+                normalizedAiDecision, normalizedKeyword, submittedOnly, offset, size);
         ReviewerTaskStatusSummary summary = buildSummary(
                 reviewerTaskItemMapper.selectStatusCounts(taskId));
         long totalItemCount = summary.unclaimedCount()

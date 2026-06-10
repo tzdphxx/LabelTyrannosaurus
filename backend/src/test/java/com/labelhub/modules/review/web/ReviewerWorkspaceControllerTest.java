@@ -64,11 +64,11 @@ class ReviewerWorkspaceControllerTest {
                 new ReviewerTaskStatusSummary(0L, 0L, 0L, 1L, 0L, 0L),
                 new PageResponse<>(List.of(row), 1, 100, 1L));
         when(taskItemQueryService.queryTaskItems(
-                100L, 7L, "SUBMITTED", "PENDING_FINAL", "MANUAL_REVIEW", "risk", 1, 100))
+                100L, 7L, "SUBMITTED", "PENDING_FINAL", "MANUAL_REVIEW", "risk", true, 1, 100))
                 .thenReturn(serviceResponse);
 
         ApiResponse<ReviewerTaskItemPageResponse> response = controller.taskItems(
-                100L, "SUBMITTED", "PENDING_FINAL", "MANUAL_REVIEW", "risk", -2, 500);
+                100L, "SUBMITTED", "PENDING_FINAL", "MANUAL_REVIEW", "risk", true, -2, 500);
 
         assertThat(response.data()).isEqualTo(serviceResponse);
         assertThat(response.data().page().items()).containsExactly(row);
@@ -80,7 +80,7 @@ class ReviewerWorkspaceControllerTest {
                 Set.of(RoleCode.LABELER), 1));
 
         assertThatThrownBy(() -> controller.taskItems(
-                100L, null, null, null, null, 1, 20))
+                100L, null, null, null, null, false, 1, 20))
                 .isInstanceOfSatisfying(BusinessException.class,
                         ex -> assertThat(ex.getCode()).isEqualTo(403001));
     }

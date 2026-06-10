@@ -3,6 +3,8 @@ package com.labelhub.modules.ai.service;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.labelhub.common.audit.AuditAppender;
 import com.labelhub.common.audit.AuditCommand;
+import com.labelhub.infrastructure.redis.RedisKeyBuilder;
+import com.labelhub.infrastructure.redis.RedisLockService;
 import com.labelhub.modules.agent.domain.SystemActorContext;
 import com.labelhub.modules.agent.service.SystemAgentProvider;
 import com.labelhub.modules.ai.domain.AiFlowAction;
@@ -12,6 +14,7 @@ import com.labelhub.modules.ai.mapper.AiReviewResultMapper;
 import com.labelhub.modules.submission.domain.Submission;
 import com.labelhub.modules.submission.domain.SubmissionStatus;
 import com.labelhub.modules.submission.mapper.SubmissionMapper;
+import java.time.LocalDateTime;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -20,6 +23,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 @Component
@@ -38,6 +42,7 @@ public class AiReviewRecoveryRunner implements ApplicationRunner {
     private final AuditAppender auditAppender;
     private final com.labelhub.modules.review.service.ReviewOwnershipResolver reviewOwnershipResolver;
     private final AiReviewSchemaReadiness schemaReadiness;
+    private final RedisLockService redisLockService;
 
     public AiReviewRecoveryRunner(SubmissionMapper submissionMapper,
                                   AiReviewResultMapper aiReviewResultMapper,
@@ -46,7 +51,8 @@ public class AiReviewRecoveryRunner implements ApplicationRunner {
                                   SystemAgentProvider systemAgentProvider,
                                   AuditAppender auditAppender,
                                   com.labelhub.modules.review.service.ReviewOwnershipResolver reviewOwnershipResolver,
-                                  AiReviewSchemaReadiness schemaReadiness) {
+                                  AiReviewSchemaReadiness schemaReadiness,
+                                  RedisLockService redisLockService) {
         this.submissionMapper = submissionMapper;
         this.aiReviewResultMapper = aiReviewResultMapper;
         this.dispatcher = dispatcher;
@@ -55,6 +61,7 @@ public class AiReviewRecoveryRunner implements ApplicationRunner {
         this.auditAppender = auditAppender;
         this.reviewOwnershipResolver = reviewOwnershipResolver;
         this.schemaReadiness = schemaReadiness;
+        this.redisLockService = redisLockService;
     }
 
     @Override
@@ -78,6 +85,51 @@ public class AiReviewRecoveryRunner implements ApplicationRunner {
                 log.error("Recovery failed for submission {}", submission.getId(), e);
             }
         }
+    }
+
+    @Scheduled(fixedDelayString = "${labelhub.ai.review-recovery-delay-ms:60000}")
+    public void recoverMissingResultsPeriodically() {
+        if (!schemaReadiness.isReady()) {
+            log.warn("Skipping periodic AI review recovery because required database tables are not ready");
+            return;
+        }
+        List<Submission> candidates = submissionMapper.selectList(
+                new LambdaQueryWrapper<Submission>()
+                        .eq(Submission::getStatus, SubmissionStatus.AI_REVIEWING));
+        if (candidates.isEmpty()) {
+            return;
+        }
+        LocalDateTime cutoff = LocalDateTime.now().minusMinutes(1);
+        for (Submission submission : candidates) {
+            if (!isOldEnoughForMissingResultRecovery(submission, cutoff)) {
+                continue;
+            }
+            try {
+                redisLockService.withLock(RedisKeyBuilder.aiReviewLock(submission.getId()),
+                        1000L, 300000L, () -> recoverMissingResult(submission.getId(), cutoff));
+            } catch (Exception e) {
+                log.warn("Periodic AI review recovery failed for submission {}", submission.getId(), e);
+            }
+        }
+    }
+
+    private boolean isOldEnoughForMissingResultRecovery(Submission submission, LocalDateTime cutoff) {
+        return submission.getSubmittedAt() == null || submission.getSubmittedAt().isBefore(cutoff);
+    }
+
+    private void recoverMissingResult(Long submissionId, LocalDateTime cutoff) {
+        Submission latest = submissionMapper.selectById(submissionId);
+        if (latest == null || latest.getStatus() != SubmissionStatus.AI_REVIEWING
+                || !isOldEnoughForMissingResultRecovery(latest, cutoff)) {
+            return;
+        }
+        AiReviewResult existing = aiReviewResultMapper.selectBySubmissionId(submissionId);
+        if (existing != null) {
+            return;
+        }
+        log.info("Re-queuing AI review missing result for submission {}", submissionId);
+        dispatcher.enqueue(submissionId);
+        appendRecoveryAudit(submissionId, "RE_QUEUED_MISSING_RESULT");
     }
 
     private void recover(Submission submission) {

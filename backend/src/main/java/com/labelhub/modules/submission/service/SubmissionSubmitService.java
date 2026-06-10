@@ -11,6 +11,7 @@ import com.labelhub.common.web.TraceIdProvider;
 import com.labelhub.modules.agent.domain.AgentRun;
 import com.labelhub.modules.agent.domain.AgentRunStatus;
 import com.labelhub.modules.agent.mapper.AgentRunMapper;
+import com.labelhub.modules.ai.mapper.AiReviewResultMapper;
 import com.labelhub.modules.ai.service.AiReviewDispatcher;
 import com.labelhub.modules.assignment.domain.Assignment;
 import com.labelhub.modules.assignment.domain.AssignmentStatus;
@@ -57,6 +58,7 @@ public class SubmissionSubmitService {
     private final SubmissionMapper submissionMapper;
     private final TaskMapper taskMapper;
     private final AgentRunMapper agentRunMapper;
+    private final AiReviewResultMapper aiReviewResultMapper;
     private final AnswerSchemaValidator answerSchemaValidator;
     private final AuditAppender auditAppender;
     private final AiReviewDispatcher aiReviewDispatcher;
@@ -69,12 +71,13 @@ public class SubmissionSubmitService {
                                    SubmissionMapper submissionMapper,
                                    TaskMapper taskMapper,
                                    AgentRunMapper agentRunMapper,
+                                   AiReviewResultMapper aiReviewResultMapper,
                                    AnswerSchemaValidator answerSchemaValidator,
                                    AuditAppender auditAppender,
                                    AiReviewDispatcher aiReviewDispatcher,
                                    DatasetClaimService datasetClaimService,
                                    TraceIdProvider traceIdProvider) {
-        this(assignmentMapper, submissionMapper, taskMapper, agentRunMapper, answerSchemaValidator, auditAppender,
+        this(assignmentMapper, submissionMapper, taskMapper, agentRunMapper, aiReviewResultMapper, answerSchemaValidator, auditAppender,
                 aiReviewDispatcher, datasetClaimService, new ObjectMapper(), traceIdProvider);
     }
 
@@ -82,6 +85,7 @@ public class SubmissionSubmitService {
                             SubmissionMapper submissionMapper,
                             TaskMapper taskMapper,
                             AgentRunMapper agentRunMapper,
+                            AiReviewResultMapper aiReviewResultMapper,
                             AnswerSchemaValidator answerSchemaValidator,
                             AuditAppender auditAppender,
                             AiReviewDispatcher aiReviewDispatcher,
@@ -92,6 +96,7 @@ public class SubmissionSubmitService {
         this.submissionMapper = submissionMapper;
         this.taskMapper = taskMapper;
         this.agentRunMapper = agentRunMapper;
+        this.aiReviewResultMapper = aiReviewResultMapper;
         this.answerSchemaValidator = answerSchemaValidator;
         this.auditAppender = auditAppender;
         this.aiReviewDispatcher = aiReviewDispatcher;
@@ -113,6 +118,7 @@ public class SubmissionSubmitService {
         String answerHash = sha256(canonicalAnswerJson);
         Submission latestActive = submissionMapper.selectLatestActiveByAssignmentId(assignmentId);
         if (latestActive != null && Objects.equals(latestActive.getAnswerHash(), answerHash)) {
+            enqueueMissingAiReviewIfNeeded(latestActive);
             return toResponse(latestActive, null);
         }
         Submission latest = submissionMapper.selectLatestByAssignmentId(assignmentId);
@@ -149,6 +155,13 @@ public class SubmissionSubmitService {
             return;
         }
         aiReviewDispatcher.enqueue(submissionId);
+    }
+
+    private void enqueueMissingAiReviewIfNeeded(Submission submission) {
+        if (submission.getStatus() == SubmissionStatus.AI_REVIEWING
+                && aiReviewResultMapper.selectBySubmissionId(submission.getId()) == null) {
+            enqueueAiReviewAfterCommit(submission.getId());
+        }
     }
 
     private Assignment loadOwnedAssignment(Long assignmentId, Long labelerId) {

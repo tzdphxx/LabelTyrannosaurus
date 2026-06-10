@@ -85,6 +85,7 @@ public class LlmTriggerService {
     private final AuditAppender auditAppender;
     private final TraceIdProvider traceIdProvider;
     private final LlmTaskQueueService llmTaskQueueService;
+    private final LlmTriggerAsyncExecutor llmTriggerAsyncExecutor;
     private final LlmTriggerRunMapper llmTriggerRunMapper;
     private final TemplateVersionMapper templateVersionMapper;
     private final AiReviewConfigMapper aiReviewConfigMapper;
@@ -112,11 +113,12 @@ public class LlmTriggerService {
                              AuditAppender auditAppender,
                              TraceIdProvider traceIdProvider,
                              LlmTaskQueueService llmTaskQueueService,
+                             LlmTriggerAsyncExecutor llmTriggerAsyncExecutor,
                              LlmTriggerRunMapper llmTriggerRunMapper,
                              TemplateVersionMapper templateVersionMapper,
                              AiReviewConfigMapper aiReviewConfigMapper) {
         this(taskMapper, datasetItemMapper, assignmentMapper, llmProviderService, rateLimiter,
-                llmGateway, agentRunService, auditAppender, traceIdProvider, llmTaskQueueService,
+                llmGateway, agentRunService, auditAppender, traceIdProvider, llmTaskQueueService, llmTriggerAsyncExecutor,
                 llmTriggerRunMapper, templateVersionMapper, aiReviewConfigMapper, new ObjectMapper(), false);
     }
 
@@ -131,7 +133,7 @@ public class LlmTriggerService {
                              TraceIdProvider traceIdProvider) {
         this(taskMapper, datasetItemMapper, assignmentMapper, llmProviderService, rateLimiter,
                 llmGateway, agentRunService, auditAppender, traceIdProvider, null, null,
-                null, null, new ObjectMapper(), true);
+                null, null, null, new ObjectMapper(), true);
     }
 
     LlmTriggerService(TaskMapper taskMapper,
@@ -150,7 +152,28 @@ public class LlmTriggerService {
                       ObjectMapper objectMapper) {
         this(taskMapper, datasetItemMapper, assignmentMapper, llmProviderService, rateLimiter,
                 llmGateway, agentRunService, auditAppender, traceIdProvider, llmTaskQueueService,
-                llmTriggerRunMapper, templateVersionMapper, aiReviewConfigMapper, objectMapper, false);
+                null, llmTriggerRunMapper, templateVersionMapper, aiReviewConfigMapper, objectMapper, false);
+    }
+
+    LlmTriggerService(TaskMapper taskMapper,
+                      DatasetItemMapper datasetItemMapper,
+                      AssignmentMapper assignmentMapper,
+                      LlmProviderService llmProviderService,
+                      LlmTriggerRateLimiter rateLimiter,
+                      LlmGateway llmGateway,
+                      AgentRunService agentRunService,
+                      AuditAppender auditAppender,
+                      TraceIdProvider traceIdProvider,
+                      LlmTaskQueueService llmTaskQueueService,
+                      LlmTriggerAsyncExecutor llmTriggerAsyncExecutor,
+                      LlmTriggerRunMapper llmTriggerRunMapper,
+                      TemplateVersionMapper templateVersionMapper,
+                      AiReviewConfigMapper aiReviewConfigMapper,
+                      ObjectMapper objectMapper) {
+        this(taskMapper, datasetItemMapper, assignmentMapper, llmProviderService, rateLimiter,
+                llmGateway, agentRunService, auditAppender, traceIdProvider, llmTaskQueueService,
+                llmTriggerAsyncExecutor, llmTriggerRunMapper, templateVersionMapper, aiReviewConfigMapper,
+                objectMapper, false);
     }
 
     private LlmTriggerService(TaskMapper taskMapper,
@@ -163,6 +186,7 @@ public class LlmTriggerService {
                               AuditAppender auditAppender,
                               TraceIdProvider traceIdProvider,
                               LlmTaskQueueService llmTaskQueueService,
+                              LlmTriggerAsyncExecutor llmTriggerAsyncExecutor,
                               LlmTriggerRunMapper llmTriggerRunMapper,
                               TemplateVersionMapper templateVersionMapper,
                               AiReviewConfigMapper aiReviewConfigMapper,
@@ -178,6 +202,7 @@ public class LlmTriggerService {
         this.auditAppender = auditAppender;
         this.traceIdProvider = traceIdProvider;
         this.llmTaskQueueService = llmTaskQueueService;
+        this.llmTriggerAsyncExecutor = llmTriggerAsyncExecutor;
         this.llmTriggerRunMapper = llmTriggerRunMapper;
         this.templateVersionMapper = templateVersionMapper;
         this.aiReviewConfigMapper = aiReviewConfigMapper;
@@ -268,19 +293,24 @@ public class LlmTriggerService {
         if (immediateExecution) {
             executeRun(run, task, run.getProviderId(), run.getModelName());
         } else {
-            llmTaskQueueService.enqueue(new LlmTaskQueueMessage(
-                    LlmTaskType.LLM_TRIGGER,
-                    run.getId(),
-                    task.getId(),
-                    assignmentId,
-                    null,
-                    null,
-                    run.getId(),
-                    agentRun.getId(),
-                    traceId,
-                    0,
-                    Instant.now()
-            ));
+            llmTriggerAsyncExecutor.submit(run.getId(), traceId);
+            /*
+             * Redis Stream implementation retained for rollback/reference:
+             *
+             * llmTaskQueueService.enqueue(new LlmTaskQueueMessage(
+             *         LlmTaskType.LLM_TRIGGER,
+             *         run.getId(),
+             *         task.getId(),
+             *         assignmentId,
+             *         null,
+             *         null,
+             *         run.getId(),
+             *         agentRun.getId(),
+             *         traceId,
+             *         0,
+             *         Instant.now()
+             * ));
+             */
         }
 
         appendAudit(actorId, task.getId(), request, run);

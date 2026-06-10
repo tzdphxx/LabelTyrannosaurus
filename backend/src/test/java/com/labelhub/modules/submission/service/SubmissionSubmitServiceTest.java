@@ -15,6 +15,8 @@ import com.labelhub.common.web.TraceIdProvider;
 import com.labelhub.modules.agent.domain.AgentRun;
 import com.labelhub.modules.agent.domain.AgentRunStatus;
 import com.labelhub.modules.agent.mapper.AgentRunMapper;
+import com.labelhub.modules.ai.domain.AiReviewResult;
+import com.labelhub.modules.ai.mapper.AiReviewResultMapper;
 import com.labelhub.modules.ai.service.AiReviewDispatcher;
 import com.labelhub.modules.assignment.domain.Assignment;
 import com.labelhub.modules.assignment.domain.AssignmentStatus;
@@ -68,6 +70,9 @@ class SubmissionSubmitServiceTest {
     private AgentRunMapper agentRunMapper;
 
     @Mock
+    private AiReviewResultMapper aiReviewResultMapper;
+
+    @Mock
     private AnswerSchemaValidator answerSchemaValidator;
 
     @Mock
@@ -91,6 +96,7 @@ class SubmissionSubmitServiceTest {
                 submissionMapper,
                 taskMapper,
                 agentRunMapper,
+                aiReviewResultMapper,
                 answerSchemaValidator,
                 auditAppender,
                 aiReviewDispatcher,
@@ -251,13 +257,14 @@ class SubmissionSubmitServiceTest {
     }
 
     @Test
-    void duplicateSameAnswerForSubmittableAssignmentReturnsExistingSubmissionWithoutNewInsertOrAgentRun() {
+    void duplicateSameAnswerForStaleAiReviewingSubmissionEnqueuesMissingAiReview() {
         Assignment assignment = assignment(AssignmentStatus.DRAFTING, 2);
         Submission existing = submission(1, sha256("{\"answer\":\"hello\"}"), SubmissionStatus.AI_REVIEWING);
         existing.setId(SUBMISSION_ID);
         when(assignmentMapper.selectOwnedAssignment(ASSIGNMENT_ID, LABELER_ID)).thenReturn(assignment);
         when(taskMapper.selectById(TASK_ID)).thenReturn(publishedTask());
         when(submissionMapper.selectLatestActiveByAssignmentId(ASSIGNMENT_ID)).thenReturn(existing);
+        when(aiReviewResultMapper.selectBySubmissionId(SUBMISSION_ID)).thenReturn(null);
 
         SubmissionSubmitResponse response = submissionSubmitService.submit(
                 ASSIGNMENT_ID,
@@ -269,6 +276,29 @@ class SubmissionSubmitServiceTest {
         assertThat(response.versionNo()).isEqualTo(1);
         assertThat(response.status()).isEqualTo(SubmissionStatus.AI_REVIEWING);
         assertThat(response.agentRunId()).isNull();
+        verify(submissionMapper, never()).insert(any(Submission.class));
+        verify(agentRunMapper, never()).insert(any(AgentRun.class));
+        verify(auditAppender, never()).append(any(AuditCommand.class));
+        verify(aiReviewDispatcher).enqueue(SUBMISSION_ID);
+    }
+
+    @Test
+    void duplicateSameAnswerWithExistingAiReviewResultDoesNotEnqueueAgain() {
+        Assignment assignment = assignment(AssignmentStatus.DRAFTING, 2);
+        Submission existing = submission(1, sha256("{\"answer\":\"hello\"}"), SubmissionStatus.AI_REVIEWING);
+        existing.setId(SUBMISSION_ID);
+        when(assignmentMapper.selectOwnedAssignment(ASSIGNMENT_ID, LABELER_ID)).thenReturn(assignment);
+        when(taskMapper.selectById(TASK_ID)).thenReturn(publishedTask());
+        when(submissionMapper.selectLatestActiveByAssignmentId(ASSIGNMENT_ID)).thenReturn(existing);
+        when(aiReviewResultMapper.selectBySubmissionId(SUBMISSION_ID)).thenReturn(new AiReviewResult());
+
+        SubmissionSubmitResponse response = submissionSubmitService.submit(
+                ASSIGNMENT_ID,
+                LABELER_ID,
+                new SubmissionSubmitRequest("{\n  \"answer\" : \"hello\"\n}", 2)
+        );
+
+        assertThat(response.submissionId()).isEqualTo(SUBMISSION_ID);
         verify(submissionMapper, never()).insert(any(Submission.class));
         verify(agentRunMapper, never()).insert(any(AgentRun.class));
         verify(auditAppender, never()).append(any(AuditCommand.class));

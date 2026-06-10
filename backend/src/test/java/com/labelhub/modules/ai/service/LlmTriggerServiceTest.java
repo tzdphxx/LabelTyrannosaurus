@@ -98,6 +98,9 @@ class LlmTriggerServiceTest {
     private LlmTaskQueueService llmTaskQueueService;
 
     @Mock
+    private LlmTriggerAsyncExecutor llmTriggerAsyncExecutor;
+
+    @Mock
     private LlmTriggerRunMapper llmTriggerRunMapper;
 
     @Mock
@@ -115,7 +118,9 @@ class LlmTriggerServiceTest {
     void setUp() {
         service = new LlmTriggerService(taskMapper, datasetItemMapper, assignmentMapper,
                 llmProviderService, rateLimiter, llmGateway, agentRunService, auditAppender, traceIdProvider,
-                llmTaskQueueService, llmTriggerRunMapper, templateVersionMapper, aiReviewConfigMapper);
+                llmTaskQueueService, llmTriggerAsyncExecutor,
+                llmTriggerRunMapper, templateVersionMapper, aiReviewConfigMapper,
+                new com.fasterxml.jackson.databind.ObjectMapper());
         org.mockito.Mockito.lenient()
                 .when(agentRunService.create(
                         org.mockito.ArgumentMatchers.any(),
@@ -180,7 +185,7 @@ class LlmTriggerServiceTest {
                 .contains("\"userInstruction\":\"Make it concise\"");
 
         verify(agentRunService).start(AGENT_RUN_ID);
-        verify(llmTaskQueueService).enqueue(any());
+        verify(llmTriggerAsyncExecutor).submit(TRIGGER_RUN_ID, "trace-1");
         verify(auditAppender).append(any(AuditCommand.class));
     }
 
@@ -225,6 +230,7 @@ class LlmTriggerServiceTest {
         LlmTriggerRunResponse response = service.testFromTask(owner(), TASK_ID, requestWithItem());
 
         assertThat(response.triggerRunId()).isEqualTo(TRIGGER_RUN_ID);
+        verify(llmTriggerAsyncExecutor).submit(TRIGGER_RUN_ID, "trace-1");
     }
 
     @Test

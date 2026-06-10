@@ -146,6 +146,26 @@ public class AgentRunService {
         ensureUpdated(updated, agentRunId);
     }
 
+    @Transactional
+    public void failIfActive(Long agentRunId, AgentRunStatus failStatus, String errorMessage) {
+        if (!FAIL_STATUSES.contains(failStatus)) {
+            throw new IllegalArgumentException(
+                    "fail status must be FAILED, RATE_LIMITED or MANUAL_REQUIRED, got: " + failStatus);
+        }
+        AgentRun run = agentRunMapper.selectById(agentRunId);
+        if (run == null || (run.getStatus() != AgentRunStatus.RUNNING && run.getStatus() != AgentRunStatus.PENDING)) {
+            return;
+        }
+        AgentRunStatus currentStatus = run.getStatus();
+        run.setStatus(failStatus);
+        run.setErrorMessage(errorMessage);
+        run.setFinishedAt(LocalDateTime.now());
+        run.setLatencyMs(calculateLatencyMs(run));
+        int updated = agentRunMapper.failIfStatus(agentRunId, currentStatus, failStatus,
+                errorMessage, run.getFinishedAt(), run.getLatencyMs());
+        ensureUpdated(updated, agentRunId);
+    }
+
     private Long calculateLatencyMs(AgentRun run) {
         if (run.getStartedAt() == null || run.getFinishedAt() == null) {
             return null;

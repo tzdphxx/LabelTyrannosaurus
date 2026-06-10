@@ -2,13 +2,16 @@ package com.labelhub.modules.ai.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.labelhub.common.audit.AuditAppender;
+import com.labelhub.infrastructure.redis.RedisLockService;
 import com.labelhub.modules.agent.domain.SystemActorContext;
 import com.labelhub.modules.agent.service.SystemAgentProvider;
 import com.labelhub.modules.ai.domain.AiFlowAction;
@@ -18,6 +21,7 @@ import com.labelhub.modules.ai.mapper.AiReviewResultMapper;
 import com.labelhub.modules.submission.domain.Submission;
 import com.labelhub.modules.submission.domain.SubmissionStatus;
 import com.labelhub.modules.submission.mapper.SubmissionMapper;
+import java.time.LocalDateTime;
 import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -39,6 +43,7 @@ class AiReviewRecoveryRunnerTest {
     @Mock private AuditAppender auditAppender;
     @Mock private com.labelhub.modules.review.service.ReviewOwnershipResolver reviewOwnershipResolver;
     @Mock private AiReviewSchemaReadiness schemaReadiness;
+    @Mock private RedisLockService redisLockService;
 
     private AiReviewRecoveryRunner runner;
     private final ArgumentCaptor<Submission> submissionCaptor = ArgumentCaptor.forClass(Submission.class);
@@ -48,9 +53,14 @@ class AiReviewRecoveryRunnerTest {
     void setUp() {
         runner = new AiReviewRecoveryRunner(submissionMapper, aiReviewResultMapper, dispatcher,
                 aiAutoReviewService, systemAgentProvider, auditAppender, reviewOwnershipResolver,
-                schemaReadiness);
+                schemaReadiness, redisLockService);
         when(schemaReadiness.isReady()).thenReturn(true);
         lenient().when(systemAgentProvider.get()).thenReturn(new SystemActorContext(900L));
+        lenient().doAnswer(invocation -> {
+            Runnable action = invocation.getArgument(3);
+            action.run();
+            return null;
+        }).when(redisLockService).withLock(any(), anyLong(), anyLong(), any(Runnable.class));
     }
 
     @Test
@@ -103,6 +113,19 @@ class AiReviewRecoveryRunnerTest {
                 aiReviewResultCaptor.capture());
         assertThat(submissionCaptor.getValue().getId()).isEqualTo(SUBMISSION_ID);
         assertThat(aiReviewResultCaptor.getValue().getFlowAction()).isEqualTo(AiFlowAction.AI_ASSIGN_MANUAL_REVIEW.name());
+    }
+
+    @Test
+    void periodicRecoveryRequeuesAiReviewingSubmissionWithoutResult() {
+        Submission submission = submission();
+        submission.setSubmittedAt(LocalDateTime.now().minusMinutes(2));
+        when(submissionMapper.selectList(any(LambdaQueryWrapper.class))).thenReturn(List.of(submission));
+        when(submissionMapper.selectById(SUBMISSION_ID)).thenReturn(submission);
+        when(aiReviewResultMapper.selectBySubmissionId(SUBMISSION_ID)).thenReturn(null);
+
+        runner.recoverMissingResultsPeriodically();
+
+        verify(dispatcher).enqueue(SUBMISSION_ID);
     }
 
     private Submission submission() {

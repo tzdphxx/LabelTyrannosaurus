@@ -43,14 +43,44 @@ datasets/   # sample datasets
 - AI Flow Policy 支持可配置直通/直拒；答辩建议默认使用人工终审兜底策略。
 - 前端服务层仍存在 mock 数据，最终录屏应按实际联调范围选择前后端联合演示或后端 API 补充演示。
 
-## 后端启动
+## 本地启动
+
+推荐使用 Docker Compose 一键启动全部服务（MySQL、Redis、后端、前端）：
+
+```powershell
+docker compose up --build -d
+```
+
+启动后访问入口：
+
+| 服务 | 地址 |
+| --- | --- |
+| 前端 | http://localhost:3000 |
+| 后端 API | http://localhost:8080 |
+
+常用运维命令：
+
+```powershell
+docker compose ps                 # 查看各容器状态
+docker compose logs backend -f    # 跟踪后端日志
+docker compose down               # 停止并移除容器（保留数据卷）
+docker compose down -v            # 停止并清空数据卷（会重建数据库）
+```
+
+后端环境变量从 `backend/.env.docker` 读取，可按需修改后重新执行 `docker compose up -d --build backend`。
+
+> 说明：后端通过自建的 OpenAI-compatible Gateway（`labelhub.llm`）调用大模型，无需配置任何 Spring AI SDK；`AI_DASHSCOPE_*` 为可选的默认 Provider 配置，留空不影响启动。
+
+## 后端启动（手动）
+
+如需脱离容器单独调试后端：
 
 ```powershell
 cd backend
 mvn spring-boot:run
 ```
 
-关键环境变量：
+依赖本机已运行的 MySQL 与 Redis。关键环境变量：
 
 | 变量 | 说明 |
 | --- | --- |
@@ -62,7 +92,7 @@ mvn spring-boot:run
 | `LABELHUB_LLM_KEY_ENCRYPTION_SECRET` | LLM API Key 加密密钥，默认 `labeltyrannosaurustzdphxxwsjyeqian` |
 | `AI_DASHSCOPE_API_KEY` / `AI_DASHSCOPE_BASE_URL` / `AI_DASHSCOPE_CHAT_MODEL` | DashScope 默认 Provider 配置，默认留空；三项都填写后启动时写入数据库 |
 
-## 前端启动
+## 前端启动（手动）
 
 ```powershell
 cd frontend

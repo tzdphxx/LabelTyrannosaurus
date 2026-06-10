@@ -148,10 +148,6 @@ export const useOwnerTaskStore = create<OwnerTaskStore>((set, get) => ({
       const task = await ownerTaskService.publishTask(taskId)
       await get().loadTasks()
 
-      if (task) {
-        await get().loadTaskDetail(task.id)
-      }
-
       return task
     } catch {
       set({ error: '任务发布失败' })
@@ -167,10 +163,6 @@ export const useOwnerTaskStore = create<OwnerTaskStore>((set, get) => ({
     try {
       const task = await ownerTaskService.updateTaskStatus(taskId, status)
       await get().loadTasks()
-
-      if (task) {
-        await get().loadTaskDetail(task.id)
-      }
 
       return task
     } catch {

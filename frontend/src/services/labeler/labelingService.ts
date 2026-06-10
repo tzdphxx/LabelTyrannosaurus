@@ -64,7 +64,7 @@ function mapMockAssignmentStatus(task: LabelerTaskSummary): LabelerAssignmentSta
     case 'approved':
       return 'APPROVED'
     case 'ended':
-      return 'CANCELLED'
+      return 'ENDED'
     case 'available':
     default:
       return null

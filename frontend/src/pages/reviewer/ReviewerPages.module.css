@@ -112,6 +112,10 @@
   box-shadow: var(--reviewer-shadow);
 }
 
+.aiDetail :global(.ant-card) {
+  flex: 0 0 auto;
+}
+
 .filterToolbar {
   align-items: center;
 }
@@ -461,9 +465,10 @@
 .aiCodePanel,
 .aiPromptPanel {
   margin: 0;
-  overflow: auto;
+  overflow: visible;
   white-space: pre-wrap;
   word-break: break-word;
+  overflow-wrap: anywhere;
   font-family:
     "Cascadia Code",
     Consolas,
@@ -473,7 +478,6 @@
 }
 
 .aiCodePanel {
-  max-height: 220px;
   padding: 14px;
   border: 1px dashed #cbd5e1;
   border-radius: 8px;
@@ -482,12 +486,19 @@
 }
 
 .aiPromptPanel {
-  max-height: 190px;
   padding: 14px;
   border: 1px dashed #cbd5e1;
   border-radius: 8px;
   background: #f8fafc;
   color: #334155;
+}
+
+.aiReadableText {
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+  line-height: 1.7;
 }
 
 .aiScoreTotal {

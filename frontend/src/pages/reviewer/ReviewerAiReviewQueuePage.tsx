@@ -312,6 +312,20 @@ export function ReviewerAiReviewQueuePage() {
     }
   }, [currentAiReviewLog?.submissionId, loadSubmissionItemHistory])
 
+  const selectedLogBelongsToCurrentList = useMemo(() => {
+    if (!currentAiReviewLog?.submissionId) {
+      return false
+    }
+
+    return aiReviewLogs.some((record) => String(record.submissionId) === String(currentAiReviewLog.submissionId))
+  }, [aiReviewLogs, currentAiReviewLog?.submissionId])
+
+  useEffect(() => {
+    if (currentAiReviewLog?.submissionId && selectedLogBelongsToCurrentList) {
+      void loadSubmissionAiReview(String(currentAiReviewLog.submissionId))
+    }
+  }, [currentAiReviewLog?.submissionId, loadSubmissionAiReview, selectedLogBelongsToCurrentList])
+
   const dimensionEntries = useMemo(() => getDimensionEntries(currentAiReviewLog), [currentAiReviewLog])
   const riskFlags = useMemo(() => getRiskFlags(currentAiReviewLog), [currentAiReviewLog])
   const historyAuditItems = useMemo(() => getHistoryAuditItems(currentSubmissionItemHistory), [currentSubmissionItemHistory])
@@ -327,10 +341,6 @@ export function ReviewerAiReviewQueuePage() {
 
   const selectRecord = (record: AiReviewResultResponse) => {
     setCurrentAiReviewLog(record)
-
-    if (record.submissionId) {
-      void loadSubmissionAiReview(String(record.submissionId))
-    }
   }
 
   const changeStatus = (value: AiReviewQueueStatusFilter) => {
@@ -513,7 +523,7 @@ export function ReviewerAiReviewQueuePage() {
                   <Tag color={decisionColors[selectedDecision] ?? 'default'}>{selectedDecisionLabel}</Tag>
                   <Typography.Text type="secondary">阈值：综合 &lt; 70 时建议打回</Typography.Text>
                 </div>
-                <Typography.Paragraph>{formatValue(currentAiReviewLog.suggestion)}</Typography.Paragraph>
+                <Typography.Paragraph className={styles.aiReadableText}>{formatValue(currentAiReviewLog.suggestion)}</Typography.Paragraph>
                 {riskFlags.length ? (
                   <Space wrap size={[6, 6]}>
                     {riskFlags.map((flag) => (
@@ -537,7 +547,7 @@ export function ReviewerAiReviewQueuePage() {
           >
             {reviewTrace ? (
               <Space direction="vertical" size={12} className={styles.panelStack}>
-                <Typography.Paragraph>{formatValue(reviewTrace.summary)}</Typography.Paragraph>
+                <Typography.Paragraph className={styles.aiReadableText}>{formatValue(reviewTrace.summary)}</Typography.Paragraph>
                 {reviewTraceMetrics.length > 0 ? (
                   <Space wrap size={[6, 6]}>
                     {reviewTraceMetrics.map(([key, value]) => (
@@ -566,7 +576,7 @@ export function ReviewerAiReviewQueuePage() {
                           <Typography.Text type="secondary">
                             分数 {formatValue(step.score)} · 置信度 {formatValue(step.confidence)}
                           </Typography.Text>
-                          <Typography.Text>{formatValue(step.reason)}</Typography.Text>
+                          <Typography.Text className={styles.aiReadableText}>{formatValue(step.reason)}</Typography.Text>
                         </Space>
                       ),
                     }))}
@@ -605,7 +615,7 @@ export function ReviewerAiReviewQueuePage() {
                         <Tag color={getAuditResultColor(item.result)}>{getAuditResultLabel(item.result)}</Tag>
                         <Typography.Text type="secondary">{item.versionLabel}</Typography.Text>
                       </Space>
-                      <Typography.Text>{item.reviewer}</Typography.Text>
+                      <Typography.Text className={styles.aiReadableText}>{item.reviewer}</Typography.Text>
                       <Typography.Text type="secondary">{formatValue(item.reviewedAt)}</Typography.Text>
                     </Space>
                   ),

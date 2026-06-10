@@ -1,10 +1,10 @@
-﻿# LabelHub API
+# LabelHub API
 
 
 **简介**:LabelHub API
 
 
-**HOST**:http://81.71.143.236:18080
+**HOST**:http://localhost:8080
 
 
 **联系人**:LabelHub Backend
@@ -91,6 +91,7 @@
 |&emsp;&emsp;&emsp;&emsp;approvedCount||integer||
 |&emsp;&emsp;&emsp;&emsp;totalReward||number||
 |&emsp;&emsp;&emsp;&emsp;targetPath||string||
+|&emsp;&emsp;todoSummary||TodoSummary|TodoSummary|
 |&emsp;&emsp;&emsp;&emsp;claimedNotSubmittedCount||integer||
 |&emsp;&emsp;&emsp;&emsp;rejectedNeedFixCount||integer||
 |&emsp;&emsp;&emsp;&emsp;continuableTaskCount||integer||
@@ -139,6 +140,7 @@
 				"targetPath": ""
 			}
 		],
+		"todoSummary": {
 			"claimedNotSubmittedCount": 0,
 			"rejectedNeedFixCount": 0,
 			"continuableTaskCount": 0
@@ -383,6 +385,7 @@ modelName 可选，缺省或空白时使用所选 Provider 的 defaultModel；
 |&emsp;&emsp;promptTemplate|审核 Prompt 模板（标注规则说明）||true|string||
 |&emsp;&emsp;scoringDimensions|评分维度列表||true|array|string|
 |&emsp;&emsp;passThreshold|通过阈值（0-100）||true|number||
+|&emsp;&emsp;manualReviewThreshold|人工复核阈值（0-100，低于此值打回）||true|number||
 |&emsp;&emsp;maxRetry|最大重试次数（0-10）||false|integer(int32)||
 |&emsp;&emsp;aiFlowPolicy|AI 流转策略: MANUAL_FIRST | AI_PASS_ONLY | AI_REJECT_ONLY | AI_PASS_AND_REJECT | ALWAYS_MANUAL||false|string||
 |&emsp;&emsp;allowAiDirectApprove|是否允许 AI 直接通过||false|boolean||
@@ -396,6 +399,7 @@ modelName 可选，缺省或空白时使用所选 Provider 的 defaultModel；
 |&emsp;&emsp;maxImagesPerRequest|单次请求最大图片数（0-20）||false|integer(int32)||
 |&emsp;&emsp;allowAiDirectApproveWhenDegraded|降级时是否仍允许 AI 直接通过||false|boolean||
 |&emsp;&emsp;reviewStrategy|审核策略: LIGHTWEIGHT(单路,默认) | PARALLEL_VOTE(多模型投票) | DEEP_DIMENSION(维度专项) | AGENT_DEBATE(辩论)||false|string||
+|&emsp;&emsp;voteModels|投票模型列表, JSON[{providerId,modelName}]; 仅1个时自动复制满足最低票数||false|array|object|
 |&emsp;&emsp;voteMinAgreement|最少一致票数(1-10), 默认2||false|integer(int32)||
 |&emsp;&emsp;dimensionReviewers|深度模式维度→模型映射, JSON{dim:[{providerId,modelName}]}||false|object||
 
@@ -667,6 +671,7 @@ aiFlowPolicy 用于描述 AI 结果是否可直接过审/打回，缺省为 MANU
 |&emsp;&emsp;promptTemplate|审核 Prompt 模板（标注规则说明）||true|string||
 |&emsp;&emsp;scoringDimensions|评分维度列表||true|array|string|
 |&emsp;&emsp;passThreshold|通过阈值（0-100）||true|number||
+|&emsp;&emsp;manualReviewThreshold|人工复核阈值（0-100，低于此值打回）||true|number||
 |&emsp;&emsp;maxRetry|最大重试次数（0-10）||false|integer(int32)||
 |&emsp;&emsp;aiFlowPolicy|AI 流转策略: MANUAL_FIRST | AI_PASS_ONLY | AI_REJECT_ONLY | AI_PASS_AND_REJECT | ALWAYS_MANUAL||false|string||
 |&emsp;&emsp;allowAiDirectApprove|是否允许 AI 直接通过||false|boolean||
@@ -680,6 +685,7 @@ aiFlowPolicy 用于描述 AI 结果是否可直接过审/打回，缺省为 MANU
 |&emsp;&emsp;maxImagesPerRequest|单次请求最大图片数（0-20）||false|integer(int32)||
 |&emsp;&emsp;allowAiDirectApproveWhenDegraded|降级时是否仍允许 AI 直接通过||false|boolean||
 |&emsp;&emsp;reviewStrategy|审核策略: LIGHTWEIGHT(单路,默认) | PARALLEL_VOTE(多模型投票) | DEEP_DIMENSION(维度专项) | AGENT_DEBATE(辩论)||false|string||
+|&emsp;&emsp;voteModels|投票模型列表, JSON[{providerId,modelName}]; 仅1个时自动复制满足最低票数||false|array|object|
 |&emsp;&emsp;voteMinAgreement|最少一致票数(1-10), 默认2||false|integer(int32)||
 |&emsp;&emsp;dimensionReviewers|深度模式维度→模型映射, JSON{dim:[{providerId,modelName}]}||false|object||
 
@@ -921,6 +927,19 @@ aiFlowPolicy 用于描述 AI 结果是否可直接过审/打回，缺省为 MANU
 |&emsp;&emsp;updatedAt||string(date-time)||
 |&emsp;&emsp;rawPrompt||string||
 |&emsp;&emsp;answerJson||string||
+|&emsp;&emsp;reviewTrace||ReviewTraceResponse|ReviewTraceResponse|
+|&emsp;&emsp;&emsp;&emsp;strategy||string||
+|&emsp;&emsp;&emsp;&emsp;strategyLabel||string||
+|&emsp;&emsp;&emsp;&emsp;summary||string||
+|&emsp;&emsp;&emsp;&emsp;steps||array|ReviewTraceStep|
+|&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;name||string||
+|&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;role||string||
+|&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;decision||string||
+|&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;score||string||
+|&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;confidence||string||
+|&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;status||string||
+|&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;reason||string||
+|&emsp;&emsp;&emsp;&emsp;metrics||object||
 |traceId||string||
 
 
@@ -951,7 +970,24 @@ aiFlowPolicy 用于描述 AI 结果是否可直接过审/打回，缺省为 MANU
 		"createdAt": "",
 		"updatedAt": "",
 		"rawPrompt": "",
-		"answerJson": ""
+		"answerJson": "",
+		"reviewTrace": {
+			"strategy": "",
+			"strategyLabel": "",
+			"summary": "",
+			"steps": [
+				{
+					"name": "",
+					"role": "",
+					"decision": "",
+					"score": "",
+					"confidence": "",
+					"status": "",
+					"reason": ""
+				}
+			],
+			"metrics": {}
+		}
 	},
 	"traceId": ""
 }
@@ -1828,6 +1864,86 @@ aiFlowPolicy 用于描述 AI 结果是否可直接过审/打回，缺省为 MANU
 ```
 
 
+## 解决冲突组
+
+
+**接口地址**:`/api/v1/reviewer/conflict-groups/{groupId}/resolve`
+
+
+**请求方式**:`POST`
+
+
+**请求数据类型**:`application/x-www-form-urlencoded,application/json`
+
+
+**响应数据类型**:`*/*`
+
+
+**接口描述**:<p>选择最终提交并完成冲突仲裁。</p>
+
+
+
+**请求示例**:
+
+
+```javascript
+{
+  "goldenSubmissionId": 0,
+  "reason": ""
+}
+```
+
+
+**请求参数**:
+
+
+| 参数名称 | 参数说明 | 请求类型    | 是否必须 | 数据类型 | schema |
+| -------- | -------- | ----- | -------- | -------- | ------ |
+|groupId||path|true|integer(int64)||
+|conflictResolveRequest|ConflictResolveRequest|body|true|ConflictResolveRequest|ConflictResolveRequest|
+|&emsp;&emsp;goldenSubmissionId|||true|integer(int64)||
+|&emsp;&emsp;reason|||true|string||
+
+
+**响应状态**:
+
+
+| 状态码 | 说明 | schema |
+| -------- | -------- | ----- | 
+|200|OK|ApiResponseConflictResolveResponse|
+
+
+**响应参数**:
+
+
+| 参数名称 | 参数说明 | 类型 | schema |
+| -------- | -------- | ----- |----- | 
+|code||integer(int32)|integer(int32)|
+|message||string||
+|data||ConflictResolveResponse|ConflictResolveResponse|
+|&emsp;&emsp;groupId||integer(int64)||
+|&emsp;&emsp;status|可用值:OPEN,RESOLVED|string||
+|&emsp;&emsp;goldenSubmissionId||integer(int64)||
+|&emsp;&emsp;reviewRecordId||integer(int64)||
+|traceId||string||
+
+
+**响应示例**:
+```javascript
+{
+	"code": 0,
+	"message": "",
+	"data": {
+		"groupId": 0,
+		"status": "",
+		"goldenSubmissionId": 0,
+		"reviewRecordId": 0
+	},
+	"traceId": ""
+}
+```
+
+
 ## 待审提交列表
 
 
@@ -1843,6 +1959,7 @@ aiFlowPolicy 用于描述 AI 结果是否可直接过审/打回，缺省为 MANU
 **响应数据类型**:`*/*`
 
 
+**接口描述**:<p>查询审核员可处理的提交列表，支持按任务、提交状态、AI 结论、冲突状态、审核级别筛选。 scope=CLAIMED 查询已领取的提交，scope=AVAILABLE 查询可领取的提交（任务广场），不传则查询全部。</p>
 
 
 
@@ -1855,6 +1972,7 @@ aiFlowPolicy 用于描述 AI 结果是否可直接过审/打回，缺省为 MANU
 |submissionStatus|按提交状态筛选|query|false|string||
 |aiDecision|按 AI 结论筛选：PASS / REJECT / MANUAL_REVIEW|query|false|string||
 |aiReviewStatus|按 AI 审核状态筛选|query|false|string||
+|conflictStatus|按冲突状态筛选|query|false|string||
 |reviewLevel|按审核级别筛选|query|false|integer(int32)||
 |scope|查询范围：CLAIMED-已领取，AVAILABLE-可领取（任务广场），不传查全部|query|false|string||
 |page|页码，从 1 开始|query|false|integer(int32)||
@@ -1885,6 +2003,7 @@ aiFlowPolicy 用于描述 AI 结果是否可直接过审/打回，缺省为 MANU
 |&emsp;&emsp;&emsp;&emsp;submissionStatus|可用值:SUBMITTED,AI_REVIEWING,PENDING_FINAL,APPROVED,REJECTED,SUPERSEDED|string||
 |&emsp;&emsp;&emsp;&emsp;aiReviewStatus|可用值:PENDING,RUNNING,SUCCESS,FAILED,RATE_LIMITED,MANUAL_REQUIRED|string||
 |&emsp;&emsp;&emsp;&emsp;aiDecision||string||
+|&emsp;&emsp;&emsp;&emsp;conflictStatus||string||
 |&emsp;&emsp;&emsp;&emsp;reviewLevel||integer||
 |&emsp;&emsp;&emsp;&emsp;assignedReviewerId||integer||
 |&emsp;&emsp;&emsp;&emsp;createdAt||string||
@@ -1910,6 +2029,7 @@ aiFlowPolicy 用于描述 AI 结果是否可直接过审/打回，缺省为 MANU
 				"submissionStatus": "",
 				"aiReviewStatus": "",
 				"aiDecision": "",
+				"conflictStatus": "",
 				"reviewLevel": 0,
 				"assignedReviewerId": 0,
 				"createdAt": "",
@@ -1940,7 +2060,7 @@ aiFlowPolicy 用于描述 AI 结果是否可直接过审/打回，缺省为 MANU
 **响应数据类型**:`*/*`
 
 
-**接口描述**:<p>查询指定提交的审核详情，包含标注答案、AI 评分、审核历史等。
+**接口描述**:<p>查询指定提交的审核详情，包含标注答案、AI 评分、审核历史、冲突信息等。
 Reviewer 只能读取已分配给自己的提交；未分配时返回 403601。</p>
 
 
@@ -2012,6 +2132,7 @@ Reviewer 只能读取已分配给自己的提交；未分配时返回 403601。<
 |&emsp;&emsp;&emsp;&emsp;versionNo||integer||
 |&emsp;&emsp;&emsp;&emsp;status|可用值:SUBMITTED,AI_REVIEWING,PENDING_FINAL,APPROVED,REJECTED,SUPERSEDED|string||
 |&emsp;&emsp;&emsp;&emsp;answerHash||string||
+|&emsp;&emsp;&emsp;&emsp;isGolden||boolean||
 |&emsp;&emsp;&emsp;&emsp;submittedAt||string||
 |&emsp;&emsp;&emsp;&emsp;aiDecision||string||
 |&emsp;&emsp;&emsp;&emsp;aiFlowAction||string||
@@ -2090,6 +2211,7 @@ Reviewer 只能读取已分配给自己的提交；未分配时返回 403601。<
 				"versionNo": 0,
 				"status": "",
 				"answerHash": "",
+				"isGolden": true,
 				"submittedAt": "",
 				"aiDecision": "",
 				"aiFlowAction": "",
@@ -2119,6 +2241,355 @@ Reviewer 只能读取已分配给自己的提交；未分配时返回 403601。<
 ```
 
 
+## 审核任务广场
+
+
+**接口地址**:`/api/v1/reviewer/review-tasks`
+
+
+**请求方式**:`GET`
+
+
+**请求数据类型**:`application/x-www-form-urlencoded`
+
+
+**响应数据类型**:`*/*`
+
+
+**接口描述**:<p>查询当前审核员可见的已发布任务，不暴露审核级别。</p>
+
+
+
+**请求参数**:
+
+
+| 参数名称 | 参数说明 | 请求类型    | 是否必须 | 数据类型 | schema |
+| -------- | -------- | ----- | -------- | -------- | ------ |
+|claimScope|领取范围：ALL / MINE / CLAIMED / UNCLAIMED|query|false|string||
+
+
+**响应状态**:
+
+
+| 状态码 | 说明 | schema |
+| -------- | -------- | ----- | 
+|200|OK|ApiResponseListReviewerReviewTaskListItem|
+
+
+**响应参数**:
+
+
+| 参数名称 | 参数说明 | 类型 | schema |
+| -------- | -------- | ----- |----- | 
+|code||integer(int32)|integer(int32)|
+|message||string||
+|data||array|ReviewerReviewTaskListItem|
+|&emsp;&emsp;taskId|Task ID|integer(int64)||
+|&emsp;&emsp;taskTitle|Task title|string||
+|&emsp;&emsp;taskStatus|Task status|string||
+|&emsp;&emsp;deadlineAt|Task deadline|string(date-time)||
+|&emsp;&emsp;pendingCount|Pending final submissions for this task|integer(int32)||
+|&emsp;&emsp;myPendingCount|Pending final submissions assigned to current reviewer|integer(int32)||
+|&emsp;&emsp;totalReviewedCount|Submissions reviewed by current reviewer for this task|integer(int32)||
+|&emsp;&emsp;claimStatus|Claim status from current reviewer perspective: MINE / CLAIMED / UNCLAIMED|string||
+|&emsp;&emsp;claimable|Whether current reviewer can claim this task|boolean||
+|&emsp;&emsp;claimedByMe|Whether current reviewer has claimed this task|boolean||
+|&emsp;&emsp;claimed|Whether any reviewer has claimed this task|boolean||
+|traceId||string||
+
+
+**响应示例**:
+```javascript
+{
+	"code": 0,
+	"message": "",
+	"data": [
+		{
+			"taskId": 10,
+			"taskTitle": "",
+			"taskStatus": "PUBLISHED",
+			"deadlineAt": "",
+			"pendingCount": 0,
+			"myPendingCount": 0,
+			"totalReviewedCount": 0,
+			"claimStatus": "",
+			"claimable": true,
+			"claimedByMe": true,
+			"claimed": true
+		}
+	],
+	"traceId": ""
+}
+```
+
+
+## 冲突组列表
+
+
+**接口地址**:`/api/v1/reviewer/conflict-groups`
+
+
+**请求方式**:`GET`
+
+
+**请求数据类型**:`application/x-www-form-urlencoded`
+
+
+**响应数据类型**:`*/*`
+
+
+**接口描述**:<p>查询待解决冲突组。</p>
+
+
+
+**请求参数**:
+
+
+| 参数名称 | 参数说明 | 请求类型    | 是否必须 | 数据类型 | schema |
+| -------- | -------- | ----- | -------- | -------- | ------ |
+|limit||query|false|integer(int32)||
+
+
+**响应状态**:
+
+
+| 状态码 | 说明 | schema |
+| -------- | -------- | ----- | 
+|200|OK|ApiResponseListConflictGroupResponse|
+
+
+**响应参数**:
+
+
+| 参数名称 | 参数说明 | 类型 | schema |
+| -------- | -------- | ----- |----- | 
+|code||integer(int32)|integer(int32)|
+|message||string||
+|data||array|ConflictGroupResponse|
+|&emsp;&emsp;groupId||integer(int64)||
+|&emsp;&emsp;taskId||integer(int64)||
+|&emsp;&emsp;datasetItemId||integer(int64)||
+|&emsp;&emsp;status|可用值:OPEN,RESOLVED|string||
+|&emsp;&emsp;consensusScore||number||
+|&emsp;&emsp;goldenSubmissionId||integer(int64)||
+|&emsp;&emsp;candidateSubmissions||array|CandidateSubmissionItem|
+|&emsp;&emsp;&emsp;&emsp;submissionId||integer||
+|&emsp;&emsp;&emsp;&emsp;labelerId||integer||
+|&emsp;&emsp;&emsp;&emsp;answerJson||string||
+|&emsp;&emsp;&emsp;&emsp;aiReviewSummary||AiReviewSummary|AiReviewSummary|
+|&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;aiReviewResultId||integer||
+|&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;agentRunId||integer||
+|&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;status|可用值:PENDING,RUNNING,SUCCESS,FAILED,RATE_LIMITED,MANUAL_REQUIRED|string||
+|&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;decision||string||
+|&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;averageScore||string||
+|&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;riskFlags||string||
+|&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;suggestion||string||
+|&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;errorCode||string||
+|&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;promptMode||string||
+|&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;degraded||boolean||
+|&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;limitations||string||
+|&emsp;&emsp;&emsp;&emsp;reviewRecords||array|ReviewRecordItem|
+|&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;reviewRecordId||integer||
+|&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;reviewerId||integer||
+|&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;action||string||
+|&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;reviewLevel||integer||
+|&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;reason||string||
+|&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;reviewComment||string||
+|&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;createdAt||string||
+|&emsp;&emsp;&emsp;&emsp;versionNo||integer||
+|&emsp;&emsp;createdAt||string(date-time)||
+|&emsp;&emsp;resolvedAt||string(date-time)||
+|traceId||string||
+
+
+**响应示例**:
+```javascript
+{
+	"code": 0,
+	"message": "",
+	"data": [
+		{
+			"groupId": 0,
+			"taskId": 0,
+			"datasetItemId": 0,
+			"status": "",
+			"consensusScore": 0,
+			"goldenSubmissionId": 0,
+			"candidateSubmissions": [
+				{
+					"submissionId": 0,
+					"labelerId": 0,
+					"answerJson": "",
+					"aiReviewSummary": {
+						"aiReviewResultId": 0,
+						"agentRunId": 0,
+						"status": "",
+						"decision": "",
+						"averageScore": "",
+						"riskFlags": "",
+						"suggestion": "",
+						"errorCode": "",
+						"promptMode": "",
+						"degraded": true,
+						"limitations": ""
+					},
+					"reviewRecords": [
+						{
+							"reviewRecordId": 0,
+							"reviewerId": 0,
+							"action": "",
+							"reviewLevel": 0,
+							"reason": "",
+							"reviewComment": "",
+							"createdAt": ""
+						}
+					],
+					"versionNo": 0
+				}
+			],
+			"createdAt": "",
+			"resolvedAt": ""
+		}
+	],
+	"traceId": ""
+}
+```
+
+
+## 冲突组详情
+
+
+**接口地址**:`/api/v1/reviewer/conflict-groups/{groupId}`
+
+
+**请求方式**:`GET`
+
+
+**请求数据类型**:`application/x-www-form-urlencoded`
+
+
+**响应数据类型**:`*/*`
+
+
+**接口描述**:<p>查询冲突组详情。</p>
+
+
+
+**请求参数**:
+
+
+| 参数名称 | 参数说明 | 请求类型    | 是否必须 | 数据类型 | schema |
+| -------- | -------- | ----- | -------- | -------- | ------ |
+|groupId||path|true|integer(int64)||
+
+
+**响应状态**:
+
+
+| 状态码 | 说明 | schema |
+| -------- | -------- | ----- | 
+|200|OK|ApiResponseConflictGroupResponse|
+
+
+**响应参数**:
+
+
+| 参数名称 | 参数说明 | 类型 | schema |
+| -------- | -------- | ----- |----- | 
+|code||integer(int32)|integer(int32)|
+|message||string||
+|data||ConflictGroupResponse|ConflictGroupResponse|
+|&emsp;&emsp;groupId||integer(int64)||
+|&emsp;&emsp;taskId||integer(int64)||
+|&emsp;&emsp;datasetItemId||integer(int64)||
+|&emsp;&emsp;status|可用值:OPEN,RESOLVED|string||
+|&emsp;&emsp;consensusScore||number||
+|&emsp;&emsp;goldenSubmissionId||integer(int64)||
+|&emsp;&emsp;candidateSubmissions||array|CandidateSubmissionItem|
+|&emsp;&emsp;&emsp;&emsp;submissionId||integer||
+|&emsp;&emsp;&emsp;&emsp;labelerId||integer||
+|&emsp;&emsp;&emsp;&emsp;answerJson||string||
+|&emsp;&emsp;&emsp;&emsp;aiReviewSummary||AiReviewSummary|AiReviewSummary|
+|&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;aiReviewResultId||integer||
+|&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;agentRunId||integer||
+|&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;status|可用值:PENDING,RUNNING,SUCCESS,FAILED,RATE_LIMITED,MANUAL_REQUIRED|string||
+|&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;decision||string||
+|&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;averageScore||string||
+|&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;riskFlags||string||
+|&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;suggestion||string||
+|&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;errorCode||string||
+|&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;promptMode||string||
+|&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;degraded||boolean||
+|&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;limitations||string||
+|&emsp;&emsp;&emsp;&emsp;reviewRecords||array|ReviewRecordItem|
+|&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;reviewRecordId||integer||
+|&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;reviewerId||integer||
+|&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;action||string||
+|&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;reviewLevel||integer||
+|&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;reason||string||
+|&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;reviewComment||string||
+|&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;createdAt||string||
+|&emsp;&emsp;&emsp;&emsp;versionNo||integer||
+|&emsp;&emsp;createdAt||string(date-time)||
+|&emsp;&emsp;resolvedAt||string(date-time)||
+|traceId||string||
+
+
+**响应示例**:
+```javascript
+{
+	"code": 0,
+	"message": "",
+	"data": {
+		"groupId": 0,
+		"taskId": 0,
+		"datasetItemId": 0,
+		"status": "",
+		"consensusScore": 0,
+		"goldenSubmissionId": 0,
+		"candidateSubmissions": [
+			{
+				"submissionId": 0,
+				"labelerId": 0,
+				"answerJson": "",
+				"aiReviewSummary": {
+					"aiReviewResultId": 0,
+					"agentRunId": 0,
+					"status": "",
+					"decision": "",
+					"averageScore": "",
+					"riskFlags": "",
+					"suggestion": "",
+					"errorCode": "",
+					"promptMode": "",
+					"degraded": true,
+					"limitations": ""
+				},
+				"reviewRecords": [
+					{
+						"reviewRecordId": 0,
+						"reviewerId": 0,
+						"action": "",
+						"reviewLevel": 0,
+						"reason": "",
+						"reviewComment": "",
+						"createdAt": ""
+					}
+				],
+				"versionNo": 0
+			}
+		],
+		"createdAt": "",
+		"resolvedAt": ""
+	},
+	"traceId": ""
+}
+```
+
+
+# 预标注
+
+
 ## 执行预标注
 
 
@@ -2134,7 +2605,7 @@ Reviewer 只能读取已分配给自己的提交；未分配时返回 403601。<
 **响应数据类型**:`*/*`
 
 
-**接口描述**:<p>触发 AI 为当前 assignment 生成建议答案。复用任务的 AI 审核配置中的 Provider 和 Prompt。一个 assignment 同时只能有一个预标注在运行。</p>
+**接口描述**:<p>触发 AI 为当前 assignment 生成整题建议答案。复用任务的 AI 审核配置中的 Provider 和 Prompt。一个 assignment 同时只能有一个预标注在运行。</p>
 
 
 
@@ -2340,7 +2811,7 @@ Reviewer 只能读取已分配给自己的提交；未分配时返回 403601。<
 **响应数据类型**:`*/*`
 
 
-**接口描述**:<p>获取当前 assignment 最新一次预标注的结果，包含建议答案、置信度和风险标记。</p>
+**接口描述**:<p>获取当前 assignment 最新一次预标注的结果，包含建议答案、字段级建议、置信度和风险标记。</p>
 
 
 
@@ -2739,6 +3210,100 @@ Reviewer 只能读取已分配给自己的提交；未分配时返回 403601。<
 	"traceId": ""
 }
 ```
+
+
+## 优质提交分页
+
+
+**接口地址**:`/api/v1/owner/export/golden-submissions`
+
+
+**请求方式**:`GET`
+
+
+**请求数据类型**:`application/x-www-form-urlencoded`
+
+
+**响应数据类型**:`*/*`
+
+
+**接口描述**:<p>查询可导出的优质提交快照。</p>
+
+
+
+**请求参数**:
+
+
+| 参数名称 | 参数说明 | 请求类型    | 是否必须 | 数据类型 | schema |
+| -------- | -------- | ----- | -------- | -------- | ------ |
+|taskId||query|true|integer(int64)||
+|lastId||query|false|integer(int64)||
+|limit||query|false|integer(int32)||
+
+
+**响应状态**:
+
+
+| 状态码 | 说明 | schema |
+| -------- | -------- | ----- | 
+|200|OK|ApiResponseExportPageResponse|
+
+
+**响应参数**:
+
+
+| 参数名称 | 参数说明 | 类型 | schema |
+| -------- | -------- | ----- |----- | 
+|code||integer(int32)|integer(int32)|
+|message||string||
+|data||ExportPageResponse|ExportPageResponse|
+|&emsp;&emsp;items||array|ExportGoldenItem|
+|&emsp;&emsp;&emsp;&emsp;submissionId||integer||
+|&emsp;&emsp;&emsp;&emsp;taskId||integer||
+|&emsp;&emsp;&emsp;&emsp;datasetItemId||integer||
+|&emsp;&emsp;&emsp;&emsp;itemJsonRef||string||
+|&emsp;&emsp;&emsp;&emsp;labelerId||integer||
+|&emsp;&emsp;&emsp;&emsp;versionNo||integer||
+|&emsp;&emsp;&emsp;&emsp;answerJson||string||
+|&emsp;&emsp;&emsp;&emsp;aiDecision|可用值:PASS,REJECT,MANUAL_REVIEW|string||
+|&emsp;&emsp;&emsp;&emsp;aiSummary||string||
+|&emsp;&emsp;&emsp;&emsp;reviewSummary||string||
+|&emsp;&emsp;&emsp;&emsp;auditRef||integer||
+|&emsp;&emsp;nextCursor||integer(int64)||
+|&emsp;&emsp;hasMore||boolean||
+|traceId||string||
+
+
+**响应示例**:
+```javascript
+{
+	"code": 0,
+	"message": "",
+	"data": {
+		"items": [
+			{
+				"submissionId": 0,
+				"taskId": 0,
+				"datasetItemId": 0,
+				"itemJsonRef": "",
+				"labelerId": 0,
+				"versionNo": 0,
+				"answerJson": "",
+				"aiDecision": "",
+				"aiSummary": "",
+				"reviewSummary": "",
+				"auditRef": 0
+			}
+		],
+		"nextCursor": 0,
+		"hasMore": true
+	},
+	"traceId": ""
+}
+```
+
+
+# 指派管理
 
 
 ## 查看指派列表
@@ -3144,6 +3709,7 @@ Reviewer 只能读取已分配给自己的提交；未分配时返回 403601。<
 |submissionStatus||query|false|string||
 |aiDecision||query|false|string||
 |keyword||query|false|string||
+|submittedOnly||query|false|boolean||
 |page||query|false|integer(int32)||
 |size||query|false|integer(int32)||
 
@@ -3469,6 +4035,17 @@ Reviewer 只能读取已分配给自己的提交；未分配时返回 403601。<
 |&emsp;&emsp;&emsp;&emsp;endedAt|结束时间|string||
 |&emsp;&emsp;&emsp;&emsp;createdAt|创建时间|string||
 |&emsp;&emsp;&emsp;&emsp;updatedAt|更新时间|string||
+|&emsp;&emsp;&emsp;&emsp;rewardRule|奖励规则响应|RewardRuleResponse|RewardRuleResponse|
+|&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;ruleId|规则记录 ID|integer||
+|&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;taskId|所属任务 ID|integer||
+|&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;effectiveVersion|规则版本号，每次保存递增|integer||
+|&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;rewardMode|奖励模式：APPROVED_ITEM（按通过条目计奖）|string||
+|&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;unitReward|单条奖励金额|number||
+|&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;rewardCurrency|奖励货币类型|string||
+|&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;rewardVisible|奖励是否对标注员可见|boolean||
+|&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;effectiveAt|规则生效时间|string||
+|&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;createdBy|创建人用户 ID|integer||
+|&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;createdAt|规则创建时间|string||
 |&emsp;&emsp;description||string||
 |&emsp;&emsp;instructionRichText||string||
 |&emsp;&emsp;templateVersionId||integer(int64)||
@@ -3506,7 +4083,19 @@ Reviewer 只能读取已分配给自己的提交；未分配时返回 403601。<
 			"publishedAt": "",
 			"endedAt": "",
 			"createdAt": "",
-			"updatedAt": ""
+			"updatedAt": "",
+			"rewardRule": {
+				"ruleId": 100,
+				"taskId": 10,
+				"effectiveVersion": 3,
+				"rewardMode": "APPROVED_ITEM",
+				"unitReward": 2.5,
+				"rewardCurrency": "POINT",
+				"rewardVisible": true,
+				"effectiveAt": "",
+				"createdBy": 1,
+				"createdAt": ""
+			}
 		},
 		"description": "",
 		"instructionRichText": "",
@@ -3596,326 +4185,7 @@ Reviewer 只能读取已分配给自己的提交；未分配时返回 403601。<
 ```
 
 
-# 导出
-
-
-## 导出任务列表
-
-
-**接口地址**:`/api/v1/tasks/{taskId}/exports`
-
-
-**请求方式**:`GET`
-
-
-**请求数据类型**:`application/x-www-form-urlencoded`
-
-
-**响应数据类型**:`*/*`
-
-
-**接口描述**:<p>分页查询任务导出历史。</p>
-
-
-
-**请求参数**:
-
-
-| 参数名称 | 参数说明 | 请求类型    | 是否必须 | 数据类型 | schema |
-| -------- | -------- | ----- | -------- | -------- | ------ |
-|taskId||path|true|integer(int64)||
-|page||query|false|integer(int32)||
-|pageSize||query|false|integer(int32)||
-
-
-**响应状态**:
-
-
-| 状态码 | 说明 | schema |
-| -------- | -------- | ----- | 
-|200|OK|ApiResponseExportJobPageResponse|
-
-
-**响应参数**:
-
-
-| 参数名称 | 参数说明 | 类型 | schema |
-| -------- | -------- | ----- |----- | 
-|code||integer(int32)|integer(int32)|
-|message||string||
-|data||ExportJobPageResponse|ExportJobPageResponse|
-|&emsp;&emsp;items||array|ExportJobResponse|
-|&emsp;&emsp;&emsp;&emsp;exportJobId||integer||
-|&emsp;&emsp;&emsp;&emsp;taskId||integer||
-|&emsp;&emsp;&emsp;&emsp;exportFormat||string||
-|&emsp;&emsp;&emsp;&emsp;status||string||
-|&emsp;&emsp;&emsp;&emsp;includeAiReview||boolean||
-|&emsp;&emsp;&emsp;&emsp;includeAuditTrail||boolean||
-|&emsp;&emsp;&emsp;&emsp;includeReviewComment||boolean||
-|&emsp;&emsp;&emsp;&emsp;includeLabelerInfo||boolean||
-|&emsp;&emsp;&emsp;&emsp;fieldMappingJson||string||
-|&emsp;&emsp;&emsp;&emsp;resultFileId||integer||
-|&emsp;&emsp;&emsp;&emsp;downloadUrl||string||
-|&emsp;&emsp;&emsp;&emsp;errorMessage||string||
-|&emsp;&emsp;&emsp;&emsp;traceId||string||
-|&emsp;&emsp;&emsp;&emsp;startedAt||string||
-|&emsp;&emsp;&emsp;&emsp;finishedAt||string||
-|&emsp;&emsp;&emsp;&emsp;createdAt||string||
-|&emsp;&emsp;page||integer(int32)||
-|&emsp;&emsp;pageSize||integer(int32)||
-|&emsp;&emsp;total||integer(int64)||
-|traceId||string||
-
-
-**响应示例**:
-```javascript
-{
-	"code": 0,
-	"message": "",
-	"data": {
-		"items": [
-			{
-				"exportJobId": 0,
-				"taskId": 0,
-				"exportFormat": "",
-				"status": "",
-				"includeAiReview": true,
-				"includeAuditTrail": true,
-				"includeReviewComment": true,
-				"includeLabelerInfo": true,
-				"fieldMappingJson": "",
-				"resultFileId": 0,
-				"downloadUrl": "",
-				"errorMessage": "",
-				"traceId": "",
-				"startedAt": "",
-				"finishedAt": "",
-				"createdAt": ""
-			}
-		],
-		"page": 0,
-		"pageSize": 0,
-		"total": 0
-	},
-	"traceId": ""
-}
-```
-
-
-## 创建导出任务
-
-
-**接口地址**:`/api/v1/tasks/{taskId}/exports`
-
-
-**请求方式**:`POST`
-
-
-**请求数据类型**:`application/x-www-form-urlencoded,application/json`
-
-
-**响应数据类型**:`*/*`
-
-
-**接口描述**:<p>按任务创建异步导出任务。
-前端不需要强制传 X-Trace-Id；服务端会通过 TraceIdProvider 解析或生成 traceId，
-并提交异步导出作业。</p>
-
-
-
-**请求示例**:
-
-
-```javascript
-{
-  "exportFormat": "",
-  "includeAiReview": true,
-  "includeAuditTrail": true,
-  "includeReviewComment": true,
-  "includeLabelerInfo": true,
-  "fieldMappings": [
-    {
-      "sourceJsonPath": "",
-      "targetName": "",
-      "formatter": "",
-      "include": true
-    }
-  ]
-}
-```
-
-
-**请求参数**:
-
-
-| 参数名称 | 参数说明 | 请求类型    | 是否必须 | 数据类型 | schema |
-| -------- | -------- | ----- | -------- | -------- | ------ |
-|taskId||path|true|integer(int64)||
-|createExportRequest|CreateExportRequest|body|true|CreateExportRequest|CreateExportRequest|
-|&emsp;&emsp;exportFormat|可用值:JSON,JSONL,CSV,EXCEL||false|string||
-|&emsp;&emsp;includeAiReview|||false|boolean||
-|&emsp;&emsp;includeAuditTrail|||false|boolean||
-|&emsp;&emsp;includeReviewComment|||false|boolean||
-|&emsp;&emsp;includeLabelerInfo|||false|boolean||
-|&emsp;&emsp;fieldMappings|||false|array|ExportFieldMapping|
-|&emsp;&emsp;&emsp;&emsp;sourceJsonPath|||false|string||
-|&emsp;&emsp;&emsp;&emsp;targetName|||false|string||
-|&emsp;&emsp;&emsp;&emsp;formatter|||false|string||
-|&emsp;&emsp;&emsp;&emsp;include|||false|boolean||
-
-
-**响应状态**:
-
-
-| 状态码 | 说明 | schema |
-| -------- | -------- | ----- | 
-|200|OK|ApiResponseExportJobResponse|
-
-
-**响应参数**:
-
-
-| 参数名称 | 参数说明 | 类型 | schema |
-| -------- | -------- | ----- |----- | 
-|code||integer(int32)|integer(int32)|
-|message||string||
-|data||ExportJobResponse|ExportJobResponse|
-|&emsp;&emsp;exportJobId||integer(int64)||
-|&emsp;&emsp;taskId||integer(int64)||
-|&emsp;&emsp;exportFormat||string||
-|&emsp;&emsp;status||string||
-|&emsp;&emsp;includeAiReview||boolean||
-|&emsp;&emsp;includeAuditTrail||boolean||
-|&emsp;&emsp;includeReviewComment||boolean||
-|&emsp;&emsp;includeLabelerInfo||boolean||
-|&emsp;&emsp;fieldMappingJson||string||
-|&emsp;&emsp;resultFileId||integer(int64)||
-|&emsp;&emsp;downloadUrl||string||
-|&emsp;&emsp;errorMessage||string||
-|&emsp;&emsp;traceId||string||
-|&emsp;&emsp;startedAt||string(date-time)||
-|&emsp;&emsp;finishedAt||string(date-time)||
-|&emsp;&emsp;createdAt||string(date-time)||
-|traceId||string||
-
-
-**响应示例**:
-```javascript
-{
-	"code": 0,
-	"message": "",
-	"data": {
-		"exportJobId": 0,
-		"taskId": 0,
-		"exportFormat": "",
-		"status": "",
-		"includeAiReview": true,
-		"includeAuditTrail": true,
-		"includeReviewComment": true,
-		"includeLabelerInfo": true,
-		"fieldMappingJson": "",
-		"resultFileId": 0,
-		"downloadUrl": "",
-		"errorMessage": "",
-		"traceId": "",
-		"startedAt": "",
-		"finishedAt": "",
-		"createdAt": ""
-	},
-	"traceId": ""
-}
-```
-
-
-## 导出任务详情
-
-
-**接口地址**:`/api/v1/tasks/{taskId}/exports/{exportJobId}`
-
-
-**请求方式**:`GET`
-
-
-**请求数据类型**:`application/x-www-form-urlencoded`
-
-
-**响应数据类型**:`*/*`
-
-
-**接口描述**:<p>查询导出任务状态和下载信息。</p>
-
-
-
-**请求参数**:
-
-
-| 参数名称 | 参数说明 | 请求类型    | 是否必须 | 数据类型 | schema |
-| -------- | -------- | ----- | -------- | -------- | ------ |
-|taskId||path|true|integer(int64)||
-|exportJobId||path|true|integer(int64)||
-
-
-**响应状态**:
-
-
-| 状态码 | 说明 | schema |
-| -------- | -------- | ----- | 
-|200|OK|ApiResponseExportJobResponse|
-
-
-**响应参数**:
-
-
-| 参数名称 | 参数说明 | 类型 | schema |
-| -------- | -------- | ----- |----- | 
-|code||integer(int32)|integer(int32)|
-|message||string||
-|data||ExportJobResponse|ExportJobResponse|
-|&emsp;&emsp;exportJobId||integer(int64)||
-|&emsp;&emsp;taskId||integer(int64)||
-|&emsp;&emsp;exportFormat||string||
-|&emsp;&emsp;status||string||
-|&emsp;&emsp;includeAiReview||boolean||
-|&emsp;&emsp;includeAuditTrail||boolean||
-|&emsp;&emsp;includeReviewComment||boolean||
-|&emsp;&emsp;includeLabelerInfo||boolean||
-|&emsp;&emsp;fieldMappingJson||string||
-|&emsp;&emsp;resultFileId||integer(int64)||
-|&emsp;&emsp;downloadUrl||string||
-|&emsp;&emsp;errorMessage||string||
-|&emsp;&emsp;traceId||string||
-|&emsp;&emsp;startedAt||string(date-time)||
-|&emsp;&emsp;finishedAt||string(date-time)||
-|&emsp;&emsp;createdAt||string(date-time)||
-|traceId||string||
-
-
-**响应示例**:
-```javascript
-{
-	"code": 0,
-	"message": "",
-	"data": {
-		"exportJobId": 0,
-		"taskId": 0,
-		"exportFormat": "",
-		"status": "",
-		"includeAiReview": true,
-		"includeAuditTrail": true,
-		"includeReviewComment": true,
-		"includeLabelerInfo": true,
-		"fieldMappingJson": "",
-		"resultFileId": 0,
-		"downloadUrl": "",
-		"errorMessage": "",
-		"traceId": "",
-		"startedAt": "",
-		"finishedAt": "",
-		"createdAt": ""
-	},
-	"traceId": ""
-}
-```
+# 领取
 
 
 ## 读取草稿
@@ -4299,6 +4569,17 @@ Reviewer 只能读取已分配给自己的提交；未分配时返回 403601。<
 |&emsp;&emsp;&emsp;&emsp;endedAt|结束时间|string||
 |&emsp;&emsp;&emsp;&emsp;createdAt|创建时间|string||
 |&emsp;&emsp;&emsp;&emsp;updatedAt|更新时间|string||
+|&emsp;&emsp;&emsp;&emsp;rewardRule|奖励规则响应|RewardRuleResponse|RewardRuleResponse|
+|&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;ruleId|规则记录 ID|integer||
+|&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;taskId|所属任务 ID|integer||
+|&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;effectiveVersion|规则版本号，每次保存递增|integer||
+|&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;rewardMode|奖励模式：APPROVED_ITEM（按通过条目计奖）|string||
+|&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;unitReward|单条奖励金额|number||
+|&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;rewardCurrency|奖励货币类型|string||
+|&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;rewardVisible|奖励是否对标注员可见|boolean||
+|&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;effectiveAt|规则生效时间|string||
+|&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;createdBy|创建人用户 ID|integer||
+|&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;createdAt|规则创建时间|string||
 |&emsp;&emsp;myClaimedCount|当前用户在该任务下的已领取数|integer(int32)||
 |&emsp;&emsp;mySubmittedCount|当前用户在该任务下的已提交数|integer(int32)||
 |&emsp;&emsp;myApprovedCount|当前用户在该任务下的已通过数|integer(int32)||
@@ -4338,7 +4619,19 @@ Reviewer 只能读取已分配给自己的提交；未分配时返回 403601。<
 				"publishedAt": "",
 				"endedAt": "",
 				"createdAt": "",
-				"updatedAt": ""
+				"updatedAt": "",
+				"rewardRule": {
+					"ruleId": 100,
+					"taskId": 10,
+					"effectiveVersion": 3,
+					"rewardMode": "APPROVED_ITEM",
+					"unitReward": 2.5,
+					"rewardCurrency": "POINT",
+					"rewardVisible": true,
+					"effectiveAt": "",
+					"createdBy": 1,
+					"createdAt": ""
+				}
 			},
 			"myClaimedCount": 5,
 			"mySubmittedCount": 3,
@@ -4505,7 +4798,7 @@ Reviewer 只能读取已分配给自己的提交；未分配时返回 403601。<
 | -------- | -------- | ----- | -------- | -------- | ------ |
 |providerId||path|true|integer(int64)||
 |updateLlmProviderRequest|更新 LLM Provider 请求|body|true|UpdateLlmProviderRequest|UpdateLlmProviderRequest|
-|&emsp;&emsp;providerCode|Provider 编码，使用小写字母、数字、短横线或下划线||true|string||
+|&emsp;&emsp;providerCode|Provider 编码，建议使用小写字母、数字、短横线或下划线||true|string||
 |&emsp;&emsp;providerName|Provider 展示名称||true|string||
 |&emsp;&emsp;baseUrl|OpenAI-compatible Base URL；服务端会去掉末尾斜杠||true|string||
 |&emsp;&emsp;apiKey|新的 API Key；null、缺省或空白表示保留原有密钥，非空时加密后替换||false|string||
@@ -4734,7 +5027,7 @@ Reviewer 只能读取已分配给自己的提交；未分配时返回 403601。<
 | 参数名称 | 参数说明 | 请求类型    | 是否必须 | 数据类型 | schema |
 | -------- | -------- | ----- | -------- | -------- | ------ |
 |createLlmProviderRequest|创建 LLM Provider 请求|body|true|CreateLlmProviderRequest|CreateLlmProviderRequest|
-|&emsp;&emsp;providerCode|Provider 编码，使用小写字母、数字、短横线或下划线||true|string||
+|&emsp;&emsp;providerCode|Provider 编码，建议使用小写字母、数字、短横线或下划线||true|string||
 |&emsp;&emsp;providerName|Provider 展示名称||true|string||
 |&emsp;&emsp;baseUrl|OpenAI-compatible Base URL；服务端会去掉末尾斜杠||true|string||
 |&emsp;&emsp;apiKey|管理员配置的 API Key；服务端 AES-GCM 加密保存，响应中不会返回||true|string||
@@ -5091,7 +5384,7 @@ Reviewer 只能读取已分配给自己的提交；未分配时返回 403601。<
 ```
 
 
-# LLM 触发
+# LLM 字段触发
 
 
 ## Owner 预览测试 LlmTrigger
@@ -5136,7 +5429,7 @@ Reviewer 只能读取已分配给自己的提交；未分配时返回 403601。<
 | 参数名称 | 参数说明 | 请求类型    | 是否必须 | 数据类型 | schema |
 | -------- | -------- | ----- | -------- | -------- | ------ |
 |taskId||path|true|integer(int64)||
-|llmTriggerRunRequest|LLM 触发请求。标注员点击组件后后端构建 LLM 上下文并发起调用。|body|true|LlmTriggerRunRequest|LlmTriggerRunRequest|
+|llmTriggerRunRequest|LLM 字段触发请求。标注员点击组件后后端构建 LLM 上下文并发起调用。|body|true|LlmTriggerRunRequest|LlmTriggerRunRequest|
 |&emsp;&emsp;providerId|旧版厂商 ID（标注员触发时忽略，保留用于旧客户端兼容）||false|integer(int64)||
 |&emsp;&emsp;modelName|旧版模型名称（标注员触发时忽略，保留用于旧客户端兼容）||false|string||
 |&emsp;&emsp;promptTemplate|旧版 Prompt 模板（标注员触发时忽略，保留用于旧客户端兼容）||false|string||
@@ -5424,7 +5717,7 @@ Reviewer 只能读取已分配给自己的提交；未分配时返回 403601。<
 | 参数名称 | 参数说明 | 请求类型    | 是否必须 | 数据类型 | schema |
 | -------- | -------- | ----- | -------- | -------- | ------ |
 |assignmentId||path|true|integer(int64)||
-|llmTriggerRunRequest|LLM 触发请求。标注员点击组件后后端构建 LLM 上下文并发起调用。|body|true|LlmTriggerRunRequest|LlmTriggerRunRequest|
+|llmTriggerRunRequest|LLM 字段触发请求。标注员点击组件后后端构建 LLM 上下文并发起调用。|body|true|LlmTriggerRunRequest|LlmTriggerRunRequest|
 |&emsp;&emsp;providerId|旧版厂商 ID（标注员触发时忽略，保留用于旧客户端兼容）||false|integer(int64)||
 |&emsp;&emsp;modelName|旧版模型名称（标注员触发时忽略，保留用于旧客户端兼容）||false|string||
 |&emsp;&emsp;promptTemplate|旧版 Prompt 模板（标注员触发时忽略，保留用于旧客户端兼容）||false|string||
@@ -6287,6 +6580,17 @@ Reviewer 只能读取已分配给自己的提交；未分配时返回 403601。<
 |&emsp;&emsp;&emsp;&emsp;endedAt|结束时间|string||
 |&emsp;&emsp;&emsp;&emsp;createdAt|创建时间|string||
 |&emsp;&emsp;&emsp;&emsp;updatedAt|更新时间|string||
+|&emsp;&emsp;&emsp;&emsp;rewardRule|奖励规则响应|RewardRuleResponse|RewardRuleResponse|
+|&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;ruleId|规则记录 ID|integer||
+|&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;taskId|所属任务 ID|integer||
+|&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;effectiveVersion|规则版本号，每次保存递增|integer||
+|&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;rewardMode|奖励模式：APPROVED_ITEM（按通过条目计奖）|string||
+|&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;unitReward|单条奖励金额|number||
+|&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;rewardCurrency|奖励货币类型|string||
+|&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;rewardVisible|奖励是否对标注员可见|boolean||
+|&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;effectiveAt|规则生效时间|string||
+|&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;createdBy|创建人用户 ID|integer||
+|&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;createdAt|规则创建时间|string||
 |&emsp;&emsp;availableCount|当前可领取题目数|integer(int32)||
 |&emsp;&emsp;currentUserClaimedCount|当前用户已领取数|integer(int32)||
 |&emsp;&emsp;rewardSummary|奖励摘要|RewardSummaryResponse|RewardSummaryResponse|
@@ -6324,7 +6628,19 @@ Reviewer 只能读取已分配给自己的提交；未分配时返回 403601。<
 				"publishedAt": "",
 				"endedAt": "",
 				"createdAt": "",
-				"updatedAt": ""
+				"updatedAt": "",
+				"rewardRule": {
+					"ruleId": 100,
+					"taskId": 10,
+					"effectiveVersion": 3,
+					"rewardMode": "APPROVED_ITEM",
+					"unitReward": 2.5,
+					"rewardCurrency": "POINT",
+					"rewardVisible": true,
+					"effectiveAt": "",
+					"createdBy": 1,
+					"createdAt": ""
+				}
 			},
 			"availableCount": 55,
 			"currentUserClaimedCount": 3,
@@ -6410,6 +6726,17 @@ Reviewer 只能读取已分配给自己的提交；未分配时返回 403601。<
 |&emsp;&emsp;&emsp;&emsp;endedAt|结束时间|string||
 |&emsp;&emsp;&emsp;&emsp;createdAt|创建时间|string||
 |&emsp;&emsp;&emsp;&emsp;updatedAt|更新时间|string||
+|&emsp;&emsp;&emsp;&emsp;rewardRule|奖励规则响应|RewardRuleResponse|RewardRuleResponse|
+|&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;ruleId|规则记录 ID|integer||
+|&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;taskId|所属任务 ID|integer||
+|&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;effectiveVersion|规则版本号，每次保存递增|integer||
+|&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;rewardMode|奖励模式：APPROVED_ITEM（按通过条目计奖）|string||
+|&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;unitReward|单条奖励金额|number||
+|&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;rewardCurrency|奖励货币类型|string||
+|&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;rewardVisible|奖励是否对标注员可见|boolean||
+|&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;effectiveAt|规则生效时间|string||
+|&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;createdBy|创建人用户 ID|integer||
+|&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;createdAt|规则创建时间|string||
 |&emsp;&emsp;availableCount|当前可领取题目数|integer(int32)||
 |&emsp;&emsp;currentUserClaimedCount|当前用户已领取数|integer(int32)||
 |&emsp;&emsp;rewardSummary|奖励摘要|RewardSummaryResponse|RewardSummaryResponse|
@@ -6446,7 +6773,19 @@ Reviewer 只能读取已分配给自己的提交；未分配时返回 403601。<
 			"publishedAt": "",
 			"endedAt": "",
 			"createdAt": "",
-			"updatedAt": ""
+			"updatedAt": "",
+			"rewardRule": {
+				"ruleId": 100,
+				"taskId": 10,
+				"effectiveVersion": 3,
+				"rewardMode": "APPROVED_ITEM",
+				"unitReward": 2.5,
+				"rewardCurrency": "POINT",
+				"rewardVisible": true,
+				"effectiveAt": "",
+				"createdBy": 1,
+				"createdAt": ""
+			}
 		},
 		"availableCount": 55,
 		"currentUserClaimedCount": 3,
@@ -6546,6 +6885,19 @@ Reviewer 只能读取已分配给自己的提交；未分配时返回 403601。<
 |&emsp;&emsp;&emsp;&emsp;updatedAt||string||
 |&emsp;&emsp;&emsp;&emsp;rawPrompt||string||
 |&emsp;&emsp;&emsp;&emsp;answerJson||string||
+|&emsp;&emsp;&emsp;&emsp;reviewTrace||ReviewTraceResponse|ReviewTraceResponse|
+|&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;strategy||string||
+|&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;strategyLabel||string||
+|&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;summary||string||
+|&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;steps||array|ReviewTraceStep|
+|&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;name||string||
+|&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;role||string||
+|&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;decision||string||
+|&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;score||string||
+|&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;confidence||string||
+|&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;status||string||
+|&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;reason||string||
+|&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;metrics||object||
 |&emsp;&emsp;page||integer(int32)||
 |&emsp;&emsp;pageSize||integer(int32)||
 |&emsp;&emsp;total||integer(int64)||
@@ -6581,7 +6933,24 @@ Reviewer 只能读取已分配给自己的提交；未分配时返回 403601。<
 				"createdAt": "",
 				"updatedAt": "",
 				"rawPrompt": "",
-				"answerJson": ""
+				"answerJson": "",
+				"reviewTrace": {
+					"strategy": "",
+					"strategyLabel": "",
+					"summary": "",
+					"steps": [
+						{
+							"name": "",
+							"role": "",
+							"decision": "",
+							"score": "",
+							"confidence": "",
+							"status": "",
+							"reason": ""
+						}
+					],
+					"metrics": {}
+				}
 			}
 		],
 		"page": 0,
@@ -6655,6 +7024,7 @@ Reviewer 只能读取已分配给自己的提交；未分配时返回 403601。<
 |&emsp;&emsp;&emsp;&emsp;aiDecision||string||
 |&emsp;&emsp;&emsp;&emsp;reviewSummary||string||
 |&emsp;&emsp;&emsp;&emsp;rejectReason||string||
+|&emsp;&emsp;&emsp;&emsp;isGolden||boolean||
 |&emsp;&emsp;&emsp;&emsp;createdAt||string||
 |&emsp;&emsp;&emsp;&emsp;updatedAt||string||
 |&emsp;&emsp;page||integer(int32)||
@@ -6682,6 +7052,7 @@ Reviewer 只能读取已分配给自己的提交；未分配时返回 403601。<
 				"aiDecision": "",
 				"reviewSummary": "",
 				"rejectReason": "",
+				"isGolden": true,
 				"createdAt": "",
 				"updatedAt": ""
 			}
@@ -7269,6 +7640,17 @@ Reviewer 只能读取已分配给自己的提交；未分配时返回 403601。<
 |&emsp;&emsp;&emsp;&emsp;endedAt|结束时间|string||
 |&emsp;&emsp;&emsp;&emsp;createdAt|创建时间|string||
 |&emsp;&emsp;&emsp;&emsp;updatedAt|更新时间|string||
+|&emsp;&emsp;&emsp;&emsp;rewardRule|奖励规则响应|RewardRuleResponse|RewardRuleResponse|
+|&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;ruleId|规则记录 ID|integer||
+|&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;taskId|所属任务 ID|integer||
+|&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;effectiveVersion|规则版本号，每次保存递增|integer||
+|&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;rewardMode|奖励模式：APPROVED_ITEM（按通过条目计奖）|string||
+|&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;unitReward|单条奖励金额|number||
+|&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;rewardCurrency|奖励货币类型|string||
+|&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;rewardVisible|奖励是否对标注员可见|boolean||
+|&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;effectiveAt|规则生效时间|string||
+|&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;createdBy|创建人用户 ID|integer||
+|&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;createdAt|规则创建时间|string||
 |&emsp;&emsp;page||integer(int32)||
 |&emsp;&emsp;pageSize||integer(int32)||
 |&emsp;&emsp;total||integer(int64)||
@@ -7296,7 +7678,19 @@ Reviewer 只能读取已分配给自己的提交；未分配时返回 403601。<
 				"publishedAt": "",
 				"endedAt": "",
 				"createdAt": "",
-				"updatedAt": ""
+				"updatedAt": "",
+				"rewardRule": {
+					"ruleId": 100,
+					"taskId": 10,
+					"effectiveVersion": 3,
+					"rewardMode": "APPROVED_ITEM",
+					"unitReward": 2.5,
+					"rewardCurrency": "POINT",
+					"rewardVisible": true,
+					"effectiveAt": "",
+					"createdBy": 1,
+					"createdAt": ""
+				}
 			}
 		],
 		"page": 0,
@@ -9735,6 +10129,7 @@ Reviewer 只能读取已分配给自己的提交；未分配时返回 403601。<
 |&emsp;&emsp;&emsp;&emsp;pendingCount||integer||
 |&emsp;&emsp;&emsp;&emsp;overduePendingCount||integer||
 |&emsp;&emsp;&emsp;&emsp;manualRequiredCount||integer||
+|&emsp;&emsp;&emsp;&emsp;conflictRequiredCount||integer||
 |&emsp;&emsp;kpis||ReviewerKpis|ReviewerKpis|
 |&emsp;&emsp;&emsp;&emsp;todayReviewedCount||integer||
 |&emsp;&emsp;&emsp;&emsp;totalApproved||integer||
@@ -9789,6 +10184,7 @@ Reviewer 只能读取已分配给自己的提交；未分配时返回 403601。<
 			"pendingCount": 0,
 			"overduePendingCount": 0,
 			"manualRequiredCount": 0,
+			"conflictRequiredCount": 0
 		},
 		"kpis": {
 			"todayReviewedCount": 0,
@@ -9847,1776 +10243,7 @@ Reviewer 只能读取已分配给自己的提交；未分配时返回 403601。<
 ```
 
 
-# 模板
-
-
-## Fork 模板
-
-
-**接口地址**:`/api/v1/templates/{templateId}/fork`
-
-
-**请求方式**:`POST`
-
-
-**请求数据类型**:`application/x-www-form-urlencoded,application/json`
-
-
-**响应数据类型**:`*/*`
-
-
-**接口描述**:<p>基于已有模板创建新版本。</p>
-
-
-
-**请求示例**:
-
-
-```javascript
-{
-  "baseVersionId": 0,
-  "schemaJson": {},
-  "changeNote": ""
-}
-```
-
-
-**请求参数**:
-
-
-| 参数名称 | 参数说明 | 请求类型    | 是否必须 | 数据类型 | schema |
-| -------- | -------- | ----- | -------- | -------- | ------ |
-|templateId||path|true|integer(int64)||
-|forkTemplateRequest|ForkTemplateRequest|body|true|ForkTemplateRequest|ForkTemplateRequest|
-|&emsp;&emsp;baseVersionId|||false|integer(int64)||
-|&emsp;&emsp;schemaJson|||false|object||
-|&emsp;&emsp;changeNote|||false|string||
-
-
-**响应状态**:
-
-
-| 状态码 | 说明 | schema |
-| -------- | -------- | ----- | 
-|200|OK|ApiResponseTemplateResponse|
-
-
-**响应参数**:
-
-
-| 参数名称 | 参数说明 | 类型 | schema |
-| -------- | -------- | ----- |----- | 
-|code||integer(int32)|integer(int32)|
-|message||string||
-|data||TemplateResponse|TemplateResponse|
-|&emsp;&emsp;templateId||integer(int64)||
-|&emsp;&emsp;taskId||integer(int64)||
-|&emsp;&emsp;ownerId||integer(int64)||
-|&emsp;&emsp;name||string||
-|&emsp;&emsp;currentVersionNo||integer(int32)||
-|&emsp;&emsp;currentVersion||TemplateVersionResponse|TemplateVersionResponse|
-|&emsp;&emsp;&emsp;&emsp;versionId||integer||
-|&emsp;&emsp;&emsp;&emsp;templateId||integer||
-|&emsp;&emsp;&emsp;&emsp;taskId||integer||
-|&emsp;&emsp;&emsp;&emsp;ownerId||integer||
-|&emsp;&emsp;&emsp;&emsp;versionNo||integer||
-|&emsp;&emsp;&emsp;&emsp;schemaJson||JsonNode|JsonNode|
-|&emsp;&emsp;&emsp;&emsp;publishedSnapshot||boolean||
-|&emsp;&emsp;&emsp;&emsp;state|可用值:DRAFT,PUBLISHED_SNAPSHOT|string||
-|&emsp;&emsp;&emsp;&emsp;changeNote||string||
-|&emsp;&emsp;&emsp;&emsp;createdBy||integer||
-|&emsp;&emsp;&emsp;&emsp;createdAt||string||
-|&emsp;&emsp;createdBy||integer(int64)||
-|&emsp;&emsp;createdAt||string(date-time)||
-|&emsp;&emsp;updatedAt||string(date-time)||
-|traceId||string||
-
-
-**响应示例**:
-```javascript
-{
-	"code": 0,
-	"message": "",
-	"data": {
-		"templateId": 0,
-		"taskId": 0,
-		"ownerId": 0,
-		"name": "",
-		"currentVersionNo": 0,
-		"currentVersion": {
-			"versionId": 0,
-			"templateId": 0,
-			"taskId": 0,
-			"ownerId": 0,
-			"versionNo": 0,
-			"schemaJson": {},
-			"publishedSnapshot": true,
-			"state": "",
-			"changeNote": "",
-			"createdBy": 0,
-			"createdAt": ""
-		},
-		"createdBy": 0,
-		"createdAt": "",
-		"updatedAt": ""
-	},
-	"traceId": ""
-}
-```
-
-
-## 模板列表
-
-
-**接口地址**:`/api/v1/tasks/{taskId}/templates`
-
-
-**请求方式**:`GET`
-
-
-**请求数据类型**:`application/x-www-form-urlencoded`
-
-
-**响应数据类型**:`*/*`
-
-
-**接口描述**:<p>查询任务下的模板列表。</p>
-
-
-
-**请求参数**:
-
-
-| 参数名称 | 参数说明 | 请求类型    | 是否必须 | 数据类型 | schema |
-| -------- | -------- | ----- | -------- | -------- | ------ |
-|taskId||path|true|integer(int64)||
-
-
-**响应状态**:
-
-
-| 状态码 | 说明 | schema |
-| -------- | -------- | ----- | 
-|200|OK|ApiResponseListTemplateResponse|
-
-
-**响应参数**:
-
-
-| 参数名称 | 参数说明 | 类型 | schema |
-| -------- | -------- | ----- |----- | 
-|code||integer(int32)|integer(int32)|
-|message||string||
-|data||array|TemplateResponse|
-|&emsp;&emsp;templateId||integer(int64)||
-|&emsp;&emsp;taskId||integer(int64)||
-|&emsp;&emsp;ownerId||integer(int64)||
-|&emsp;&emsp;name||string||
-|&emsp;&emsp;currentVersionNo||integer(int32)||
-|&emsp;&emsp;currentVersion||TemplateVersionResponse|TemplateVersionResponse|
-|&emsp;&emsp;&emsp;&emsp;versionId||integer||
-|&emsp;&emsp;&emsp;&emsp;templateId||integer||
-|&emsp;&emsp;&emsp;&emsp;taskId||integer||
-|&emsp;&emsp;&emsp;&emsp;ownerId||integer||
-|&emsp;&emsp;&emsp;&emsp;versionNo||integer||
-|&emsp;&emsp;&emsp;&emsp;schemaJson||JsonNode|JsonNode|
-|&emsp;&emsp;&emsp;&emsp;publishedSnapshot||boolean||
-|&emsp;&emsp;&emsp;&emsp;state|可用值:DRAFT,PUBLISHED_SNAPSHOT|string||
-|&emsp;&emsp;&emsp;&emsp;changeNote||string||
-|&emsp;&emsp;&emsp;&emsp;createdBy||integer||
-|&emsp;&emsp;&emsp;&emsp;createdAt||string||
-|&emsp;&emsp;createdBy||integer(int64)||
-|&emsp;&emsp;createdAt||string(date-time)||
-|&emsp;&emsp;updatedAt||string(date-time)||
-|traceId||string||
-
-
-**响应示例**:
-```javascript
-{
-	"code": 0,
-	"message": "",
-	"data": [
-		{
-			"templateId": 0,
-			"taskId": 0,
-			"ownerId": 0,
-			"name": "",
-			"currentVersionNo": 0,
-			"currentVersion": {
-				"versionId": 0,
-				"templateId": 0,
-				"taskId": 0,
-				"ownerId": 0,
-				"versionNo": 0,
-				"schemaJson": {},
-				"publishedSnapshot": true,
-				"state": "",
-				"changeNote": "",
-				"createdBy": 0,
-				"createdAt": ""
-			},
-			"createdBy": 0,
-			"createdAt": "",
-			"updatedAt": ""
-		}
-	],
-	"traceId": ""
-}
-```
-
-
-## 创建模板
-
-
-**接口地址**:`/api/v1/tasks/{taskId}/templates`
-
-
-**请求方式**:`POST`
-
-
-**请求数据类型**:`application/x-www-form-urlencoded,application/json`
-
-
-**响应数据类型**:`*/*`
-
-
-**接口描述**:<p>为任务创建模板并生成首个版本。</p>
-
-
-
-**请求示例**:
-
-
-```javascript
-{
-  "name": "",
-  "schemaJson": {},
-  "changeNote": ""
-}
-```
-
-
-**请求参数**:
-
-
-| 参数名称 | 参数说明 | 请求类型    | 是否必须 | 数据类型 | schema |
-| -------- | -------- | ----- | -------- | -------- | ------ |
-|taskId||path|true|integer(int64)||
-|createTemplateRequest|CreateTemplateRequest|body|true|CreateTemplateRequest|CreateTemplateRequest|
-|&emsp;&emsp;name|||true|string||
-|&emsp;&emsp;schemaJson|||true|object||
-|&emsp;&emsp;changeNote|||false|string||
-
-
-**响应状态**:
-
-
-| 状态码 | 说明 | schema |
-| -------- | -------- | ----- | 
-|200|OK|ApiResponseTemplateResponse|
-
-
-**响应参数**:
-
-
-| 参数名称 | 参数说明 | 类型 | schema |
-| -------- | -------- | ----- |----- | 
-|code||integer(int32)|integer(int32)|
-|message||string||
-|data||TemplateResponse|TemplateResponse|
-|&emsp;&emsp;templateId||integer(int64)||
-|&emsp;&emsp;taskId||integer(int64)||
-|&emsp;&emsp;ownerId||integer(int64)||
-|&emsp;&emsp;name||string||
-|&emsp;&emsp;currentVersionNo||integer(int32)||
-|&emsp;&emsp;currentVersion||TemplateVersionResponse|TemplateVersionResponse|
-|&emsp;&emsp;&emsp;&emsp;versionId||integer||
-|&emsp;&emsp;&emsp;&emsp;templateId||integer||
-|&emsp;&emsp;&emsp;&emsp;taskId||integer||
-|&emsp;&emsp;&emsp;&emsp;ownerId||integer||
-|&emsp;&emsp;&emsp;&emsp;versionNo||integer||
-|&emsp;&emsp;&emsp;&emsp;schemaJson||JsonNode|JsonNode|
-|&emsp;&emsp;&emsp;&emsp;publishedSnapshot||boolean||
-|&emsp;&emsp;&emsp;&emsp;state|可用值:DRAFT,PUBLISHED_SNAPSHOT|string||
-|&emsp;&emsp;&emsp;&emsp;changeNote||string||
-|&emsp;&emsp;&emsp;&emsp;createdBy||integer||
-|&emsp;&emsp;&emsp;&emsp;createdAt||string||
-|&emsp;&emsp;createdBy||integer(int64)||
-|&emsp;&emsp;createdAt||string(date-time)||
-|&emsp;&emsp;updatedAt||string(date-time)||
-|traceId||string||
-
-
-**响应示例**:
-```javascript
-{
-	"code": 0,
-	"message": "",
-	"data": {
-		"templateId": 0,
-		"taskId": 0,
-		"ownerId": 0,
-		"name": "",
-		"currentVersionNo": 0,
-		"currentVersion": {
-			"versionId": 0,
-			"templateId": 0,
-			"taskId": 0,
-			"ownerId": 0,
-			"versionNo": 0,
-			"schemaJson": {},
-			"publishedSnapshot": true,
-			"state": "",
-			"changeNote": "",
-			"createdBy": 0,
-			"createdAt": ""
-		},
-		"createdBy": 0,
-		"createdAt": "",
-		"updatedAt": ""
-	},
-	"traceId": ""
-}
-```
-
-
-## 校验答案 JSON
-
-
-**接口地址**:`/api/v1/schema/validate-answer`
-
-
-**请求方式**:`POST`
-
-
-**请求数据类型**:`application/x-www-form-urlencoded,application/json`
-
-
-**响应数据类型**:`*/*`
-
-
-**接口描述**:<p>按模板版本 Schema 校验答案 JSON，不修改业务数据。</p>
-
-
-
-**请求示例**:
-
-
-```javascript
-{
-  "schemaVersionId": 0,
-  "answerJson": {}
-}
-```
-
-
-**请求参数**:
-
-
-| 参数名称 | 参数说明 | 请求类型    | 是否必须 | 数据类型 | schema |
-| -------- | -------- | ----- | -------- | -------- | ------ |
-|validateAnswerRequest|ValidateAnswerRequest|body|true|ValidateAnswerRequest|ValidateAnswerRequest|
-|&emsp;&emsp;schemaVersionId|||true|integer(int64)||
-|&emsp;&emsp;answerJson|||true|object||
-
-
-**响应状态**:
-
-
-| 状态码 | 说明 | schema |
-| -------- | -------- | ----- | 
-|200|OK|ApiResponseListSchemaValidationError|
-
-
-**响应参数**:
-
-
-| 参数名称 | 参数说明 | 类型 | schema |
-| -------- | -------- | ----- |----- | 
-|code||integer(int32)|integer(int32)|
-|message||string||
-|data||array|SchemaValidationError|
-|&emsp;&emsp;path||string||
-|&emsp;&emsp;errorCode||integer(int32)||
-|&emsp;&emsp;errorMessage||string||
-|traceId||string||
-
-
-**响应示例**:
-```javascript
-{
-	"code": 0,
-	"message": "",
-	"data": [
-		{
-			"path": "",
-			"errorCode": 0,
-			"errorMessage": ""
-		}
-	],
-	"traceId": ""
-}
-```
-
-
-## OWNER 模板列表
-
-
-**接口地址**:`/api/v1/owner/templates`
-
-
-**请求方式**:`GET`
-
-
-**请求数据类型**:`application/x-www-form-urlencoded`
-
-
-**响应数据类型**:`*/*`
-
-
-**接口描述**:<p>查询当前 OWNER 的可复用模板列表。</p>
-
-
-
-**请求参数**:
-
-
-暂无
-
-
-**响应状态**:
-
-
-| 状态码 | 说明 | schema |
-| -------- | -------- | ----- | 
-|200|OK|ApiResponseListTemplateResponse|
-
-
-**响应参数**:
-
-
-| 参数名称 | 参数说明 | 类型 | schema |
-| -------- | -------- | ----- |----- | 
-|code||integer(int32)|integer(int32)|
-|message||string||
-|data||array|TemplateResponse|
-|&emsp;&emsp;templateId||integer(int64)||
-|&emsp;&emsp;taskId||integer(int64)||
-|&emsp;&emsp;ownerId||integer(int64)||
-|&emsp;&emsp;name||string||
-|&emsp;&emsp;currentVersionNo||integer(int32)||
-|&emsp;&emsp;currentVersion||TemplateVersionResponse|TemplateVersionResponse|
-|&emsp;&emsp;&emsp;&emsp;versionId||integer||
-|&emsp;&emsp;&emsp;&emsp;templateId||integer||
-|&emsp;&emsp;&emsp;&emsp;taskId||integer||
-|&emsp;&emsp;&emsp;&emsp;ownerId||integer||
-|&emsp;&emsp;&emsp;&emsp;versionNo||integer||
-|&emsp;&emsp;&emsp;&emsp;schemaJson||JsonNode|JsonNode|
-|&emsp;&emsp;&emsp;&emsp;publishedSnapshot||boolean||
-|&emsp;&emsp;&emsp;&emsp;state|可用值:DRAFT,PUBLISHED_SNAPSHOT|string||
-|&emsp;&emsp;&emsp;&emsp;changeNote||string||
-|&emsp;&emsp;&emsp;&emsp;createdBy||integer||
-|&emsp;&emsp;&emsp;&emsp;createdAt||string||
-|&emsp;&emsp;createdBy||integer(int64)||
-|&emsp;&emsp;createdAt||string(date-time)||
-|&emsp;&emsp;updatedAt||string(date-time)||
-|traceId||string||
-
-
-**响应示例**:
-```javascript
-{
-	"code": 0,
-	"message": "",
-	"data": [
-		{
-			"templateId": 0,
-			"taskId": 0,
-			"ownerId": 0,
-			"name": "",
-			"currentVersionNo": 0,
-			"currentVersion": {
-				"versionId": 0,
-				"templateId": 0,
-				"taskId": 0,
-				"ownerId": 0,
-				"versionNo": 0,
-				"schemaJson": {},
-				"publishedSnapshot": true,
-				"state": "",
-				"changeNote": "",
-				"createdBy": 0,
-				"createdAt": ""
-			},
-			"createdBy": 0,
-			"createdAt": "",
-			"updatedAt": ""
-		}
-	],
-	"traceId": ""
-}
-```
-
-
-## 创建 OWNER 模板
-
-
-**接口地址**:`/api/v1/owner/templates`
-
-
-**请求方式**:`POST`
-
-
-**请求数据类型**:`application/x-www-form-urlencoded,application/json`
-
-
-**响应数据类型**:`*/*`
-
-
-**接口描述**:<p>创建当前 OWNER 可复用模板并生成首个版本。</p>
-
-
-
-**请求示例**:
-
-
-```javascript
-{
-  "name": "",
-  "schemaJson": {},
-  "changeNote": ""
-}
-```
-
-
-**请求参数**:
-
-
-| 参数名称 | 参数说明 | 请求类型    | 是否必须 | 数据类型 | schema |
-| -------- | -------- | ----- | -------- | -------- | ------ |
-|createTemplateRequest|CreateTemplateRequest|body|true|CreateTemplateRequest|CreateTemplateRequest|
-|&emsp;&emsp;name|||true|string||
-|&emsp;&emsp;schemaJson|||true|object||
-|&emsp;&emsp;changeNote|||false|string||
-
-
-**响应状态**:
-
-
-| 状态码 | 说明 | schema |
-| -------- | -------- | ----- | 
-|200|OK|ApiResponseTemplateResponse|
-
-
-**响应参数**:
-
-
-| 参数名称 | 参数说明 | 类型 | schema |
-| -------- | -------- | ----- |----- | 
-|code||integer(int32)|integer(int32)|
-|message||string||
-|data||TemplateResponse|TemplateResponse|
-|&emsp;&emsp;templateId||integer(int64)||
-|&emsp;&emsp;taskId||integer(int64)||
-|&emsp;&emsp;ownerId||integer(int64)||
-|&emsp;&emsp;name||string||
-|&emsp;&emsp;currentVersionNo||integer(int32)||
-|&emsp;&emsp;currentVersion||TemplateVersionResponse|TemplateVersionResponse|
-|&emsp;&emsp;&emsp;&emsp;versionId||integer||
-|&emsp;&emsp;&emsp;&emsp;templateId||integer||
-|&emsp;&emsp;&emsp;&emsp;taskId||integer||
-|&emsp;&emsp;&emsp;&emsp;ownerId||integer||
-|&emsp;&emsp;&emsp;&emsp;versionNo||integer||
-|&emsp;&emsp;&emsp;&emsp;schemaJson||JsonNode|JsonNode|
-|&emsp;&emsp;&emsp;&emsp;publishedSnapshot||boolean||
-|&emsp;&emsp;&emsp;&emsp;state|可用值:DRAFT,PUBLISHED_SNAPSHOT|string||
-|&emsp;&emsp;&emsp;&emsp;changeNote||string||
-|&emsp;&emsp;&emsp;&emsp;createdBy||integer||
-|&emsp;&emsp;&emsp;&emsp;createdAt||string||
-|&emsp;&emsp;createdBy||integer(int64)||
-|&emsp;&emsp;createdAt||string(date-time)||
-|&emsp;&emsp;updatedAt||string(date-time)||
-|traceId||string||
-
-
-**响应示例**:
-```javascript
-{
-	"code": 0,
-	"message": "",
-	"data": {
-		"templateId": 0,
-		"taskId": 0,
-		"ownerId": 0,
-		"name": "",
-		"currentVersionNo": 0,
-		"currentVersion": {
-			"versionId": 0,
-			"templateId": 0,
-			"taskId": 0,
-			"ownerId": 0,
-			"versionNo": 0,
-			"schemaJson": {},
-			"publishedSnapshot": true,
-			"state": "",
-			"changeNote": "",
-			"createdBy": 0,
-			"createdAt": ""
-		},
-		"createdBy": 0,
-		"createdAt": "",
-		"updatedAt": ""
-	},
-	"traceId": ""
-}
-```
-
-
-## 模板版本列表
-
-
-**接口地址**:`/api/v1/templates/{templateId}/versions`
-
-
-**请求方式**:`GET`
-
-
-**请求数据类型**:`application/x-www-form-urlencoded`
-
-
-**响应数据类型**:`*/*`
-
-
-**接口描述**:<p>查询指定模板的所有版本，最新版本在前。</p>
-
-
-
-**请求参数**:
-
-
-| 参数名称 | 参数说明 | 请求类型    | 是否必须 | 数据类型 | schema |
-| -------- | -------- | ----- | -------- | -------- | ------ |
-|templateId||path|true|integer(int64)||
-
-
-**响应状态**:
-
-
-| 状态码 | 说明 | schema |
-| -------- | -------- | ----- | 
-|200|OK|ApiResponseListTemplateVersionResponse|
-
-
-**响应参数**:
-
-
-| 参数名称 | 参数说明 | 类型 | schema |
-| -------- | -------- | ----- |----- | 
-|code||integer(int32)|integer(int32)|
-|message||string||
-|data||array|TemplateVersionResponse|
-|&emsp;&emsp;versionId||integer(int64)||
-|&emsp;&emsp;templateId||integer(int64)||
-|&emsp;&emsp;taskId||integer(int64)||
-|&emsp;&emsp;ownerId||integer(int64)||
-|&emsp;&emsp;versionNo||integer(int32)||
-|&emsp;&emsp;schemaJson||JsonNode|JsonNode|
-|&emsp;&emsp;publishedSnapshot||boolean||
-|&emsp;&emsp;state|可用值:DRAFT,PUBLISHED_SNAPSHOT|string||
-|&emsp;&emsp;changeNote||string||
-|&emsp;&emsp;createdBy||integer(int64)||
-|&emsp;&emsp;createdAt||string(date-time)||
-|traceId||string||
-
-
-**响应示例**:
-```javascript
-{
-	"code": 0,
-	"message": "",
-	"data": [
-		{
-			"versionId": 0,
-			"templateId": 0,
-			"taskId": 0,
-			"ownerId": 0,
-			"versionNo": 0,
-			"schemaJson": {},
-			"publishedSnapshot": true,
-			"state": "",
-			"changeNote": "",
-			"createdBy": 0,
-			"createdAt": ""
-		}
-	],
-	"traceId": ""
-}
-```
-
-
-## 模板版本详情
-
-
-**接口地址**:`/api/v1/template-versions/{versionId}`
-
-
-**请求方式**:`GET`
-
-
-**请求数据类型**:`application/x-www-form-urlencoded`
-
-
-**响应数据类型**:`*/*`
-
-
-**接口描述**:<p>查询指定模板版本详情。</p>
-
-
-
-**请求参数**:
-
-
-| 参数名称 | 参数说明 | 请求类型    | 是否必须 | 数据类型 | schema |
-| -------- | -------- | ----- | -------- | -------- | ------ |
-|versionId||path|true|integer(int64)||
-
-
-**响应状态**:
-
-
-| 状态码 | 说明 | schema |
-| -------- | -------- | ----- | 
-|200|OK|ApiResponseTemplateVersionResponse|
-
-
-**响应参数**:
-
-
-| 参数名称 | 参数说明 | 类型 | schema |
-| -------- | -------- | ----- |----- | 
-|code||integer(int32)|integer(int32)|
-|message||string||
-|data||TemplateVersionResponse|TemplateVersionResponse|
-|&emsp;&emsp;versionId||integer(int64)||
-|&emsp;&emsp;templateId||integer(int64)||
-|&emsp;&emsp;taskId||integer(int64)||
-|&emsp;&emsp;ownerId||integer(int64)||
-|&emsp;&emsp;versionNo||integer(int32)||
-|&emsp;&emsp;schemaJson||JsonNode|JsonNode|
-|&emsp;&emsp;publishedSnapshot||boolean||
-|&emsp;&emsp;state|可用值:DRAFT,PUBLISHED_SNAPSHOT|string||
-|&emsp;&emsp;changeNote||string||
-|&emsp;&emsp;createdBy||integer(int64)||
-|&emsp;&emsp;createdAt||string(date-time)||
-|traceId||string||
-
-
-**响应示例**:
-```javascript
-{
-	"code": 0,
-	"message": "",
-	"data": {
-		"versionId": 0,
-		"templateId": 0,
-		"taskId": 0,
-		"ownerId": 0,
-		"versionNo": 0,
-		"schemaJson": {},
-		"publishedSnapshot": true,
-		"state": "",
-		"changeNote": "",
-		"createdBy": 0,
-		"createdAt": ""
-	},
-	"traceId": ""
-}
-```
-
-
-# 审核
-
-
-## 驳回提交
-
-
-**接口地址**:`/api/v1/reviewer/submissions/{submissionId}/reject`
-
-
-**请求方式**:`POST`
-
-
-**请求数据类型**:`application/x-www-form-urlencoded,application/json`
-
-
-**响应数据类型**:`*/*`
-
-
-**接口描述**:<p>审核驳回指定提交。</p>
-
-
-
-**请求示例**:
-
-
-```javascript
-{
-  "reason": "",
-  "reviewLevel": 0
-}
-```
-
-
-**请求参数**:
-
-
-| 参数名称 | 参数说明 | 请求类型    | 是否必须 | 数据类型 | schema |
-| -------- | -------- | ----- | -------- | -------- | ------ |
-|submissionId||path|true|integer(int64)||
-|rejectRequest|RejectRequest|body|true|RejectRequest|RejectRequest|
-|&emsp;&emsp;reason|||true|string||
-|&emsp;&emsp;reviewLevel|||false|integer(int32)||
-
-
-**响应状态**:
-
-
-| 状态码 | 说明 | schema |
-| -------- | -------- | ----- | 
-|200|OK|ApiResponseReviewActionResponse|
-
-
-**响应参数**:
-
-
-| 参数名称 | 参数说明 | 类型 | schema |
-| -------- | -------- | ----- |----- | 
-|code||integer(int32)|integer(int32)|
-|message||string||
-|data||ReviewActionResponse|ReviewActionResponse|
-|&emsp;&emsp;submissionId||integer(int64)||
-|&emsp;&emsp;submissionStatus|可用值:SUBMITTED,AI_REVIEWING,PENDING_FINAL,APPROVED,REJECTED,SUPERSEDED|string||
-|&emsp;&emsp;reviewRecordId||integer(int64)||
-|traceId||string||
-
-
-**响应示例**:
-```javascript
-{
-	"code": 0,
-	"message": "",
-	"data": {
-		"submissionId": 0,
-		"submissionStatus": "",
-		"reviewRecordId": 0
-	},
-	"traceId": ""
-}
-```
-
-
-## 通过提交
-
-
-**接口地址**:`/api/v1/reviewer/submissions/{submissionId}/approve`
-
-
-**请求方式**:`POST`
-
-
-**请求数据类型**:`application/x-www-form-urlencoded,application/json`
-
-
-**响应数据类型**:`*/*`
-
-
-**接口描述**:<p>审核通过指定提交。</p>
-
-
-
-**请求示例**:
-
-
-```javascript
-{
-  "reviewComment": "",
-  "reviewLevel": 0,
-  "revisedAnswerJson": ""
-}
-```
-
-
-**请求参数**:
-
-
-| 参数名称 | 参数说明 | 请求类型    | 是否必须 | 数据类型 | schema |
-| -------- | -------- | ----- | -------- | -------- | ------ |
-|submissionId||path|true|integer(int64)||
-|approveRequest|ApproveRequest|body|true|ApproveRequest|ApproveRequest|
-|&emsp;&emsp;reviewComment|||false|string||
-|&emsp;&emsp;reviewLevel|||false|integer(int32)||
-|&emsp;&emsp;revisedAnswerJson|||false|string||
-
-
-**响应状态**:
-
-
-| 状态码 | 说明 | schema |
-| -------- | -------- | ----- | 
-|200|OK|ApiResponseReviewActionResponse|
-
-
-**响应参数**:
-
-
-| 参数名称 | 参数说明 | 类型 | schema |
-| -------- | -------- | ----- |----- | 
-|code||integer(int32)|integer(int32)|
-|message||string||
-|data||ReviewActionResponse|ReviewActionResponse|
-|&emsp;&emsp;submissionId||integer(int64)||
-|&emsp;&emsp;submissionStatus|可用值:SUBMITTED,AI_REVIEWING,PENDING_FINAL,APPROVED,REJECTED,SUPERSEDED|string||
-|&emsp;&emsp;reviewRecordId||integer(int64)||
-|traceId||string||
-
-
-**响应示例**:
-```javascript
-{
-	"code": 0,
-	"message": "",
-	"data": {
-		"submissionId": 0,
-		"submissionStatus": "",
-		"reviewRecordId": 0
-	},
-	"traceId": ""
-}
-```
-
-
-## 批量驳回
-
-
-**接口地址**:`/api/v1/reviewer/submissions/batch/reject`
-
-
-**请求方式**:`POST`
-
-
-**请求数据类型**:`application/x-www-form-urlencoded,application/json`
-
-
-**响应数据类型**:`*/*`
-
-
-**接口描述**:<p>批量审核驳回提交。</p>
-
-
-
-**请求示例**:
-
-
-```javascript
-{
-  "submissionIds": [],
-  "reason": "",
-  "reviewLevel": 0
-}
-```
-
-
-**请求参数**:
-
-
-| 参数名称 | 参数说明 | 请求类型    | 是否必须 | 数据类型 | schema |
-| -------- | -------- | ----- | -------- | -------- | ------ |
-|batchRejectRequest|BatchRejectRequest|body|true|BatchRejectRequest|BatchRejectRequest|
-|&emsp;&emsp;submissionIds|||true|array|integer(int64)|
-|&emsp;&emsp;reason|||true|string||
-|&emsp;&emsp;reviewLevel|||false|integer(int32)||
-
-
-**响应状态**:
-
-
-| 状态码 | 说明 | schema |
-| -------- | -------- | ----- | 
-|200|OK|ApiResponseBatchReviewResponse|
-
-
-**响应参数**:
-
-
-| 参数名称 | 参数说明 | 类型 | schema |
-| -------- | -------- | ----- |----- | 
-|code||integer(int32)|integer(int32)|
-|message||string||
-|data||BatchReviewResponse|BatchReviewResponse|
-|&emsp;&emsp;total||integer(int32)||
-|&emsp;&emsp;successCount||integer(int32)||
-|&emsp;&emsp;failCount||integer(int32)||
-|&emsp;&emsp;results||array|BatchReviewItemResult|
-|&emsp;&emsp;&emsp;&emsp;submissionId||integer||
-|&emsp;&emsp;&emsp;&emsp;success||boolean||
-|&emsp;&emsp;&emsp;&emsp;error||string||
-|traceId||string||
-
-
-**响应示例**:
-```javascript
-{
-	"code": 0,
-	"message": "",
-	"data": {
-		"total": 0,
-		"successCount": 0,
-		"failCount": 0,
-		"results": [
-			{
-				"submissionId": 0,
-				"success": true,
-				"error": ""
-			}
-		]
-	},
-	"traceId": ""
-}
-```
-
-
-## 批量转人工
-
-
-**接口地址**:`/api/v1/reviewer/submissions/batch/mark-manual`
-
-
-**请求方式**:`POST`
-
-
-**请求数据类型**:`application/x-www-form-urlencoded,application/json`
-
-
-**响应数据类型**:`*/*`
-
-
-**接口描述**:<p>将提交批量标记为需要人工处理。</p>
-
-
-
-**请求示例**:
-
-
-```javascript
-{
-  "submissionIds": []
-}
-```
-
-
-**请求参数**:
-
-
-| 参数名称 | 参数说明 | 请求类型    | 是否必须 | 数据类型 | schema |
-| -------- | -------- | ----- | -------- | -------- | ------ |
-|batchMarkManualRequest|BatchMarkManualRequest|body|true|BatchMarkManualRequest|BatchMarkManualRequest|
-|&emsp;&emsp;submissionIds|||true|array|integer(int64)|
-
-
-**响应状态**:
-
-
-| 状态码 | 说明 | schema |
-| -------- | -------- | ----- | 
-|200|OK|ApiResponseBatchReviewResponse|
-
-
-**响应参数**:
-
-
-| 参数名称 | 参数说明 | 类型 | schema |
-| -------- | -------- | ----- |----- | 
-|code||integer(int32)|integer(int32)|
-|message||string||
-|data||BatchReviewResponse|BatchReviewResponse|
-|&emsp;&emsp;total||integer(int32)||
-|&emsp;&emsp;successCount||integer(int32)||
-|&emsp;&emsp;failCount||integer(int32)||
-|&emsp;&emsp;results||array|BatchReviewItemResult|
-|&emsp;&emsp;&emsp;&emsp;submissionId||integer||
-|&emsp;&emsp;&emsp;&emsp;success||boolean||
-|&emsp;&emsp;&emsp;&emsp;error||string||
-|traceId||string||
-
-
-**响应示例**:
-```javascript
-{
-	"code": 0,
-	"message": "",
-	"data": {
-		"total": 0,
-		"successCount": 0,
-		"failCount": 0,
-		"results": [
-			{
-				"submissionId": 0,
-				"success": true,
-				"error": ""
-			}
-		]
-	},
-	"traceId": ""
-}
-```
-
-
-## 批量通过
-
-
-**接口地址**:`/api/v1/reviewer/submissions/batch/approve`
-
-
-**请求方式**:`POST`
-
-
-**请求数据类型**:`application/x-www-form-urlencoded,application/json`
-
-
-**响应数据类型**:`*/*`
-
-
-**接口描述**:<p>批量审核通过提交。</p>
-
-
-
-**请求示例**:
-
-
-```javascript
-{
-  "submissionIds": [],
-  "reviewComment": "",
-  "reviewLevel": 0
-}
-```
-
-
-**请求参数**:
-
-
-| 参数名称 | 参数说明 | 请求类型    | 是否必须 | 数据类型 | schema |
-| -------- | -------- | ----- | -------- | -------- | ------ |
-|batchApproveRequest|BatchApproveRequest|body|true|BatchApproveRequest|BatchApproveRequest|
-|&emsp;&emsp;submissionIds|||true|array|integer(int64)|
-|&emsp;&emsp;reviewComment|||false|string||
-|&emsp;&emsp;reviewLevel|||false|integer(int32)||
-
-
-**响应状态**:
-
-
-| 状态码 | 说明 | schema |
-| -------- | -------- | ----- | 
-|200|OK|ApiResponseBatchReviewResponse|
-
-
-**响应参数**:
-
-
-| 参数名称 | 参数说明 | 类型 | schema |
-| -------- | -------- | ----- |----- | 
-|code||integer(int32)|integer(int32)|
-|message||string||
-|data||BatchReviewResponse|BatchReviewResponse|
-|&emsp;&emsp;total||integer(int32)||
-|&emsp;&emsp;successCount||integer(int32)||
-|&emsp;&emsp;failCount||integer(int32)||
-|&emsp;&emsp;results||array|BatchReviewItemResult|
-|&emsp;&emsp;&emsp;&emsp;submissionId||integer||
-|&emsp;&emsp;&emsp;&emsp;success||boolean||
-|&emsp;&emsp;&emsp;&emsp;error||string||
-|traceId||string||
-
-
-**响应示例**:
-```javascript
-{
-	"code": 0,
-	"message": "",
-	"data": {
-		"total": 0,
-		"successCount": 0,
-		"failCount": 0,
-		"results": [
-			{
-				"submissionId": 0,
-				"success": true,
-				"error": ""
-			}
-		]
-	},
-	"traceId": ""
-}
-```
-
-
-## 批量驳回
-
-
-**接口地址**:`/api/v1/reviewer/submissions/batch-reject`
-
-
-**请求方式**:`POST`
-
-
-**请求数据类型**:`application/x-www-form-urlencoded,application/json`
-
-
-**响应数据类型**:`*/*`
-
-
-**接口描述**:<p>兼容契约路径，批量审核驳回提交。</p>
-
-
-
-**请求示例**:
-
-
-```javascript
-{
-  "submissionIds": [],
-  "reason": "",
-  "reviewLevel": 0
-}
-```
-
-
-**请求参数**:
-
-
-| 参数名称 | 参数说明 | 请求类型    | 是否必须 | 数据类型 | schema |
-| -------- | -------- | ----- | -------- | -------- | ------ |
-|batchRejectRequest|BatchRejectRequest|body|true|BatchRejectRequest|BatchRejectRequest|
-|&emsp;&emsp;submissionIds|||true|array|integer(int64)|
-|&emsp;&emsp;reason|||true|string||
-|&emsp;&emsp;reviewLevel|||false|integer(int32)||
-
-
-**响应状态**:
-
-
-| 状态码 | 说明 | schema |
-| -------- | -------- | ----- | 
-|200|OK|ApiResponseBatchReviewResponse|
-
-
-**响应参数**:
-
-
-| 参数名称 | 参数说明 | 类型 | schema |
-| -------- | -------- | ----- |----- | 
-|code||integer(int32)|integer(int32)|
-|message||string||
-|data||BatchReviewResponse|BatchReviewResponse|
-|&emsp;&emsp;total||integer(int32)||
-|&emsp;&emsp;successCount||integer(int32)||
-|&emsp;&emsp;failCount||integer(int32)||
-|&emsp;&emsp;results||array|BatchReviewItemResult|
-|&emsp;&emsp;&emsp;&emsp;submissionId||integer||
-|&emsp;&emsp;&emsp;&emsp;success||boolean||
-|&emsp;&emsp;&emsp;&emsp;error||string||
-|traceId||string||
-
-
-**响应示例**:
-```javascript
-{
-	"code": 0,
-	"message": "",
-	"data": {
-		"total": 0,
-		"successCount": 0,
-		"failCount": 0,
-		"results": [
-			{
-				"submissionId": 0,
-				"success": true,
-				"error": ""
-			}
-		]
-	},
-	"traceId": ""
-}
-```
-
-
-## 批量转人工
-
-
-**接口地址**:`/api/v1/reviewer/submissions/batch-mark-manual`
-
-
-**请求方式**:`POST`
-
-
-**请求数据类型**:`application/x-www-form-urlencoded,application/json`
-
-
-**响应数据类型**:`*/*`
-
-
-**接口描述**:<p>兼容契约路径，将提交批量标记为需要人工处理。</p>
-
-
-
-**请求示例**:
-
-
-```javascript
-{
-  "submissionIds": []
-}
-```
-
-
-**请求参数**:
-
-
-| 参数名称 | 参数说明 | 请求类型    | 是否必须 | 数据类型 | schema |
-| -------- | -------- | ----- | -------- | -------- | ------ |
-|batchMarkManualRequest|BatchMarkManualRequest|body|true|BatchMarkManualRequest|BatchMarkManualRequest|
-|&emsp;&emsp;submissionIds|||true|array|integer(int64)|
-
-
-**响应状态**:
-
-
-| 状态码 | 说明 | schema |
-| -------- | -------- | ----- | 
-|200|OK|ApiResponseBatchReviewResponse|
-
-
-**响应参数**:
-
-
-| 参数名称 | 参数说明 | 类型 | schema |
-| -------- | -------- | ----- |----- | 
-|code||integer(int32)|integer(int32)|
-|message||string||
-|data||BatchReviewResponse|BatchReviewResponse|
-|&emsp;&emsp;total||integer(int32)||
-|&emsp;&emsp;successCount||integer(int32)||
-|&emsp;&emsp;failCount||integer(int32)||
-|&emsp;&emsp;results||array|BatchReviewItemResult|
-|&emsp;&emsp;&emsp;&emsp;submissionId||integer||
-|&emsp;&emsp;&emsp;&emsp;success||boolean||
-|&emsp;&emsp;&emsp;&emsp;error||string||
-|traceId||string||
-
-
-**响应示例**:
-```javascript
-{
-	"code": 0,
-	"message": "",
-	"data": {
-		"total": 0,
-		"successCount": 0,
-		"failCount": 0,
-		"results": [
-			{
-				"submissionId": 0,
-				"success": true,
-				"error": ""
-			}
-		]
-	},
-	"traceId": ""
-}
-```
-
-
-## 批量通过
-
-
-**接口地址**:`/api/v1/reviewer/submissions/batch-approve`
-
-
-**请求方式**:`POST`
-
-
-**请求数据类型**:`application/x-www-form-urlencoded,application/json`
-
-
-**响应数据类型**:`*/*`
-
-
-**接口描述**:<p>兼容契约路径，批量审核通过提交。</p>
-
-
-
-**请求示例**:
-
-
-```javascript
-{
-  "submissionIds": [],
-  "reviewComment": "",
-  "reviewLevel": 0
-}
-```
-
-
-**请求参数**:
-
-
-| 参数名称 | 参数说明 | 请求类型    | 是否必须 | 数据类型 | schema |
-| -------- | -------- | ----- | -------- | -------- | ------ |
-|batchApproveRequest|BatchApproveRequest|body|true|BatchApproveRequest|BatchApproveRequest|
-|&emsp;&emsp;submissionIds|||true|array|integer(int64)|
-|&emsp;&emsp;reviewComment|||false|string||
-|&emsp;&emsp;reviewLevel|||false|integer(int32)||
-
-
-**响应状态**:
-
-
-| 状态码 | 说明 | schema |
-| -------- | -------- | ----- | 
-|200|OK|ApiResponseBatchReviewResponse|
-
-
-**响应参数**:
-
-
-| 参数名称 | 参数说明 | 类型 | schema |
-| -------- | -------- | ----- |----- | 
-|code||integer(int32)|integer(int32)|
-|message||string||
-|data||BatchReviewResponse|BatchReviewResponse|
-|&emsp;&emsp;total||integer(int32)||
-|&emsp;&emsp;successCount||integer(int32)||
-|&emsp;&emsp;failCount||integer(int32)||
-|&emsp;&emsp;results||array|BatchReviewItemResult|
-|&emsp;&emsp;&emsp;&emsp;submissionId||integer||
-|&emsp;&emsp;&emsp;&emsp;success||boolean||
-|&emsp;&emsp;&emsp;&emsp;error||string||
-|traceId||string||
-
-
-**响应示例**:
-```javascript
-{
-	"code": 0,
-	"message": "",
-	"data": {
-		"total": 0,
-		"successCount": 0,
-		"failCount": 0,
-		"results": [
-			{
-				"submissionId": 0,
-				"success": true,
-				"error": ""
-			}
-		]
-	},
-	"traceId": ""
-}
-```
-
-
-## 待审提交列表
-
-
-**接口地址**:`/api/v1/reviewer/submissions`
-
-
-**请求方式**:`GET`
-
-
-**请求数据类型**:`application/x-www-form-urlencoded`
-
-
-**响应数据类型**:`*/*`
-
-
-
-
-
-**请求参数**:
-
-
-| 参数名称 | 参数说明 | 请求类型    | 是否必须 | 数据类型 | schema |
-| -------- | -------- | ----- | -------- | -------- | ------ |
-|taskId|按任务 ID 筛选|query|false|integer(int64)||
-|submissionStatus|按提交状态筛选|query|false|string||
-|aiDecision|按 AI 结论筛选：PASS / REJECT / MANUAL_REVIEW|query|false|string||
-|aiReviewStatus|按 AI 审核状态筛选|query|false|string||
-|reviewLevel|按审核级别筛选|query|false|integer(int32)||
-|scope|查询范围：CLAIMED-已领取，AVAILABLE-可领取（任务广场），不传查全部|query|false|string||
-|page|页码，从 1 开始|query|false|integer(int32)||
-|size|每页条数，默认 20，最大 100|query|false|integer(int32)||
-
-
-**响应状态**:
-
-
-| 状态码 | 说明 | schema |
-| -------- | -------- | ----- | 
-|200|OK|ApiResponsePageResponseReviewerSubmissionListItem|
-
-
-**响应参数**:
-
-
-| 参数名称 | 参数说明 | 类型 | schema |
-| -------- | -------- | ----- |----- | 
-|code||integer(int32)|integer(int32)|
-|message||string||
-|data||PageResponseReviewerSubmissionListItem|PageResponseReviewerSubmissionListItem|
-|&emsp;&emsp;items||array|ReviewerSubmissionListItem|
-|&emsp;&emsp;&emsp;&emsp;submissionId||integer||
-|&emsp;&emsp;&emsp;&emsp;taskId||integer||
-|&emsp;&emsp;&emsp;&emsp;datasetItemId||integer||
-|&emsp;&emsp;&emsp;&emsp;labelerId||integer||
-|&emsp;&emsp;&emsp;&emsp;submissionStatus|可用值:SUBMITTED,AI_REVIEWING,PENDING_FINAL,APPROVED,REJECTED,SUPERSEDED|string||
-|&emsp;&emsp;&emsp;&emsp;aiReviewStatus|可用值:PENDING,RUNNING,SUCCESS,FAILED,RATE_LIMITED,MANUAL_REQUIRED|string||
-|&emsp;&emsp;&emsp;&emsp;aiDecision||string||
-|&emsp;&emsp;&emsp;&emsp;reviewLevel||integer||
-|&emsp;&emsp;&emsp;&emsp;assignedReviewerId||integer||
-|&emsp;&emsp;&emsp;&emsp;createdAt||string||
-|&emsp;&emsp;&emsp;&emsp;updatedAt||string||
-|&emsp;&emsp;page||integer(int32)||
-|&emsp;&emsp;pageSize||integer(int32)||
-|&emsp;&emsp;total||integer(int64)||
-|traceId||string||
-
-
-**响应示例**:
-```javascript
-{
-	"code": 0,
-	"message": "",
-	"data": {
-		"items": [
-			{
-				"submissionId": 0,
-				"taskId": 0,
-				"datasetItemId": 0,
-				"labelerId": 0,
-				"submissionStatus": "",
-				"aiReviewStatus": "",
-				"aiDecision": "",
-				"reviewLevel": 0,
-				"assignedReviewerId": 0,
-				"createdAt": "",
-				"updatedAt": ""
-			}
-		],
-		"page": 0,
-		"pageSize": 0,
-		"total": 0
-	},
-	"traceId": ""
-}
-```
-
-
-## 提交审核详情
-
-
-**接口地址**:`/api/v1/reviewer/submissions/{submissionId}`
-
-
-**请求方式**:`GET`
-
-
-**请求数据类型**:`application/x-www-form-urlencoded`
-
-
-**响应数据类型**:`*/*`
-
-
-**接口描述**:<p>查询指定提交的审核详情，包含标注答案、AI 评分、审核历史等。
-Reviewer 只能读取已分配给自己的提交；未分配时返回 403601。</p>
-
-
-
-**请求参数**:
-
-
-| 参数名称 | 参数说明 | 请求类型    | 是否必须 | 数据类型 | schema |
-| -------- | -------- | ----- | -------- | -------- | ------ |
-|submissionId|提交 ID|path|true|integer(int64)||
-
-
-**响应状态**:
-
-
-| 状态码 | 说明 | schema |
-| -------- | -------- | ----- | 
-|200|OK|ApiResponseReviewerSubmissionDetailResponse|
-
-
-**响应参数**:
-
-
-| 参数名称 | 参数说明 | 类型 | schema |
-| -------- | -------- | ----- |----- | 
-|code||integer(int32)|integer(int32)|
-|message||string||
-|data||ReviewerSubmissionDetailResponse|ReviewerSubmissionDetailResponse|
-|&emsp;&emsp;submissionId||integer(int64)||
-|&emsp;&emsp;taskId||integer(int64)||
-|&emsp;&emsp;assignmentId||integer(int64)||
-|&emsp;&emsp;datasetItemId||integer(int64)||
-|&emsp;&emsp;labelerId||integer(int64)||
-|&emsp;&emsp;versionNo||integer(int32)||
-|&emsp;&emsp;submissionStatus|可用值:SUBMITTED,AI_REVIEWING,PENDING_FINAL,APPROVED,REJECTED,SUPERSEDED|string||
-|&emsp;&emsp;answerJson||string||
-|&emsp;&emsp;itemJson||string||
-|&emsp;&emsp;templateVersionId||integer(int64)||
-|&emsp;&emsp;schemaJson||string||
-|&emsp;&emsp;aiReviewResult||AiReviewSummary|AiReviewSummary|
-|&emsp;&emsp;&emsp;&emsp;aiReviewResultId||integer||
-|&emsp;&emsp;&emsp;&emsp;agentRunId||integer||
-|&emsp;&emsp;&emsp;&emsp;status|可用值:PENDING,RUNNING,SUCCESS,FAILED,RATE_LIMITED,MANUAL_REQUIRED|string||
-|&emsp;&emsp;&emsp;&emsp;decision||string||
-|&emsp;&emsp;&emsp;&emsp;averageScore||string||
-|&emsp;&emsp;&emsp;&emsp;riskFlags||string||
-|&emsp;&emsp;&emsp;&emsp;suggestion||string||
-|&emsp;&emsp;&emsp;&emsp;errorCode||string||
-|&emsp;&emsp;&emsp;&emsp;promptMode||string||
-|&emsp;&emsp;&emsp;&emsp;degraded||boolean||
-|&emsp;&emsp;&emsp;&emsp;limitations||string||
-|&emsp;&emsp;agentRunSummary||AgentRunSummary|AgentRunSummary|
-|&emsp;&emsp;&emsp;&emsp;agentRunId||integer||
-|&emsp;&emsp;&emsp;&emsp;agentType||string||
-|&emsp;&emsp;&emsp;&emsp;modelName||string||
-|&emsp;&emsp;&emsp;&emsp;status||string||
-|&emsp;&emsp;&emsp;&emsp;startedAt||string||
-|&emsp;&emsp;&emsp;&emsp;finishedAt||string||
-|&emsp;&emsp;reviewRecords||array|ReviewRecordItem|
-|&emsp;&emsp;&emsp;&emsp;reviewRecordId||integer||
-|&emsp;&emsp;&emsp;&emsp;reviewerId||integer||
-|&emsp;&emsp;&emsp;&emsp;action||string||
-|&emsp;&emsp;&emsp;&emsp;reviewLevel||integer||
-|&emsp;&emsp;&emsp;&emsp;reason||string||
-|&emsp;&emsp;&emsp;&emsp;reviewComment||string||
-|&emsp;&emsp;&emsp;&emsp;createdAt||string||
-|&emsp;&emsp;versionHistory||array|VersionHistoryItem|
-|&emsp;&emsp;&emsp;&emsp;submissionId||integer||
-|&emsp;&emsp;&emsp;&emsp;versionNo||integer||
-|&emsp;&emsp;&emsp;&emsp;status|可用值:SUBMITTED,AI_REVIEWING,PENDING_FINAL,APPROVED,REJECTED,SUPERSEDED|string||
-|&emsp;&emsp;&emsp;&emsp;answerHash||string||
-|&emsp;&emsp;&emsp;&emsp;submittedAt||string||
-|&emsp;&emsp;&emsp;&emsp;aiDecision||string||
-|&emsp;&emsp;&emsp;&emsp;aiFlowAction||string||
-|&emsp;&emsp;&emsp;&emsp;latestReviewAction||string||
-|&emsp;&emsp;&emsp;&emsp;createdBy||integer||
-|&emsp;&emsp;&emsp;&emsp;creatorName||string||
-|&emsp;&emsp;latestPreAnnotation||LatestPreAnnotationSummary|LatestPreAnnotationSummary|
-|&emsp;&emsp;&emsp;&emsp;preAnnotationId||integer||
-|&emsp;&emsp;&emsp;&emsp;agentRunId||integer||
-|&emsp;&emsp;&emsp;&emsp;status||string||
-|&emsp;&emsp;&emsp;&emsp;suggestedAnswerJson||string||
-|&emsp;&emsp;&emsp;&emsp;fieldSuggestions||string||
-|&emsp;&emsp;&emsp;&emsp;riskFlags||string||
-|&emsp;&emsp;&emsp;&emsp;overallConfidence||string||
-|&emsp;&emsp;&emsp;&emsp;limitations||string||
-|&emsp;&emsp;&emsp;&emsp;promptMode||string||
-|&emsp;&emsp;&emsp;&emsp;degraded||boolean||
-|&emsp;&emsp;&emsp;&emsp;ignoredFields||string||
-|&emsp;&emsp;&emsp;&emsp;mediaUnderstanding||string||
-|&emsp;&emsp;&emsp;&emsp;finalDiff||string||
-|traceId||string||
-
-
-**响应示例**:
-```javascript
-{
-	"code": 0,
-	"message": "",
-	"data": {
-		"submissionId": 0,
-		"taskId": 0,
-		"assignmentId": 0,
-		"datasetItemId": 0,
-		"labelerId": 0,
-		"versionNo": 0,
-		"submissionStatus": "",
-		"answerJson": "",
-		"itemJson": "",
-		"templateVersionId": 0,
-		"schemaJson": "",
-		"aiReviewResult": {
-			"aiReviewResultId": 0,
-			"agentRunId": 0,
-			"status": "",
-			"decision": "",
-			"averageScore": "",
-			"riskFlags": "",
-			"suggestion": "",
-			"errorCode": "",
-			"promptMode": "",
-			"degraded": true,
-			"limitations": ""
-		},
-		"agentRunSummary": {
-			"agentRunId": 0,
-			"agentType": "",
-			"modelName": "",
-			"status": "",
-			"startedAt": "",
-			"finishedAt": ""
-		},
-		"reviewRecords": [
-			{
-				"reviewRecordId": 0,
-				"reviewerId": 0,
-				"action": "",
-				"reviewLevel": 0,
-				"reason": "",
-				"reviewComment": "",
-				"createdAt": ""
-			}
-		],
-		"versionHistory": [
-			{
-				"submissionId": 0,
-				"versionNo": 0,
-				"status": "",
-				"answerHash": "",
-				"submittedAt": "",
-				"aiDecision": "",
-				"aiFlowAction": "",
-				"latestReviewAction": "",
-				"createdBy": 0,
-				"creatorName": ""
-			}
-		],
-		"latestPreAnnotation": {
-			"preAnnotationId": 0,
-			"agentRunId": 0,
-			"status": "",
-			"suggestedAnswerJson": "",
-			"fieldSuggestions": "",
-			"riskFlags": "",
-			"overallConfidence": "",
-			"limitations": "",
-			"promptMode": "",
-			"degraded": true,
-			"ignoredFields": "",
-			"mediaUnderstanding": "",
-			"finalDiff": ""
-		}
-	},
-	"traceId": ""
-}
-```
+# 提交追溯
 
 
 ## 版本历史
@@ -11666,6 +10293,7 @@ Reviewer 只能读取已分配给自己的提交；未分配时返回 403601。<
 |&emsp;&emsp;versionNo||integer(int32)||
 |&emsp;&emsp;status|可用值:SUBMITTED,AI_REVIEWING,PENDING_FINAL,APPROVED,REJECTED,SUPERSEDED|string||
 |&emsp;&emsp;answerHash||string||
+|&emsp;&emsp;isGolden||boolean||
 |&emsp;&emsp;submittedAt||string(date-time)||
 |&emsp;&emsp;aiDecision||string||
 |&emsp;&emsp;aiFlowAction||string||
@@ -11686,6 +10314,7 @@ Reviewer 只能读取已分配给自己的提交；未分配时返回 403601。<
 			"versionNo": 0,
 			"status": "",
 			"answerHash": "",
+			"isGolden": true,
 			"submittedAt": "",
 			"aiDecision": "",
 			"aiFlowAction": "",
@@ -12046,6 +10675,19 @@ Reviewer 只能读取已分配给自己的提交；未分配时返回 403601。<
 |&emsp;&emsp;updatedAt||string(date-time)||
 |&emsp;&emsp;rawPrompt||string||
 |&emsp;&emsp;answerJson||string||
+|&emsp;&emsp;reviewTrace||ReviewTraceResponse|ReviewTraceResponse|
+|&emsp;&emsp;&emsp;&emsp;strategy||string||
+|&emsp;&emsp;&emsp;&emsp;strategyLabel||string||
+|&emsp;&emsp;&emsp;&emsp;summary||string||
+|&emsp;&emsp;&emsp;&emsp;steps||array|ReviewTraceStep|
+|&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;name||string||
+|&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;role||string||
+|&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;decision||string||
+|&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;score||string||
+|&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;confidence||string||
+|&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;status||string||
+|&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;reason||string||
+|&emsp;&emsp;&emsp;&emsp;metrics||object||
 |traceId||string||
 
 
@@ -12076,7 +10718,24 @@ Reviewer 只能读取已分配给自己的提交；未分配时返回 403601。<
 		"createdAt": "",
 		"updatedAt": "",
 		"rawPrompt": "",
-		"answerJson": ""
+		"answerJson": "",
+		"reviewTrace": {
+			"strategy": "",
+			"strategyLabel": "",
+			"summary": "",
+			"steps": [
+				{
+					"name": "",
+					"role": "",
+					"decision": "",
+					"score": "",
+					"confidence": "",
+					"status": "",
+					"reason": ""
+				}
+			],
+			"metrics": {}
+		}
 	},
 	"traceId": ""
 }
@@ -12148,6 +10807,19 @@ Reviewer 只能读取已分配给自己的提交；未分配时返回 403601。<
 |&emsp;&emsp;updatedAt||string(date-time)||
 |&emsp;&emsp;rawPrompt||string||
 |&emsp;&emsp;answerJson||string||
+|&emsp;&emsp;reviewTrace||ReviewTraceResponse|ReviewTraceResponse|
+|&emsp;&emsp;&emsp;&emsp;strategy||string||
+|&emsp;&emsp;&emsp;&emsp;strategyLabel||string||
+|&emsp;&emsp;&emsp;&emsp;summary||string||
+|&emsp;&emsp;&emsp;&emsp;steps||array|ReviewTraceStep|
+|&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;name||string||
+|&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;role||string||
+|&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;decision||string||
+|&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;score||string||
+|&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;confidence||string||
+|&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;status||string||
+|&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;reason||string||
+|&emsp;&emsp;&emsp;&emsp;metrics||object||
 |traceId||string||
 
 
@@ -12178,7 +10850,24 @@ Reviewer 只能读取已分配给自己的提交；未分配时返回 403601。<
 		"createdAt": "",
 		"updatedAt": "",
 		"rawPrompt": "",
-		"answerJson": ""
+		"answerJson": "",
+		"reviewTrace": {
+			"strategy": "",
+			"strategyLabel": "",
+			"summary": "",
+			"steps": [
+				{
+					"name": "",
+					"role": "",
+					"decision": "",
+					"score": "",
+					"confidence": "",
+					"status": "",
+					"reason": ""
+				}
+			],
+			"metrics": {}
+		}
 	},
 	"traceId": ""
 }
@@ -13991,7 +12680,7 @@ aiFlowPolicy 可缺省，默认 MANUAL_FIRST。</p>
 |&emsp;&emsp;deadlineAt|截止时间||true|string(date-time)||
 |&emsp;&emsp;overlapCount|每条数据需要的标注份数，当前固定为 1||true|integer(int32)||
 |&emsp;&emsp;publishedTemplateVersionId|已发布模板版本 ID||false|integer(int64)||
-|&emsp;&emsp;aiReviewConfigId|AI 审核配置 ID。当前创建接口要求内联提供 aiProviderId、aiPrompt、aiScoringDimensions，创建成功后后端会自动回写配置 ID||false|integer(int64)||
+|&emsp;&emsp;aiReviewConfigId|AI 审核配置 ID。创建新任务时不建议传该字段；当前创建接口要求内联提供 aiProviderId、aiPrompt、aiScoringDimensions，创建成功后后端会自动回写配置 ID||false|integer(int64)||
 |&emsp;&emsp;aiProviderId|AI 模型供应商 ID（内联创建 AI 配置时必填）||false|integer(int64)||
 |&emsp;&emsp;aiModelName|AI 模型名称（可选，如提供则必须匹配 Provider defaultModel）||false|string||
 |&emsp;&emsp;aiPrompt|AI 审核 Prompt 模板（内联创建 AI 配置时必填）||false|string||
@@ -14639,653 +13328,3 @@ aiFlowPolicy 可缺省，默认 MANUAL_FIRST。</p>
 ```
 
 
-# AI 审核
-
-
-## 更新 AI 审核配置
-
-
-**接口地址**:`/api/v1/tasks/{taskId}/ai-review-configs/{configId}`
-
-
-**请求方式**:`PUT`
-
-
-**请求数据类型**:`application/x-www-form-urlencoded,application/json`
-
-
-**响应数据类型**:`*/*`
-
-
-**接口描述**:<p>更新指定 AI 审核配置。
-modelName 可选，缺省或空白时使用所选 Provider 的 defaultModel；
-修改后 promptVersion 会递增，任务仍需处于 DRAFT 状态。</p>
-
-
-
-**请求示例**:
-
-
-```javascript
-{
-  "providerId": 1,
-  "modelName": "qwen-plus",
-  "promptTemplate": "请评估标注结果的准确性和完整性",
-  "scoringDimensions": [
-    "准确性",
-    "完整性",
-    "安全性"
-  ],
-  "passThreshold": 80,
-  "manualReviewThreshold": 60,
-  "maxRetry": 3,
-  "aiFlowPolicy": "MANUAL_FIRST",
-  "allowAiDirectApprove": true,
-  "allowAiDirectReject": true,
-  "rejectThreshold": 40,
-  "confidenceThreshold": 0.85,
-  "riskFlagsForceManual": [],
-  "multimodalEnabled": true,
-  "degradationPenalty": 0.2,
-  "visionDetail": "auto",
-  "maxImagesPerRequest": 5,
-  "allowAiDirectApproveWhenDegraded": true,
-  "reviewStrategy": "LIGHTWEIGHT",
-  "voteModels": [
-    {
-      "providerId": 1,
-      "modelName": "qwen-plus"
-    }
-  ],
-  "voteMinAgreement": 2,
-  "dimensionReviewers": {}
-}
-```
-
-
-**请求参数**:
-
-
-| 参数名称 | 参数说明 | 请求类型    | 是否必须 | 数据类型 | schema |
-| -------- | -------- | ----- | -------- | -------- | ------ |
-|taskId||path|true|integer(int64)||
-|configId||path|true|integer(int64)||
-|aiReviewConfigRequest|AI 审核配置请求|body|true|AiReviewConfigRequest|AiReviewConfigRequest|
-|&emsp;&emsp;providerId|LLM 供应商 ID||true|integer(int64)||
-|&emsp;&emsp;modelName|模型名称；可选，缺省或空白时使用所选 Provider 的 defaultModel||false|string||
-|&emsp;&emsp;promptTemplate|审核 Prompt 模板（标注规则说明）||true|string||
-|&emsp;&emsp;scoringDimensions|评分维度列表||true|array|string|
-|&emsp;&emsp;passThreshold|通过阈值（0-100）||true|number||
-|&emsp;&emsp;maxRetry|最大重试次数（0-10）||false|integer(int32)||
-|&emsp;&emsp;aiFlowPolicy|AI 流转策略: MANUAL_FIRST | AI_PASS_ONLY | AI_REJECT_ONLY | AI_PASS_AND_REJECT | ALWAYS_MANUAL||false|string||
-|&emsp;&emsp;allowAiDirectApprove|是否允许 AI 直接通过||false|boolean||
-|&emsp;&emsp;allowAiDirectReject|是否允许 AI 直接打回||false|boolean||
-|&emsp;&emsp;rejectThreshold|打回阈值（0-100）||false|number||
-|&emsp;&emsp;confidenceThreshold|置信度阈值（0.00-1.00）||false|number||
-|&emsp;&emsp;riskFlagsForceManual|强制转人工的风险标记列表||false|array|string|
-|&emsp;&emsp;multimodalEnabled|是否启用多模态（图片/视频输入）||false|boolean||
-|&emsp;&emsp;degradationPenalty|多模态降级惩罚系数（0.00-1.00）||false|number||
-|&emsp;&emsp;visionDetail|视觉精度: auto | low | high||false|string||
-|&emsp;&emsp;maxImagesPerRequest|单次请求最大图片数（0-20）||false|integer(int32)||
-|&emsp;&emsp;allowAiDirectApproveWhenDegraded|降级时是否仍允许 AI 直接通过||false|boolean||
-|&emsp;&emsp;reviewStrategy|审核策略: LIGHTWEIGHT(单路,默认) | PARALLEL_VOTE(多模型投票) | DEEP_DIMENSION(维度专项) | AGENT_DEBATE(辩论)||false|string||
-|&emsp;&emsp;voteMinAgreement|最少一致票数(1-10), 默认2||false|integer(int32)||
-|&emsp;&emsp;dimensionReviewers|深度模式维度→模型映射, JSON{dim:[{providerId,modelName}]}||false|object||
-
-
-**响应状态**:
-
-
-| 状态码 | 说明 | schema |
-| -------- | -------- | ----- | 
-|200|OK|ApiResponseAiReviewConfigResponse|
-
-
-**响应参数**:
-
-
-| 参数名称 | 参数说明 | 类型 | schema |
-| -------- | -------- | ----- |----- | 
-|code||integer(int32)|integer(int32)|
-|message||string||
-|data||AiReviewConfigResponse|AiReviewConfigResponse|
-|&emsp;&emsp;id|配置 ID|integer(int64)||
-|&emsp;&emsp;taskId|任务 ID|integer(int64)||
-|&emsp;&emsp;providerId|LLM 供应商 ID|integer(int64)||
-|&emsp;&emsp;modelName|模型名称|string||
-|&emsp;&emsp;promptTemplate|审核 Prompt 模板|string||
-|&emsp;&emsp;scoringDimensions|评分维度列表|array|string|
-|&emsp;&emsp;passThreshold|通过阈值|number||
-|&emsp;&emsp;manualReviewThreshold|人工复核阈值|number||
-|&emsp;&emsp;outputSchema|输出 JSON Schema|object||
-|&emsp;&emsp;promptVersion|Prompt 版本号|string||
-|&emsp;&emsp;maxRetry|最大重试次数|integer(int32)||
-|&emsp;&emsp;aiFlowPolicy|AI 流转策略|string||
-|&emsp;&emsp;allowAiDirectApprove|是否允许 AI 直接通过|boolean||
-|&emsp;&emsp;allowAiDirectReject|是否允许 AI 直接打回|boolean||
-|&emsp;&emsp;rejectThreshold|打回阈值|number||
-|&emsp;&emsp;confidenceThreshold|置信度阈值|number||
-|&emsp;&emsp;riskFlagsForceManual|强制转人工的风险标记|array|string|
-|&emsp;&emsp;multimodalEnabled|是否启用多模态|boolean||
-|&emsp;&emsp;degradationPenalty|多模态降级惩罚系数|number||
-|&emsp;&emsp;visionDetail|视觉精度|string||
-|&emsp;&emsp;maxImagesPerRequest|最大图片数|integer(int32)||
-|&emsp;&emsp;allowAiDirectApproveWhenDegraded|降级时是否允许 AI 直接通过|boolean||
-|&emsp;&emsp;reviewStrategy|审核策略: LIGHTWEIGHT | PARALLEL_VOTE | DEEP_DIMENSION | AGENT_DEBATE|string||
-|&emsp;&emsp;voteModels|投票模型列表|array|object|
-|&emsp;&emsp;voteMinAgreement|最少一致票数|integer(int32)||
-|&emsp;&emsp;dimensionReviewers|深度模式维度→模型映射|object||
-|traceId||string||
-
-
-**响应示例**:
-```javascript
-{
-	"code": 0,
-	"message": "",
-	"data": {
-		"id": 0,
-		"taskId": 0,
-		"providerId": 0,
-		"modelName": "",
-		"promptTemplate": "",
-		"scoringDimensions": [],
-		"passThreshold": 0,
-		"manualReviewThreshold": 0,
-		"outputSchema": {},
-		"promptVersion": "",
-		"maxRetry": 0,
-		"aiFlowPolicy": "",
-		"allowAiDirectApprove": true,
-		"allowAiDirectReject": true,
-		"rejectThreshold": 0,
-		"confidenceThreshold": 0,
-		"riskFlagsForceManual": [],
-		"multimodalEnabled": true,
-		"degradationPenalty": 0,
-		"visionDetail": "",
-		"maxImagesPerRequest": 0,
-		"allowAiDirectApproveWhenDegraded": true,
-		"reviewStrategy": "",
-		"voteModels": [],
-		"voteMinAgreement": 0,
-		"dimensionReviewers": {}
-	},
-	"traceId": ""
-}
-```
-
-
-## 获取 AI 审核配置
-
-
-**接口地址**:`/api/v1/tasks/{taskId}/ai-review-configs`
-
-
-**请求方式**:`GET`
-
-
-**请求数据类型**:`application/x-www-form-urlencoded`
-
-
-**响应数据类型**:`*/*`
-
-
-**接口描述**:<p>查询任务当前 AI 审核配置。</p>
-
-
-
-**请求参数**:
-
-
-| 参数名称 | 参数说明 | 请求类型    | 是否必须 | 数据类型 | schema |
-| -------- | -------- | ----- | -------- | -------- | ------ |
-|taskId||path|true|integer(int64)||
-
-
-**响应状态**:
-
-
-| 状态码 | 说明 | schema |
-| -------- | -------- | ----- | 
-|200|OK|ApiResponseAiReviewConfigResponse|
-
-
-**响应参数**:
-
-
-| 参数名称 | 参数说明 | 类型 | schema |
-| -------- | -------- | ----- |----- | 
-|code||integer(int32)|integer(int32)|
-|message||string||
-|data||AiReviewConfigResponse|AiReviewConfigResponse|
-|&emsp;&emsp;id|配置 ID|integer(int64)||
-|&emsp;&emsp;taskId|任务 ID|integer(int64)||
-|&emsp;&emsp;providerId|LLM 供应商 ID|integer(int64)||
-|&emsp;&emsp;modelName|模型名称|string||
-|&emsp;&emsp;promptTemplate|审核 Prompt 模板|string||
-|&emsp;&emsp;scoringDimensions|评分维度列表|array|string|
-|&emsp;&emsp;passThreshold|通过阈值|number||
-|&emsp;&emsp;manualReviewThreshold|人工复核阈值|number||
-|&emsp;&emsp;outputSchema|输出 JSON Schema|object||
-|&emsp;&emsp;promptVersion|Prompt 版本号|string||
-|&emsp;&emsp;maxRetry|最大重试次数|integer(int32)||
-|&emsp;&emsp;aiFlowPolicy|AI 流转策略|string||
-|&emsp;&emsp;allowAiDirectApprove|是否允许 AI 直接通过|boolean||
-|&emsp;&emsp;allowAiDirectReject|是否允许 AI 直接打回|boolean||
-|&emsp;&emsp;rejectThreshold|打回阈值|number||
-|&emsp;&emsp;confidenceThreshold|置信度阈值|number||
-|&emsp;&emsp;riskFlagsForceManual|强制转人工的风险标记|array|string|
-|&emsp;&emsp;multimodalEnabled|是否启用多模态|boolean||
-|&emsp;&emsp;degradationPenalty|多模态降级惩罚系数|number||
-|&emsp;&emsp;visionDetail|视觉精度|string||
-|&emsp;&emsp;maxImagesPerRequest|最大图片数|integer(int32)||
-|&emsp;&emsp;allowAiDirectApproveWhenDegraded|降级时是否允许 AI 直接通过|boolean||
-|&emsp;&emsp;reviewStrategy|审核策略: LIGHTWEIGHT | PARALLEL_VOTE | DEEP_DIMENSION | AGENT_DEBATE|string||
-|&emsp;&emsp;voteModels|投票模型列表|array|object|
-|&emsp;&emsp;voteMinAgreement|最少一致票数|integer(int32)||
-|&emsp;&emsp;dimensionReviewers|深度模式维度→模型映射|object||
-|traceId||string||
-
-
-**响应示例**:
-```javascript
-{
-	"code": 0,
-	"message": "",
-	"data": {
-		"id": 0,
-		"taskId": 0,
-		"providerId": 0,
-		"modelName": "",
-		"promptTemplate": "",
-		"scoringDimensions": [],
-		"passThreshold": 0,
-		"manualReviewThreshold": 0,
-		"outputSchema": {},
-		"promptVersion": "",
-		"maxRetry": 0,
-		"aiFlowPolicy": "",
-		"allowAiDirectApprove": true,
-		"allowAiDirectReject": true,
-		"rejectThreshold": 0,
-		"confidenceThreshold": 0,
-		"riskFlagsForceManual": [],
-		"multimodalEnabled": true,
-		"degradationPenalty": 0,
-		"visionDetail": "",
-		"maxImagesPerRequest": 0,
-		"allowAiDirectApproveWhenDegraded": true,
-		"reviewStrategy": "",
-		"voteModels": [],
-		"voteMinAgreement": 0,
-		"dimensionReviewers": {}
-	},
-	"traceId": ""
-}
-```
-
-
-## 保存 AI 审核配置
-
-
-**接口地址**:`/api/v1/tasks/{taskId}/ai-review-configs`
-
-
-**请求方式**:`POST`
-
-
-**请求数据类型**:`application/x-www-form-urlencoded,application/json`
-
-
-**响应数据类型**:`*/*`
-
-
-**接口描述**:<p>创建或保存任务 AI 审核配置。
-providerId、promptTemplate、scoringDimensions、passThreshold、manualReviewThreshold 必填；
-modelName 可选，缺省或空白时使用所选 Provider 的 defaultModel。
-aiFlowPolicy 用于描述 AI 结果是否可直接过审/打回，缺省为 MANUAL_FIRST。</p>
-
-
-
-**请求示例**:
-
-
-```javascript
-{
-  "providerId": 1,
-  "modelName": "qwen-plus",
-  "promptTemplate": "请评估标注结果的准确性和完整性",
-  "scoringDimensions": [
-    "准确性",
-    "完整性",
-    "安全性"
-  ],
-  "passThreshold": 80,
-  "manualReviewThreshold": 60,
-  "maxRetry": 3,
-  "aiFlowPolicy": "MANUAL_FIRST",
-  "allowAiDirectApprove": true,
-  "allowAiDirectReject": true,
-  "rejectThreshold": 40,
-  "confidenceThreshold": 0.85,
-  "riskFlagsForceManual": [],
-  "multimodalEnabled": true,
-  "degradationPenalty": 0.2,
-  "visionDetail": "auto",
-  "maxImagesPerRequest": 5,
-  "allowAiDirectApproveWhenDegraded": true,
-  "reviewStrategy": "LIGHTWEIGHT",
-  "voteModels": [
-    {
-      "providerId": 1,
-      "modelName": "qwen-plus"
-    }
-  ],
-  "voteMinAgreement": 2,
-  "dimensionReviewers": {}
-}
-```
-
-
-**请求参数**:
-
-
-| 参数名称 | 参数说明 | 请求类型    | 是否必须 | 数据类型 | schema |
-| -------- | -------- | ----- | -------- | -------- | ------ |
-|taskId||path|true|integer(int64)||
-|aiReviewConfigRequest|AI 审核配置请求|body|true|AiReviewConfigRequest|AiReviewConfigRequest|
-|&emsp;&emsp;providerId|LLM 供应商 ID||true|integer(int64)||
-|&emsp;&emsp;modelName|模型名称；可选，缺省或空白时使用所选 Provider 的 defaultModel||false|string||
-|&emsp;&emsp;promptTemplate|审核 Prompt 模板（标注规则说明）||true|string||
-|&emsp;&emsp;scoringDimensions|评分维度列表||true|array|string|
-|&emsp;&emsp;passThreshold|通过阈值（0-100）||true|number||
-|&emsp;&emsp;maxRetry|最大重试次数（0-10）||false|integer(int32)||
-|&emsp;&emsp;aiFlowPolicy|AI 流转策略: MANUAL_FIRST | AI_PASS_ONLY | AI_REJECT_ONLY | AI_PASS_AND_REJECT | ALWAYS_MANUAL||false|string||
-|&emsp;&emsp;allowAiDirectApprove|是否允许 AI 直接通过||false|boolean||
-|&emsp;&emsp;allowAiDirectReject|是否允许 AI 直接打回||false|boolean||
-|&emsp;&emsp;rejectThreshold|打回阈值（0-100）||false|number||
-|&emsp;&emsp;confidenceThreshold|置信度阈值（0.00-1.00）||false|number||
-|&emsp;&emsp;riskFlagsForceManual|强制转人工的风险标记列表||false|array|string|
-|&emsp;&emsp;multimodalEnabled|是否启用多模态（图片/视频输入）||false|boolean||
-|&emsp;&emsp;degradationPenalty|多模态降级惩罚系数（0.00-1.00）||false|number||
-|&emsp;&emsp;visionDetail|视觉精度: auto | low | high||false|string||
-|&emsp;&emsp;maxImagesPerRequest|单次请求最大图片数（0-20）||false|integer(int32)||
-|&emsp;&emsp;allowAiDirectApproveWhenDegraded|降级时是否仍允许 AI 直接通过||false|boolean||
-|&emsp;&emsp;reviewStrategy|审核策略: LIGHTWEIGHT(单路,默认) | PARALLEL_VOTE(多模型投票) | DEEP_DIMENSION(维度专项) | AGENT_DEBATE(辩论)||false|string||
-|&emsp;&emsp;voteMinAgreement|最少一致票数(1-10), 默认2||false|integer(int32)||
-|&emsp;&emsp;dimensionReviewers|深度模式维度→模型映射, JSON{dim:[{providerId,modelName}]}||false|object||
-
-
-**响应状态**:
-
-
-| 状态码 | 说明 | schema |
-| -------- | -------- | ----- | 
-|200|OK|ApiResponseAiReviewConfigResponse|
-
-
-**响应参数**:
-
-
-| 参数名称 | 参数说明 | 类型 | schema |
-| -------- | -------- | ----- |----- | 
-|code||integer(int32)|integer(int32)|
-|message||string||
-|data||AiReviewConfigResponse|AiReviewConfigResponse|
-|&emsp;&emsp;id|配置 ID|integer(int64)||
-|&emsp;&emsp;taskId|任务 ID|integer(int64)||
-|&emsp;&emsp;providerId|LLM 供应商 ID|integer(int64)||
-|&emsp;&emsp;modelName|模型名称|string||
-|&emsp;&emsp;promptTemplate|审核 Prompt 模板|string||
-|&emsp;&emsp;scoringDimensions|评分维度列表|array|string|
-|&emsp;&emsp;passThreshold|通过阈值|number||
-|&emsp;&emsp;manualReviewThreshold|人工复核阈值|number||
-|&emsp;&emsp;outputSchema|输出 JSON Schema|object||
-|&emsp;&emsp;promptVersion|Prompt 版本号|string||
-|&emsp;&emsp;maxRetry|最大重试次数|integer(int32)||
-|&emsp;&emsp;aiFlowPolicy|AI 流转策略|string||
-|&emsp;&emsp;allowAiDirectApprove|是否允许 AI 直接通过|boolean||
-|&emsp;&emsp;allowAiDirectReject|是否允许 AI 直接打回|boolean||
-|&emsp;&emsp;rejectThreshold|打回阈值|number||
-|&emsp;&emsp;confidenceThreshold|置信度阈值|number||
-|&emsp;&emsp;riskFlagsForceManual|强制转人工的风险标记|array|string|
-|&emsp;&emsp;multimodalEnabled|是否启用多模态|boolean||
-|&emsp;&emsp;degradationPenalty|多模态降级惩罚系数|number||
-|&emsp;&emsp;visionDetail|视觉精度|string||
-|&emsp;&emsp;maxImagesPerRequest|最大图片数|integer(int32)||
-|&emsp;&emsp;allowAiDirectApproveWhenDegraded|降级时是否允许 AI 直接通过|boolean||
-|&emsp;&emsp;reviewStrategy|审核策略: LIGHTWEIGHT | PARALLEL_VOTE | DEEP_DIMENSION | AGENT_DEBATE|string||
-|&emsp;&emsp;voteModels|投票模型列表|array|object|
-|&emsp;&emsp;voteMinAgreement|最少一致票数|integer(int32)||
-|&emsp;&emsp;dimensionReviewers|深度模式维度→模型映射|object||
-|traceId||string||
-
-
-**响应示例**:
-```javascript
-{
-	"code": 0,
-	"message": "",
-	"data": {
-		"id": 0,
-		"taskId": 0,
-		"providerId": 0,
-		"modelName": "",
-		"promptTemplate": "",
-		"scoringDimensions": [],
-		"passThreshold": 0,
-		"manualReviewThreshold": 0,
-		"outputSchema": {},
-		"promptVersion": "",
-		"maxRetry": 0,
-		"aiFlowPolicy": "",
-		"allowAiDirectApprove": true,
-		"allowAiDirectReject": true,
-		"rejectThreshold": 0,
-		"confidenceThreshold": 0,
-		"riskFlagsForceManual": [],
-		"multimodalEnabled": true,
-		"degradationPenalty": 0,
-		"visionDetail": "",
-		"maxImagesPerRequest": 0,
-		"allowAiDirectApproveWhenDegraded": true,
-		"reviewStrategy": "",
-		"voteModels": [],
-		"voteMinAgreement": 0,
-		"dimensionReviewers": {}
-	},
-	"traceId": ""
-}
-```
-
-
-## 测试 AI 审核提示词
-
-
-**接口地址**:`/api/v1/tasks/{taskId}/ai-review-configs/{configId}/test`
-
-
-**请求方式**:`POST`
-
-
-**请求数据类型**:`application/x-www-form-urlencoded,application/json`
-
-
-**响应数据类型**:`*/*`
-
-
-**接口描述**:<p>用样例输入测试 AI 审核提示词和输出结构。</p>
-
-
-
-**请求示例**:
-
-
-```javascript
-{
-  "itemSnapshot": {},
-  "answerJson": {}
-}
-```
-
-
-**请求参数**:
-
-
-| 参数名称 | 参数说明 | 请求类型    | 是否必须 | 数据类型 | schema |
-| -------- | -------- | ----- | -------- | -------- | ------ |
-|taskId||path|true|integer(int64)||
-|configId||path|true|integer(int64)||
-|aiReviewPromptTestRequest|AiReviewPromptTestRequest|body|true|AiReviewPromptTestRequest|AiReviewPromptTestRequest|
-|&emsp;&emsp;itemSnapshot|||true|object||
-|&emsp;&emsp;answerJson|||true|object||
-
-
-**响应状态**:
-
-
-| 状态码 | 说明 | schema |
-| -------- | -------- | ----- | 
-|200|OK|ApiResponseAiReviewPromptTestResponse|
-
-
-**响应参数**:
-
-
-| 参数名称 | 参数说明 | 类型 | schema |
-| -------- | -------- | ----- |----- | 
-|code||integer(int32)|integer(int32)|
-|message||string||
-|data||AiReviewPromptTestResponse|AiReviewPromptTestResponse|
-|&emsp;&emsp;agentRunId||integer(int64)||
-|&emsp;&emsp;status|可用值:SUCCESS,PROVIDER_UNAVAILABLE,PROVIDER_ERROR,RATE_LIMITED,TIMEOUT,INVALID_JSON|string||
-|&emsp;&emsp;contentText||string||
-|&emsp;&emsp;structuredJson||object||
-|&emsp;&emsp;rawResponse||string||
-|&emsp;&emsp;latencyMs||integer(int64)||
-|&emsp;&emsp;errorCode||string||
-|&emsp;&emsp;errorMessage||string||
-|traceId||string||
-
-
-**响应示例**:
-```javascript
-{
-	"code": 0,
-	"message": "",
-	"data": {
-		"agentRunId": 0,
-		"status": "",
-		"contentText": "",
-		"structuredJson": {},
-		"rawResponse": "",
-		"latencyMs": 0,
-		"errorCode": "",
-		"errorMessage": ""
-	},
-	"traceId": ""
-}
-```
-
-
-## AI 审核结果
-
-
-**接口地址**:`/api/v1/submissions/{submissionId}/ai-review-result`
-
-
-**请求方式**:`GET`
-
-
-**请求数据类型**:`application/x-www-form-urlencoded`
-
-
-**响应数据类型**:`*/*`
-
-
-**接口描述**:<p>查询指定提交的 AI 审核结果。</p>
-
-
-
-**请求参数**:
-
-
-| 参数名称 | 参数说明 | 请求类型    | 是否必须 | 数据类型 | schema |
-| -------- | -------- | ----- | -------- | -------- | ------ |
-|submissionId||path|true|integer(int64)||
-
-
-**响应状态**:
-
-
-| 状态码 | 说明 | schema |
-| -------- | -------- | ----- | 
-|200|OK|ApiResponseAiReviewResultResponse|
-
-
-**响应参数**:
-
-
-| 参数名称 | 参数说明 | 类型 | schema |
-| -------- | -------- | ----- |----- | 
-|code||integer(int32)|integer(int32)|
-|message||string||
-|data||AiReviewResultResponse|AiReviewResultResponse|
-|&emsp;&emsp;id||integer(int64)||
-|&emsp;&emsp;submissionId||integer(int64)||
-|&emsp;&emsp;agentRunId||integer(int64)||
-|&emsp;&emsp;providerId||integer(int64)||
-|&emsp;&emsp;modelName||string||
-|&emsp;&emsp;status|可用值:PENDING,RUNNING,SUCCESS,FAILED,RATE_LIMITED,MANUAL_REQUIRED|string||
-|&emsp;&emsp;decision||string||
-|&emsp;&emsp;averageScore||string||
-|&emsp;&emsp;dimensionScores||object||
-|&emsp;&emsp;riskFlags||string||
-|&emsp;&emsp;suggestion||string||
-|&emsp;&emsp;confidence||string||
-|&emsp;&emsp;flowAction||string||
-|&emsp;&emsp;promptMode||string||
-|&emsp;&emsp;degraded||boolean||
-|&emsp;&emsp;limitations||array|string|
-|&emsp;&emsp;errorCode||string||
-|&emsp;&emsp;errorMessage||string||
-|&emsp;&emsp;createdAt||string(date-time)||
-|&emsp;&emsp;updatedAt||string(date-time)||
-|&emsp;&emsp;rawPrompt||string||
-|&emsp;&emsp;answerJson||string||
-|traceId||string||
-
-
-**响应示例**:
-```javascript
-{
-	"code": 0,
-	"message": "",
-	"data": {
-		"id": 0,
-		"submissionId": 0,
-		"agentRunId": 0,
-		"providerId": 0,
-		"modelName": "",
-		"status": "",
-		"decision": "",
-		"averageScore": "",
-		"dimensionScores": {},
-		"riskFlags": "",
-		"suggestion": "",
-		"confidence": "",
-		"flowAction": "",
-		"promptMode": "",
-		"degraded": true,
-		"limitations": [],
-		"errorCode": "",
-		"errorMessage": "",
-		"createdAt": "",
-		"updatedAt": "",
-		"rawPrompt": "",
-		"answerJson": ""
-	},
-	"traceId": ""
-}
-```

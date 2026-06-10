@@ -26,13 +26,13 @@ vi.mock('../http', () => ({
   request: requestMock,
 }))
 
-function claimedTaskResponse(draftVersion: number) {
+function claimedTaskResponse(draftVersion: number, taskStatus = 'PUBLISHED') {
   return [
     {
       task: {
         taskId: 1,
         title: 'Task 1',
-        status: 'PUBLISHED',
+        status: taskStatus,
         quota: 1,
         claimedCount: 1,
         overlapCount: 1,
@@ -233,5 +233,26 @@ describe('realLabelingService draft version handling', () => {
       answerJson: JSON.stringify({ answer: 'next' }),
       clientVersion: 3,
     })
+  })
+
+  it('uses ended task lifecycle status for claimed task assignment summaries', async () => {
+    requestMock.get.mockImplementation((url: string) => {
+      if (url === '/v1/claims') {
+        return Promise.resolve([
+          {
+            ...claimedTaskResponse(2, 'ENDED')[0],
+            items: [],
+          },
+        ])
+      }
+
+      throw new Error(`Unexpected GET ${url}`)
+    })
+
+    const { realLabelingService } = await importService()
+    const assignments = await realLabelingService.listAssignments()
+
+    expect(assignments).toHaveLength(1)
+    expect(assignments[0]?.status).toBe('ENDED')
   })
 })

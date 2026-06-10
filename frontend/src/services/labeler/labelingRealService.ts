@@ -616,6 +616,10 @@ function mapMarketStatus(response: MarketTaskResponse): LabelerTaskStatus {
     return 'paused'
   }
 
+  if (status === 'ENDED') {
+    return 'ended'
+  }
+
   const availableCount = response.availableCount ?? 0
 
   if (availableCount <= 0) {
@@ -638,7 +642,7 @@ function mapTaskStatusToAssignmentStatus(status: LabelerTaskStatus): LabelerAssi
     case 'rejected':
       return 'RETURNED'
     case 'ended':
-      return 'CANCELLED'
+      return 'ENDED'
     case 'available':
     case 'claimed':
     default:
@@ -738,7 +742,12 @@ function buildTaskSummaryFromClaimedTask(response: ClaimedTaskResponse): Labeler
   }
   const items = response.items ?? []
   const completedQuestions = response.mySubmittedCount ?? items.filter((item) => item.claimStatus === 'SUBMITTED' || item.claimStatus === 'APPROVED').length
-  const taskStatus = String(task.status ?? '').toUpperCase() === 'PAUSED' ? 'paused' : getTaskStatusFromClaimedItems(items)
+  const rawTaskStatus = String(task.status ?? '').toUpperCase()
+  const taskStatus = rawTaskStatus === 'PAUSED'
+    ? 'paused'
+    : rawTaskStatus === 'ENDED'
+      ? 'ended'
+      : getTaskStatusFromClaimedItems(items)
 
   return {
     id: String(task.taskId),
@@ -789,7 +798,12 @@ function buildAssignmentSummary(response: ClaimedTaskResponse): LabelerAssignmen
   }
   const items = response.items ?? []
   const firstItem = items[0]
-  const status = String(task.status ?? '').toUpperCase() === 'PAUSED' ? 'paused' : getTaskStatusFromClaimedItems(items)
+  const rawTaskStatus = String(task.status ?? '').toUpperCase()
+  const status = rawTaskStatus === 'PAUSED'
+    ? 'paused'
+    : rawTaskStatus === 'ENDED'
+      ? 'ended'
+      : getTaskStatusFromClaimedItems(items)
 
   return {
     id: String(task.taskId),

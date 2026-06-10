@@ -17,6 +17,7 @@ export type LabelerAssignmentStatus =
   | 'CLAIMED'
   | 'DRAFTING'
   | 'PAUSED'
+  | 'ENDED'
   | 'SUBMITTED'
   | 'AI_RETURNED'
   | 'RETURNED'

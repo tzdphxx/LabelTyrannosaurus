@@ -165,6 +165,7 @@ interface CachedAssignmentContext {
 }
 
 const assignmentCache: Record<string, CachedAssignmentContext> = {}
+const draftSaveQueues: Record<string, Promise<unknown>> = {}
 
 function persistAssignmentCache() {
   // Disabled while /v1/claims returnedReason must always reflect the latest server response.
@@ -178,6 +179,21 @@ function cacheAssignment(context: CachedAssignmentContext) {
   persistAssignmentCache()
 
   return assignmentCache[context.assignmentId]
+}
+
+function enqueueDraftSave<T>(assignmentId: string, operation: () => Promise<T>): Promise<T> {
+  const previous = draftSaveQueues[assignmentId] ?? Promise.resolve()
+  const current = previous.catch(() => undefined).then(operation)
+  const tracked = current.catch(() => undefined)
+
+  draftSaveQueues[assignmentId] = tracked
+  void tracked.finally(() => {
+    if (draftSaveQueues[assignmentId] === tracked) {
+      delete draftSaveQueues[assignmentId]
+    }
+  })
+
+  return current
 }
 
 function findAssignmentByTaskId(taskId: string) {
@@ -218,6 +234,23 @@ function parseJsonDeep(value: unknown): unknown {
 
 function toRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {}
+}
+
+function stringifyStable(value: unknown): string {
+  if (!value || typeof value !== 'object') {
+    return JSON.stringify(value ?? null)
+  }
+
+  if (Array.isArray(value)) {
+    return `[${value.map((item) => stringifyStable(item)).join(',')}]`
+  }
+
+  const record = value as Record<string, unknown>
+
+  return `{${Object.keys(record)
+    .sort()
+    .map((key) => `${JSON.stringify(key)}:${stringifyStable(record[key])}`)
+    .join(',')}}`
 }
 
 function formatValue(value: unknown) {
@@ -910,6 +943,10 @@ function normalizeAssignmentError(error: unknown): never {
   throw error
 }
 
+function isDraftVersionConflict(error: unknown) {
+  return error instanceof ApiError && String(error.code ?? '') === '409101'
+}
+
 async function fetchClaimedTasks(query: LabelerAssignmentListQuery = {}) {
   const response = await request.get<ClaimedTaskResponse[] | { list?: ClaimedTaskResponse[]; records?: ClaimedTaskResponse[]; content?: ClaimedTaskResponse[]; data?: ClaimedTaskResponse[] }>(
     '/v1/claims',
@@ -1133,34 +1170,69 @@ export const realLabelingService = {
   },
 
   async saveDraft(payload: Omit<LabelingDraft, 'id' | 'updatedAt'>): Promise<LabelingDraft> {
-    const assignment = assignmentCache[payload.questionId] ?? await ensureAssignmentDetailForTask(payload.taskId)
-    const assignmentId = assignment?.assignmentId ?? payload.questionId
-    const draftResponse = await request.put<AssignmentDraftResponse, { answerJson: string; clientVersion: number }>(
-      `/v1/claims/${assignmentId}/draft`,
-      {
-        answerJson: JSON.stringify(payload.values),
-        clientVersion: assignment?.draftVersion ?? 0,
-      },
-    ).catch((error: unknown) => {
-      normalizeAssignmentError(error)
-    })
-    const draftValues = draftResponse.draftAnswerJson
-      ? toRecord(parseJsonValue(draftResponse.draftAnswerJson))
-      : payload.values
-    const draft = buildDraft(payload.taskId, assignmentId, payload.userId, draftValues, draftResponse.updatedAt)
+    const initialAssignment = assignmentCache[payload.questionId] ?? await ensureAssignmentDetailForTask(payload.taskId)
+    const assignmentId = initialAssignment?.assignmentId ?? payload.questionId
 
-    cacheAssignment({
-      ...(assignment ?? {
-        assignmentId,
-        taskId: payload.taskId,
-      }),
-      draft,
-      draftVersion: draftResponse.draftVersion,
-      status: draftResponse.status ?? 'DRAFTING',
-      updatedAt: draftResponse.updatedAt,
-    })
+    return enqueueDraftSave(assignmentId, async () => {
+      const assignment = assignmentCache[assignmentId] ?? assignmentCache[payload.questionId] ?? initialAssignment
+      const answerJson = JSON.stringify(payload.values)
+      let draftResponse: AssignmentDraftResponse
 
-    return draft
+      try {
+        draftResponse = await request.put<AssignmentDraftResponse, { answerJson: string; clientVersion: number }>(
+          `/v1/claims/${assignmentId}/draft`,
+          {
+            answerJson,
+            clientVersion: assignment?.draftVersion ?? 0,
+          },
+        )
+      } catch (error: unknown) {
+        if (isDraftVersionConflict(error)) {
+          const refreshedResponse = await request.get<AssignmentDraftResponse>(`/v1/claims/${assignmentId}/draft`).catch((refreshError: unknown) => {
+            normalizeAssignmentError(refreshError)
+          })
+          const refreshedValues = refreshedResponse.draftAnswerJson
+            ? toRecord(parseJsonValue(refreshedResponse.draftAnswerJson))
+            : {}
+          const refreshedDraft = buildDraft(payload.taskId, assignmentId, payload.userId, refreshedValues, refreshedResponse.updatedAt)
+
+          cacheAssignment({
+            ...(assignment ?? {
+              assignmentId,
+              taskId: payload.taskId,
+            }),
+            draft: refreshedDraft,
+            draftVersion: refreshedResponse.draftVersion,
+            status: refreshedResponse.status ?? assignment?.status ?? 'DRAFTING',
+            updatedAt: refreshedResponse.updatedAt,
+          })
+
+          if (stringifyStable(refreshedValues) === stringifyStable(payload.values)) {
+            return refreshedDraft
+          }
+        }
+
+        normalizeAssignmentError(error)
+      }
+
+      const draftValues = draftResponse.draftAnswerJson
+        ? toRecord(parseJsonValue(draftResponse.draftAnswerJson))
+        : payload.values
+      const draft = buildDraft(payload.taskId, assignmentId, payload.userId, draftValues, draftResponse.updatedAt)
+
+      cacheAssignment({
+        ...(assignment ?? {
+          assignmentId,
+          taskId: payload.taskId,
+        }),
+        draft,
+        draftVersion: draftResponse.draftVersion,
+        status: draftResponse.status ?? 'DRAFTING',
+        updatedAt: draftResponse.updatedAt,
+      })
+
+      return draft
+    })
   },
 
   async submitAnswers(taskId: string, userId: string, answers: DynamicFormSubmitResult[]): Promise<LabelingSubmission | null> {
